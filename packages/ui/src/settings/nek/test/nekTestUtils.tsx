@@ -65,6 +65,14 @@ export function installDomPolyfills(): void {
     proto.hasPointerCapture = () => false;
     proto.releasePointerCapture = () => undefined;
   }
+  // happy-dom 的 WAAPI 在元素卸载时以 AbortError 拒绝 animation.finished；
+  // 去掉 animate 让 motion 退回 JS 动画，避免测试里出现未处理的拒绝。
+  const elementProto = globalThis.Element?.prototype as unknown as
+    | Record<string, unknown>
+    | undefined;
+  if (elementProto && "animate" in elementProto) {
+    delete elementProto.animate;
+  }
   const globals = globalThis as unknown as Record<string, unknown>;
   if (!globals.ResizeObserver) {
     globals.ResizeObserver = class {
