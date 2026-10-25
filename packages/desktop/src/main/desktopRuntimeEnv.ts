@@ -22,7 +22,6 @@ import {
   sanitizeZCodeRuntimeEnv,
   type ZCodeRuntimeEnv,
 } from "@zcode/shared";
-import { resolvePlatformKeyForPackagedApp } from "../../scripts/target-platform.mjs";
 import { desktopProductIdentities } from "../../scripts/desktop-product-identity.mjs";
 import {
   getAppConfigDir,
@@ -314,47 +313,6 @@ export function resolveRemoteAssetDirs(): RemoteAssetDirs {
   };
 }
 
-function resolveBundledRuntimeToolBinaryPath(
-  toolDir: string,
-  binaryName: string,
-): string | undefined {
-  const candidateBinaryName = process.platform === "win32" ? `${binaryName}.exe` : binaryName;
-  const candidates = [
-    isElectronAppPackaged()
-      ? join(process.resourcesPath, "tools", toolDir, candidateBinaryName)
-      : null,
-    join(
-      import.meta.dirname,
-      "../../bundled-tools",
-      resolvePlatformKeyForPackagedApp(),
-      toolDir,
-      candidateBinaryName,
-    ),
-  ].filter((candidate): candidate is string => Boolean(candidate));
-
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
-function resolveBundledLarkCliBinaryPath(): string | undefined {
-  return resolveBundledRuntimeToolBinaryPath("lark-cli", "lark-cli");
-}
-
-function resolveHostProcessBinaryEnv(
-  envVar: string,
-  hostProcessLocalEnv: Record<string, string>,
-  bundledPath: string | undefined,
-): string | undefined {
-  // 随包工具与 app 版本强绑定，优先使用随包携带的固定 runtime；缺失时才使用显式路径。
-  if (bundledPath) {
-    return bundledPath;
-  }
-  const explicitPath = process.env[envVar]?.trim() || hostProcessLocalEnv[envVar]?.trim();
-  if (explicitPath && existsSync(explicitPath)) {
-    return explicitPath;
-  }
-  return undefined;
-}
-
 function resolveWindowsAppInstallDirForDataBaseDirGuard(
   options: {
     platform?: NodeJS.Platform | string;
@@ -420,12 +378,6 @@ export function buildHostProcessEnv(
   // 主进程启动链断裂、host 进程不再 spawn，窗口卡在启动页（startup_status_timeout）。
   // 补回声明；isElectronAppPackaged 的 import 本文件本就存在。
   const packagedDesktop = options.isPackaged ?? isElectronAppPackaged();
-  const larkCliBinaryPath = resolveBundledLarkCliBinaryPath();
-  const resolvedLarkCliBinaryPath = resolveHostProcessBinaryEnv(
-    "ZCODE_LARK_CLI_BINARY",
-    hostProcessLocalEnv,
-    larkCliBinaryPath,
-  );
   const dataBaseDir = getDataBaseDir();
   const rawInheritedEnv = {
     ...hostProcessLocalEnv,
@@ -462,6 +414,5 @@ export function buildHostProcessEnv(
     [ZCODE_APP_VERSION_ENV]: ZCODE_VERSION,
     ...(dataBaseDir !== homedir() ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
     ...(windowsAppInstallDir ? { [ZCODE_WINDOWS_APP_INSTALL_DIR_ENV]: windowsAppInstallDir } : {}),
-    ...(resolvedLarkCliBinaryPath ? { ZCODE_LARK_CLI_BINARY: resolvedLarkCliBinaryPath } : {}),
   };
 }

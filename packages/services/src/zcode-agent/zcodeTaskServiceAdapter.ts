@@ -52,7 +52,6 @@ import {
   type ZCodeBackgroundTaskControlItem,
   type ZCodeBackgroundTaskNotificationInfo,
   type ZCodeBackgroundTurnAttribution,
-  type ZCodeAutomationBotDeliveryTarget,
   type ZCodeCancelTaskCommandResult,
   type ZCodeConfigOption,
   type ZCodeContextCompactionTimelineMeta,
@@ -368,7 +367,6 @@ export function createZCodeTaskServiceAdapter(
       content: string;
       attachments?: ZCodePromptAttachment[];
       toolDenylist?: string[];
-      botDeliveryTarget?: ZCodeAutomationBotDeliveryTarget;
       clientId?: string;
       clientMode?: ZCodeTaskClientMode;
       logReason?: string;
@@ -419,7 +417,6 @@ export function createZCodeTaskServiceAdapter(
           modelExecution: params.modelExecution,
           ...turnAttributionOf(params),
           toolDenylist: promptToolDenylist,
-          botDeliveryTarget: params.botDeliveryTarget,
           ...(params.clientMode ? { clientMode: params.clientMode } : {}),
         });
       } else {
@@ -441,7 +438,6 @@ export function createZCodeTaskServiceAdapter(
               ...(params.modelSelection ? { modelSelection: params.modelSelection } : {}),
               ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
               ...turnAttributionOf(params),
-              ...(params.botDeliveryTarget ? { botDeliveryTarget: params.botDeliveryTarget } : {}),
               ...(promptToolDenylist ? { toolDisallowlist: promptToolDenylist } : {}),
             },
             sessionId: target.taskId,
@@ -1917,7 +1913,6 @@ export function createZCodeTaskServiceAdapter(
         attachments: params.attachments,
         ...turnAttributionOf(params),
         toolDenylist: params.toolDenylist,
-        botDeliveryTarget: params.botDeliveryTarget,
         clientId: params.clientId,
         clientMode: params.clientMode,
         modelSelection: params.modelSelection,

@@ -102,13 +102,6 @@ export {
   setZCodeStdioTapDevEnabled,
 } from "./zcode-agent/zcodeStdioTapDevConfig.js";
 export type { ZCodeStdioTapDevState } from "@zcode/shared";
-export { createBotsService } from "./bots/botsService.js";
-export { createAstrBotBotProvider } from "./bots/providers/astrbotProvider.js";
-export type { AstrBotProvider, AstrBotProviderOptions } from "./bots/providers/astrbotProvider.js";
-// desktop 的 host 只需要传输类型与专用 getter。BotsDeliveryLog 类、BOTS_DELIVERY_WINDOW、
-// BotsDeliveryRecord 以及 IAstrBotBridgeService 描述符都是 provider 私有实现，不再提升为
-// 包公开 API：否则后续调整窗口/ack 策略会被外部消费者牵制。
-export type { AstrBotBridgeTransport } from "./bots/astrbotBridgePort.js";
 export { createFileWatcherService } from "./fileWatcher/fileWatcherService.js";
 export { importLegacyPersonalProviderConfig } from "./model-provider/legacyPersonalProviderConfigImporter.js";
 export {
@@ -241,7 +234,6 @@ import {
   conversationShareConnectionScopeFactory,
 } from "./conversation-share/conversationShareService.js";
 import { createLocalConversationShareArtifactSource } from "./conversation-share/conversationShareArtifactSource.js";
-import { IBotsService } from "./bots/bots.js";
 import { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 import { IUsageStatsService } from "./usage-stats/usageStats.js";
 import { ICodingPlanSubscriptionService } from "./coding-plan-subscription/codingPlanSubscription.js";
@@ -278,10 +270,6 @@ import { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAda
 import { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
 import { createZCodeTaskIndexSyncer } from "./zcode-agent/zcodeTaskIndexSyncer.js";
 import { TaskIndexRepo } from "./session/taskIndexRepo.js";
-import { createBotsService } from "./bots/botsService.js";
-import { createAstrBotBotProvider } from "./bots/providers/astrbotProvider.js";
-import type { AstrBotProvider } from "./bots/providers/astrbotProvider.js";
-import { createBotRemoteWorkspaceService } from "./bots/botRemoteWorkspaceBridge.js";
 import type { SessionMessageSendRequested } from "#src/session/sessionMailbox.js";
 import { createFileWatcherService } from "./fileWatcher/fileWatcherService.js";
 import { readLegacyZCodeConfigProviders } from "./model-provider/legacyZCodeConfigProviderReader.js";
@@ -519,14 +507,6 @@ export function getProviderProvisioningSource(
 }
 
 const managedHostApiNetworkTransports = new WeakMap<ServiceCollection, HostApiNetworkTransport>();
-// AstrBot 桥接的传输控制面（beginTurn/settleTurn/resolveResume/buildSnapshot/
-// ackDeliveryByFrameId）只服务于 host 内部的 loopback WS 传输，不是业务契约。
-// 修复依据：原先把 IAstrBotBridgeService register 进 ServiceCollection，
-// exposeOnChannelServer() 会把它连同这些内部控制方法一起暴露给 MessagePort 客户端
-//（桌面渲染进程 / 手机远控），内部传输控制面就成了 RPC 面。
-// 改用与 managedCuaHelperHosts / providerRuntimes 相同的 WeakMap 侧表，
-// host 经专用 getter 取用，不进入通用 RPC Channel。
-const astrBotBridgeProviders = new WeakMap<ServiceCollection, AstrBotProvider>();
 
 export function registerManagedCuaHelperHostForDispose(
   services: ServiceCollection,
@@ -535,10 +515,6 @@ export function registerManagedCuaHelperHostForDispose(
   managedCuaHelperHosts.set(services, host);
 }
 
-/** AstrBot 桥接传输控制面；host 专用，不随 ServiceCollection 暴露到 RPC。 */
-export function getAstrBotBridgeProvider(services: ServiceCollection): AstrBotProvider | undefined {
-  return astrBotBridgeProviders.get(services);
-}
 
 export function registerHostApiNetworkTransportForDispose(
   services: ServiceCollection,
@@ -1573,11 +1549,6 @@ export function createLocalServices(options: {
     settingService,
     cuaProductMcpServerResolver,
   });
-  const botRemoteWorkspaceService = createBotRemoteWorkspaceService({
-    parentPort: options?.parentPort,
-    settingService,
-    credentialService,
-  });
   const fileService = createFileService({
     workspaceFileSearchFilter: options?.workspaceFileSearchFilter,
   });
@@ -1595,8 +1566,6 @@ export function createLocalServices(options: {
         zcodeSessionService,
         artifactSource: createLocalConversationShareArtifactSource(),
       });
-  // AstrBot 桥接 provider：官方 BotsService 的一个传输 provider，host 负责 attach loopback WS。
-  const astrBotProvider = createAstrBotBotProvider();
   const services = new ServiceCollection()
     .register(IFileService, fileService)
     .register(IMediaPreviewService, mediaPreviewService)
@@ -1613,21 +1582,6 @@ export function createLocalServices(options: {
     .register(IZCodeSessionService, zcodeSessionService)
     .register(ICuaPermissionService, cuaPermissionService)
     .register(IConversationShareService, conversationShareService)
-    .register(
-      IBotsService,
-      createBotsService({
-        credentialService,
-        zcodeTaskService,
-        broadcastService,
-        settingService,
-        modelSelectionService: providerRuntime.modelSelection,
-        remoteWorkspaceService: botRemoteWorkspaceService,
-        astrBotProvider,
-        // 远端与本地 Bot 都读取所属 Environment 的 Model Selection View。
-        // 远端启动期不再轮询旧 Preset，避免重新制造一套模型候选事实。
-        runStartupBackgroundTasks: !isDesktopAttachedRemote,
-      }),
-    )
     .register(IFileWatcherService, createFileWatcherService())
     .register(IUsageStatsService, createUsageStatsService({ zcodeAgentService, apiClient }))
     .register(ICodingPlanSubscriptionService, codingPlanSubscriptionService)
@@ -1677,7 +1631,6 @@ export function createLocalServices(options: {
   providerRuntimes.set(services, providerRuntime);
   providerProvisioningSources.set(services, providerProvisioningSource);
   providerProvisioningTriggerDisposers.set(services, providerProvisioningDisposers);
-  astrBotBridgeProviders.set(services, astrBotProvider);
   services
     .register(IProviderSettingsService, providerRuntime.providerSettings)
     .register(IModelSelectionService, providerRuntime.modelSelection);
@@ -1723,7 +1676,6 @@ export function disposeServiceResources(services: ServiceCollection): void {
     services.getOptional(IZCodeTaskService),
     services.getOptional(IZCodeAgentService),
     services.getOptional(IZCodeSessionService),
-    services.getOptional(IBotsService),
     services.getOptional(IFileWatcherService),
   ].filter((service) => service !== undefined);
 
@@ -1759,7 +1711,6 @@ export async function disposeServiceResourcesAndWait(services: ServiceCollection
     services.getOptional(IZCodeTaskService),
     services.getOptional(IZCodeAgentService),
     services.getOptional(IZCodeSessionService),
-    services.getOptional(IBotsService),
     services.getOptional(IFileWatcherService),
   ].filter((service) => service !== undefined);
 
@@ -1790,6 +1741,3 @@ export async function disposeServiceResourcesAndWait(services: ServiceCollection
     .catch(() => {});
 }
 
-// AstrBot 桥接传输的 provider 与投递日志依赖 node:crypto，只能从 @zcode/services/node 引入。
-// 官方 bots 服务（createBotsService）见上方；AstrBot 已作为其 astrbot provider 接入。
-export type { BotsDeliveryReplay } from "./bots/botsDeliveryLog.js";
