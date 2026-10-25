@@ -45,20 +45,14 @@ export function applySettingsPatch(
   return mergeDeep(view as PlainObject, patch as PlainObject) as NekSettingsView;
 }
 
-/** 嵌套补丁：允许子键为 null（删除）。 */
-export type NestedSettingsPatch = {
-  [K in keyof NekSettingsView]?:
-    | null
-    | (NonNullable<NekSettingsView[K]> extends readonly unknown[]
-        ? NekSettingsView[K]
-        : NonNullable<NekSettingsView[K]> extends object
-          ? {
-              [F in keyof NonNullable<NekSettingsView[K]>]?:
-                | NonNullable<NekSettingsView[K]>[F]
-                | null;
-            }
-          : NekSettingsView[K]);
-};
+/** 嵌套补丁：任意层级的子键可为 null（删除）。 */
+type DeepPatch<T> = T extends readonly unknown[]
+  ? T
+  : T extends object
+    ? { [K in keyof T]?: DeepPatch<NonNullable<T[K]>> | null }
+    : T;
+
+export type NestedSettingsPatch = DeepPatch<NekSettingsView>;
 
 /**
  * 嵌套 `null` 的唯一出口：契约类型尚未表达嵌套删除，这里集中做一次类型收窄。

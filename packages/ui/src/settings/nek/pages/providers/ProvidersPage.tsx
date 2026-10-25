@@ -4,7 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import { BoxesIcon } from "lucide-react";
-import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
+import type { NekModelConfig, NekProviderView, NekThinkingLevel } from "@zcode/shared/nek-protocol";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useUndoToast } from "@/components/ui/undo-toast.js";
@@ -48,7 +48,7 @@ async function saveModelDraft(
   const levels = settings.data?.values.modelThinkingLevels ?? {};
   const oldRef = original ? formatModelRef(provider.id, original.id) : undefined;
   const newRef = formatModelRef(provider.id, config.id);
-  const changes: Record<string, string | null> = {};
+  const changes: Record<string, NekThinkingLevel | null> = {};
   if (oldRef && oldRef !== newRef && oldRef in levels) {
     changes[oldRef] = null;
   }
@@ -60,7 +60,7 @@ async function saveModelDraft(
   );
   if (relevant.length > 0) {
     await settings.patch(
-      nestedSettingsPatch({ modelThinkingLevels: Object.fromEntries(relevant) as never }),
+      nestedSettingsPatch({ modelThinkingLevels: Object.fromEntries(relevant) }),
     );
   }
 }
