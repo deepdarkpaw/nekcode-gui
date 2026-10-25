@@ -8,10 +8,12 @@ import { resolveNekSettingsApis } from "./api/registry.js";
 import type { NekSettingsSectionId } from "./sections.js";
 import { AccountsPage } from "./pages/accounts/AccountsPage.js";
 import { ProvidersPage } from "./pages/providers/ProvidersPage.js";
+import { DefaultModelPage } from "./pages/DefaultModelPage.js";
 
 const PAGES: Partial<Record<NekSettingsSectionId, () => ReactNode>> = {
   nekAccounts: () => <AccountsPage />,
   nekProviders: () => <ProvidersPage />,
+  nekDefaultModel: () => <DefaultModelPage />,
 };
 
 export function NekSettingsSection({
