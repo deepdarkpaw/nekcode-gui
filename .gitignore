@@ -1,0 +1,100 @@
+# ===== 工作区规则（全局 AGENTS.md） =====
+# Markdown 只跟踪 README.md；许可要求随源码分发的声明显式放行。
+*.md
+!README.md
+!NOTICE.md
+!THIRD-PARTY-NOTICES.md
+!third-party/**/NOTICE.md
+
+# 隐藏目录默认忽略；CI 工作流与门禁基线是构建必需，显式放行。
+.*/
+!.github/
+!.gate-baseline/
+
+# 参考源码、本地工具链、子代理工作树
+/参考/
+/.tools/
+/.worktree/
+
+# 构建产物（packages/desktop/build/ 是打包图标与安装脚本源文件，保留）
+build/
+!packages/desktop/build/
+dist/
+dist-release/
+packages/desktop/dist-*/
+out/
+target/
+prebuilds/
+bundled-resources/
+mock-cdn/
+packages/desktop/bundled-resources/
+packages/desktop/bundled-agents/
+packages/desktop/bundled-tools/
+packages/desktop/bundled-remote-assets/
+packages/desktop/mock-cdn/
+*.tsbuildinfo
+coverage/
+
+# 依赖与缓存
+node_modules/
+/.electron-builder-cache/
+/.electron-cache/
+/.pnpm-store/
+/.npm-cache/
+.turbo/
+.cache
+
+# Go
+*.test
+*.out
+go.work.sum
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+
+# 可执行文件与二进制
+*.exe
+*.dll
+*.so
+*.dylib
+*.node
+*.o
+*.obj
+*.a
+*.lib
+
+# 原生模块构建中间产物
+.deps/
+obj.target/
+config.gypi
+gyp-mac-tool
+*.target.mk
+binding.Makefile
+**/build/Makefile
+**/build/Release/*.node
+
+# 本地环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志、临时文件、系统垃圾
+logs/
+*.log
+*.tmp
+*.temp
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+.VSCodeCounter
+
+# 本地安装包产物
+/nekcode-*.deb
+/nekcode-*.dmg
+/nekcode-*.exe
+/nekcode-*.AppImage
+/nekcode-*.rpm

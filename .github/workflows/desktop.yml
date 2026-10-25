@@ -1,0 +1,406 @@
+name: Desktop CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  HUSKY: "0"
+  ZCODE_ENV: production
+  ZCODE_SKIP_REMOTE_ASSETS: "1"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # 全史检出：版本串的 commitCount 取 git rev-list --count HEAD，浅克隆会恒为 1，
+          # 同一天不同 commit 派生相同版本串，updater 漏推更新（见 packages/desktop/scripts/build-metadata.mjs）
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release version
+        run: node scripts/ci/desktop-release.mjs check-version
+      - uses: ./.github/actions/setup-workspace
+        id: setup
+      - name: Typecheck
+        run: pnpm typecheck
+      # 门禁是「棘轮」：存量债务收在 .gate-baseline/ 里，只拦截新增违规。
+      # 原始真值命令是 pnpm lint / pnpm fmt:check（存量债务会报错，属预期）。
+      - name: Lint
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: pnpm gate:lint
+      - name: Format
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: pnpm gate:format
+      - name: Architecture
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: pnpm architecture:check
+      # knip 早已配置却从未进入 CI（上游 code review 报告 §5.2 同样点名这一点）。
+      # 既有告警千余条，直接当门禁会立刻变红，因此走 .gate-baseline/knip.json 棘轮：
+      # 只对新增的未用导出/类型/文件/依赖失败，允许逐步收紧。见 scripts/ci/gate-ratchet.mjs。
+      - name: Unused code and dependencies
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: pnpm gate:knip
+      - name: Plugin UI domain regressions
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/plugin-ui/domain packages/ui/src/plugin-ui/contract.test.ts
+      - name: Build Agent test dependencies
+        id: agent-build
+        # 根安装采用 hoisted 布局；从子 workspace 启动会丢失根目录的工具路径。
+        run: pnpm -r --filter './apps/zcode-cli/packages/*' build
+      - name: Agent package tests
+        if: ${{ !cancelled() && steps.agent-build.outcome == 'success' }}
+        # 这些包的测试是 node:test、入口在各自的包级 test 脚本里；根 CI 此前只跑了 scripts/ci 与 zcode-cua，
+        # 新增（如 @zcode/contracts）的包级测试不会进入门禁，因此在这里补一道。
+        run: pnpm -r --filter './apps/zcode-cli/packages/*' test
+      - name: Vitest suites
+        if: ${{ !cancelled() && steps.agent-build.outcome == 'success' }}
+        # 这批测试用 vitest，覆盖远控分片/重传/ack、MCP Apps 契约、adapter 出站响应等回归场景；
+        # 此前 CI 只跑了 scripts/ci 与包级 node:test，这些套件一直没进门禁。
+        # workspace 包的 exports 指向 src，套件不依赖构建产物，因此放在构建步骤之后、Release tests 之前。
+        # UI 留白套件依赖 @ alias 与 SSR JSX，单独使用受控配置；任一命令失败即门禁失败。
+        run: |
+          pnpm vitest run packages/shared/src/webRemoteControl packages/shared/src/mcp-apps packages/ui/src/lib/webRemoteControlTarget.test.ts packages/desktop/src/main/webRemoteControl/servicePipe.test.ts packages/desktop/src/main/desktopAgentRuntimeEnv.test.ts apps/zcode-cli/packages/adapters/src/network packages/web/src/mobile packages/shared/src/zcode-protocol-v4
+          pnpm vitest run --config packages/ui/vitest.holes.config.ts
+          pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnRenderUnits.test.ts
+      - name: Release tests
+        if: ${{ !cancelled() && steps.agent-build.outcome == 'success' }}
+        run: node --test --test-isolation=none scripts/ci/*.test.mjs
+      - name: Computer Use runtime and SDK checks
+        run: |
+          node --test --test-isolation=none packages/zcode-cua/test/*.test.mjs
+          pnpm --filter @zcode/zcode-cua-plugin check:sdk
+      - name: Conversation navigator regressions
+        if: ${{ !cancelled() && steps.agent-build.outcome == 'success' }}
+        run: pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnNavigatorPreview.test.ts
+      - name: Standalone CLI and TUI model setup checks
+        run: |
+          node scripts/ci/cli-local-entrypoints-smoke.mjs
+          node scripts/ci/local-automation-protocol-smoke.mjs
+          node scripts/ci/bundled-plugin-marketplace-protocol-smoke.mjs
+          node scripts/ci/tui-model-setup-smoke.mjs
+      - name: Install browser for remote form checks
+        run: pnpm exec playwright-core install --with-deps chromium
+      - name: Install isolated Computer Use test desktop
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb openbox bubblewrap dbus-x11 at-spi2-core apparmor
+          # Ubuntu 24.04 的 userns 限制会阻止 bwrap 配置隔离网络的 loopback。
+          # 仅授权 CI 的 bwrap 创建命名空间，保留全局 AppArmor 与测试断网隔离。
+          sudo apparmor_parser -r <<'PROFILE'
+          abi <abi/4.0>,
+          profile zcodium-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+      - name: Computer Use actions without network access
+        run: node scripts/ci/cua-actions-smoke.mjs
+      - name: Remote form browser checks
+        run: node scripts/ci/remote-form-smoke.mjs
+      - name: Bundled help browser checks
+        run: node scripts/ci/bundled-help-smoke.mjs
+      - name: Local feedback browser checks
+        run: node scripts/ci/local-feedback-smoke.mjs
+      - name: Conversation navigator browser checks
+        run: node scripts/ci/conversation-navigator-smoke.mjs
+      - name: Web remote control dialog browser checks
+        run: node scripts/ci/web-remote-control-dialog-smoke.mjs
+      - name: Imported conversation browser checks
+        run: node scripts/ci/local-share-context-smoke.mjs
+      - name: Self-managed model settings
+        run: |
+          pnpm --filter @zcode/desktop build:no-runtime-assets
+          node scripts/ci/local-scheduler-smoke.mjs
+          node scripts/ci/self-managed-models-smoke.mjs
+          node scripts/ci/model-choice-smoke.mjs
+          node scripts/ci/local-usage-smoke.mjs
+          node scripts/ci/coding-plan-quota-smoke.mjs
+          node scripts/ci/local-automations-smoke.mjs
+          node scripts/ci/local-context-smoke.mjs
+          node scripts/ci/session-local-errors-smoke.mjs
+          node scripts/ci/local-onboarding-smoke.mjs
+      - name: Bundled catalog browser checks
+        run: |
+          node scripts/ci/client-catalog-smoke.mjs
+          node scripts/ci/bundled-plugin-marketplace-smoke.mjs
+      - name: Model setup without official purchases
+        run: node scripts/ci/no-official-purchase-smoke.mjs
+      - name: Local preferences without official accounts
+        run: node scripts/ci/local-preferences-smoke.mjs
+      - name: Verify self-managed image search configuration
+        run: node scripts/ci/image-search-config-smoke.mjs
+      - name: Startup without official account restoration
+        run: |
+          pnpm --filter @zcode/web build
+          node scripts/ci/root-startup-smoke.mjs
+          node scripts/ci/web-entry-without-oauth-smoke.mjs
+      - name: Conversation file browser checks
+        run: |
+          node scripts/ci/conversation-export-smoke.mjs
+          node scripts/ci/conversation-import-smoke.mjs
+
+  remote-assets:
+    name: Bundled Linux remote runtime
+    # coverage 与资产 producer 没有数据依赖，之前串行等待 checks 白白增加约 9 分钟。
+    # 从同一 ref 并行生成真实资产；checks 失败仍打包，release 仍单独等待 checks 成功。
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Build remote components from source
+        run: pnpm prepare:remote-assets
+      - name: Verify native remote runtime
+        run: node scripts/ci/remote-assets-smoke.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bundled-remote-linux-x64
+          path: packages/desktop/bundled-remote-assets/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  build:
+    name: Build (${{ matrix.flavor }} ${{ matrix.target.platform }} ${{ matrix.target.arch }})
+    needs: remote-assets
+    # 打包只等待 assets 真实产出，不等待 checks 完成，也不看 checks 是否通过：
+    # - checks 失败但 assets 成功 -> 继续打包，保留「检查与打包独立」的产品规则；
+    # - assets 失败/取消 -> build 跳过，避免四个平台各自下载缺失 artifact 制造重复噪声；
+    # 不使用 continue-on-error 或 artifact 静默 fallback，跳过状态如实反映 assets 失败。
+    if: ${{ !cancelled() && needs.remote-assets.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && '["production","preview"]' || '["production"]') }}
+        target:
+          - platform: linux
+            runner: ubuntu-24.04
+            arch: x64
+          # Linux arm64：使用 GitHub 公共仓库免费提供的原生 arm64 runner，
+          # 这样 CUA 原生库与打包后的 Electron 运行时都能真正执行探针，
+          # 而不是像交叉打包那样只能校验文件。
+          - platform: linux
+            runner: ubuntu-24.04-arm
+            arch: arm64
+          - platform: win
+            runner: windows-2025
+            arch: x64
+          # Windows arm64：electron-builder 在 x64 runner 上交叉构建；原生库
+          # @trycua/cua-driver-win32-arm64-msvc 已随 SDK optionalDependencies 分发。
+          # 这是唯一一个 crossArch 目标：原生库无法在 x64 Node/Electron 里加载。
+          - platform: win
+            runner: windows-2025
+            arch: arm64
+            crossArch: true
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      ZCODE_TARGET_OS: ${{ matrix.target.platform }}
+      ZCODE_TARGET_ARCH: ${{ matrix.target.arch }}
+      ZCODE_PREVIEW_IDENTITY: ${{ matrix.flavor == 'preview' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm libarchive-tools zstd
+      - uses: ./.github/actions/setup-workspace
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: bundled-remote-linux-x64
+          path: packages/desktop/bundled-remote-assets
+      - name: Verify bundled remote components
+        run: node scripts/bundle-remote-assets.mjs verify
+      # Preview 的 Rust runtime 必须在准备/构建前安装；与仓库 CLI workflow 使用相同 stable channel。
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.flavor == 'preview'
+      - name: Initialize Windows MSVC environment for Preview
+        if: matrix.flavor == 'preview' && matrix.target.platform == 'win'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: ${{ matrix.target.arch == 'arm64' && 'amd64_arm64' || 'amd64' }}
+      - name: Install Windows ARM64 Rust target
+        if: matrix.flavor == 'preview' && matrix.target.platform == 'win' && matrix.target.arch == 'arm64'
+        run: rustup target add aarch64-pc-windows-msvc
+      - name: Prepare desktop runtime
+        run: pnpm prepare:desktop-runtime
+      # 交叉架构（Windows arm64 在 x64 runner 上打包）加载不了目标原生库，
+      # 只能校验随包资产文件；执行探针留给同架构的原生 runner（含 Linux arm64）。
+      - name: Verify native CUA and shared plugin host
+        if: matrix.target.crossArch != true
+        run: node scripts/ci/cua-driver-smoke.mjs
+      - name: Verify staged CUA assets (cross-arch)
+        if: matrix.target.crossArch == true
+        run: node scripts/ci/cua-driver-smoke.mjs --files-only
+      - name: Build workspace and desktop
+        run: pnpm build:bootstrap
+      - name: Package and verify desktop
+        run: pnpm bundle:desktop -- --os "$ZCODE_TARGET_OS" --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
+      # 同理：交叉架构的 Electron 可执行文件在 x64 runner 上跑不起来。
+      - name: Verify CUA with the packaged Electron runtime
+        if: matrix.target.crossArch != true
+        run: node scripts/ci/cua-driver-smoke.mjs --packaged
+      - name: Collect installers
+        run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-${{ matrix.flavor }}-${{ matrix.target.platform }}-${{ matrix.target.arch }}
+          path: dist/release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  build-macos:
+    name: Build (${{ matrix.flavor }} mac ${{ matrix.target.arch }})
+    # macOS runner 按 10 倍费率计分钟，只在发版 tag 与手动触发时打包；
+    # 日常 push/PR 的打包回归由 linux/win 矩阵与 checks 覆盖。
+    if: ${{ !cancelled() && needs.remote-assets.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) }}
+    needs: remote-assets
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && '["production","preview"]' || '["production"]') }}
+        target:
+          # arm64 与 x64 各自用原生 runner：Apple Silicon 上交叉打 x64 会带上
+          # 错误架构的原生预编译产物（node-pty prebuild、bundled 工具链）。
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 120
+    env:
+      ZCODE_TARGET_OS: mac
+      ZCODE_TARGET_ARCH: ${{ matrix.target.arch }}
+      ZCODE_PREVIEW_IDENTITY: ${{ matrix.flavor == 'preview' && '1' || '0' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      # 与 linux/win 同样下载 ubuntu 上产出的 Linux x64 远端运行时：
+      # 打包链路在 beforePack/afterPack 里无条件校验 bundled-remote-assets。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: bundled-remote-linux-x64
+          path: packages/desktop/bundled-remote-assets
+      - name: Verify bundled remote components
+        run: node scripts/bundle-remote-assets.mjs verify
+      # Rust runtime 只用于 Preview；工具链必须在 runtime preparation 之前就绪。
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.flavor == 'preview'
+      - name: Prepare desktop runtime
+        run: pnpm prepare:desktop-runtime
+      - name: Build workspace and desktop
+        run: pnpm build:bootstrap
+      - name: Package and verify desktop
+        run: pnpm bundle:desktop -- --os mac --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
+      - name: Collect installers
+        run: node scripts/ci/desktop-release.mjs collect mac "$ZCODE_TARGET_ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-${{ matrix.flavor }}-mac-${{ matrix.target.arch }}
+          path: dist/release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    name: Draft release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [checks, build, build-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+        with:
+          install-dependencies: "false"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-production-linux-x64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-production-linux-arm64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-production-win-x64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-production-win-arm64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-production-mac-arm64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-production-mac-x64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-preview-linux-x64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-preview-linux-arm64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-preview-win-x64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-preview-win-arm64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-preview-mac-arm64
+          path: dist/release-assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-preview-mac-x64
+          path: dist/release-assets
+      - name: Verify assets and create or update draft
+        run: node scripts/ci/desktop-release.mjs publish
+        env:
+          GH_TOKEN: ${{ github.token }}

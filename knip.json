@@ -1,0 +1,67 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "tags": [
+    "-lintignore"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        ".release-it.mjs",
+        ".vscode/*.mjs",
+        "scripts/check-workspace-freshness.mjs",
+        "scripts/mise-run.mjs",
+        "scripts/zcode-cli-rust-workbench-smoke.mjs",
+        "scripts/ci/fixtures/mcp-workbench.mjs"
+      ]
+    },
+    "packages/desktop": {
+      "entry": [
+        "electron-builder.config.js",
+        "scripts/sign-windows-hook.cjs",
+        "src/renderer/*.html",
+        "src/renderer/cuaPermissionPanel.ts",
+        "src/renderer/src/resource-manager.tsx"
+      ]
+    },
+    "packages/server": {
+      "entry": [
+        "src/index.ts",
+        "src/entry-stdio.ts",
+        "build-remote.ts"
+      ]
+    },
+    "packages/services": {
+      "entry": [
+        "src/index.ts",
+        "src/storage/module.ts"
+      ]
+    },
+    "apps/zcode-cli/packages/browser-use-plugin": {
+      "entry": [
+        "src/browser-client.ts"
+      ]
+    },
+    "apps/zcode-cli/packages/pdf-plugin/skills/pdf/scripts": {
+      "entry": [
+        "html2pdf-next.js",
+        "html2poster.js",
+        "cover_validate.js"
+      ]
+    },
+    "apps/zcode-cli/packages/superpowers-plugin": {
+      "entry": [
+        "skills/brainstorming/scripts/server.cjs"
+      ]
+    },
+    "packages/relay": {
+      "entry": [
+        "src/cli.ts"
+      ]
+    }
+  },
+  "ignore": [
+    ".agents/**",
+    "docs/**",
+    "packages/ui/src/components/**"
+  ]
+}

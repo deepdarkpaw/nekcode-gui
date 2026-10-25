@@ -1,0 +1,15 @@
+{
+  // 本包的 oxlint 配置：规则通过 extends 继承根配置，根配置已覆盖本包（apps/zcode-cli），
+  // 因此这里不重复声明规则。保留下方包级 fixture 路径排除，它们只收窄本目录的扫描范围。
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["../../../../.oxlintrc.json"],
+  "ignorePatterns": [
+    "tests/workflows/**",
+    "tests/graphs/**",
+    "tests/holes/**",
+    "tests/schemas/**",
+    "tests/schema-errors/**"
+  ],
+  // override 留空：文件超出 max-lines 上限时应拆模块，而不是回到这里加豁免名单。
+  "overrides": []
+}

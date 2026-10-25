@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="zh-CN" class="no-js">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZCodium Exp. — 把只在安装包里存在的功能补回源码</title>
+    <meta
+      name="description"
+      content="ZCodium Exp. 是 ZCode 的社区衍生仓库：上游发布新功能却不放出对应源码时，我们补齐等价实现并开源。不等待、不申请、不保留。"
+    />
+    <link rel="icon" href="assets/favicon.ico" sizes="any" />
+    <link rel="icon" href="assets/logo-256.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/logo-192.png" />
+    <meta property="og:title" content="ZCodium Exp. — ZCode 的社区衍生仓库" />
+    <meta property="og:description" content="把只存在于安装包里的功能，一个个补回开源源码。" />
+    <meta property="og:image" content="assets/og.png" />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#f4f2ee" />
+    <script>
+      document.documentElement.className = "js";
+    </script>
+    <style>
+      /* ============================================================
+     设计语言
+     - 版式与节奏：Apple —— 大字号、宽留白、居中开头、胶囊按钮
+     - 色彩与网格：Tracebit —— 石灰岩底 + 焦橙强调 + 瑞士式微标签
+     ============================================================ */
+      :root {
+        --paper: #f4f2ee;
+        --paper-soft: #efece6;
+        --ink: #17150f;
+        --ink-2: #5b554c;
+        --ink-3: #8a8378;
+        --line: rgba(23, 21, 15, 0.12);
+        --line-strong: rgba(23, 21, 15, 0.22);
+        --accent: #e14b1e;
+        --accent-dark: #bf3d14;
+        --accent-soft: #f7cfc3;
+        --block: #17150f;
+        --white: #fff;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", Roboto, Helvetica,
+          Arial, sans-serif;
+        --mono:
+          ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        --container: 1120px;
+        --r: 22px;
+        --r-sm: 12px;
+        --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow-x: hidden;
+      }
+      ::selection {
+        background: var(--accent);
+        color: #fff;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      img {
+        display: block;
+        max-width: 100%;
+      }
+      svg {
+        display: block;
+      }
+
+      .container {
+        width: min(100% - 48px, var(--container));
+        margin-inline: auto;
+      }
+
+      .skip {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        z-index: 200;
+        background: var(--ink);
+        color: var(--paper);
+        padding: 10px 16px;
+        border-radius: 0 0 var(--r-sm) 0;
+      }
+      .skip:focus {
+        left: 0;
+      }
+
+      /* 微标签 —— Tracebit 式瑞士排版 */
+      .label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      /* ============================================================
+     顶栏 —— Apple 式全宽半透明玻璃
+     ============================================================ */
+      .site-head {
+        position: sticky;
+        top: 0;
+        z-index: 60;
+        background: rgba(244, 242, 238, 0.72);
+        -webkit-backdrop-filter: saturate(180%) blur(20px);
+        backdrop-filter: saturate(180%) blur(20px);
+        border-bottom: 1px solid transparent;
+        transition:
+          border-color 0.3s ease,
+          background 0.3s ease;
+      }
+      .site-head.is-scrolled {
+        background: rgba(244, 242, 238, 0.88);
+        border-bottom-color: var(--line);
+      }
+      .head-inner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 62px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .brand img {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+      }
+      .brand b {
+        font-size: 15.5px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .brand span {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-3);
+        padding-left: 10px;
+        margin-left: 4px;
+        border-left: 1px solid var(--line-strong);
+        white-space: nowrap;
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        margin-left: auto;
+      }
+      .nav a {
+        font-size: 14px;
+        color: var(--ink-2);
+        transition: color 0.2s ease;
+      }
+      .nav a:hover {
+        color: var(--ink);
+      }
+      .locale {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: 4px;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(23, 21, 15, 0.06);
+      }
+      .locale button {
+        font-family: inherit;
+        font-size: 12.5px;
+        line-height: 1;
+        padding: 6px 11px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ink-2);
+        cursor: pointer;
+        transition:
+          background 0.2s ease,
+          color 0.2s ease;
+      }
+      .locale button:hover {
+        color: var(--ink);
+      }
+      .locale button.is-active {
+        background: var(--ink);
+        color: var(--paper);
+        font-weight: 600;
+      }
+
+      /* ============================================================
+     按钮
+     ============================================================ */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 22px;
+        border-radius: 999px;
+        font-family: var(--sans);
+        font-size: 15px;
+        font-weight: 500;
+        line-height: 1.2;
+        border: 1px solid transparent;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          background 0.2s ease,
+          color 0.2s ease,
+          border-color 0.2s ease,
+          transform 0.2s ease;
+      }
+      .btn svg {
+        width: 15px;
+        height: 15px;
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--accent-dark);
+      }
+      .btn-ghost {
+        border-color: var(--line-strong);
+        color: var(--ink);
+      }
+      .btn-ghost:hover {
+        background: var(--white);
+        border-color: var(--ink);
+      }
+      .btn-dark {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .btn-dark:hover {
+        background: #2c281e;
+      }
+      .btn-sm {
+        padding: 9px 16px;
+        font-size: 13.5px;
+      }
+
+      /* ============================================================
+     Hero —— 第一眼就是梁文锋那句话
+     ============================================================ */
+      .hero {
+        position: relative;
+        padding: 104px 0 96px;
+        text-align: center;
+        overflow: hidden;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: -40% -10% auto;
+        height: 130%;
+        background: radial-gradient(
+          60% 55% at 50% 12%,
+          var(--accent-soft),
+          rgba(247, 207, 195, 0) 68%
+        );
+        opacity: 0.75;
+        pointer-events: none;
+      }
+      .hero .container {
+        position: relative;
+        z-index: 1;
+      }
+      .hero .label {
+        display: block;
+        margin-bottom: 30px;
+      }
+      .hero h1 {
+        font-size: clamp(34px, 6.6vw, 76px);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.04;
+        text-wrap: balance;
+      }
+      .hero blockquote {
+        max-width: 780px;
+        margin: 34px auto 0;
+        font-size: clamp(17px, 2.1vw, 22px);
+        font-weight: 400;
+        line-height: 1.72;
+        letter-spacing: -0.01em;
+        color: var(--ink-2);
+        text-wrap: pretty;
+      }
+      .hero cite {
+        display: block;
+        margin-top: 26px;
+        font-family: var(--mono);
+        font-style: normal;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      .hero-note {
+        max-width: 640px;
+        margin: 20px auto 0;
+        font-size: clamp(15px, 1.7vw, 18px);
+        line-height: 1.7;
+        color: var(--ink);
+      }
+      .hero-tag {
+        max-width: 640px;
+        margin: 40px auto 0;
+        font-size: clamp(16px, 1.9vw, 19px);
+        line-height: 1.65;
+        color: var(--ink);
+      }
+      .hero-tag b {
+        font-weight: 600;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 34px;
+      }
+
+      /* ============================================================
+     跑马灯 —— Tracebit 的招牌元素
+     ============================================================ */
+      .marquee {
+        overflow: hidden;
+        background: var(--block);
+        color: var(--paper);
+        border-block: 1px solid var(--ink);
+      }
+      .marquee-track {
+        display: flex;
+        width: max-content;
+        animation: marquee 34s linear infinite;
+      }
+      .marquee-track p {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        padding: 15px 14px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .marquee-track span {
+        color: var(--accent);
+      }
+      @keyframes marquee {
+        to {
+          transform: translateX(-50%);
+        }
+      }
+
+      /* ============================================================
+     通用分区
+     ============================================================ */
+      .section {
+        padding: 120px 0;
+      }
+      .section h2 {
+        margin-top: 18px;
+        font-size: clamp(30px, 4.6vw, 54px);
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.06;
+      }
+      .lede {
+        max-width: 620px;
+        margin-top: 20px;
+        font-size: clamp(16px, 1.7vw, 18px);
+        line-height: 1.7;
+        color: var(--ink-2);
+      }
+
+      /* ============================================================
+     安装
+     ============================================================ */
+      #install {
+        background: var(--paper-soft);
+        border-block: 1px solid var(--line);
+      }
+      .install-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 28px;
+        margin-top: 54px;
+        align-items: start;
+      }
+      .term {
+        border-radius: var(--r);
+        overflow: hidden;
+        background: var(--block);
+        border: 1px solid #2c281e;
+        box-shadow: 0 30px 60px -30px rgba(23, 21, 15, 0.45);
+      }
+      .term-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+      }
+      .term-bar .dots {
+        display: flex;
+        gap: 6px;
+      }
+      .term-bar .dots i {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.18);
+      }
+      .term-bar .name {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .copy {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        padding: 5px 12px;
+        cursor: pointer;
+        transition:
+          background 0.2s ease,
+          color 0.2s ease;
+      }
+      .copy:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+      }
+      .copy.is-done {
+        color: #8fe0a9;
+        border-color: rgba(143, 224, 169, 0.4);
+      }
+      .copy svg {
+        width: 13px;
+        height: 13px;
+      }
+      .term-body {
+        padding: 20px 22px 24px;
+        overflow-x: auto;
+      }
+      .term-body code {
+        font-family: var(--mono);
+        font-size: 13.5px;
+        line-height: 2.15;
+        color: #f2efe9;
+      }
+      .term-body .line {
+        display: block;
+        white-space: pre;
+      }
+      .term-body .p {
+        color: var(--accent);
+        margin-right: 10px;
+      }
+      .term-body .c {
+        color: rgba(255, 255, 255, 0.34);
+        margin-left: 18px;
+      }
+
+      .install-side {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 30px;
+        border-radius: var(--r);
+        background: var(--white);
+        border: 1px solid var(--line);
+      }
+      .install-side h3 {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .install-side p {
+        color: var(--ink-2);
+        font-size: 14.5px;
+        line-height: 1.7;
+      }
+      .install-side .btn {
+        margin-top: 16px;
+      }
+
+      .fine {
+        margin-top: 34px;
+        font-size: 14px;
+        color: var(--ink-3);
+        line-height: 1.7;
+      }
+      .fine code {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink);
+        background: rgba(23, 21, 15, 0.06);
+        border: 1px solid var(--line);
+        padding: 2px 7px;
+        border-radius: 7px;
+      }
+      .fine a {
+        color: var(--ink);
+        border-bottom: 1px solid var(--line-strong);
+      }
+      .fine a:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      /* ============================================================
+     我们做了什么 —— 只给入口，不贴内容
+     ============================================================ */
+      .links {
+        list-style: none;
+        margin-top: 50px;
+        border-top: 1px solid var(--line);
+      }
+      .link-row {
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        padding: 30px 8px;
+        border-bottom: 1px solid var(--line);
+        transition:
+          padding-left 0.3s var(--ease),
+          background 0.3s ease;
+      }
+      .link-row:hover {
+        padding-left: 20px;
+        background: rgba(255, 255, 255, 0.55);
+      }
+      .link-row .num {
+        flex: none;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--ink-3);
+        padding-top: 4px;
+      }
+      .link-main {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+      .link-row:hover .link-title {
+        color: var(--accent);
+      }
+      .link-title {
+        font-size: clamp(19px, 2.1vw, 25px);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        transition: color 0.25s ease;
+      }
+      .link-desc {
+        font-size: 14.5px;
+        color: var(--ink-2);
+        line-height: 1.65;
+      }
+      .link-arrow {
+        flex: none;
+        margin-left: auto;
+        width: 18px;
+        height: 18px;
+        color: var(--ink-3);
+        transition:
+          transform 0.3s var(--ease),
+          color 0.25s ease;
+      }
+      .link-row:hover .link-arrow {
+        transform: translateX(5px);
+        color: var(--accent);
+      }
+
+      /* ============================================================
+     收尾 CTA
+     ============================================================ */
+      .closing {
+        position: relative;
+        padding: 150px 0;
+        text-align: center;
+        background: var(--block);
+        color: var(--paper);
+        overflow: hidden;
+      }
+      .closing::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 0;
+        width: 780px;
+        height: 480px;
+        transform: translateX(-50%);
+        background: radial-gradient(closest-side, rgba(225, 75, 30, 0.38), transparent 72%);
+        filter: blur(30px);
+        pointer-events: none;
+      }
+      .closing .container {
+        position: relative;
+        z-index: 1;
+      }
+      .closing h2 {
+        font-size: clamp(32px, 5vw, 62px);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.05;
+        text-wrap: balance;
+      }
+      .closing p {
+        max-width: 600px;
+        margin: 24px auto 0;
+        color: rgba(244, 242, 238, 0.66);
+        font-size: 16.5px;
+        line-height: 1.75;
+      }
+      .closing .btn-ghost {
+        border-color: rgba(244, 242, 238, 0.3);
+        color: var(--paper);
+      }
+      .closing .btn-ghost:hover {
+        background: rgba(244, 242, 238, 0.1);
+        border-color: var(--paper);
+      }
+
+      /* ============================================================
+     Footer
+     ============================================================ */
+      footer {
+        padding: 52px 0 64px;
+        border-top: 1px solid var(--line);
+      }
+      .foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .foot-brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .foot-brand img {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+      }
+      .foot-brand b {
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+      .foot-brand span {
+        display: block;
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      .foot-links {
+        display: flex;
+        gap: 22px;
+        flex-wrap: wrap;
+      }
+      .foot-links a {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        transition: color 0.2s ease;
+      }
+      .foot-links a:hover {
+        color: var(--accent);
+      }
+      .foot-fine {
+        margin-top: 34px;
+        padding-top: 24px;
+        border-top: 1px solid var(--line);
+        font-size: 12.5px;
+        color: var(--ink-3);
+        line-height: 1.8;
+      }
+      .foot-fine a {
+        border-bottom: 1px solid var(--line-strong);
+      }
+      .foot-fine a:hover {
+        color: var(--accent);
+      }
+
+      /* ============================================================
+     进场动画
+     ============================================================ */
+      .js .reveal {
+        opacity: 0;
+        transform: translateY(22px);
+      }
+      .js .reveal.in {
+        opacity: 1;
+        transform: none;
+        transition:
+          opacity 0.9s var(--ease) var(--d, 0s),
+          transform 0.9s var(--ease) var(--d, 0s);
+      }
+
+      /* ============================================================
+     响应式
+     ============================================================ */
+      @media (max-width: 900px) {
+        .install-grid {
+          grid-template-columns: 1fr;
+        }
+        .brand span {
+          display: none;
+        }
+      }
+      @media (max-width: 680px) {
+        .section {
+          padding: 88px 0;
+        }
+        .hero {
+          padding: 68px 0 72px;
+        }
+        .nav {
+          display: none;
+        }
+        .link-row {
+          gap: 16px;
+          padding: 26px 4px;
+        }
+        .link-row .num {
+          display: none;
+        }
+        .closing {
+          padding: 110px 0;
+        }
+        .foot {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        .js .reveal {
+          opacity: 1;
+          transform: none;
+        }
+        .marquee-track {
+          animation: none;
+        }
+        .link-row,
+        .link-arrow,
+        .btn {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body id="top">
+    <a class="skip" href="#main" data-i18n="skip">跳到主要内容</a>
+
+    <!-- ===================== 顶栏 ===================== -->
+    <header class="site-head" id="siteHead">
+      <div class="container head-inner">
+        <a class="brand" href="#top" aria-label="ZCodium Exp. 首页">
+          <img src="assets/logo-256.png" alt="ZCodium Exp." width="24" height="24" />
+          <b>ZCodium Exp.</b>
+          <span data-i18n="brand-tag">ZCode 的社区衍生仓库</span>
+        </a>
+        <nav class="nav" aria-label="主导航">
+          <a href="#install" data-i18n="nav-install">安装</a>
+          <a href="#work" data-i18n="nav-work">我们做了什么</a>
+        </nav>
+        <div class="locale" role="group" aria-label="Language / 语言">
+          <button type="button" data-lang-btn="zh" class="is-active" aria-pressed="true">
+            中文
+          </button>
+          <button type="button" data-lang-btn="en" aria-pressed="false">EN</button>
+        </div>
+        <a
+          class="btn btn-primary btn-sm"
+          href="https://github.com/axiom-desu/ZCodium"
+          target="_blank"
+          rel="noopener"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ===================== Hero：梁文锋那句话 ===================== -->
+      <section class="hero">
+        <div class="container">
+          <span class="label reveal">ZCodium Exp.</span>
+          <h1 class="reveal" style="--d: 0.06s" data-i18n="hero-h1">为什么我们这么坚持开源？</h1>
+          <blockquote class="reveal" style="--d: 0.12s" data-i18n-html="hero-quote">
+            因为这个愿景本身就要求开源。你没有这个愿景，你没法把人组织起来。比如说，智谱也开源，但是智谱的开源跟我们的开源不一样。<strong
+              ><em>智谱的开源有一种被迫的感觉</em></strong
+            >，他们觉得这不是本意，但是对我们来讲，这就是我们的本意。
+          </blockquote>
+          <cite class="reveal" style="--d: 0.18s" data-i18n="hero-cite">梁文锋 · 深度求索 CEO</cite>
+          <p class="hero-note reveal" style="--d: 0.22s" data-i18n="hero-note">
+            我们深有感触，于是有了 ZCodium Exp.
+          </p>
+
+          <p class="hero-tag reveal" style="--d: 0.26s" data-i18n-html="hero-tag">
+            ZCodium Exp. 是 ZCode 的社区衍生仓库：上游把一批功能留在了安装包里，我们把它们<b
+              >补回源码</b
+            >
+            —— 不等待、不申请、不保留。
+          </p>
+          <div class="actions reveal" style="--d: 0.32s">
+            <a class="btn btn-primary" href="#install" data-i18n="cta-start">开始安装</a>
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/axiom-desu/ZCodium"
+              target="_blank"
+              rel="noopener"
+            >
+              <span data-i18n="cta-github">在 GitHub 上查看</span>
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 8h10M9 4l4 4-4 4" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 跑马灯 ===================== -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <p data-i18n-html="marquee">
+            跟进上游 <span>·</span> 补全缺口 <span>·</span> 有据可查 <span>·</span> 不等待
+            <span>·</span> 不申请 <span>·</span> 不保留 <span>·</span> 源码与安装包对等
+            <span>·</span>
+          </p>
+          <p data-i18n-html="marquee">
+            跟进上游 <span>·</span> 补全缺口 <span>·</span> 有据可查 <span>·</span> 不等待
+            <span>·</span> 不申请 <span>·</span> 不保留 <span>·</span> 源码与安装包对等
+            <span>·</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- ===================== 安装 ===================== -->
+      <section class="section" id="install">
+        <div class="container">
+          <p class="label reveal">Install</p>
+          <h2 class="reveal" style="--d: 0.06s" data-i18n="install-h2">怎么装</h2>
+          <p class="lede reveal" style="--d: 0.12s" data-i18n-html="install-lede">
+            准备 Node.js <b>24.14.0</b> 与 pnpm <b>10.33.2</b>，在仓库根目录执行即可。
+          </p>
+
+          <div class="install-grid">
+            <div class="term reveal" style="--d: 0.16s">
+              <div class="term-bar">
+                <span class="dots"><i></i><i></i><i></i></span>
+                <span class="name">terminal</span>
+                <button
+                  class="copy"
+                  type="button"
+                  data-copy="pnpm bootstrap&#10;pnpm dev:desktop&#10;pnpm dev:web"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    aria-hidden="true"
+                  >
+                    <rect x="5.5" y="5.5" width="8" height="8" rx="1.6" />
+                    <path
+                      d="M10.5 5.5v-2A1.5 1.5 0 0 0 9 2H4a2 2 0 0 0-2 2v5a1.5 1.5 0 0 0 1.5 1.5h2"
+                    />
+                  </svg>
+                  <span class="copy-text" data-i18n="copy">复制</span>
+                </button>
+              </div>
+              <div class="term-body">
+                <code>
+                  <span class="line"
+                    ><span class="p">$</span>pnpm bootstrap<span class="c"
+                      ># 安装依赖，准备运行资源</span
+                    ></span
+                  >
+                  <span class="line"
+                    ><span class="p">$</span>pnpm dev:desktop<span class="c"
+                      ># 启动桌面应用</span
+                    ></span
+                  >
+                  <span class="line"
+                    ><span class="p">$</span>pnpm dev:web<span class="c"
+                      ># 启动 Web 工作台</span
+                    ></span
+                  >
+                </code>
+              </div>
+            </div>
+
+            <div class="install-side reveal" style="--d: 0.22s">
+              <h3 data-i18n="side-h3">不想自己构建？</h3>
+              <p data-i18n="side-p">
+                直接在 GitHub Releases 下载对应平台的桌面安装包：macOS、Windows 与
+                Linux。安装包未签名，首次打开可能需要在系统中放行。
+              </p>
+              <a
+                class="btn btn-dark"
+                href="https://github.com/axiom-desu/ZCodium/releases"
+                target="_blank"
+                rel="noopener"
+              >
+                <span data-i18n="cta-releases">前往 Releases</span>
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <p class="fine reveal" style="--d: 0.26s" data-i18n-html="install-fine">
+            命令行版：构建发行包后，<code>zcode</code> 进入终端界面，<code>zcode --web</code> 启动
+            Web。完整步骤见
+            <a
+              href="https://github.com/axiom-desu/ZCodium/blob/main/README.md#初始化"
+              target="_blank"
+              rel="noopener"
+              >README 的初始化一章</a
+            >。
+          </p>
+        </div>
+      </section>
+
+      <!-- ===================== 我们做了什么：只给链接 ===================== -->
+      <section class="section" id="work">
+        <div class="container">
+          <p class="label reveal">What we did</p>
+          <h2 class="reveal" style="--d: 0.06s" data-i18n="work-h2">我们做了什么</h2>
+          <p class="lede reveal" style="--d: 0.12s" data-i18n="work-lede">
+            补了什么、还差什么、为什么这么补 —— 全部写在仓库里。这里只留入口，正文请看链接。
+          </p>
+
+          <ul class="links">
+            <li class="reveal" style="--d: 0.14s">
+              <a
+                class="link-row"
+                href="https://github.com/axiom-desu/ZCodium/blob/main/README.md#与官方包的能力差异"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="num">01</span>
+                <span class="link-main">
+                  <span class="link-title" data-i18n="link1-title">与官方包的能力差异</span>
+                  <span class="link-desc" data-i18n="link1-desc"
+                    >已补全、尚未补全、有意不补全的完整清单。</span
+                  >
+                </span>
+                <svg
+                  class="link-arrow"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </li>
+            <li class="reveal" style="--d: 0.18s">
+              <a
+                class="link-row"
+                href="https://github.com/axiom-desu/ZCodium/blob/main/README.md#已定的补全路线"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="num">02</span>
+                <span class="link-main">
+                  <span class="link-title" data-i18n="link2-title">已定的补全路线</span>
+                  <span class="link-desc" data-i18n="link2-desc"
+                    >bot 通知、Computer Use、本地搜图 —— 下一步做什么，怎么做。</span
+                  >
+                </span>
+                <svg
+                  class="link-arrow"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </li>
+            <li class="reveal" style="--d: 0.22s">
+              <a
+                class="link-row"
+                href="https://github.com/axiom-desu/ZCodium/tree/main/.agents/specs"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="num">03</span>
+                <span class="link-main">
+                  <span class="link-title" data-i18n="link3-title">补全 spec</span>
+                  <span class="link-desc" data-i18n="link3-desc"
+                    >每个补全项的范围、状态所有者、接口契约与验收场景。</span
+                  >
+                </span>
+                <svg
+                  class="link-arrow"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </li>
+            <li class="reveal" style="--d: 0.26s">
+              <a
+                class="link-row"
+                href="https://github.com/axiom-desu/ZCodium/blob/main/README.md#与上游的关系"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="num">04</span>
+                <span class="link-main">
+                  <span class="link-title" data-i18n="link4-title">与上游的关系</span>
+                  <span class="link-desc" data-i18n="link4-desc"
+                    >如何跟进上游、补全内容如何按功能拆分提交。</span
+                  >
+                </span>
+                <svg
+                  class="link-arrow"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </li>
+            <li class="reveal" style="--d: 0.3s">
+              <a
+                class="link-row"
+                href="https://github.com/axiom-desu/ZCodium/blob/main/DIAGNOSTICS.md"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="num">05</span>
+                <span class="link-main">
+                  <span class="link-title" data-i18n="link5-title">诊断与遥测</span>
+                  <span class="link-desc" data-i18n="link5-desc"
+                    >保留了什么、去掉了什么、为什么。</span
+                  >
+                </span>
+                <svg
+                  class="link-arrow"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </li>
+            <li class="reveal" style="--d: 0.34s">
+              <a
+                class="link-row"
+                href="https://github.com/axiom-desu/ZCodium/blob/main/README.en.md"
+                target="_blank"
+                rel="noopener"
+                data-i18n-href="link6-href"
+              >
+                <span class="num">06</span>
+                <span class="link-main">
+                  <span class="link-title" data-i18n="link6-title">English README</span>
+                  <span class="link-desc" data-i18n="link6-desc"
+                    >Read the same story in English.</span
+                  >
+                </span>
+                <svg
+                  class="link-arrow"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===================== 收尾 ===================== -->
+      <section class="closing">
+        <div class="container">
+          <h2 class="reveal" data-i18n="closing-h2">让源码与安装包对等。</h2>
+          <p class="reveal" style="--d: 0.08s" data-i18n="closing-p">
+            上游发布新功能却不放出对应源码时，我们补齐等价实现并开源 ——
+            判断依据是安装包里有没有，不是上游说了什么。
+          </p>
+          <div class="actions reveal" style="--d: 0.16s">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/axiom-desu/ZCodium"
+              target="_blank"
+              rel="noopener"
+            >
+              <span data-i18n="cta-github">在 GitHub 上查看</span>
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 8h10M9 4l4 4-4 4" />
+              </svg>
+            </a>
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/axiom-desu/ZCodium/blob/main/README.md"
+              target="_blank"
+              rel="noopener"
+              data-i18n="cta-readme"
+              >阅读 README</a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===================== Footer ===================== -->
+    <footer>
+      <div class="container">
+        <div class="foot">
+          <div class="foot-brand">
+            <img src="assets/logo-256.png" alt="" width="22" height="22" />
+            <div>
+              <b>ZCodium Exp.</b>
+              <span data-i18n="brand-tag">ZCode 的社区衍生仓库</span>
+            </div>
+          </div>
+          <nav class="foot-links" aria-label="页脚导航">
+            <a href="https://github.com/axiom-desu/ZCodium" target="_blank" rel="noopener"
+              >GitHub</a
+            >
+            <a
+              href="https://github.com/axiom-desu/ZCodium/blob/main/README.md"
+              target="_blank"
+              rel="noopener"
+              >中文 README</a
+            >
+            <a
+              href="https://github.com/axiom-desu/ZCodium/blob/main/README.en.md"
+              target="_blank"
+              rel="noopener"
+              >English README</a
+            >
+            <a
+              href="https://github.com/axiom-desu/ZCodium/blob/main/NOTICE.md"
+              target="_blank"
+              rel="noopener"
+              >NOTICE</a
+            >
+            <a
+              href="https://github.com/axiom-desu/ZCodium/blob/main/LICENSE"
+              target="_blank"
+              rel="noopener"
+              >LICENSE</a
+            >
+          </nav>
+        </div>
+        <p class="foot-fine" data-i18n-html="foot-fine">
+          基于 Apache-2.0 许可。ZCodium Exp.
+          由社区维护，与上游官方无隶属关系；图形与商标归各自所有者。 功能补全记录见
+          <a
+            href="https://github.com/axiom-desu/ZCodium/tree/main/.agents/specs"
+            target="_blank"
+            rel="noopener"
+            >.agents/specs</a
+          >。
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        // 顶栏：滚动后出现分隔线
+        var head = document.getElementById("siteHead");
+        var onScroll = function () {
+          head.classList.toggle("is-scrolled", window.scrollY > 8);
+        };
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+
+        // ===== 中英文切换 =====
+        var EN = {
+          skip: "Skip to content",
+          "brand-tag": "A community fork of ZCode",
+          "nav-install": "Install",
+          "nav-work": "What we did",
+          "hero-h1": "Why are we so committed to open source?",
+          "hero-quote":
+            "Because this vision itself demands it. Without this vision, you cannot bring people together. Take Zhipu, for example \u2014 they also open source, but their open source is not the same as ours. <strong><em>Theirs has a sense of being forced</em></strong>; they feel it is not their original intent. But for us, this is our intent.",
+          "hero-cite": "Liang Wenfeng \u00b7 CEO, DeepSeek",
+          "hero-note": "It resonated deeply with us, and so ZCodium Exp. was born.",
+          "hero-tag":
+            "ZCodium Exp. is a community fork of ZCode: upstream left a batch of features in the installer, and we put them <b>back into the source</b> \u2014 no waiting, no asking, no withholding.",
+          marquee:
+            "Track upstream <span>\u00b7</span> Close the gaps <span>\u00b7</span> Documented <span>\u00b7</span> No waiting <span>\u00b7</span> No asking <span>\u00b7</span> No withholding <span>\u00b7</span> Source parity with the installer <span>\u00b7</span>",
+          "install-h2": "How to install",
+          "install-lede":
+            "Requires Node.js <b>24.14.0</b> and pnpm <b>10.33.2</b>. Run these in the repository root.",
+          copy: "Copy",
+          "term-c1": "# Install deps and prepare runtime assets",
+          "term-c2": "# Start the desktop app",
+          "term-c3": "# Start the web workspace",
+          "side-h3": "Don't want to build it yourself?",
+          "side-p":
+            "Download a desktop installer for your platform from GitHub Releases: macOS, Windows, and Linux. The builds are unsigned, so your system may need to allow them on first launch.",
+          "cta-releases": "Go to Releases",
+          "install-fine":
+            'CLI: after building the distribution, <code>zcode</code> opens the terminal UI and <code>zcode --web</code> starts the web app. Full steps are in <a href="https://github.com/axiom-desu/ZCodium/blob/main/README.md#\u521d\u59cb\u5316" target="_blank" rel="noopener">the README\u2019s initialization section</a>.',
+          "work-h2": "What we did",
+          "work-lede":
+            "What we added, what is still missing, and why \u2014 it is all in the repo. This page only links there; the details live in the README.",
+          "link1-title": "Feature parity with the official build",
+          "link1-desc": "The full list: shipped, still missing, and deliberately left out.",
+          "link2-title": "The roadmap",
+          "link2-desc":
+            "Bot notifications, Computer Use, local image search \u2014 what is next and how.",
+          "link3-title": "Parity specs",
+          "link3-desc":
+            "Scope, state owners, interface contracts, and acceptance scenarios for each item.",
+          "link4-title": "Relationship with upstream",
+          "link4-desc": "How we track upstream and split parity work into per-feature commits.",
+          "link5-title": "Diagnostics and telemetry",
+          "link5-desc": "What we kept, what we removed, and why.",
+          "link6-title": "中文 README",
+          "link6-desc": "阅读同一份说明的中文版。",
+          "link6-href": "https://github.com/axiom-desu/ZCodium Exp./blob/main/README.md",
+          "closing-h2": "Bring the source and the installer to parity.",
+          "closing-p":
+            "When upstream ships a feature without releasing its source, we build an equivalent and open-source it. The test is whether it is in the installer, not what upstream says.",
+          "cta-github": "View on GitHub",
+          "cta-readme": "Read the README",
+          "cta-start": "Get started",
+          "foot-fine":
+            'Licensed under Apache-2.0. ZCodium Exp. is community-maintained and not affiliated with upstream; logos and trademarks belong to their respective owners. Parity records live in <a href="https://github.com/axiom-desu/ZCodium/tree/main/.agents/specs" target="_blank" rel="noopener">.agents/specs</a>.',
+        };
+        var EN_TITLE = "ZCodium Exp. \u2014 Putting installer-only features back into the source";
+        var EN_DESC =
+          "ZCodium Exp. is a community fork of ZCode: when upstream ships a feature without releasing its source, we build an equivalent and open-source it. No waiting, no asking, no withholding.";
+
+        var nodes = [];
+        var register = function (el, key, html) {
+          nodes.push({ el: el, key: key, html: html, zh: html ? el.innerHTML : el.textContent });
+        };
+        document.querySelectorAll("[data-i18n]").forEach(function (el) {
+          register(el, el.getAttribute("data-i18n"), false);
+        });
+        document.querySelectorAll("[data-i18n-html]").forEach(function (el) {
+          register(el, el.getAttribute("data-i18n-html"), true);
+        });
+        // 需要随语言切换的链接（中/英文 README 互换）
+        var hrefNodes = [];
+        document.querySelectorAll("[data-i18n-href]").forEach(function (el) {
+          hrefNodes.push({
+            el: el,
+            key: el.getAttribute("data-i18n-href"),
+            zh: el.getAttribute("href"),
+          });
+        });
+        // 终端注释含源码缩进，按顺序注册更干净
+        document.querySelectorAll(".term-body .c").forEach(function (el, i) {
+          register(el, "term-c" + (i + 1), false);
+        });
+
+        var metaDesc = document.querySelector('meta[name="description"]');
+        var ogDesc = document.querySelector('meta[property="og:description"]');
+        var zhTitle = document.title;
+        var zhDesc = metaDesc ? metaDesc.getAttribute("content") : "";
+        var zhOg = ogDesc ? ogDesc.getAttribute("content") : "";
+
+        var lang = "zh";
+        var applyLang = function (next) {
+          lang = next === "en" ? "en" : "zh";
+          var en = lang === "en";
+          document.documentElement.lang = en ? "en" : "zh-CN";
+          document.title = en ? EN_TITLE : zhTitle;
+          if (metaDesc) metaDesc.setAttribute("content", en ? EN_DESC : zhDesc);
+          if (ogDesc) ogDesc.setAttribute("content", en ? EN_DESC : zhOg);
+          nodes.forEach(function (n) {
+            if (n.html) {
+              n.el.innerHTML = en ? EN[n.key] : n.zh;
+            } else {
+              n.el.textContent = en ? EN[n.key] : n.zh;
+            }
+          });
+          hrefNodes.forEach(function (n) {
+            n.el.setAttribute("href", en ? EN[n.key] : n.zh);
+          });
+          document.querySelectorAll("[data-lang-btn]").forEach(function (b) {
+            var active = b.getAttribute("data-lang-btn") === lang;
+            b.classList.toggle("is-active", active);
+            b.setAttribute("aria-pressed", active ? "true" : "false");
+          });
+          try {
+            localStorage.setItem("zcodium-lang", lang);
+          } catch (e) {}
+        };
+
+        document.querySelectorAll("[data-lang-btn]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            applyLang(b.getAttribute("data-lang-btn"));
+          });
+        });
+
+        // 初始语言：本地记录 > URL 参数 > 浏览器语言
+        var saved = null;
+        try {
+          saved = localStorage.getItem("zcodium-lang");
+        } catch (e) {}
+        var param = null;
+        try {
+          param = new URLSearchParams(location.search).get("lang");
+        } catch (e) {}
+        var detected = "zh";
+        if (saved === "en" || saved === "zh") {
+          detected = saved;
+        } else if (param === "en" || param === "zh") {
+          detected = param;
+        } else if ((navigator.language || "").toLowerCase().indexOf("zh") !== 0) {
+          detected = "en";
+        }
+        applyLang(detected);
+
+        // 进场动画
+        var reveals = document.querySelectorAll(".reveal");
+        if (!("IntersectionObserver" in window)) {
+          reveals.forEach(function (el) {
+            el.classList.add("in");
+          });
+        } else {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                  entry.target.classList.add("in");
+                  io.unobserve(entry.target);
+                }
+              });
+            },
+            { rootMargin: "0px 0px -12% 0px", threshold: 0.1 },
+          );
+          reveals.forEach(function (el) {
+            io.observe(el);
+          });
+        }
+
+        // 复制命令
+        document.querySelectorAll(".copy").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var text = btn.getAttribute("data-copy") || "";
+            var label = btn.querySelector(".copy-text");
+            var done = function () {
+              btn.classList.add("is-done");
+              label.textContent = lang === "en" ? "Copied" : "已复制";
+              setTimeout(function () {
+                btn.classList.remove("is-done");
+                label.textContent = lang === "en" ? EN.copy : "复制";
+              }, 1600);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(done, done);
+            } else {
+              var ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try {
+                document.execCommand("copy");
+              } catch (e) {}
+              document.body.removeChild(ta);
+              done();
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
