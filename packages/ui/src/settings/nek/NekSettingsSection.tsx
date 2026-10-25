@@ -16,6 +16,7 @@ import { AgentPage } from "./pages/agent/AgentPage.js";
 import { ProjectPage } from "./pages/ProjectPage.js";
 import { RemoteHostsPage } from "./pages/hosts/RemoteHostsPage.js";
 import { AppearancePage } from "./pages/AppearancePage.js";
+import { ShortcutsPage } from "./pages/ShortcutsPage.js";
 
 export interface NekSettingsSectionEnv {
   isWindowsDesktop: boolean;
@@ -31,6 +32,7 @@ const PAGES: Partial<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) =
   nekAgent: () => <AgentPage />,
   nekProject: () => <ProjectPage />,
   nekAppearance: () => <AppearancePage />,
+  nekShortcuts: () => <ShortcutsPage />,
   nekRemoteHosts: (env) => <RemoteHostsPage isWindowsDesktop={env.isWindowsDesktop} />,
 };
 
