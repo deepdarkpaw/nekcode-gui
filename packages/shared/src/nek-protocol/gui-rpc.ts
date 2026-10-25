@@ -135,6 +135,8 @@ export type NekGuiRpcCommand =
   // ---- 联网与 MCP 探测 [session + control] ----
   | { id?: string; type: "test_web_search"; query: string }
   | { id?: string; type: "mcp_test"; name?: string; config?: NekMcpServerConfig; cwd?: string }
+  // ---- 输入框 @ 点名补全 [session + control（按 cwd）] ----
+  | { id?: string; type: "get_mention_targets"; cwd?: string }
   // ---- 扩展通道 [session] ----
   | { id?: string; type: "extension_call"; method: string; params?: unknown };
 
@@ -161,6 +163,7 @@ export const NEK_CONTROL_COMMANDS: readonly string[] = [
   "set_project_trust",
   "test_web_search",
   "mcp_test",
+  "get_mention_targets",
   "get_available_models",
 ];
 
@@ -178,6 +181,24 @@ export interface NekInfo {
   cwd: string;
   platform: string;
   nodeVersion: string;
+}
+
+/**
+ * 输入框 `@` 补全中排在文件之前的点名目标（nek `core/mentions.ts`）：
+ * `@agent:<type>` 点名子代理类型，`@skill:<name>` 把该 Skill 作为隐藏消息（`customType: "skill_mention"`，
+ * `display: false`）附在用户消息之后；普通 `@path` 只是路径文本，不附带文件内容。
+ */
+export interface NekMentionTarget {
+  kind: "agent" | "skill";
+  name: string;
+  description?: string;
+  /** skill：SKILL.md 绝对路径（对话中 `@skill:name` 点击打开）。 */
+  location?: string;
+}
+
+/** `get_mention_targets` 响应：agent 按 subagents section 顺序，skill 按 resourceLoader 顺序。 */
+export interface NekMentionTargetsResult {
+  targets: NekMentionTarget[];
 }
 
 export interface NekConfigDiagnostic {
@@ -320,6 +341,7 @@ export interface NekGuiRpcResponseData {
   set_project_trust: Record<string, never>;
   test_web_search: NekTestWebSearchResult;
   mcp_test: NekMcpTestResult;
+  get_mention_targets: NekMentionTargetsResult;
   extension_call: { result: unknown };
 }
 
