@@ -334,6 +334,35 @@ test("fire-and-forget requests are notified without a response", async () => {
   assert.equal(harness.responses.length, 0);
 });
 
+test("get_mention_targets resolves the mapped target list", async () => {
+  const harness = createHarness();
+  const pending = harness.client.call({ type: "get_mention_targets" });
+  await waitFor(() => harness.commands.length === 1);
+  harness.emit({
+    id: harness.commands[0]?.id,
+    type: "response",
+    command: "get_mention_targets",
+    success: true,
+    data: {
+      targets: [
+        {
+          kind: "agent",
+          name: "explorer",
+          description: "read-only",
+          location: "/agents/explorer.md",
+        },
+        { kind: "skill", name: "pdf", description: "PDF files", location: "/skills/pdf/SKILL.md" },
+      ],
+    },
+  });
+  const data = await pending;
+  assert.deepEqual(
+    data.targets.map((target) => `${target.kind}:${target.name}`),
+    ["agent:explorer", "skill:pdf"],
+  );
+  assert.equal(data.targets[1]?.location, "/skills/pdf/SKILL.md");
+});
+
 test("delivers session events to typed listeners", async () => {
   const harness = createHarness();
   const events: string[] = [];

@@ -12,7 +12,11 @@ import {
   nekFuzzyFilter,
   nekFuzzyMatch,
 } from "@zcode/shared/nek-protocol";
-import type { MentionTarget } from "@zcode/shared/nek-protocol";
+import type {
+  MentionTarget,
+  NekRpcCommandOfType,
+  NekRpcResponseDataFor,
+} from "@zcode/shared/nek-protocol";
 
 /**
  * `@agent:` / `@skill:` 点名的语义镜像。
@@ -168,6 +172,31 @@ test("fuzzy filter splits on whitespace and slashes and keeps input order on tie
   assert.deepEqual(
     nekFuzzyFilter(["ab", "ac"], "a", (item) => item),
     ["ab", "ac"],
+  );
+});
+
+test("get_mention_targets is part of the command and response mapping", () => {
+  const command: NekRpcCommandOfType<"get_mention_targets"> = {
+    id: "m1",
+    type: "get_mention_targets",
+  };
+  assert.equal(command.type, "get_mention_targets");
+  // 响应 data 的类型由命令类型决定：写成别的形状在这里（tsc）会报错。
+  const data: NekRpcResponseDataFor<"get_mention_targets"> = {
+    targets: [
+      {
+        kind: "agent",
+        name: "explorer",
+        description: "read-only",
+        location: "/agents/explorer.md",
+      },
+    ],
+  };
+  assert.deepEqual(
+    matchMentionTargets(data.targets, "exp").map((target) =>
+      formatMention(target.kind, target.name),
+    ),
+    ["@agent:explorer"],
   );
 });
 

@@ -15,6 +15,7 @@ import type {
   NekMode,
   NekThinkingLevel,
 } from "./gui-rpc.js";
+import type { NekMentionTargetInfo } from "./mentions.js";
 import type {
   NekAgentMessage,
   NekImageContent,
@@ -206,8 +207,16 @@ export type NekSessionRpcCommand =
   // Commands
   | { id?: string; type: "get_commands" };
 
-/** 完整命令联合：nek 既有命令 + `gui-rpc.ts` 的 GUI 扩展命令。 */
-export type NekRpcCommand = NekSessionRpcCommand | NekGuiRpcCommand;
+/**
+ * `@agent:` / `@skill:` 点名补全的目标列表。
+ *
+ * 契约先落在镜像层（`gui-rpc.ts` 由主代理稍后同步）：GUI 启动会话/打开项目后取一次，
+ * 之后由 `reload` 触发刷新。返回的目标带 `location`，供 UI 打开 agent 预设或 `SKILL.md`。
+ */
+export type NekMentionRpcCommand = { id?: string; type: "get_mention_targets" };
+
+/** 完整命令联合：nek 既有命令 + 点名目标 + `gui-rpc.ts` 的 GUI 扩展命令。 */
+export type NekRpcCommand = NekSessionRpcCommand | NekMentionRpcCommand | NekGuiRpcCommand;
 
 export type NekRpcCommandType = NekRpcCommand["type"];
 export type NekSessionRpcCommandType = NekSessionRpcCommand["type"];
@@ -268,6 +277,8 @@ export interface NekRpcResponseDataMap {
   set_session_name: undefined;
   get_messages: { messages: NekAgentMessage[] };
   get_commands: { commands: NekRpcSlashCommand[] };
+  // ---- 点名补全 ----
+  get_mention_targets: { targets: NekMentionTargetInfo[] };
   // ---- gui-rpc 新增命令 ----
   get_info: NekGuiRpcResponseData["get_info"];
   reload: NekGuiRpcResponseData["reload"];
