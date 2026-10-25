@@ -154,6 +154,7 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
       return;
     }
     case "custom_message": {
+      // 扩展追加的隐藏消息（`display: false`）同样不投影成可见行。
       if (entry.display === false) return;
       applyCustomMessage(ctx, {
         role: "custom",

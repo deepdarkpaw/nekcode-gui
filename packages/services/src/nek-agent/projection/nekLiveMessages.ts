@@ -269,6 +269,13 @@ function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessag
   if (result.toolName === "subagent") applySubagentDetails(ctx, result.toolCallId, result.details);
 }
 
+/**
+ * `custom` 消息 → 行。
+ *
+ * `display: false` 表示"只给模型看、不进对话记录"：`@skill:name` 展开的
+ * `customType: "skill_mention"` 隐藏消息就是这一类（nek 把它紧跟在用户消息后面发给模型）。
+ * 它们不生成任何可见行，用户输入原样显示，`@agent:`/`@skill:` 的高亮由渲染层负责。
+ */
 function applyCustomMessage(ctx: NekLiveContext, message: NekCustomMessage): void {
   if (message.display === false) return;
   const timestamp = toEpochMs(message.timestamp);

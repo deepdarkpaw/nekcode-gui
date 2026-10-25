@@ -563,3 +563,114 @@ test("bash command streaming and final result land on one toolCall row", () => {
     1,
   );
 });
+
+test("hidden custom messages (skill_mention) never produce a visible row", () => {
+  const { projector, scheduler } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  const typed = "@agent:explorer 找出读取 config.yaml 的地方，再用 @skill:pdf 整理成 PDF";
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: typed, timestamp: 1_000 },
+  });
+  projector.handleEvent({
+    type: "message_end",
+    message: { role: "user", content: typed, timestamp: 1_000 },
+  });
+  // nek 把 skill 的完整说明作为隐藏消息紧跟用户消息之后发给模型。
+  const hidden = {
+    role: "custom" as const,
+    customType: "skill_mention",
+    // 多行内容用模板字符串：`\n` 在这里是真实换行，与 nek 写入的 <skill> 块一致。
+    content: `<skill name="pdf" location="/skills/pdf/SKILL.md">
+PDF 说明
+</skill>`,
+    display: false,
+    details: { name: "pdf", location: "/skills/pdf/SKILL.md" },
+    timestamp: 1_001,
+  };
+  projector.handleEvent({ type: "message_start", message: hidden });
+  projector.handleEvent({ type: "message_end", message: hidden });
+  scheduler.flushAll();
+  const rows = projector.snapshot().rows.window;
+  assert.deepEqual(
+    rows.map((row) => row.kind),
+    ["turnHeader", "userInput"],
+  );
+  const user = rows[1];
+  // 用户输入原样保留：不在投影层剥离或改写 @agent:/@skill: 记号（高亮交给 UI）。
+  assert.equal(user?.kind === "userInput" && user.text, typed);
+});
+
+test("hidden custom_message entries are skipped on the entries path", () => {
+  const hiddenEntries: NekSessionEntry[] = [
+    {
+      type: "message",
+      id: "h1",
+      parentId: null,
+      timestamp: iso(1_000),
+      message: { role: "user", content: "用 @skill:pdf 看这个", timestamp: 1_000 },
+    },
+    {
+      type: "custom_message",
+      id: "h2",
+      parentId: "h1",
+      timestamp: iso(1_100),
+      customType: "skill_mention",
+      content: "PDF 说明",
+      display: false,
+      details: { name: "pdf", location: "/skills/pdf/SKILL.md" },
+    },
+    {
+      type: "message",
+      id: "h3",
+      parentId: "h2",
+      timestamp: iso(2_000),
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "好的" }],
+        api: "anthropic-messages",
+        provider: "anthropic",
+        model: "claude-sonnet",
+        usage,
+        stopReason: "stop",
+        timestamp: 2_000,
+      },
+    },
+  ];
+  const { projector, frames } = createProjector();
+  projector.loadSnapshot({ entries: hiddenEntries, leafId: "h3" });
+  const snapshot = replay(frames);
+  assert.deepEqual(
+    snapshot.rows.window.map((row) => row.kind),
+    ["turnHeader", "userInput", "assistantText"],
+  );
+  const user = snapshot.rows.window[1];
+  assert.equal(user?.kind === "userInput" && user.text, "用 @skill:pdf 看这个");
+});
+
+test("an extension-appended hidden custom message also stays out of the transcript", () => {
+  const { projector, scheduler } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: "go", timestamp: 1_000 },
+  });
+  projector.handleEvent({
+    type: "entry_appended",
+    entry: {
+      type: "custom_message",
+      id: "x1",
+      parentId: null,
+      timestamp: iso(1_500),
+      customType: "skill_mention",
+      content: "PDF 说明",
+      display: false,
+      details: { name: "pdf" },
+    },
+  });
+  scheduler.flushAll();
+  assert.deepEqual(
+    projector.snapshot().rows.window.map((row) => row.kind),
+    ["turnHeader", "userInput"],
+  );
+});

@@ -156,6 +156,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         break;
       }
       case "custom_message": {
+        // `display: false` 的隐藏消息（如 `@skill:` 展开出的 `skill_mention`）不进对话记录。
         if (entry.display === false) break;
         const row = projectCustomMessage(entry as NekCustomMessageEntry, turn, allocator);
         if (row) push(row);
