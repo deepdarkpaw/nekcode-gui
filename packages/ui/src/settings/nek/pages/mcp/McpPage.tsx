@@ -196,6 +196,7 @@ export function McpPage() {
         )}
       </DocumentGate>
       <McpServerFormDialog
+        documents={[global]}
         open={form.open}
         onOpenChange={(open) => !open && setForm({ open: false })}
         initial={

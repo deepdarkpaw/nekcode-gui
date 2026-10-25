@@ -125,6 +125,7 @@ function ProvidersBody({
           }
         />
         <ProviderFormDialog
+          documents={[models]}
           open={dialog.kind === "addProvider"}
           onOpenChange={(open) => !open && close()}
           existingIds={existingIds}
@@ -168,6 +169,7 @@ function ProvidersBody({
         }
       />
       <ProviderFormDialog
+        documents={[models]}
         open={dialog.kind === "addProvider" || dialog.kind === "editProvider"}
         onOpenChange={(open) => !open && close()}
         provider={dialog.kind === "editProvider" ? selected : undefined}
@@ -176,6 +178,7 @@ function ProvidersBody({
         onRequestRename={() => setDialog({ kind: "rename" })}
       />
       <RenameProviderDialog
+        documents={[models]}
         open={dialog.kind === "rename"}
         onOpenChange={(open) => !open && close()}
         provider={selected}
@@ -202,6 +205,7 @@ function ProvidersBody({
         onManualAdd={() => setDialog({ kind: "model", model: undefined })}
       />
       <ModelEditorDialog
+        documents={[models, settings]}
         open={dialog.kind === "model"}
         onOpenChange={(open) => !open && close()}
         model={dialog.kind === "model" ? dialog.model : undefined}

@@ -1,10 +1,13 @@
+import type { NekConfigRevision as NekDraftRevision } from "@zcode/shared/nek-protocol";
+import type { NekDocument } from "../../api/useNekDocument.js";
+import { useDialogDraft } from "../../components/useDialogDraft.js";
 /**
  * 新建 / 编辑服务商表单：
  * 名称 → ID 自动生成（新建时可改，编辑时只读，"修改 ID"走单独的影响预览）；端点类型分段控件；
  * Base URL 占位示例 + 最终请求地址 + 常见错误一键修正；API Key 掩码 / 显示 / 环境变量；
  * 高级（默认折叠）：自定义请求头、authHeader、compat。
  */
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import { WandSparklesIcon } from "lucide-react";
 import type { NekEndpointApi, NekProviderView } from "@zcode/shared/nek-protocol";
 import { NEK_ENDPOINT_APIS } from "@zcode/shared/nek-protocol";
@@ -79,6 +82,7 @@ export function ProviderFormDialog({
   existingIds,
   onSave,
   onRequestRename,
+  documents,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -87,6 +91,9 @@ export function ProviderFormDialog({
   existingIds: ReadonlySet<string>;
   onSave: (draft: ProviderDraft) => Promise<void>;
   onRequestRename?: () => void;
+  documents?: ReadonlyArray<
+    Pick<NekDocument<NekDraftRevision>, "setDirty" | "resetToken"> | undefined
+  >;
 }) {
   const { intl } = useZCodeIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -97,12 +104,7 @@ export function ProviderFormDialog({
     () => (provider ? providerDraftFromView(provider) : emptyProviderDraft()),
     [provider],
   );
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => {
-    if (open) {
-      setDraft(initial);
-    }
-  }, [open, initial]);
+  const [draft, setDraft, resetDraft] = useDialogDraft(open, initial);
 
   const errors = validateProviderDraft(draft, { isNew, existingIds }, t);
   const valid = Object.keys(errors).length === 0;
@@ -129,6 +131,8 @@ export function ProviderFormDialog({
       valid={valid}
       saveLabel={t(isNew ? "settings.nek.provider.form.add" : "settings.nek.provider.form.save")}
       onSave={() => onSave(draft)}
+      documents={documents}
+      onReset={resetDraft}
     >
       {({ attempted }) => {
         const show = (field: keyof typeof errors, touched: boolean) =>

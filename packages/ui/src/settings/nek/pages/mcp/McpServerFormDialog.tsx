@@ -1,3 +1,6 @@
+import type { NekConfigRevision as NekDraftRevision } from "@zcode/shared/nek-protocol";
+import type { NekDocument } from "../../api/useNekDocument.js";
+import { useDialogDraft } from "../../components/useDialogDraft.js";
 /**
  * MCP 服务器表单：stdio 填 command / args / env / cwd；HTTP 填 url / headers，OAuth 在高级里。
  * 底部可"测试"当前草稿（连接、列出工具、断开）。
@@ -39,6 +42,7 @@ export function McpServerFormDialog({
   initial,
   existingNames,
   onSave,
+  documents,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -46,6 +50,9 @@ export function McpServerFormDialog({
   initial?: { name: string; config: NekMcpServerConfig };
   existingNames: ReadonlySet<string>;
   onSave: (name: string, config: NekMcpServerConfig) => Promise<void>;
+  documents?: ReadonlyArray<
+    Pick<NekDocument<NekDraftRevision>, "setDirty" | "resetToken"> | undefined
+  >;
 }) {
   const { intl } = useZCodeIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -57,14 +64,13 @@ export function McpServerFormDialog({
     () => (initial ? mcpDraftFromConfig(initial.name, initial.config) : emptyMcpDraft()),
     [initial],
   );
-  const [draft, setDraft] = useState(start);
+  const [draft, setDraft, resetDraft] = useDialogDraft(open, start);
   const [testResult, setTestResult] = useState<string | null>(null);
   useEffect(() => {
     if (open) {
-      setDraft(start);
       setTestResult(null);
     }
-  }, [open, start]);
+  }, [open]);
   const others = useMemo(
     () => new Set([...existingNames].filter((name) => name !== initial?.name)),
     [existingNames, initial],
@@ -84,6 +90,8 @@ export function McpServerFormDialog({
       valid={valid}
       saveLabel={t(initial ? "settings.nek.mcp.form.save" : "settings.nek.mcp.form.add")}
       onSave={() => onSave(draft.name.trim(), mcpConfigFromDraft(draft))}
+      documents={documents}
+      onReset={resetDraft}
       footerStart={
         <>
           <AsyncButton

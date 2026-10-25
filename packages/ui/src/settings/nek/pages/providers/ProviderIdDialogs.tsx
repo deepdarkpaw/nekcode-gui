@@ -1,3 +1,6 @@
+import type { NekConfigRevision as NekDraftRevision } from "@zcode/shared/nek-protocol";
+import type { NekDocument } from "../../api/useNekDocument.js";
+import { useDialogDraft } from "../../components/useDialogDraft.js";
 /**
  * 修改服务商 ID（高级）：输入新 ID → 预览并同步改写 defaultProvider、enabledModels、compaction.model、
  * modelThinkingLevels 与子代理预设里的引用；删除服务商：确认框列出删除后会失效的引用。
@@ -142,19 +145,20 @@ export function RenameProviderDialog({
   provider,
   existingIds,
   onRename,
+  documents,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   provider: NekProviderView;
   existingIds: ReadonlySet<string>;
   onRename: (to: string) => Promise<void>;
+  documents?: ReadonlyArray<
+    Pick<NekDocument<NekDraftRevision>, "setDirty" | "resetToken"> | undefined
+  >;
 }) {
   const { intl } = useZCodeIntl();
   const inputId = useId();
-  const [next, setNext] = useState(provider.id);
-  useEffect(() => {
-    if (open) setNext(provider.id);
-  }, [open, provider.id]);
+  const [next, setNext, resetNext] = useDialogDraft(open, provider.id);
   const { references } = useReferences(open, provider.id);
   const idError = next === provider.id ? "unchanged" : validateProviderId(next, existingIds);
   const errorText =
@@ -171,6 +175,8 @@ export function RenameProviderDialog({
       valid={idError === null}
       saveLabel={intl.formatMessage({ id: "settings.nek.provider.renameId" })}
       onSave={() => onRename(next)}
+      documents={documents}
+      onReset={resetNext}
     >
       {({ attempted }) => (
         <>

@@ -22,7 +22,15 @@ import { useFocusRestore } from "@/hooks/useFocusRestore.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { focusFirstInvalidField, handleFormDialogOpenAutoFocus } from "@/lib/dialogFocus.js";
 import { isImeComposing } from "@/lib/imeComposition.js";
+import type { NekConfigRevision } from "@zcode/shared/nek-protocol";
+import {
+  useNekDirtyRegistration,
+  useOnDocumentReset,
+  type NekDocument,
+} from "../api/useNekDocument.js";
 import { NekConfirmDialog } from "./NekConfirmDialog.js";
+
+type DraftDocument = Pick<NekDocument<NekConfigRevision>, "setDirty" | "resetToken">;
 
 export interface NekFormDialogProps {
   open: boolean;
@@ -41,6 +49,10 @@ export interface NekFormDialogProps {
   className?: string;
   /** 抽屉式（右侧）呈现。 */
   variant?: "dialog" | "drawer";
+  /** 草稿对应的配置文档：打开且有改动时登记为未保存，外部修改改为显示横幅。 */
+  documents?: ReadonlyArray<DraftDocument | undefined>;
+  /** 文档"重新载入"时丢弃草稿。 */
+  onReset?: () => void;
 }
 
 const DRAWER_CLASSNAME =
@@ -59,7 +71,12 @@ export function NekFormDialog({
   footerStart,
   className,
   variant = "dialog",
+  documents = [],
+  onReset,
 }: NekFormDialogProps) {
+  useNekDirtyRegistration(documents, open && dirty);
+  const resetToken = documents.reduce((sum, doc) => sum + (doc?.resetToken ?? 0), 0);
+  useOnDocumentReset(resetToken, () => onReset?.());
   const { intl } = useZCodeIntl();
   const contentRef = useRef<HTMLDivElement>(null);
   const focusRestore = useFocusRestore(open);

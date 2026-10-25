@@ -1,8 +1,11 @@
+import type { NekConfigRevision as NekDraftRevision } from "@zcode/shared/nek-protocol";
+import type { NekDocument } from "../../api/useNekDocument.js";
+import { useDialogDraft } from "../../components/useDialogDraft.js";
 /**
  * 子代理预设表单：name、description、model、thinking、context_window、readonly、tools、
  * disallowed_tools、is_background、autonomous 与正文说明。
  */
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import type { NekAgentPreset, NekCatalogModel, NekConfigScope } from "@zcode/shared/nek-protocol";
 import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import { Input } from "@/components/ui/input.js";
@@ -57,9 +60,13 @@ export function AgentPresetDialog({
   models,
   onSave,
   editing,
+  documents,
 }: {
   /** 编辑已有预设（否则为新建 / 复制）。 */
   editing: boolean;
+  documents?: ReadonlyArray<
+    Pick<NekDocument<NekDraftRevision>, "setDirty" | "resetToken"> | undefined
+  >;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** 编辑或复制的来源；undefined 为新建。 */
@@ -85,10 +92,7 @@ export function AgentPresetDialog({
     }),
     [initial, scope],
   );
-  const [draft, setDraft] = useState(start);
-  useEffect(() => {
-    if (open) setDraft(start);
-  }, [open, start]);
+  const [draft, setDraft, resetDraft] = useDialogDraft(open, start);
   const preset = draft.preset;
   const update = (patch: Partial<NekAgentPreset>) =>
     setDraft((current) => ({ ...current, preset: { ...current.preset, ...patch } }));
@@ -123,6 +127,8 @@ export function AgentPresetDialog({
       valid={valid}
       saveLabel={t(editing ? "settings.nek.agent.preset.save" : "settings.nek.agent.preset.create")}
       onSave={() => onSave(draft.scope, presetFromDraft(draft))}
+      documents={documents}
+      onReset={resetDraft}
     >
       {({ attempted }) => (
         <>

@@ -151,6 +151,7 @@ export function AgentPresetsSection({
         }
       </DocumentGate>
       <AgentPresetDialog
+        documents={[doc]}
         editing={dialog.kind === "edit"}
         open={dialog.kind !== "none"}
         onOpenChange={(open) => !open && setDialog({ kind: "none" })}

@@ -1,8 +1,11 @@
+import type { NekConfigRevision as NekDraftRevision } from "@zcode/shared/nek-protocol";
+import type { NekDocument } from "../../api/useNekDocument.js";
+import { useDialogDraft } from "../../components/useDialogDraft.js";
 /**
  * 模型编辑抽屉：ID、显示名称、上下文窗口与最大输出（支持 `200k` / `1M`）、图片输入、
  * 支持思考 + 可用等级勾选（高级：上游原始取值）、默认思考等级、价格（高级）。
  */
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import type { NekModelConfig, NekThinkingLevel } from "@zcode/shared/nek-protocol";
 import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import { Checkbox } from "@/components/ui/checkbox.js";
@@ -119,6 +122,7 @@ export function ModelEditorDialog({
   defaultLevel,
   otherIds,
   onSave,
+  documents,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -127,16 +131,16 @@ export function ModelEditorDialog({
   defaultLevel: NekThinkingLevel | undefined;
   otherIds: ReadonlySet<string>;
   onSave: (draft: ModelDraft) => Promise<void>;
+  documents?: ReadonlyArray<
+    Pick<NekDocument<NekDraftRevision>, "setDirty" | "resetToken"> | undefined
+  >;
 }) {
   const { intl } = useZCodeIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const baseId = useId();
   const initial = useMemo(() => modelDraftFrom(model, defaultLevel), [model, defaultLevel]);
-  const [draft, setDraft] = useState(initial);
-  useEffect(() => {
-    if (open) setDraft(initial);
-  }, [open, initial]);
+  const [draft, setDraft, resetDraft] = useDialogDraft(open, initial);
   const errors = validateModelDraft(draft, otherIds, t);
   const update = (patch: Partial<ModelDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const ids = {
@@ -157,6 +161,8 @@ export function ModelEditorDialog({
       valid={Object.keys(errors).length === 0}
       saveLabel={t(model ? "settings.nek.modelEditor.save" : "settings.nek.modelEditor.add")}
       onSave={() => onSave(draft)}
+      documents={documents}
+      onReset={resetDraft}
     >
       {({ attempted }) => (
         <>
