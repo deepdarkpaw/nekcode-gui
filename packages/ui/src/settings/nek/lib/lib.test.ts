@@ -182,6 +182,7 @@ describe("fetchedModels", () => {
   const catalog = [
     {
       provider: "x",
+      api: "openai-responses",
       id: "gpt-4.1",
       name: "GPT-4.1",
       contextWindow: 1_000_000,
