@@ -333,7 +333,12 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
   }
   if (turnOpen) pushTurnHeader("completedSuccess");
 
-  const usage = summarizeUsage(branch);
+  const usage = summarizeUsage(branch, {
+    contextWindow: input.stats?.contextUsage?.contextWindow ?? input.state?.model?.contextWindow,
+    ...(input.stats?.contextUsage?.tokens == null
+      ? {}
+      : { usedTokens: input.stats.contextUsage.tokens }),
+  });
   const plan = planFromNekState(input.nekState);
   if (input.nekState) mode = input.nekState.mode;
   return {

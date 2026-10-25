@@ -174,10 +174,23 @@ export class NekConversationProjector {
     this.scheduleFlush();
   }
 
-  /** 合并 `get_state` / `get_session_stats` 的结果。 */
-  applySessionState(state: NekRpcSessionState, _stats?: NekSessionStats): void {
+  /** 合并 `get_state` / `get_session_stats` 的结果（含上下文窗口用量）。 */
+  applySessionState(state: NekRpcSessionState, stats?: NekSessionStats): void {
     applySessionState(this.live, state);
     this.store.state.control = buildControlState(state, this.store.state.control.phase);
+    // 窗口大小只能从 nek 报告里取：`get_session_stats.contextUsage` 优先，其次模型元数据。
+    const maxTokens = stats?.contextUsage?.contextWindow ?? state.model?.contextWindow;
+    if (maxTokens !== undefined && maxTokens > 0) {
+      this.store.state.usage = {
+        ...this.store.state.usage,
+        contextWindow: {
+          usedTokens:
+            stats?.contextUsage?.tokens ?? this.store.state.usage.contextWindow?.usedTokens ?? 0,
+          maxTokens,
+          autoCompactThresholdTokens: null,
+        },
+      };
+    }
     this.scheduleFlush();
   }
 

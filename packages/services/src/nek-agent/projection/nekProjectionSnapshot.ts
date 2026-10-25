@@ -27,13 +27,15 @@ import { buildSubagentRow } from "./nekRows.js";
  * （control / config / usage / plan / queue / availability）与行之外的公共构造。
  */
 
-export function summarizeUsage(entries: readonly NekSessionEntry[]): SessionUsageState {
+export function summarizeUsage(
+  entries: readonly NekSessionEntry[],
+  options: { contextWindow?: number; usedTokens?: number } = {},
+): SessionUsageState {
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
   let cacheWriteTokens = 0;
   let contextTokens = 0;
-  let contextWindow = 0;
   for (const entry of entries) {
     if (entry.type === "usage") {
       inputTokens += entry.usage.input;
@@ -52,10 +54,17 @@ export function summarizeUsage(entries: readonly NekSessionEntry[]): SessionUsag
     // 最近一次 assistant 的 input+cacheRead+cacheWrite 是最接近"当前上下文占用"的估计。
     contextTokens = usage.input + usage.cacheRead + usage.cacheWrite + usage.output;
   }
+  // 上下文档位只能来自 nek 报告的模型窗口（`get_state.model.contextWindow` 或
+  // `get_session_stats.contextUsage`）：entries 里没有窗口大小，不要瞎猜。
+  const maxTokens = options.contextWindow ?? 0;
   return {
     contextWindow:
-      contextWindow > 0
-        ? { usedTokens: contextTokens, maxTokens: contextWindow, autoCompactThresholdTokens: null }
+      maxTokens > 0
+        ? {
+            usedTokens: options.usedTokens ?? contextTokens,
+            maxTokens,
+            autoCompactThresholdTokens: null,
+          }
         : null,
     cumulative: { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens },
   };

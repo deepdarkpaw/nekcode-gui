@@ -426,6 +426,55 @@ test("re-subscribing yields a fresh full snapshot at the current water mark", ()
   assert.equal(next.fromSeq, resubscribed[0]?.toSeq);
 });
 
+test("session state and stats fill the context window usage", () => {
+  const { projector, scheduler } = createProjector();
+  projector.loadSnapshot({ entries, leafId: "e6" });
+  projector.applySessionState(
+    {
+      thinkingLevel: "high",
+      isStreaming: false,
+      isCompacting: false,
+      steeringMode: "all",
+      followUpMode: "one-at-a-time",
+      sessionId: "session-1",
+      autoCompactionEnabled: true,
+      messageCount: 6,
+      pendingMessageCount: 0,
+      model: {
+        id: "gpt-5",
+        name: "GPT-5",
+        api: "openai-responses",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 400_000,
+        reasoning: true,
+      },
+    },
+    {
+      sessionFile: "/s.jsonl",
+      sessionId: "session-1",
+      userMessages: 1,
+      assistantMessages: 1,
+      toolCalls: 1,
+      toolResults: 1,
+      totalMessages: 4,
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      cost: 0,
+      contextUsage: { tokens: 12_345, contextWindow: 400_000, percent: 3 },
+    },
+  );
+  scheduler.flushAll();
+  const usageState = projector.snapshot().usage;
+  assert.deepEqual(usageState.contextWindow, {
+    usedTokens: 12_345,
+    maxTokens: 400_000,
+    autoCompactThresholdTokens: null,
+  });
+  assert.equal(projector.snapshot().config.thought, "high");
+});
+
 test("subagent tool results become subagent rows with a parent tool call", () => {
   const { projector, scheduler } = createProjector();
   projector.loadSnapshot({ entries: [], leafId: null });
