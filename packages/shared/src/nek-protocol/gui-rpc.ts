@@ -122,7 +122,13 @@ export type NekGuiRpcCommand =
   // ---- 模型 [session + control] ----
   | { id?: string; type: "get_model_catalog"; provider?: string; ids?: string[] }
   | { id?: string; type: "fetch_provider_models"; provider?: string; draft?: NekProviderDraft }
-  | { id?: string; type: "test_provider"; modelId: string; provider?: string; draft?: NekProviderDraft }
+  | {
+      id?: string;
+      type: "test_provider";
+      modelId: string;
+      provider?: string;
+      draft?: NekProviderDraft;
+    }
   // ---- 项目信任 [session + control] ----
   | { id?: string; type: "get_project_trust"; cwd: string }
   | { id?: string; type: "set_project_trust"; cwd: string; trusted: boolean }
@@ -261,7 +267,16 @@ export type NekTestProviderResult =
   | { ok: false; status?: number; message: string };
 
 export interface NekProjectTrustResource {
-  kind: "settings" | "mcp" | "extensions" | "skills" | "prompts" | "themes" | "agents" | "system_prompt" | "other";
+  kind:
+    | "settings"
+    | "mcp"
+    | "extensions"
+    | "skills"
+    | "prompts"
+    | "themes"
+    | "agents"
+    | "system_prompt"
+    | "other";
   path: string;
 }
 
@@ -326,7 +341,13 @@ export interface NekAuthEventRecord {
   event:
     | { type: "info"; message: string; links?: Array<{ url: string; label?: string }> }
     | { type: "auth_url"; url: string; instructions?: string }
-    | { type: "device_code"; userCode: string; verificationUri: string; intervalSeconds?: number; expiresInSeconds?: number }
+    | {
+        type: "device_code";
+        userCode: string;
+        verificationUri: string;
+        intervalSeconds?: number;
+        expiresInSeconds?: number;
+      }
     | { type: "progress"; message: string };
 }
 
@@ -360,7 +381,11 @@ export interface NekAuthPromptPayload {
   prompt:
     | { type: "text"; message: string; placeholder?: string }
     | { type: "secret"; message: string; placeholder?: string }
-    | { type: "select"; message: string; options: Array<{ id: string; label: string; description?: string }> }
+    | {
+        type: "select";
+        message: string;
+        options: Array<{ id: string; label: string; description?: string }>;
+      }
     | { type: "manual_code"; message: string; placeholder?: string };
 }
 
