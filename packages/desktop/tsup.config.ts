@@ -5,9 +5,6 @@ import { pathToFileURL } from "node:url";
 import { defineConfig } from "tsup";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
-const { copyGenUiRuntimeAssets } = await import(
-  pathToFileURL(resolve(import.meta.dirname, "scripts/gen-ui-runtime-assets.mjs")).href
-);
 // tsup 会先打包配置文件；动态加载构建工具，避免其 import.meta.dirname 被重定位到 desktop。
 const { loadBuiltinProviderConfig } = await import(
   pathToFileURL(resolve(import.meta.dirname, "../../scripts/builtin-provider-config.mjs")).href
@@ -138,8 +135,7 @@ export default defineConfig([
   {
     name: "main",
     entry: {
-      "main/index": "src/main/bootstrap.ts",
-      "main/gui": "src/main/gui.ts",
+      "main/index": "src/main/index.ts",
       "main/browserWebmRecorder": "src/main/browserView/electronBrowserWebmRecorder.ts",
       // 资源管理器「存储」tab 的扫描 Worker：main 持有 StorageService，遍历放独立线程，供 new Worker(new URL()) 解析。
       "main/storageScanWorker": "src/main/storageScanWorker.ts",
@@ -151,8 +147,7 @@ export default defineConfig([
     // undici 如果被 main ESM bundle 直接内联，运行时会落到它内部的 CommonJS require("assert")，
     // Electron 加载 main 产物时会报 Dynamic require of "assert" is not supported。
     // desktop 保持 undici 为外部依赖，remote 单文件 bundle 再单独内联。
-    // bootstrap 的 dynamic import 由入口名映射到同目录 gui.js，保留 specifier 供 tsup 输出入口映射。
-    external: [...desktopNodeRuntimeExternals, "./gui.js"],
+    external: desktopNodeRuntimeExternals,
     noExternal: [
       "@zcode/server",
       "@zcode/shared",
@@ -214,7 +209,6 @@ export default defineConfig([
     },
     // 不能放 out/renderer：vite renderer 构建 emptyOutDir 会把先落盘的别名脚本清掉。
     outDir: "out/plugin-sandbox",
-    onSuccess: () => copyGenUiRuntimeAssets(resolve("out/plugin-sandbox")),
     format: "iife",
     platform: "browser",
     target: "es2022",

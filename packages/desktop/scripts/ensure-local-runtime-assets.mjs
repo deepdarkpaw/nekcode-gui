@@ -117,8 +117,6 @@ if (missingAssets.length === 0) {
 
 // 开发态需要在 Electron 启动前发现缺失的本地 sidecar/helper，而不是等到真正使用时才报错。
 // 这里在 Electron 启动前只自检当前开发路径需要的 embedded search sidecar 和平台 helper。
-// Agent bundle 由后续 build-desktop-agent-cli 构建，开发态 resolver 优先使用 workspace dist，
-// 不在此自检范围。
 for (const asset of missingAssets) {
   console.log(
     `[ensure-local-runtime-assets] preparing ${asset.label} because local runtime asset is missing or incomplete`,

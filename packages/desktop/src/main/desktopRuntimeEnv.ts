@@ -5,7 +5,6 @@ import { join, resolve, win32 } from "node:path";
 import type { ConnectOptions } from "@zcode/server/remote";
 import { listSSHConfigAliasesFromLocalConfig } from "@zcode/services/node";
 import {
-  ZCODE_AGENT_RUNTIME,
   ZCODE_APP_VERSION_ENV,
   ZCODE_DYNAMIC_WORKFLOW_MODE_ENV,
   ZCODE_ENV,
@@ -21,7 +20,6 @@ import {
   resolveZaiOAuthClientId,
   resolveZaiOAuthOrigin,
   sanitizeZCodeRuntimeEnv,
-  type ZCodeProductFlavor,
   type ZCodeRuntimeEnv,
 } from "@zcode/shared";
 import { resolvePlatformKeyForPackagedApp } from "../../scripts/target-platform.mjs";
@@ -32,10 +30,6 @@ import {
   ZCODE_WINDOWS_APP_INSTALL_DIR_ENV,
 } from "@zcode/services/node";
 import { getElectronAppPath, isElectronAppPackaged } from "./desktopElectronApp.js";
-import {
-  ZCODE_AGENT_SERVER_RUNTIME_ENV_KEY,
-  resolveHostProcessAgentServerRuntimeEnv,
-} from "./desktopAgentRuntimeEnv.js";
 
 const isLocalDevelopmentRuntime = !isElectronAppPackaged();
 export const desktopRuntimeEnv: ZCodeRuntimeEnv = isLocalDevelopmentRuntime
@@ -320,45 +314,6 @@ export function resolveRemoteAssetDirs(): RemoteAssetDirs {
   };
 }
 
-function resolveBundledZCodeAgentBinaryPath(): string | undefined {
-  const runtime = ZCODE_AGENT_RUNTIME;
-  const entrySegments = runtime.resolveEntrySegments(process.platform);
-  const platformKey = resolvePlatformKeyForPackagedApp();
-  const candidates = [
-    isElectronAppPackaged()
-      ? join(process.resourcesPath, runtime.bundledResourceDir, ...entrySegments)
-      : null,
-    // desktop 开发态的启动 cwd 可能是 packages/desktop，也可能是仓库根，
-    // 之前这里只按 import.meta.dirname 的相对路径推导 bundled-agents，
-    // 这里补齐和 services 侧一致的多候选根目录，避免开发/构建/重启入口不同导致资源解析漂移。
-    join(
-      process.cwd(),
-      "bundled-agents",
-      platformKey,
-      runtime.bundledResourceDir,
-      ...entrySegments,
-    ),
-    join(
-      process.cwd(),
-      "packages",
-      "desktop",
-      "bundled-agents",
-      platformKey,
-      runtime.bundledResourceDir,
-      ...entrySegments,
-    ),
-    join(
-      import.meta.dirname,
-      "../../bundled-agents",
-      platformKey,
-      runtime.bundledResourceDir,
-      ...entrySegments,
-    ),
-  ].filter((candidate): candidate is string => Boolean(candidate));
-
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
 function resolveBundledRuntimeToolBinaryPath(
   toolDir: string,
   binaryName: string,
@@ -384,18 +339,12 @@ function resolveBundledLarkCliBinaryPath(): string | undefined {
   return resolveBundledRuntimeToolBinaryPath("lark-cli", "lark-cli");
 }
 
-export function resolveBundledGlmBinaryPath(): string | undefined {
-  return resolveBundledZCodeAgentBinaryPath();
-}
-
 function resolveHostProcessBinaryEnv(
   envVar: string,
   hostProcessLocalEnv: Record<string, string>,
   bundledPath: string | undefined,
 ): string | undefined {
-  // ZCode Agent 与 app 协议适配强绑定版本，生产包必须优先使用随包携带的固定 runtime。
-  // 用户机器或本地 .env 里残留的 GLM_BINARY_PATH 即使存在，也可能版本不兼容。
-  // 只有 bundled runtime 缺失时才把显式路径作为兜底，避免用户本机 CLI 覆盖内嵌版本。
+  // 随包工具与 app 版本强绑定，优先使用随包携带的固定 runtime；缺失时才使用显式路径。
   if (bundledPath) {
     return bundledPath;
   }
@@ -454,12 +403,11 @@ function resolveDynamicWorkflowModeHostEnv(options: {
 }
 
 /**
- * buildHostProcessEnv 的产品身份决定项。生产调用不传，默认取真实打包状态与构建期 flavor；
- * 单测可显式注入这两项，从而在不启动 Electron 的前提下验证真实 env 接线。
+ * buildHostProcessEnv 的产品身份决定项。生产调用不传，默认取真实打包状态；
+ * 单测可显式注入，从而在不启动 Electron 的前提下验证真实 env 接线。
  */
 export interface BuildHostProcessEnvOptions {
   isPackaged?: boolean;
-  productFlavor?: ZCodeProductFlavor;
 }
 
 export function buildHostProcessEnv(
@@ -472,13 +420,7 @@ export function buildHostProcessEnv(
   // 主进程启动链断裂、host 进程不再 spawn，窗口卡在启动页（startup_status_timeout）。
   // 补回声明；isElectronAppPackaged 的 import 本文件本就存在。
   const packagedDesktop = options.isPackaged ?? isElectronAppPackaged();
-  const glmBinaryPath = resolveBundledGlmBinaryPath();
   const larkCliBinaryPath = resolveBundledLarkCliBinaryPath();
-  const resolvedGlmBinaryPath = resolveHostProcessBinaryEnv(
-    "GLM_BINARY_PATH",
-    hostProcessLocalEnv,
-    glmBinaryPath,
-  );
   const resolvedLarkCliBinaryPath = resolveHostProcessBinaryEnv(
     "ZCODE_LARK_CLI_BINARY",
     hostProcessLocalEnv,
@@ -494,14 +436,6 @@ export function buildHostProcessEnv(
     ...sanitizeZCodeRuntimeEnv(rawInheritedEnv),
     ...buildZCodeToolEnvPassthroughEnv(rawInheritedEnv),
   });
-  // Agent runtime 产品默认由 Main 决定：打包的 Preview 默认 Rust，其余默认 TS。
-  // 非空显式值（含拼写错误）优先并原样保留，交由 Services resolver 校验/fail-closed；
-  // 读取 rawInheritedEnv 以保持 process.env 覆盖 hostProcessLocalEnv 的既有优先级。
-  const agentServerRuntimeEnv = resolveHostProcessAgentServerRuntimeEnv({
-    inheritedValue: rawInheritedEnv[ZCODE_AGENT_SERVER_RUNTIME_ENV_KEY],
-    isPackaged: packagedDesktop,
-    productFlavor: options.productFlavor ?? ZCODE_PRODUCT_FLAVOR,
-  });
   const dynamicWorkflowModeHostEnv = resolveDynamicWorkflowModeHostEnv({
     inheritedValue: rawInheritedEnv[ZCODE_DYNAMIC_WORKFLOW_MODE_ENV],
     isPackaged: packagedDesktop,
@@ -513,7 +447,6 @@ export function buildHostProcessEnv(
 
   return {
     ...inheritedEnv,
-    ...agentServerRuntimeEnv,
     // ZCode 运行时不再使用 NODE_ENV；它会被用户 shell、包管理器和测试框架复用。
     // 这里显式下发 ZCODE_RUNTIME_ENV，并在继承环境里清掉 NODE_ENV，避免 host/agent/Bash 被污染。
     [ZCODE_RUNTIME_ENV_KEY]: resolveHostProcessNodeEnv(),
@@ -529,7 +462,6 @@ export function buildHostProcessEnv(
     [ZCODE_APP_VERSION_ENV]: ZCODE_VERSION,
     ...(dataBaseDir !== homedir() ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
     ...(windowsAppInstallDir ? { [ZCODE_WINDOWS_APP_INSTALL_DIR_ENV]: windowsAppInstallDir } : {}),
-    ...(resolvedGlmBinaryPath ? { GLM_BINARY_PATH: resolvedGlmBinaryPath } : {}),
     ...(resolvedLarkCliBinaryPath ? { ZCODE_LARK_CLI_BINARY: resolvedLarkCliBinaryPath } : {}),
   };
 }

@@ -70,7 +70,6 @@ test("parallel packaging preserves coverage commands, full targets and current-r
     "pnpm gate:format",
     "pnpm gate:knip",
     "pnpm architecture:check",
-    "pnpm -r --filter './apps/zcode-cli/packages/*' test",
     "pnpm vitest run",
     "node --test --test-isolation=none scripts/ci/*.test.mjs",
     "node scripts/ci/remote-form-smoke.mjs",

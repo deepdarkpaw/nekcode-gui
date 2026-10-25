@@ -67,7 +67,6 @@ const enUS: Record<string, string> = {
     "Local data is ready, but app services failed to start. Copy the diagnostics, then exit and reopen ZCodium.",
   "startup.global.starting": "Preparing local data",
   "startup.global.preparing_host_storage": "Preparing task index",
-  "startup.global.preparing_session_storage": "Preparing chat history",
   "startup.global.starting_services": "Starting ZCodium Exp",
   "startup.global.ready": "Local data is ready",
   "startup.global.failed": "Startup preparation failed",
@@ -100,8 +99,6 @@ const enUS: Record<string, string> = {
     "No startup status was received. Exit and reopen ZCodium. If it fails again, provide the diagnostics to support.",
   "startup.global.error.transport_closed":
     "The preparation process exited or disconnected. Exit and reopen ZCodium to check the migration records again.",
-  "startup.global.error.unsupported_runtime":
-    "The configured Agent does not support storage preparation. Restore the bundled Agent, then reopen ZCodium.",
 
   "startup.database.checking": "Checking history",
   "startup.database.waiting_for_lock": "Waiting for another window to prepare data",

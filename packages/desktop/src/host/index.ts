@@ -2473,11 +2473,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     });
     databaseStartup = createHostDatabaseStartup({
       startupId: msg.databaseStartupId,
-      cwd: msg.agentSpawnFallbackCwd ?? process.cwd(),
-      workingDirectories:
-        msg.agentWarmupTargets?.map((target) => target.workspacePath) ??
-        (msg.workspacePath ? [msg.workspacePath] : []),
-      env: msg.runtimeProcessEnvPatch,
       publish: (state) => {
         parentPort?.postMessage({ type: HostResponseTypes.DatabaseStartupState, state });
         if (state.phase === "ready") {

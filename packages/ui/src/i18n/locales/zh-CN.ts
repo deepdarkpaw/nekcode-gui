@@ -65,7 +65,6 @@ const zhCN: Record<string, string> = {
     "本地数据准备已完成，但应用服务启动失败。请复制诊断信息，退出并重新打开 ZCodium。",
   "startup.global.starting": "正在准备本地数据",
   "startup.global.preparing_host_storage": "正在更新任务索引",
-  "startup.global.preparing_session_storage": "正在更新聊天记录",
   "startup.global.starting_services": "正在启动 ZCodium Exp",
   "startup.global.ready": "本地数据已就绪",
   "startup.global.failed": "无法完成启动准备",
@@ -96,8 +95,6 @@ const zhCN: Record<string, string> = {
     "未能收到启动状态。请退出并重新打开 ZCodium；如果仍失败，请提供诊断信息。",
   "startup.global.error.transport_closed":
     "数据准备进程意外退出或连接中断。请退出并重新打开 ZCodium，应用会重新检查迁移记录。",
-  "startup.global.error.unsupported_runtime":
-    "当前配置的 Agent 不支持独立存储准备。请恢复配套的 Agent 后重新打开 ZCodium。",
 
   "startup.database.checking": "正在检查历史数据",
   "startup.database.waiting_for_lock": "数据库正被其他进程使用，正在等待",

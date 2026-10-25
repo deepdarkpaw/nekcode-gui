@@ -6,12 +6,10 @@ import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { runCommand, runCommandAndReadStdout } from "../../scripts/spawn-command.mjs";
 import { loadBuiltinProviderConfig } from "../../scripts/builtin-provider-config.mjs";
-import { validateBuiltinPluginAssets } from "../../scripts/builtin-plugin-assets.mjs";
 import { verifyBundledRemoteAssets } from "../../scripts/bundle-remote-assets.mjs";
 import { noticesFileName, stageElectronNotices } from "../../scripts/third-party-notices.mjs";
 import { resolveNativeSearchReleasePlan } from "../../scripts/native-search-tools-config.mjs";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
-import { resolveRuntimeAssetsPlan } from "./scripts/runtime-assets-plan.mjs";
 import { collectRuntimeModuleClosureEntries } from "./scripts/runtime-dependency-closure.mjs";
 import {
   resolvePackagedNodePtyPrebuildPath,
@@ -23,7 +21,6 @@ import {
   resolveDesktopArtifactSuffix,
   resolveDesktopProductIdentity,
 } from "./scripts/desktop-product-identity.mjs";
-import { verifyDesktopCliAssets } from "./scripts/stage-desktop-cli-tui.mjs";
 const ELECTRON_BUILDER_ARCH = {
   1: "x64",
   3: "arm64",
@@ -77,13 +74,6 @@ const builtinProviderConfig = await loadBuiltinProviderConfig();
 const desktopProductIdentity = resolveDesktopProductIdentity({
   ...process.env,
   ZCODE_ENV: builtinProviderConfig.environment,
-});
-// 随包 Rust 资产与 productName/appId 的 identity 同源：
-// `ZCODE_ENV=test` 也是 preview（ZCodium Rust），而 Main 会按该 flavor 默认选 Rust。
-// 旧实现只看 ZCODE_PREVIEW_IDENTITY，会让 test 后端的包缺 resources/rust 却默认走 Rust。
-// 见 packages/desktop/scripts/runtime-assets-plan.mjs。
-const runtimeAssetsPlan = resolveRuntimeAssetsPlan({
-  environment: builtinProviderConfig.environment,
 });
 const nativeSearchReleasePlan = resolveNativeSearchReleasePlan({
   platform: targetPlatform.os,
@@ -517,10 +507,6 @@ export default {
     `node_modules/node-pty/prebuilds/${targetPlatform.key}/**`,
   ],
   beforePack: async (context) => {
-    await validateBuiltinPluginAssets(
-      resolve(import.meta.dirname, "bundled-agents", targetPlatform.key, "glm/packages"),
-      { platform: targetPlatform.os, arch: targetPlatform.arch },
-    );
     await verifyBundledRemoteAssets(
       resolve(import.meta.dirname, "bundled-remote-assets"),
       context.packager.appInfo.version,
@@ -564,10 +550,6 @@ export default {
     await stageElectronNotices(context.appOutDir, resources, framework.version);
   },
   afterPack: async (context) => {
-    await validateBuiltinPluginAssets(join(resolvePackagedResourcesDir(context), "glm/packages"), {
-      platform: targetPlatform.os,
-      arch: targetPlatform.arch,
-    });
     await verifyBundledRemoteAssets(
       join(resolvePackagedResourcesDir(context), "remote-assets"),
       context.packager.appInfo.version,
@@ -580,12 +562,6 @@ export default {
             configuredTargetPlatform: targetPlatform,
           })
         : null;
-    await runTimedAsync("afterPack:verifyDesktopCliAssets", () =>
-      verifyDesktopCliAssets({
-        glmDir: join(resolvePackagedResourcesDir(context), "glm"),
-        platformKey: targetPlatform.key,
-      }),
-    );
     await runTimedAsync("afterPack:finalizePackagedAsar", () => finalizePackagedAppAsar(context));
     runTimedSync("afterPack:assertPackagedNativeResourcePolicy", () =>
       assertPackagedNativeResourcePolicy(context),
@@ -665,39 +641,6 @@ export default {
         ]
       : []),
     {
-      // agent 运行时资产，打包到 resources/glm。
-      // 桌面端内置的是 agent 的 JS bundle（glm/zcode.cjs，由 prepare:agent-bundle 生成），
-      // Host 进程用 app 自带的 Electron Node runtime（ELECTRON_RUN_AS_NODE）执行 `zcode.cjs app-server --stdio`，
-      // 不再随包内置独立 Node 二进制。远端 SSH/WSL 仍走原生二进制（无 Electron）。
-      from: `bundled-agents/${targetPlatform.key}/glm`,
-      to: "glm",
-      filter: ["**/*", "!**/*.map"],
-    },
-    {
-      // Builder 会无条件忽略 from 根下的 node_modules；直接以它为复制根，避免丢失 TUI 闭包。
-      from: `bundled-agents/${targetPlatform.key}/glm/node_modules`,
-      to: "glm/node_modules",
-      filter: ["**/*", "!**/*.map"],
-    },
-    // Rust CLI runtime，只在 Preview（ZCodium Rust）口味随包分发，落到 resources/rust。
-    // 生产口味不构建也不打包，继续只用上面的 glm/ JS bundle。
-    // 目录与 glm/ 平级但分开，保证两套 runtime 的启停与回退互不影响。
-    ...(runtimeAssetsPlan.includeRustCliRuntime
-      ? [
-          {
-            from: `bundled-agents/${targetPlatform.key}/rust`,
-            to: "rust",
-            filter: ["**/*"],
-          },
-          {
-            // 新增 Rust 许可材料独立随包；不因旧 npm notices 生成受阻而漏掉原始快照。
-            from: resolve(workspaceRoot, "third-party/rust-tui"),
-            to: "licenses/rust-tui",
-            filter: ["sources.json", "snapshots/**", "README.md"],
-          },
-        ]
-      : []),
-    {
       // agent shell 之前完全依赖宿主系统 PATH，GUI 启动时经常拿不到用户自己装的 rg。
       // 这里把 ripgrep 作为桌面端内置 runtime tool 打进 resources/tools，
       // 后续 host/server 把该目录追加到 PATH；用户版本优先，缺失时再由随包 rg 兜底。
@@ -749,10 +692,7 @@ export default {
     // electron-builder 在签主 app 时若继续深度扫描这些目录，会显著拉长 macOS codesign 时长。
     // 这里按“任意前缀 + Contents/Resources”匹配绝对路径，避免 ^Contents/... 在 CI 中无法命中。
     // 命中后可跳过已预签名目录的重复签名/遍历，同时保留主 app 与框架签名。
-    // CUA Helper 在独立 job 中已完成 Developer ID 签名和 notarization staple；
-    // electron-builder 若再次签名嵌套 Helper 会改变 CDHash，使最终用户包中的 staple 失效。
     signIgnore: [
-      "[/\\\\]Contents[/\\\\]Resources[/\\\\]glm([/\\\\]|$)",
       "[/\\\\]Contents[/\\\\]Resources[/\\\\]tools([/\\\\]|$)",
     ],
   },

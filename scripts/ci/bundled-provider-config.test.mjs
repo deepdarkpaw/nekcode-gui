@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile, writeFile, rm, readdir, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { tsImport } from "tsx/esm/api";
 
 const { NodeZCodeBuiltinProviderConfigSource, NodeProviderConfigRuntime } = await tsImport(
   "../../packages/provider-node/src/index.ts",
-  import.meta.url,
-);
-const { prepareCliProviderRuntimeEnv } = await tsImport(
-  "../../apps/zcode-cli/packages/cli/src/provider-runtime-env.ts",
   import.meta.url,
 );
 const bundled = JSON.parse(
@@ -102,32 +98,6 @@ test(
   },
 );
 
-test("standalone CLI points to packaged config while managed CLI retains Host paths", async (t) => {
-  const { root, file } = await fixture(t);
-  const dir = join(root, "cli");
-  await mkdir(join(dir, "provider"), { recursive: true });
-  await writeFile(join(dir, "entry.js"), "");
-  const local = join(dir, "provider", "zcode-builtin.json");
-  await writeFile(local, JSON.stringify(bundled));
-  const env = await prepareCliProviderRuntimeEnv({
-    argv: ["--prompt", "test"],
-    env: {},
-    dataBaseDir: root,
-    entrypoint: join(dir, "entry.js"),
-    sea: { isSea: () => false },
-  });
-  assert.equal(env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE, local);
-  assert.equal(env.ZCODE_BUILTIN_PROVIDER_BUNDLED_CONFIG_FILE, undefined);
-  const managed = {
-    ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: file,
-    ZCODE_PERSONAL_PROVIDER_CONFIG_FILE: join(root, "host-personal.json"),
-  };
-  assert.deepEqual(
-    await prepareCliProviderRuntimeEnv({ argv: ["app-server"], env: managed }),
-    managed,
-  );
-});
-
 test(
   "atomic bundle replacement emits a local change and keeps Host/Worker revisions aligned",
   { timeout: 5000 },
@@ -152,30 +122,3 @@ test(
     assert.equal((await watched.read()).revision, (await source.read()).revision);
   },
 );
-
-test("SEA entry materializes its embedded config without using an endpoint cache", async (t) => {
-  const { root } = await fixture(t);
-  const env = await prepareCliProviderRuntimeEnv({
-    argv: ["tui"],
-    env: {},
-    dataBaseDir: root,
-    sea: {
-      isSea: () => true,
-      getAsset(key, encoding) {
-        assert.equal(key, "zcode-provider/zcode-builtin.json");
-        assert.equal(encoding, "utf8");
-        return JSON.stringify(bundled);
-      },
-    },
-  });
-  assert.equal(
-    env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE,
-    join(root, ".zcodium", "v2", "runtime", "provider", "bundled", "zcode-builtin.json"),
-  );
-  const source = new NodeZCodeBuiltinProviderConfigSource({
-    bundledFilePath: env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE,
-    watch: false,
-  });
-  t.after(() => source.dispose());
-  assert.match((await source.read()).revision, new RegExp(`^zcode-builtin:${bundled.revision}:`));
-});

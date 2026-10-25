@@ -23,12 +23,7 @@ import {
   safeDiagnosticFrames,
   DiagnosticRecordSchema,
 } from "@zcode/shared";
-import {
-  findDevZCodeCliRustBinary,
-  findZCodeAgentRuntimeBinary,
-  findZCodeAgentRuntimeNodeBundle,
-  findZCodeCliRustBinary,
-} from "../runtime-tools/providerRuntimeResolver.js";
+import { findZCodeAgentRuntimeBinary } from "../runtime-tools/providerRuntimeResolver.js";
 import { isEffectiveDevelopmentNodeEnv } from "#src/runtime-tools/nodeEnv.js";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { ZCodeProtocolClient } from "./zcodeProtocolClient.js";
@@ -39,20 +34,7 @@ import { shouldSpawnInDetachedProcessGroup } from "../process/processTreeTermina
 import type { RuntimeProcessLifecycleReporter } from "../process/runtimeProcessLifecycle.js";
 import { buildAgentWorkspaceIdentityEnv } from "../runtime-tools/agentProxyEnv.js";
 
-/**
- * 存储准备 transport 的唯一描述。Host 据此选择 Worker 还是原生进程，不再有第二份能力字段。
- * - node-worker：运行同一 CLI bundle 的存储 Worker（已知 JS runtime）。
- * - native-process：复用 resolved command/args/cwd/env 启动原生进程。
- */
-export type ZCodeAgentStoragePreparation =
-  | { kind: "node-worker"; entry: string }
-  | { kind: "native-process" };
-
 export interface ZCodeAgentCommand {
-  /** 存储准备 transport；未知自定义/旧部署命令不设置。 */
-  storagePreparation?: ZCodeAgentStoragePreparation;
-  /** 本次部署的 Agent 支持迁移前的启动通知；旧自定义命令保持原协议。 */
-  supportsStorageStartup?: boolean;
   command: string;
   args?: string[];
   cwd?: string;
@@ -322,44 +304,6 @@ async function buildZCodeAgentSpawnPreflight(
   };
 }
 
-function resolveBundledWorkspaceZCodeAgentCommand(
-  context: ZCodeAgentCommandResolverContext,
-): ZCodeAgentCommand | null {
-  const distEntrypoint = findUpward("apps/zcode-cli/packages/cli/dist/zcode.cjs");
-  if (distEntrypoint) {
-    const useBytecode =
-      process.versions.electron && process.env.ZCODE_DESKTOP_AGENT_BYTECODE === "1";
-    const entrypoint = useBytecode
-      ? join(dirname(distEntrypoint), "zcode.bytecode.cjs")
-      : distEntrypoint;
-    // 此同步 command resolver 沿用既有 existsSync 契约；显式试验不能静默回退成 JS。
-    if (useBytecode && !existsSync(entrypoint)) {
-      throw new Error("桌面 Agent 字节码入口缺失，请运行 pnpm build:desktop-agent:bytecode");
-    }
-    return {
-      command: process.execPath,
-      args: [entrypoint, "app-server", "--stdio"],
-      // Worker 与 Electron Node 子进程的 V8 snapshot 可不同；临时存储准备继续用 JS。
-      storagePreparation: { kind: "node-worker", entry: distEntrypoint },
-      cwd: context.workspacePath,
-      // 桌面端 host 运行在 Electron utility process 中，process.execPath 指向 Electron Helper。
-      // 这里显式启用 Node 运行模式，避免内置 zcode-agent 被当成 Electron/Chromium 子进程启动并卡在 GPU 初始化。
-      env: { ELECTRON_RUN_AS_NODE: "1" },
-    };
-  }
-
-  const sourceEntrypoint = findUpward("apps/zcode-cli/packages/cli/src/main.ts");
-  const tsxEntrypoint = findUpward("node_modules/.bin/tsx");
-  if (!sourceEntrypoint || !tsxEntrypoint) {
-    return null;
-  }
-  return {
-    command: tsxEntrypoint,
-    args: [sourceEntrypoint, "app-server", "--stdio"],
-    cwd: context.workspacePath,
-  };
-}
-
 function resolveDeployedZCodeAgentBinaryCommand(
   context: ZCodeAgentCommandResolverContext,
 ): ZCodeAgentCommand | null {
@@ -381,80 +325,10 @@ function resolveDeployedZCodeAgentBinaryCommand(
   };
 }
 
-/**
- * 解析显式选择的 Rust CLI runtime（`ZCODE_AGENT_SERVER_RUNTIME=zcode-cli-rust`）。
- *
- * 打包态优先随包 resources/rust；开发态再从仓库锚点的 Cargo target/debug（后备 release）
- * 发现。显式选择后缺 binary 必须 fail-closed——不回退 TS bundle，只有撤销选择或设为 ts
- * 才是回退（见 .agents/specs/cli-rust-m8-resolver.md）。
- */
-function resolveRustZCodeCliRuntimeCommand(
-  context: ZCodeAgentCommandResolverContext,
-): ZCodeAgentCommand {
-  const binaryPath = findZCodeCliRustBinary() ?? findDevZCodeCliRustBinary();
-  if (!binaryPath) {
-    throw new Error(
-      "ZCODE_AGENT_SERVER_RUNTIME=zcode-cli-rust 已显式选择 Rust runtime，但未找到 zcode-cli-rust binary（packaged resources 或开发态 Cargo target）；显式选择不会回退 TS。",
-    );
-  }
-  return {
-    command: binaryPath,
-    args: [...ZCODE_AGENT_RUNTIME.spawnArgs],
-    cwd: context.workspacePath,
-    // Rust 是独立可执行文件：native transport，且不需要 ELECTRON_RUN_AS_NODE。
-    storagePreparation: { kind: "native-process" },
-    supportsStorageStartup: true,
-  };
-}
-
-function resolveElectronRuntimeZCodeAgentCommand(
-  context: ZCodeAgentCommandResolverContext,
-): ZCodeAgentCommand | null {
-  // 桌面打包态：host 跑在 Electron utility process 里，process.execPath 指向 Electron Helper，
-  // 它内置的 Node runtime 与 zcode-cli 目标版本一致（Electron 41 = Node 24.x）。
-  // 这里直接用 app 自带的 Electron Node 执行打进 resources/glm 的 zcode.cjs，
-  // 不再随包内置一份独立 Node 二进制（体积从 ~180MB 降到 ~16MB，且跨平台同一份 JS）。
-  // 用 process.versions.electron 作为闸门：远端 SSH/WSL host 由系统 Node 运行、没有 electron，
-  // 会跳过这里继续走原生二进制兜底，桌面/远端两条链路互不影响。
-  if (!process.versions.electron) {
-    return null;
-  }
-  const bundlePath = findZCodeAgentRuntimeNodeBundle();
-  if (!bundlePath) {
-    return null;
-  }
-  return {
-    command: process.execPath,
-    args: [bundlePath, ...ZCODE_AGENT_RUNTIME.spawnArgs],
-    storagePreparation: { kind: "node-worker", entry: bundlePath },
-    cwd: context.workspacePath,
-    // 关键：必须以纯 Node 模式启动，否则子进程会被当成 Electron/Chromium 子进程卡在 GPU 初始化。
-    env: { ELECTRON_RUN_AS_NODE: "1" },
-  };
-}
-
-/**
- * 解析 `ZCODE_AGENT_SERVER_RUNTIME`：未设置/空/`ts` → TS，`zcode-cli-rust` → Rust。
- * 未知值明确失败，不静默按 TS 处理（避免把拼写错误当成回退）。
- */
-function resolveZCodeAgentRuntimeSelection(raw: string | undefined): "ts" | "zcode-cli-rust" {
-  const normalized = raw?.trim().toLowerCase();
-  if (!normalized || normalized === "ts") {
-    return "ts";
-  }
-  if (normalized === "zcode-cli-rust") {
-    return "zcode-cli-rust";
-  }
-  throw new Error(
-    `未知的 ZCODE_AGENT_SERVER_RUNTIME 值 ${JSON.stringify(raw)}；只接受 "ts" 或 "zcode-cli-rust"。`,
-  );
-}
-
 export function resolveDefaultZCodeAgentCommand(
   context: ZCodeAgentCommandResolverContext,
 ): ZCodeAgentCommand | null {
   // 显式 ZCODE_AGENT_SERVER_COMMAND 保持最高优先级与既有自定义命令语义。
-  // 未知自定义命令不推断存储能力：不设置 storagePreparation 与 supportsStorageStartup。
   const command = process.env.ZCODE_AGENT_SERVER_COMMAND?.trim();
   if (command) {
     return applyPresentationSurfaceToCommand(
@@ -467,24 +341,10 @@ export function resolveDefaultZCodeAgentCommand(
     );
   }
 
-  const runtime = resolveZCodeAgentRuntimeSelection(process.env.ZCODE_AGENT_SERVER_RUNTIME);
-  if (runtime === "zcode-cli-rust") {
-    // 显式 Rust 分支：不再走 TS bundle，缺 binary 由 resolveRust... 抛错。
-    return applyPresentationSurfaceToCommand(
-      resolveRustZCodeCliRuntimeCommand(context),
-      context.presentationSurface,
-    );
-  }
-
-  // 默认 TS：monorepo dev 源码/dist → 桌面打包态 Electron Node 跑 zcode.cjs
-  // → 已部署 native binary（远端 SSH 兜底）。不再按 Preview 文件存在自动启用 Rust。
-  const bundled =
-    resolveBundledWorkspaceZCodeAgentCommand(context) ??
-    resolveElectronRuntimeZCodeAgentCommand(context);
+  // 内置 agent CLI 已移除：未显式配置命令、也没有已部署的 agent 时返回 null，
+  // 由 getClient 明确报错「agent 不可用」，不做任何回退。
   return applyPresentationSurfaceToCommand(
-    bundled
-      ? { ...bundled, supportsStorageStartup: true }
-      : resolveDeployedZCodeAgentBinaryCommand(context),
+    resolveDeployedZCodeAgentBinaryCommand(context),
     context.presentationSurface,
   );
 }
@@ -541,11 +401,7 @@ export function wrapZCodeAgentCommandWithStdioTapDevProxy(
 
   // 开发态 raw stdio 帧数据量和消息流同级，不能打进普通 info 日志。
   // 这里只在显式开关打开时用旁路 proxy 写盘，生产构建和默认开发路径都不受影响。
-  // Bug 背景：重建命令时漏掉 storagePreparation 会让被代理命令失去存储能力；
-  // 这里原样透传能力描述，只替换 transport 包装。
   return {
-    supportsStorageStartup: command.supportsStorageStartup,
-    ...(command.storagePreparation ? { storagePreparation: command.storagePreparation } : {}),
     command: process.execPath,
     args: [
       tapScript,
@@ -1093,7 +949,6 @@ export class ZCodeAgentProcessManager {
       ...(process.platform !== "win32" && child.pid ? { ownedProcessGroupId: child.pid } : {}),
     });
     const client = new ZCodeProtocolClient(transport, {
-      requireStorageStartup: effectiveCommand.supportsStorageStartup,
       requestTimeoutMs: this.requestTimeoutMs,
     });
     // Agent 进程重启后，Host 仍需要 runtime identity 区分新旧订阅和运行命令。

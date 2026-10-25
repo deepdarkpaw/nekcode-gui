@@ -64,7 +64,7 @@ const ZCODE_PLUGIN_MANIFEST_PATH = join(ZCODE_PLUGIN_MANIFEST_DIR_NAME, "plugin.
 const CLAUDE_PLUGIN_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
 const CODEX_PLUGIN_MANIFEST_PATH = join(".codex-plugin", "plugin.json");
 
-/** 对齐 apps/zcode-cli/packages/adapters/src/skills/index.ts:19 */
+/** 技能描述的最大长度（字符）。 */
 const MAX_DESCRIPTION_LENGTH = 1024;
 function resolveUserHomeDir() {
   const envHome = process.env.HOME?.trim() || process.env.USERPROFILE?.trim();
@@ -140,7 +140,6 @@ async function isUserAgentsSkillCoveredByZcode(params: {
 /**
  * 从 workspacePath 向上走到 worktree 根（含 .git 标记），把每一层的
  * `.zcodium/skills` 与 `.agents/skills` 都收集起来。
- * 对齐 apps/zcode-cli/packages/adapters/src/skills/roots.ts:60-72。
  * 找不到 .git 时退回 workspacePath 自身。
  */
 async function resolveAncestorWorkspaceRoots(workspacePath: string): Promise<string[]> {
