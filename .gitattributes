@@ -1,3 +1,6 @@
+# 仓库统一 LF 换行（oxfmt 门禁按 LF 检查；Windows 检出同样使用 LF）
+* text=auto eol=lf
+
 # 保持脚本文件 LF 换行，避免 Windows CRLF 导致 shebang 解析失败
 *.mjs text eol=lf
 *.sh  text eol=lf
