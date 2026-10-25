@@ -231,6 +231,7 @@ export function RemoteHostsPage({ isWindowsDesktop = false }: { isWindowsDesktop
   return (
     <NekPageFrame
       usesTarget={false}
+      showMockBadge
       description={t("settings.nek.hosts.pageDescription")}
       actions={
         <Button onClick={() => setDialog({ kind: "add" })}>

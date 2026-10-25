@@ -19,8 +19,11 @@ export function NekPageFrame({
   documents = [],
   actions,
   children,
+  showMockBadge = usesTarget,
 }: {
   usesTarget: boolean;
+  /** 页面数据来自 mock 时显示“模拟数据”标记；默认与 usesTarget 一致。 */
+  showMockBadge?: boolean;
   description?: ReactNode;
   documents?: ReadonlyArray<
     Pick<NekDocument<NekConfigRevision>, "banner" | "resolveBanner"> | undefined
@@ -45,7 +48,7 @@ export function NekPageFrame({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {isMock ? (
+          {isMock && showMockBadge ? (
             <span
               title={intl.formatMessage({ id: "settings.nek.mockBadgeHint" })}
               className="inline-flex h-6 items-center gap-1 rounded-md border border-warning/40 px-2 text-ui-xs font-medium text-warning"
