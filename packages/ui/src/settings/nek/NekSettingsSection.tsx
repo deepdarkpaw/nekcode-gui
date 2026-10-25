@@ -8,36 +8,44 @@ import { resolveNekSettingsApis } from "./api/registry.js";
 import type { NekSettingsSectionId } from "./sections.js";
 import { AccountsPage } from "./pages/accounts/AccountsPage.js";
 import { ProvidersPage } from "./pages/providers/ProvidersPage.js";
-import { ProjectPage } from "./pages/ProjectPage.js";
-import { AgentPage } from "./pages/agent/AgentPage.js";
-import { McpPage } from "./pages/mcp/McpPage.js";
-import { ToolsPage } from "./pages/ToolsPage.js";
-import { CompactionPage } from "./pages/CompactionPage.js";
 import { DefaultModelPage } from "./pages/DefaultModelPage.js";
+import { CompactionPage } from "./pages/CompactionPage.js";
+import { ToolsPage } from "./pages/ToolsPage.js";
+import { McpPage } from "./pages/mcp/McpPage.js";
+import { AgentPage } from "./pages/agent/AgentPage.js";
+import { ProjectPage } from "./pages/ProjectPage.js";
+import { RemoteHostsPage } from "./pages/hosts/RemoteHostsPage.js";
 
-const PAGES: Partial<Record<NekSettingsSectionId, () => ReactNode>> = {
+export interface NekSettingsSectionEnv {
+  isWindowsDesktop: boolean;
+}
+
+const PAGES: Partial<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) => ReactNode>> = {
   nekAccounts: () => <AccountsPage />,
   nekProviders: () => <ProvidersPage />,
-  nekProject: () => <ProjectPage />,
-  nekAgent: () => <AgentPage />,
-  nekMcp: () => <McpPage />,
-  nekTools: () => <ToolsPage />,
-  nekCompaction: () => <CompactionPage />,
   nekDefaultModel: () => <DefaultModelPage />,
+  nekCompaction: () => <CompactionPage />,
+  nekTools: () => <ToolsPage />,
+  nekMcp: () => <McpPage />,
+  nekAgent: () => <AgentPage />,
+  nekProject: () => <ProjectPage />,
+  nekRemoteHosts: (env) => <RemoteHostsPage isWindowsDesktop={env.isWindowsDesktop} />,
 };
 
 export function NekSettingsSection({
   sectionId,
   projectCwd,
+  isWindowsDesktop = false,
 }: {
   sectionId: NekSettingsSectionId;
   projectCwd?: string | null;
+  isWindowsDesktop?: boolean;
 }) {
   const apis = useMemo(() => resolveNekSettingsApis(), []);
   const render = PAGES[sectionId];
   return (
     <NekSettingsProvider apis={apis} projectCwd={projectCwd ?? undefined}>
-      {render ? render() : null}
+      {render ? render({ isWindowsDesktop }) : null}
     </NekSettingsProvider>
   );
 }
