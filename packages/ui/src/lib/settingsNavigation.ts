@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- 设置导航意图集中管理 sessionStorage、事件桥接和解析校验，拆分会让一次性意图消费顺序更难保证。 */
 import { logger } from "@/logger.js";
+import { isNekSettingsSectionId, type NekSettingsSectionId } from "@/settings/nek/sectionIds.js";
 
 export type SettingsSectionId =
   | "general"
@@ -19,7 +20,8 @@ export type SettingsSectionId =
   | "workspaceFileSearch"
   | "computerUse"
   | "automations"
-  | "shortcuts";
+  | "shortcuts"
+  | NekSettingsSectionId;
 
 type SettingsPluginTabTarget = "plugins" | "mcps" | "skills" | "commands";
 type SettingsPluginNavigationOrigin = "plugin-store";
@@ -42,7 +44,22 @@ const HIDDEN_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   // 编辑页代码保留，放开时从这里移除即可。
   "workspaceFileSearch",
   "computerUse",
+  // 由 nek 设置中心取代（旧组件暂留，后续统一清理）。
+  "modelProvider",
+  "mcp",
+  "appearance",
+  "shortcuts",
+  "subagents",
 ]);
+
+/** 旧入口 → nek 设置中心对应页面（保留历史偏好与已有跳转调用）。 */
+const LEGACY_SECTION_REDIRECTS: Partial<Record<SettingsSectionId, NekSettingsSectionId>> = {
+  modelProvider: "nekProviders",
+  mcp: "nekMcp",
+  appearance: "nekAppearance",
+  shortcuts: "nekShortcuts",
+  subagents: "nekAgent",
+};
 
 interface SettingsSectionIntentEventDetail {
   section: SettingsSectionId;
@@ -75,7 +92,8 @@ function isSettingsSectionId(value: string): value is SettingsSectionId {
     value === "workspaceFileSearch" ||
     value === "computerUse" ||
     value === "automations" ||
-    value === "shortcuts"
+    value === "shortcuts" ||
+    isNekSettingsSectionId(value)
   );
 }
 
@@ -88,6 +106,8 @@ export function resolveSettingsSection(
   fallbackSection: SettingsSectionId = "general",
 ): SettingsSectionId {
   if (section === "plugins") return "plugin";
+  const redirect = LEGACY_SECTION_REDIRECTS[section];
+  if (redirect) return redirect;
   return isSettingsSectionEnabled(section) ? section : fallbackSection;
 }
 
