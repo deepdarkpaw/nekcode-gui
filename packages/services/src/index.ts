@@ -150,7 +150,6 @@ export type {
   ZCodeAgentAttachmentChunkParams,
   ZCodeAgentAttachmentTerminalParams,
   ZCodeAgentCreateSessionParams,
-  ZCodeAgentCuaPermissionObservation,
   ZCodeAgentInitializeResult,
   ZCodeAgentStorageStartupSnapshot,
   ZCodeAgentRuntimeLifecycleEvent,
@@ -227,16 +226,6 @@ export { ISkillsService } from "./skills/skills.js";
 export { ISkillSyncService } from "./skill-sync/skillSync.js";
 export { IMcpSyncService } from "./mcp-sync/mcpSync.js";
 export { IPluginSyncService } from "./plugin-sync/pluginSync.js";
-export {
-  ICuaPermissionService,
-  type CuaPermissionState,
-  type CuaPermissionRestartOptions,
-  type CuaPermissionStatus,
-  type CuaPermissionStatusQueryOptions,
-  type CuaPermissionStatusResult,
-  type CuaPermissionStatusUnavailable,
-  isCuaPermissionStatusAvailable,
-} from "./cua-permission-broker/cuaPermissionService.js";
 // Plugins service — IPluginsService is both a type (interface) and value (descriptor)
 export { IPluginsService } from "./plugins/plugins.js";
 // 设置页插件管理薄服务（UI 平台能力面不再直触 zcodeAgentService）

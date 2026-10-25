@@ -42,27 +42,6 @@ export function createDesktopPlatform(options: {
     openInFileManager: (path) => window.zcode.openInFileManager(path),
     openExternalFile: (path) => window.zcode.openExternalFile(path),
     getBuiltinProviderConfigFile: () => window.zcode.getBuiltinProviderConfigFile(),
-    openCuaPermissionOnboarding: window.zcode.openCuaPermissionOnboarding
-      ? (permissionOptions) =>
-          window.zcode.openCuaPermissionOnboarding?.(permissionOptions) ??
-          Promise.resolve({ success: false, error: "not_supported" })
-      : undefined,
-    prepareCuaHelperPermissionDrag: window.zcode.prepareCuaHelperPermissionDrag
-      ? () =>
-          window.zcode.prepareCuaHelperPermissionDrag?.() ??
-          Promise.resolve({ success: false, error: "not_supported" })
-      : undefined,
-    requestCuaPermissions: window.zcode.requestCuaPermissions
-      ? () =>
-          window.zcode.requestCuaPermissions?.() ??
-          Promise.resolve({ ok: false, accessibility: false, screenRecording: false })
-      : undefined,
-    openCuaPermissionSystemSettings: window.zcode.openCuaPermissionSystemSettings
-      ? () => window.zcode.openCuaPermissionSystemSettings?.() ?? Promise.resolve(false)
-      : undefined,
-    startCuaHelperPermissionDrag: window.zcode.startCuaHelperPermissionDrag
-      ? () => window.zcode.startCuaHelperPermissionDrag?.()
-      : undefined,
     notifyRendererReady: () => window.zcode.notifyRendererReady(),
     reportDiagnostic: (record) => window.zcode.reportDiagnostic(record),
     reportRendererHeapSample: (sample) => window.zcode.reportRendererHeapSample(sample),

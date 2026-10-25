@@ -73,29 +73,11 @@ jobs:
       - name: Release tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node --test --test-isolation=none scripts/ci/*.test.mjs
-      - name: Computer Use runtime and SDK checks
-        run: |
-          node --test --test-isolation=none packages/zcode-cua/test/*.test.mjs
-          pnpm --filter @zcode/zcode-cua-plugin check:sdk
       - name: Conversation navigator regressions
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnNavigatorPreview.test.ts
       - name: Install browser for remote form checks
         run: pnpm exec playwright-core install --with-deps chromium
-      - name: Install isolated Computer Use test desktop
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb openbox bubblewrap dbus-x11 at-spi2-core apparmor
-          # Ubuntu 24.04 的 userns 限制会阻止 bwrap 配置隔离网络的 loopback。
-          # 仅授权 CI 的 bwrap 创建命名空间，保留全局 AppArmor 与测试断网隔离。
-          sudo apparmor_parser -r <<'PROFILE'
-          abi <abi/4.0>,
-          profile zcodium-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
-            userns,
-          }
-          PROFILE
-      - name: Computer Use actions without network access
-        run: node scripts/ci/cua-actions-smoke.mjs
       - name: Remote form browser checks
         run: node scripts/ci/remote-form-smoke.mjs
       - name: Local feedback browser checks
@@ -176,17 +158,15 @@ jobs:
             runner: ubuntu-24.04
             arch: x64
           # Linux arm64：使用 GitHub 公共仓库免费提供的原生 arm64 runner，
-          # 这样 CUA 原生库与打包后的 Electron 运行时都能真正执行探针，
-          # 而不是像交叉打包那样只能校验文件。
+          # 这样打包后的 Electron 运行时能真正执行探针，而不是只能校验文件。
           - platform: linux
             runner: ubuntu-24.04-arm
             arch: arm64
           - platform: win
             runner: windows-2025
             arch: x64
-          # Windows arm64：electron-builder 在 x64 runner 上交叉构建；原生库
-          # @trycua/cua-driver-win32-arm64-msvc 已随 SDK optionalDependencies 分发。
-          # 这是唯一一个 crossArch 目标：原生库无法在 x64 Node/Electron 里加载。
+          # Windows arm64：electron-builder 在 x64 runner 上交叉构建；
+          # 这是唯一一个 crossArch 目标：arm64 产物无法在 x64 Node/Electron 里加载。
           - platform: win
             runner: windows-2025
             arch: arm64

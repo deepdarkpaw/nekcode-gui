@@ -83,12 +83,9 @@ export function toolCallRowToLegacyNode(row: ToolCallRow): TaskChatToolCallTreeN
   const legacyStatus = STATUS_MAP[row.status];
   const errorText = resolveV4ToolErrorText(row);
   const inputPreview = resolveToolInputPreview(row);
-  // CUA 等结构化展示事实位于 output.display；顶层 display 仅是旧 Node REPL 图片通道。
+  // 结构化展示事实位于 output.display；顶层 display 仅是旧 Node REPL 图片通道。
   // 优先读取 canonical output，同时保留旧快照和 Browser 轮尾截图的兼容路径。
   const display = row.output?.display ?? row.display;
-  // CUA v1 历史 display 会重复保存 input；工具调用行已经持有唯一输入，桥接时丢弃旧副本。
-  const legacyDisplay =
-    display?.kind === "cua" ? (({ input: _legacyInput, ...rest }) => rest)(display) : display;
   return {
     toolCall: {
       toolId: row.toolCallId,
@@ -116,8 +113,7 @@ export function toolCallRowToLegacyNode(row: ToolCallRow): TaskChatToolCallTreeN
         toolCallId: row.toolCallId,
         toolName: row.toolName,
         v4Status: row.status,
-        ...(row.cuaApp ? { cuaApp: row.cuaApp } : {}),
-        ...(legacyDisplay ? { display: legacyDisplay } : {}),
+        ...(display ? { display } : {}),
         // R7：运行中进度（MCP notifications/progress）供 McpToolCallBlock 头部进度条消费。
         ...(row.progress ? { progress: row.progress } : {}),
         inputPreviewComplete: inputPreview.inputPreviewComplete,

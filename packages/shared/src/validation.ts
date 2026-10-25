@@ -371,20 +371,6 @@ export const hostPluginSandboxRegisterResultMessageSchema = z
   })
   .strict();
 
-export const hostCuaPipFocusChangedMessageSchema = z
-  .object({
-    type: z.literal("cua-pip-focus-changed"),
-    event: z
-      .object({
-        kind: z.literal("focus-changed"),
-        revision: z.number().int().nonnegative().safe(),
-        sourceWindowId: nonEmptyStringSchema.max(255),
-        sessionId: nonEmptyStringSchema.max(255).nullable(),
-      })
-      .strict(),
-  })
-  .strict();
-
 export const hostProviderProvisioningExecuteMessageSchema = z
   .object({
     type: z.literal("provider-provisioning-execute"),
@@ -433,7 +419,6 @@ export const hostIncomingMessageSchema = z.discriminatedUnion("type", [
   hostBrowserExecuteResultMessageSchema,
   hostLocalMediaPreviewPathAuthorizeResultMessageSchema,
   hostPluginSandboxRegisterResultMessageSchema,
-  hostCuaPipFocusChangedMessageSchema,
   hostProviderProvisioningExecuteMessageSchema,
 ]);
 
@@ -667,19 +652,6 @@ export const hostWorkspaceRunningTaskCountChangedResponseSchema = z.object({
   workspaceIdentity: nonEmptyStringSchema.optional(),
   runningTaskCount: z.number().int().nonnegative(),
 });
-
-export const hostCuaOperationStateResponseSchema = z
-  .object({
-    type: z.literal("cua-operation-state"),
-    active: z.boolean(),
-    sessionId: nonEmptyStringSchema,
-    turnId: nonEmptyStringSchema,
-    workspacePath: nonEmptyStringSchema,
-    workspaceIdentity: nonEmptyStringSchema.optional(),
-  })
-  .strict();
-
-export type HostCuaOperationStateResponse = z.infer<typeof hostCuaOperationStateResponseSchema>;
 
 export const hostBroadcastClaimRequestResponseSchema = z.object({
   type: z.literal("broadcast-claim-request"),
@@ -923,7 +895,6 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostToolExecResourceResponseSchema,
   hostAgentRunningTaskCountChangedResponseSchema,
   hostWorkspaceRunningTaskCountChangedResponseSchema,
-  hostCuaOperationStateResponseSchema,
   hostBroadcastEnvelopeSchema,
   hostBroadcastClaimRequestResponseSchema,
   hostBroadcastClaimCommitResponseSchema,

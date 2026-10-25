@@ -232,24 +232,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
     },
   },
   {
-    id: "feature-recvvsPdvclWR1",
-    mode: "office",
-    iconName: "monitor",
-    iconStyle: "plugin",
-    label: {
-      cn: "帮我把下载文件夹里的截图按月份批量归档",
-      en: "File my downloaded screenshots by month",
-    },
-    prompt: {
-      cn: "请使用 [@电脑控制](plugin://computer-use@zcode-plugins-official) 打开这台电脑的文件管理软件，把下载文件夹里的截图按月份分类，先给我看会移动哪些文件、分别放到哪里；我确认后再批量归档。不要处理其他图片或删除文件。",
-      en: "Use [@Computer Use](plugin://computer-use@zcode-plugins-official) to open this computer’s file manager and sort screenshots in Downloads by month. Show me which files would move and where; after I approve, file them in batches. Leave other images alone and do not delete files.",
-    },
-    plugin: {
-      stableId: "computer-use@zcode-plugins-official",
-      label: { cn: "电脑控制", en: "Computer Use" },
-    },
-  },
-  {
     id: "feature-recvvsV4e4aOFp",
     mode: "office",
     iconName: "chart-no-axes-combined",

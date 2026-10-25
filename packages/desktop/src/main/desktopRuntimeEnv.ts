@@ -372,7 +372,7 @@ export function buildHostProcessEnv(
   hostProcessLocalEnv: Record<string, string>,
   options: BuildHostProcessEnvOptions = {},
 ) {
-  // 上游 9976f24 拆除 Computer Use Helper 链路时删除了本声明，但漏删下方
+  // 上游拆除 Helper 链路时删除了本声明，但漏删下方
   // resolveDynamicWorkflowModeHostEnv({ isPackaged: packagedDesktop }) 处的引用，
   // 打包产物启动即抛 ReferenceError: packagedDesktop is not defined，
   // 主进程启动链断裂、host 进程不再 spawn，窗口卡在启动页（startup_status_timeout）。
@@ -405,8 +405,6 @@ export function buildHostProcessEnv(
     // 显式注入编译期产品身份，保证主进程与 host 的身份语义一致；地址独立解析。
     // inheritedEnv 从 .env 通用变量补齐 ZCode/ZAI 链接，未覆盖时统一使用线上默认值。
     ZCODE_ENV,
-    // Preview 与生产版共享任务、配置和凭据，但不同版本的 Helper 不能互相覆盖或触发降级保护。
-    // 只隔离 computer-use 下的运行组件，不改写 ZCODE_HOME / ZCODE_DATA_BASE_DIR 业务数据根。
     // Dynamic Workflow 灰度的本地覆盖：Main 决策后写入，production 包为空对象（继承值已在上面删除）。
     ...dynamicWorkflowModeHostEnv,
     // 模型请求默认 header 由 agent 进程构造，过去只继承 shell env 导致桌面启动时拿不到 app 版本。

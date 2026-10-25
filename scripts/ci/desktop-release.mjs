@@ -49,8 +49,7 @@ const extensions = {
     { extension: "pkg.tar.zst", arch: "aarch64" },
   ],
   win: [
-    // Windows 同时发 x64 与 arm64：electron-builder 可在 x64 runner 上交叉构建 arm64，
-    // 原生库 @trycua/cua-driver-win32-arm64-msvc 已随 SDK 的 optionalDependencies 分发。
+    // Windows 同时发 x64 与 arm64：electron-builder 可在 x64 runner 上交叉构建 arm64。
     { extension: "exe", arch: "x64" },
     { extension: "exe", arch: "arm64" },
   ],

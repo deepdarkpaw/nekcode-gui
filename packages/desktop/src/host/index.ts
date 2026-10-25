@@ -702,18 +702,6 @@ const runtimeTaskReporter = {
   },
 } satisfies NonNullable<Parameters<typeof createLocalServices>[0]>["taskRuntimeReporter"];
 
-const cuaOperationStateReporter = {
-  onStateChanged(event) {
-    if (!parentPort) {
-      return;
-    }
-    parentPort.postMessage({
-      type: HostResponseTypes.CuaOperationState,
-      ...event,
-    });
-  },
-} satisfies NonNullable<Parameters<typeof createLocalServices>[0]>["cuaOperationStateReporter"];
-
 let untrackedPromptRpcCount = 0;
 function reportHostRunningTaskCount(): void {
   runtimeTaskReporter.onRunningTaskCountChanged({
@@ -2362,9 +2350,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
               // browser-use：agent 的 interaction/browserExecute 经 zcodeAgentService 转到这个 executor，
               // 再经 parentPort 到 main 的 WebContentsView+CDP 执行。
               browserControlExecutor: browserControlMainBridge,
-              // CUA 顶部提示属于物理 Windows 桌面投影；非 Windows 和远端 authority 都不得上报。
-              cuaOperationStateReporter:
-                process.platform === "win32" ? cuaOperationStateReporter : undefined,
             });
             activeServices = initializedServices;
             return initializedServices;

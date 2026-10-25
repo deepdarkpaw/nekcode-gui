@@ -49,11 +49,6 @@ import type {
   BuiltinProviderConfigFileInfo,
 } from "./platform.js";
 import type { BrowserViewportSize } from "./browser-use/command-metadata.js";
-import type {
-  CuaAccessibilitySettingsResult,
-  OpenCuaPermissionOnboardingOptions,
-  PrepareCuaHelperPermissionDragResult,
-} from "./cuaAccessibilitySettings.js";
 
 // ============================================================================
 // RPC 服务频道 —— 通过 ChannelServer/ChannelClient 传输
@@ -72,8 +67,6 @@ export const ServiceChannels = {
   Setting: "setting",
   /** 凭据管理（从 main IPC 迁移到 host RPC） */
   Credential: "credential",
-  /** Computer Use Helper macOS 权限服务 */
-  CuaPermission: "cua-permission",
   /** 跨窗口广播 */
   Broadcast: "broadcast",
   /** ZCode task wrapper 服务 */
@@ -270,31 +263,6 @@ export const PlatformChannels = {
   OpenExternalFile: "zcode:open-external-file",
   /** Renderer → Main：查询当前生效的 Provider 配置文件路径 */
   GetBuiltinProviderConfigFile: "zcode:get-builtin-provider-config-file",
-  /** Renderer → Main：打开 ZCode Computer Use 权限引导 */
-  OpenCuaPermissionOnboarding: "zcode:open-cua-permission-onboarding",
-  /** Renderer → Main：取消当前 renderer 发起的一次权限引导 participant */
-  CancelCuaPermissionOnboarding: "zcode:cancel-cua-permission-onboarding",
-  /**
-   * Renderer → Main：申请 macOS TCC 授权（辅助功能 / 屏幕录制）。
-   * 必须由 Electron main 在 app.whenReady() 之后触发，授权才归属 ZCode.app。
-   */
-  RequestCuaPermissions: "zcode:request-cua-permissions",
-  /** Renderer → Main：打开 macOS「屏幕录制」系统设置面板 */
-  OpenCuaPermissionSystemSettings: "zcode:open-cua-permission-system-settings",
-  /**
-   * Renderer → Main：预热并缓存已验证的 Helper 路径 + bundle 指纹。
-   * 必须在拖拽浮窗挂载时调用 —— dragstart 链路里不允许任何异步 I/O。
-   */
-  PrepareCuaHelperPermissionDrag: "zcode:prepare-cua-helper-permission-drag",
-  /** Renderer → Main：把已验证的 Helper.app 同步拖出到 macOS 权限列表 */
-  StartCuaHelperPermissionDrag: "zcode:start-cua-helper-permission-drag",
-  /**
-   * Renderer → Main：拖拽手势结束。
-   * 拖完授权即完成，浮窗该让位（用户此时要看设置页和系统的重启提示）。必须等 dragend 而不是
-   * 在 dragstart 里就收窗：startDrag 只是把 drag session 交给 OS，非阻塞，drag source
-   * 立刻消失可能打断正在进行的拖拽。
-   */
-  NotifyCuaHelperPermissionDragEnded: "zcode:notify-cua-helper-permission-drag-ended",
   /** Renderer → Main：renderer 已就绪，可接收缓存的 deep link */
   RendererReady: "zcode:renderer-ready",
   ReportRendererHeapSample: "zcode:report-renderer-heap-sample",
@@ -523,8 +491,6 @@ export const HostMessageTypes = {
   LocalMediaPreviewPathAuthorizeResult: "local-media-preview-path-authorize-result",
   /** main → host：插件 UI 沙箱登记结果（PluginSandboxRegisterResultPayload） */
   PluginSandboxRegisterResult: "plugin-sandbox-register-result",
-  /** Main → Host：全局前台 ZCode 窗口派生的 producer focus fact。 */
-  CuaPipFocusChanged: "cua-pip-focus-changed",
   /** main → host：要求 Host 现读本地 Source，并同步指定 Remote Environment。 */
   ProviderProvisioningExecute: "provider-provisioning-execute",
   /** main → host：资源管理器请求 Host 采样其后代进程（Agent / MCP / 终端）的 CPU 与内存 */
@@ -567,8 +533,6 @@ export const HostResponseTypes = {
   AgentRunningTaskCountChanged: "agent-running-task-count-changed",
   /** host 内指定 workspace 当前仍未 terminal 的 task 数量变化 */
   WorkspaceRunningTaskCountChanged: "workspace-running-task-count-changed",
-  /** host → main：Windows desktop-local CUA turn 的操作提示状态 */
-  CuaOperationState: "cua-operation-state",
   /** host → main：workspace generation 已可安全 attach */
   RemoteWorkspaceAcquired: "remote-workspace-acquired",
   /** 广播消息 */
@@ -831,27 +795,6 @@ export interface PlatformChannelMap {
     request: void;
     response: BuiltinProviderConfigFileInfo;
   };
-  [PlatformChannels.OpenCuaPermissionOnboarding]: {
-    request: OpenCuaPermissionOnboardingOptions | undefined;
-    response: CuaAccessibilitySettingsResult;
-  };
-  [PlatformChannels.PrepareCuaHelperPermissionDrag]: {
-    request: undefined;
-    response: PrepareCuaHelperPermissionDragResult;
-  };
-  // 单向 send（不是 invoke）：dragstart 必须同步发起，等不了 invoke 的往返。
-  [PlatformChannels.StartCuaHelperPermissionDrag]: {
-    request: undefined;
-    response: void;
-  };
-  [PlatformChannels.NotifyCuaHelperPermissionDragEnded]: {
-    request: undefined;
-    response: void;
-  };
-  [PlatformChannels.CancelCuaPermissionOnboarding]: {
-    request: { operationId: string };
-    response: void;
-  };
   [PlatformChannels.RendererReady]: {
     request: void;
     response: void;
@@ -1050,7 +993,6 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.ExecuteDesktopCommand]: {
     request: DesktopCommandId;
-    // 返回值直通 main 进程 handler 的 return（GetCuaOsSupport 返回 CuaOsSupport），
     // 与 renderer 侧 IPlatformService.executeDesktopCommand 的 Promise<unknown> 对齐。
     response: unknown;
   };

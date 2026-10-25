@@ -12,10 +12,7 @@
     "packages/desktop/src/main/desktopLinuxDeepLinkRegistration.ts",
     "packages/services/src/node.ts",
     "packages/services/src/session/sessionModeOptions.ts",
-    "packages/ui/src/cua-permission/CuaPermissionObservationAttachment.tsx",
     "packages/ui/src/lib/taskListMetaSync.ts",
-    "packages/ui/src/settings/ComputerUseSection.tsx",
-    "packages/ui/src/v4/SessionPane.tsx",
-    "packages/zcode-cua/package.json"
+    "packages/ui/src/v4/SessionPane.tsx"
   ]
 }

@@ -19,15 +19,11 @@ const nativeSearchReleasePlan = resolveNativeSearchReleasePlan({
 // 保留显式开关，后续恢复入口时仍可复用既有原生实现和供应链校验。
 const shouldPrepareWindowsBrowserImportHelper =
   target.os === "win32" && process.env.ZCODE_ENABLE_WINDOWS_BROWSER_IMPORT === "1";
-// CUA 权限浮窗的吸附数据源。仅 macOS；缺 swiftc 时脚本内部自行降级为跳过（浮窗 fail-open
-// 到屏幕底部，仍可用），所以无条件挂在 darwin 上不会让构建变脆。
-const shouldPrepareMacosWindowBounds = target.os === "darwin";
 // Linux x64 远端资源由 prepare:remote-assets 生成，两种桌面包消费同一份归档。
 // native-search 归档随仓库分发，准备步骤只做本地解包校验，不需要任何下载源配置。
 const localRuntimeScripts = [
   ...(nativeSearchReleasePlan.enabled ? ["prepare:native-search"] : []),
   ...(shouldPrepareWindowsBrowserImportHelper ? ["prepare:browser-import-helper"] : []),
-  ...(shouldPrepareMacosWindowBounds ? ["prepare:macos-window-bounds"] : []),
 ];
 
 function runTimedPnpmScript(scriptName) {

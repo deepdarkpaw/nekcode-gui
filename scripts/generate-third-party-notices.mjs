@@ -1,7 +1,6 @@
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { assertNoticeOverrideVersions, collectNpmNotices, hashBytes } from "./third-party-npm.mjs";
-import { readCuaLicenseReview } from "./cua-license-review.mjs";
 import {
   noticesFileName,
   readNativeSearchNotices,
@@ -28,8 +27,6 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
   await readInput("pnpm-lock.yaml");
   await readInput("pnpm-workspace.yaml");
   await readInput("third-party/native-search/sources.json");
-  const cuaReview = await readCuaLicenseReview(root);
-  for (const file of cuaReview.files) await readInput(file);
   const { packages, notInstalled, workspaceManifests } = await collectNpmNotices(root, overrides);
   // 修复：递归扫描会把 bundled-agents/mock-cdn 的可删除缓存当作源码输入，重建立即失效。
   // workspace 边界由 pnpm 解析，同一份项目集合用于依赖图和 manifest 新鲜度检查。
@@ -162,10 +159,7 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
       "````text\n" + record.bytes.toString("utf8") + "\n````",
     );
   }
-  sections.push(
-    "## Native search tools",
-    "````text\n" + native.bytes.toString("utf8") + "\n````",
-  );
+  sections.push("## Native search tools", "````text\n" + native.bytes.toString("utf8") + "\n````");
   const bytes = Buffer.from(`${sections.join("\n\n")}\n`);
   const inventory = {
     schemaVersion: 1,

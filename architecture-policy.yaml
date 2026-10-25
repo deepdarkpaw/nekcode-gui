@@ -49,9 +49,6 @@ modules:
   - id: formal-proof
     roots: [packages/formal-proof/src]
     managed: false
-  - id: zcode-cua
-    roots: [packages/zcode-cua]
-    managed: false
 
   - id: gen-ui-protocol
     roots: [packages/shared/src/gen-ui]

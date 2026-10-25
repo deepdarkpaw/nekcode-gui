@@ -5,7 +5,6 @@ import { z } from "zod";
 import { bashOutputDisplaySchema } from "../bash-output-display.js";
 import { timestampSchema } from "./core.js";
 import { OFFICIAL_MCP_TOOL_ERROR_CODES } from "../official-mcp-tool-error.js";
-import { cuaRequestAccessStatusSchema } from "./cuaPermission.js";
 import { mcpToolDisplayUiSchema } from "../mcp-apps/schemas.js";
 import { toolCallCreateWorkflowDisplaySchema } from "./create-workflow-display.js";
 import {
@@ -17,10 +16,7 @@ import {
   toolCallResumeWorkflowRunDisplaySchema,
 } from "./workflow-observation-display.js";
 
-// toolCall 终态 output 的结构化展示模型（port 自 feat；CUA 工具靠 kind:"cua" 分支把
-// errorCode/suggestedAction/media(screenshot) 等结构化内容带到 renderer）。consume-main 之前
-// 缺这个 union + toolOutputSchema.display 字段——协议层 zod 校验会把 agent 下发的 display 整个
-// strip 掉，导致 UI 永远拿不到 display?.kind==="cua"，CUA 工具调用退化成 fallback 渲染。
+// toolCall 终态 output 的结构化展示模型。
 const toolResultDisplaySchema = z.discriminatedUnion("kind", [
   bashOutputDisplaySchema,
   z.object({
@@ -63,61 +59,6 @@ const toolResultDisplaySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("respond_to_coordinator"),
     status: z.enum(["success", "failed"]),
-  }),
-  z.object({
-    kind: z.literal("cua"),
-    schemaVersion: z.literal(1),
-    toolName: z.string().min(1),
-    status: z.enum(["success", "failed"]),
-    // 旧 v1 snapshot 曾重复携带 ToolCallRow.input；只为历史回放继续接受。
-    input: z.string().optional(),
-    structuredContent: z.string().optional(),
-    text: z.string().optional(),
-    errorCode: z.string().optional(),
-    suggestedAction: z.string().optional(),
-    permissionStatus: cuaRequestAccessStatusSchema.optional(),
-    targetApp: z
-      .object({
-        schemaVersion: z.literal(1),
-        displayName: z.string().trim().min(1).max(512).optional(),
-        iconLocators: z
-          .array(
-            z.discriminatedUnion("kind", [
-              z
-                .object({
-                  kind: z.literal("darwin-bundle-id"),
-                  value: z.string().trim().min(1).max(512),
-                })
-                .strict(),
-              z
-                .object({
-                  kind: z.literal("windows-executable-path"),
-                  value: z.string().trim().min(1).max(32_768),
-                })
-                .strict(),
-              z
-                .object({
-                  kind: z.literal("windows-aumid"),
-                  value: z.string().trim().min(1).max(512),
-                })
-                .strict(),
-            ]),
-          )
-          .max(3),
-      })
-      .strict()
-      .optional(),
-    media: z
-      .array(
-        z.object({
-          mimeType: z.string().min(1),
-          data: z.string().min(1).max(349_528).optional(),
-          artifactUri: z.string().min(1).optional(),
-        }),
-      )
-      .max(4)
-      .optional(),
-    truncated: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal("mcp_tool"),
@@ -179,22 +120,9 @@ export const toolProgressSchema = z.object({
 });
 export type ToolProgress = z.infer<typeof toolProgressSchema>;
 
-/**
- * node_repl cell 的目标应用身份（Computer Use 的工具卡图标）。与 CLI contracts 的
- * `nodeReplCuaAppDisplaySchema` 必须同集——两侧都是 strict，少一个字段会让整块 display 被剥掉。
- */
-const toolCallNodeReplCuaAppDisplaySchema = z
-  .object({
-    appKey: z.string().trim().min(1).max(2_048),
-    displayName: z.string().trim().min(1).max(512).optional(),
-  })
-  .strict();
-
 const toolCallNodeReplImageDisplaySchema = z
   .object({
     kind: z.literal("node_repl_images"),
-    // images 可选：CUA 的纯动作 cell 没有截图，但仍要携带 app 身份。kind 名保留不动，
-    // 改名会让已持久化的 row 在这条 strict union 里整段校验失败。
     images: z
       .array(
         z
@@ -210,7 +138,6 @@ const toolCallNodeReplImageDisplaySchema = z
       .min(1)
       .max(2)
       .optional(),
-    app: toolCallNodeReplCuaAppDisplaySchema.optional(),
     truncated: z.boolean().optional(),
     source: z.literal("browser_turn_end").optional(),
   })

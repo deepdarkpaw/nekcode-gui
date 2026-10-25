@@ -4,10 +4,6 @@ import type {
   TurnHeaderRow,
   UserInputRow,
 } from "@zcode/shared/zcode-protocol-v4";
-import {
-  ENABLE_CUA_TOOL_CALL_GROUPING,
-  prepareCuaGroupFlowItems,
-} from "@/v4/conversationCuaGroups.js";
 import { isPluginUiPinnedToolRow, type PluginUiRowPinResolver } from "@/plugin-ui/index.js";
 import { buildConversationFlowItems } from "@/v4/conversationTurnFlowItems.js";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
@@ -212,10 +208,7 @@ export function buildConversationTurnWorkSegments(options: {
     return {
       key: segmentKey,
       ...(segment.triggerRow ? { triggerRow: segment.triggerRow } : {}),
-      flowItems: prepareCuaGroupFlowItems(flowItems, {
-        enabled: ENABLE_CUA_TOOL_CALL_GROUPING,
-        stageTailIsRunning: segmentRunning,
-      }),
+      flowItems,
       assistantWorkRows: segmentAssistantRows,
       assistantHistoryRows: segmentHistoryRows,
       assistantFollowingRows: segmentFollowingRows,

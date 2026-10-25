@@ -157,10 +157,6 @@ export default defineConfig([
       // TS loader，必须随 Desktop bundle 内联，不能留下指向 src/index.ts 的裸包引用。
       "@zcode/provider",
       "@zcode/provider-node",
-      // services 已内联进 main，但其 producer import 曾被保留为裸包引用；
-      // electron-builder 又会排除 node_modules/@zcode，导致安装包启动即 ERR_MODULE_NOT_FOUND。
-      // producer 的 JS broker 必须跟随 services 一起内联，原生 addon 仍只存在于独立 Helper。
-      "@zcode/zcode-cua",
     ],
     define: createSharedDefines(),
     // main/host 同时 watch 且共享 out 根目录时，默认 chunk 命名会互相覆盖，
@@ -180,7 +176,6 @@ export default defineConfig([
       "preload/browserVideoRecorder": "src/preload/browserVideoRecorder.ts",
       "preload/index": "src/preload/index.ts",
       "preload/resourceManager": "src/preload/resourceManager.ts",
-      "preload/cuaPermissionPanel": "src/preload/cuaPermissionPanel.ts",
       "preload/pluginSandbox": "src/preload/pluginSandbox/index.ts",
     },
     outDir: "out",
@@ -241,7 +236,6 @@ export default defineConfig([
       "@zcode/client",
       "@zcode/provider",
       "@zcode/provider-node",
-      "@zcode/zcode-cua",
     ],
     define: createSharedDefines(),
     // 与 main 保持一致的 chunk 隔离策略，避免 host/main 产物相互覆盖。
@@ -270,7 +264,6 @@ export default defineConfig([
       "@zcode/client",
       "@zcode/provider",
       "@zcode/provider-node",
-      "@zcode/zcode-cua",
     ],
     define: createSharedDefines(),
     esbuildOptions(options) {

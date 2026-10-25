@@ -169,7 +169,6 @@ export type {
   SaveFileResult,
   PrintPageToPdfResult,
   DesktopCommandId,
-  CuaOsSupport,
   DesktopWindowChromeState,
   DesktopTitleBarTheme,
   DockerContainerInfo,
@@ -196,13 +195,6 @@ export type {
   WSLDistro,
   ZCodeStdioTapDevState,
 } from "./platform.js";
-export type {
-  CuaAccessibilitySettingsResult,
-  CuaPermissionKind,
-  CuaPermissionRequestResult,
-  OpenCuaPermissionOnboardingOptions,
-  PrepareCuaHelperPermissionDragResult,
-} from "./cuaAccessibilitySettings.js";
 export type { ZCodeTaskCreateResult } from "./zcode-task-types.js";
 export * from "./zcode-task-types.js";
 export * from "./automation-types.js";

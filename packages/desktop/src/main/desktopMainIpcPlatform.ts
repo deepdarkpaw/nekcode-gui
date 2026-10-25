@@ -38,7 +38,6 @@ import { resolveDesktopZoomLevelFromFactor } from "./desktopZoom.js";
 import { resolveDesktopWindowChromeState } from "./desktopWindowChromeState.js";
 import { handleWindowUnreadCountSync } from "./desktopWindowLifecycle.js";
 import { captureWindowScreenshot, openPathInFileManager } from "./desktopMainIpcHelpers.js";
-import { registerCuaPermissionIpcHandlers } from "./desktopCuaPermissionIpc.js";
 import {
   registerDesktopBrowserIpcHandlers,
   type AttachBrowserGuest,
@@ -309,8 +308,6 @@ export function registerPlatformIpcHandlers(options: {
     openPathInFileManager(rawPath, options.logger),
   );
 
-  registerCuaPermissionIpcHandlers({ logger: options.logger });
-
   ipcMain.handle(PlatformChannels.CanOpenCommunity, async (_event, locale: unknown) => {
     const result = localeSchema.safeParse(locale);
     if (!result.success) {
@@ -391,7 +388,7 @@ export function registerPlatformIpcHandlers(options: {
       return;
     }
 
-    // 返回值直通 renderer 的 executeDesktopCommand promise（GetCuaOsSupport 依赖此行为）。
+    // 返回值直通 renderer 的 executeDesktopCommand promise。
     return await options.executeDesktopCommand(command as DesktopCommandId, senderWindow);
   });
 }

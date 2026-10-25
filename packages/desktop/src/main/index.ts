@@ -127,7 +127,6 @@ import type { DesktopWindowSize } from "./desktopWindowSize.js";
 import { maybeWarnArchitectureMismatch } from "./desktopArchitectureGuard.js";
 import { maybeBlockStartupForForceUpdate } from "./forceUpdateGuard.js";
 import { createWindowsDesktopTray, updateWindowsDesktopTrayMenu } from "./desktopTray.js";
-import { createWindowsCuaOperationIndicator } from "./windowsCuaOperationIndicator.js";
 import {
   configureDockMenu,
   createWindow,
@@ -583,11 +582,6 @@ const windowTaskRealtimeHostIdMap = new Map<number, string>();
 const windowUnreadCountMap = new Map<number, number>();
 const windowHostProcessMap = new Map<number, ElectronUtilityProcess>();
 const hostRunningTaskCountMap = new Map<ElectronUtilityProcess, number>();
-const windowsCuaOperationIndicator = createWindowsCuaOperationIndicator({
-  platform: process.platform,
-  getLocale: () => currentApplicationLocale,
-  logger,
-});
 
 // 常驻 cron scheduler 进程句柄；app ready 后拉起，退出前销毁。
 let cronScheduler: CronSchedulerHandle | null = null;
@@ -679,7 +673,7 @@ function resolveExternalWorkspaceConfirmationCopy() {
 }
 
 function focusForceUpdateGateWindow() {
-  const gateWindow = getApplicationWindowsExcludingCuaIndicator()[0];
+  const gateWindow = getApplicationWindows()[0];
   if (!gateWindow) {
     return;
   }
@@ -694,7 +688,7 @@ function focusForceUpdateGateWindow() {
 }
 
 const primaryWindowCoordinator = createPrimaryWindowCoordinator({
-  listWindows: getApplicationWindowsExcludingCuaIndicator,
+  listWindows: getApplicationWindows,
   resolveStartupWindowBootstrap: () => {
     if (startupOpenWorkspaceRequest) {
       const request = startupOpenWorkspaceRequest;
@@ -778,7 +772,7 @@ function syncImmediateAppSettings(patch: Partial<AppSettings>) {
     // 这里重建应用菜单 accelerator，并通知所有窗口刷新设置快照 —— 其他窗口的
     // useAppKeyboard 生效表与设置页跟随更新。先例：setAutoDownloadAndInstallUpdates 的全窗口广播。
     rebuildMenu();
-    for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+    for (const win of getApplicationWindows()) {
       if (!win.isDestroyed()) {
         win.webContents.send(PlatformChannels.SettingsChanged);
       }
@@ -800,7 +794,7 @@ async function setAutoDownloadAndInstallUpdates(enabled: boolean) {
   syncImmediateAppSettings({
     autoDownloadAndInstallUpdates: enabled,
   });
-  for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+  for (const win of getApplicationWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(PlatformChannels.SettingsChanged);
     }
@@ -833,7 +827,6 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   notifyStabilityAppExit(
     activeAppShutdownKind === "update-install" ? "update_install" : "app_quit",
   );
-  windowsCuaOperationIndicator.dispose();
   browserScreenshotSurfaceCoordinator.dispose();
 
   const cronSchedulerToDispose = cronScheduler;
@@ -1098,9 +1091,7 @@ function confirmAppQuit(originWindow?: BrowserWindow | null) {
   const targetWindow =
     originWindow && !originWindow.isDestroyed()
       ? originWindow
-      : (BrowserWindow.getFocusedWindow() ??
-        getApplicationWindowsExcludingCuaIndicator()[0] ??
-        null);
+      : (BrowserWindow.getFocusedWindow() ?? getApplicationWindows()[0] ?? null);
   const dialogOptions = {
     type: "question" as const,
     buttons: isZh ? ["退出", "取消"] : ["Quit", "Cancel"],
@@ -1220,14 +1211,12 @@ function resolveFocusedDesktopZoomLevel(): number {
   return resolveDesktopZoomLevelFromFactor(focusedWindow.webContents.getZoomFactor());
 }
 
-function getApplicationWindowsExcludingCuaIndicator(): BrowserWindow[] {
-  return BrowserWindow.getAllWindows().filter(
-    (win) => !win.isDestroyed() && !windowsCuaOperationIndicator.ownsWindow(win),
-  );
+function getApplicationWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed());
 }
 
 function getMainApplicationWindows(): BrowserWindow[] {
-  return getApplicationWindowsExcludingCuaIndicator().filter((win) => win !== updateStatusWindow);
+  return getApplicationWindows().filter((win) => win !== updateStatusWindow);
 }
 
 function isUpdateStatusWindowCloseLocked(state: UpdateStatePayload) {
@@ -1487,10 +1476,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onAgentProcessReady: recordAgentProcessReady,
           onAgentProcessSpawned: recordAgentProcessStarted,
           onMcpTelemetry: (message) => recordMcpDiagnostic(message.event),
-          onCuaOperationStateChanged: (source, event) =>
-            windowsCuaOperationIndicator.handleState(source, event),
-          onCuaOperationStateSourceExited: (source) =>
-            windowsCuaOperationIndicator.clearSource(source),
           onCronRunResult: forwardCronRunResult,
           onCronSchedulerWakeRequested: wakeCronScheduler,
           authorizeLocalMediaPreviewPath: localMediaPreviewPathRegistry.authorize,
@@ -1565,7 +1550,7 @@ app.on("open-url", (event, url) => {
     focusForceUpdateGateWindow();
     return;
   }
-  if (workspacePath && getApplicationWindowsExcludingCuaIndicator().length === 0) {
+  if (workspacePath && getApplicationWindows().length === 0) {
     // macOS 冷启动 Finder Service 会先触发 open-url，再创建首窗。
     // 把目标目录按 deep link 来源记录，首窗 bootstrap 前仍要走确认 gate。
     startupOpenWorkspaceRequest = { path: workspacePath, source: "deep-link" };
@@ -1576,7 +1561,7 @@ app.on("open-url", (event, url) => {
   }
   handleDeepLink(url, logger, {
     confirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
-    resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+    resolveApplicationWindow: () => getApplicationWindows()[0] ?? null,
   });
 });
 const gotTheLock = app.requestSingleInstanceLock(createDeepLinkSingleInstanceData(process.argv));
@@ -1596,10 +1581,9 @@ app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
           allowWithoutReadyWindow: true,
           ...options,
           resolveApplicationWindow:
-            options?.resolveApplicationWindow ??
-            (() => getApplicationWindowsExcludingCuaIndicator()[0] ?? null),
+            options?.resolveApplicationWindow ?? (() => getApplicationWindows()[0] ?? null),
         }),
-      resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+      resolveApplicationWindow: () => getApplicationWindows()[0] ?? null,
       logger,
       workspaceConfirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
     })
@@ -1607,7 +1591,7 @@ app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
     return;
   }
 
-  const win = getApplicationWindowsExcludingCuaIndicator()[0];
+  const win = getApplicationWindows()[0];
   if (win) {
     if (win.isMinimized()) {
       win.restore();
@@ -1629,7 +1613,7 @@ app.whenReady().then(async () => {
     preloadPath: join(import.meta.dirname, "../preload/pluginSandbox.cjs"),
     rendererDir: join(import.meta.dirname, "../renderer"),
     aliasDir: join(import.meta.dirname, "../plugin-sandbox"),
-    // 开发模式 out/renderer 没有 shell 产物，从 renderer dev server 代理（同 cua-permission-panel 的做法）。
+    // 开发模式 out/renderer 没有 shell 产物，从 renderer dev server 代理。
     ...(!app.isPackaged && process.env["ELECTRON_RENDERER_URL"]
       ? { devServerUrl: process.env["ELECTRON_RENDERER_URL"] }
       : {}),
@@ -1809,9 +1793,8 @@ app.whenReady().then(async () => {
     },
     applyApplicationLocale: async (locale) => {
       currentApplicationLocale = locale;
-      windowsCuaOperationIndicator.refreshContent();
       rebuildMenu();
-      for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+      for (const win of getApplicationWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send(PlatformChannels.ApplicationLocaleChanged, currentApplicationLocale);
         }
@@ -1886,8 +1869,7 @@ app.whenReady().then(async () => {
   registerRendererHeapSampleIpc();
 
   // 本地未打包 dev 构建（app.isPackaged === false）必须跳过远端强制升级 gate。
-  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建（如 dev:desktop:cua
-  // 连真实后端测 computer use）虽指向 production 后端，版本号却滞后于线上 release（feature
+  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建虽指向 production 后端，版本号却滞后于线上 release（feature
   // 分支不 bump 版本），会被 release minimalVersion 误判为"需强制升级"而启动秒退。force-update
   // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
   // gate 照常生效，对真实用户零影响。
@@ -1922,7 +1904,7 @@ app.whenReady().then(async () => {
   void maybeWarnArchitectureMismatch({
     locale: currentApplicationLocale,
     logger,
-    parentWindow: getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+    parentWindow: getApplicationWindows()[0] ?? null,
     icon: nativeImage.createFromPath(iconPath),
   }).catch((error) => {
     logger.warn("[architecture] 架构检测弹框失败:", error);
@@ -1932,7 +1914,7 @@ app.whenReady().then(async () => {
   if (startupDeepLinkConsumptionGate.shouldHandleReadyProtocolUrl(protocolUrl)) {
     handleDeepLink(protocolUrl, logger, {
       confirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
-      resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+      resolveApplicationWindow: () => getApplicationWindows()[0] ?? null,
     });
   }
 });
@@ -1984,7 +1966,7 @@ app.on("before-quit", (event) => {
     localMediaPreviewPathRegistry.clear();
     event.preventDefault();
     void prepareAppQuit("app-before-quit").finally(() => {
-      const remainingWindows = getApplicationWindowsExcludingCuaIndicator();
+      const remainingWindows = getApplicationWindows();
       logger.info(
         `[app-quit] preparation finished, resuming quit with windows=${remainingWindows.length}`,
       );
@@ -1999,7 +1981,7 @@ app.on("before-quit", (event) => {
 
       let exitRequested = false;
       const exitAfterLastWindowClosed = () => {
-        if (exitRequested || getApplicationWindowsExcludingCuaIndicator().length > 0) {
+        if (exitRequested || getApplicationWindows().length > 0) {
           return;
         }
         exitRequested = true;
