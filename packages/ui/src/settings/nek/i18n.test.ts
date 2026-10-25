@@ -11,7 +11,8 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return sourceFiles(path);
-    return /\.tsx?$/.test(entry.name) && !entry.name.includes(".test.") ? [path] : [];
+    // 也兼容 tsc -b 产出的 dist/*.js（vitest 4 默认不排除 dist）。
+    return /\.(tsx?|js)$/.test(entry.name) && !/\.(test|d)\./.test(entry.name) ? [path] : [];
   });
 }
 
