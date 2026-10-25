@@ -17,12 +17,14 @@ import { ProjectPage } from "./pages/ProjectPage.js";
 import { RemoteHostsPage } from "./pages/hosts/RemoteHostsPage.js";
 import { AppearancePage } from "./pages/AppearancePage.js";
 import { ShortcutsPage } from "./pages/ShortcutsPage.js";
+import { AdvancedPage } from "./pages/AdvancedPage.js";
+import { AboutPage } from "./pages/AboutPage.js";
 
 export interface NekSettingsSectionEnv {
   isWindowsDesktop: boolean;
 }
 
-const PAGES: Partial<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) => ReactNode>> = {
+const PAGES: Readonly<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) => ReactNode>> = {
   nekAccounts: () => <AccountsPage />,
   nekProviders: () => <ProvidersPage />,
   nekDefaultModel: () => <DefaultModelPage />,
@@ -33,6 +35,8 @@ const PAGES: Partial<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) =
   nekProject: () => <ProjectPage />,
   nekAppearance: () => <AppearancePage />,
   nekShortcuts: () => <ShortcutsPage />,
+  nekAdvanced: () => <AdvancedPage />,
+  nekAbout: () => <AboutPage />,
   nekRemoteHosts: (env) => <RemoteHostsPage isWindowsDesktop={env.isWindowsDesktop} />,
 };
 
@@ -49,7 +53,7 @@ export function NekSettingsSection({
   const render = PAGES[sectionId];
   return (
     <NekSettingsProvider apis={apis} projectCwd={projectCwd ?? undefined}>
-      {render ? render({ isWindowsDesktop }) : null}
+      {render({ isWindowsDesktop })}
     </NekSettingsProvider>
   );
 }
