@@ -53,6 +53,8 @@ import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
 import { ComputerUseSection } from "@/settings/ComputerUseSection.js";
 import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
+import { NekSettingsSection } from "@/settings/nek/NekSettingsSection.js";
+import { isNekSettingsSectionId } from "@/settings/nek/sectionIds.js";
 import { SETTINGS_FRAME_CONTENT_CLASSNAME } from "@/settings/SettingsPageParts.js";
 import {
   SettingsBreadcrumbProvider,
@@ -921,7 +923,13 @@ export function SettingsPage({
                         ) : null}
                       </div>
                       <div className="space-y-8">
-                        {activeSection === "general" ? (
+                        {isNekSettingsSectionId(activeSection) ? (
+                          <NekSettingsSection
+                            sectionId={activeSection}
+                            projectCwd={activeWorkspacePath ?? captionWorkspacePath}
+                            isWindowsDesktop={Boolean(isWindowsDesktop)}
+                          />
+                        ) : activeSection === "general" ? (
                           <GeneralSectionContent
                             localePreference={localePreference}
                             interfaceMode={interfaceMode}

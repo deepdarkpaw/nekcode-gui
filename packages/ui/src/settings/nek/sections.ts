@@ -18,23 +18,13 @@ import {
   WrenchIcon,
 } from "lucide-react";
 
-export const NEK_SETTINGS_SECTION_IDS = [
-  "nekAccounts",
-  "nekProviders",
-  "nekDefaultModel",
-  "nekCompaction",
-  "nekTools",
-  "nekMcp",
-  "nekAgent",
-  "nekProject",
-  "nekRemoteHosts",
-  "nekAppearance",
-  "nekShortcuts",
-  "nekAdvanced",
-  "nekAbout",
-] as const;
+import type { NekSettingsSectionId } from "./sectionIds.js";
 
-export type NekSettingsSectionId = (typeof NEK_SETTINGS_SECTION_IDS)[number];
+export {
+  isNekSettingsSectionId,
+  NEK_SETTINGS_SECTION_IDS,
+  type NekSettingsSectionId,
+} from "./sectionIds.js";
 
 export type NekSettingsGroupId = "nekConfig" | "nekApp";
 
@@ -144,10 +134,6 @@ export const NEK_SETTINGS_SECTIONS: readonly NekSettingsSectionDefinition[] = [
     usesTarget: true,
   },
 ];
-
-export function isNekSettingsSectionId(value: string): value is NekSettingsSectionId {
-  return (NEK_SETTINGS_SECTION_IDS as readonly string[]).includes(value);
-}
 
 export function getNekSettingsSection(id: NekSettingsSectionId): NekSettingsSectionDefinition {
   const section = NEK_SETTINGS_SECTIONS.find((item) => item.id === id);
