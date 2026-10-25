@@ -223,35 +223,12 @@ jobs:
           path: packages/desktop/bundled-remote-assets
       - name: Verify bundled remote components
         run: node scripts/bundle-remote-assets.mjs verify
-      # Preview 的 Rust runtime 必须在准备/构建前安装；与仓库 CLI workflow 使用相同 stable channel。
-      - uses: dtolnay/rust-toolchain@stable
-        if: matrix.flavor == 'preview'
-      - name: Initialize Windows MSVC environment for Preview
-        if: matrix.flavor == 'preview' && matrix.target.platform == 'win'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
-        with:
-          arch: ${{ matrix.target.arch == 'arm64' && 'amd64_arm64' || 'amd64' }}
-      - name: Install Windows ARM64 Rust target
-        if: matrix.flavor == 'preview' && matrix.target.platform == 'win' && matrix.target.arch == 'arm64'
-        run: rustup target add aarch64-pc-windows-msvc
       - name: Prepare desktop runtime
         run: pnpm prepare:desktop-runtime
-      # 交叉架构（Windows arm64 在 x64 runner 上打包）加载不了目标原生库，
-      # 只能校验随包资产文件；执行探针留给同架构的原生 runner（含 Linux arm64）。
-      - name: Verify native CUA and shared plugin host
-        if: matrix.target.crossArch != true
-        run: node scripts/ci/cua-driver-smoke.mjs
-      - name: Verify staged CUA assets (cross-arch)
-        if: matrix.target.crossArch == true
-        run: node scripts/ci/cua-driver-smoke.mjs --files-only
       - name: Build workspace and desktop
         run: pnpm build:bootstrap
       - name: Package and verify desktop
         run: pnpm bundle:desktop -- --os "$ZCODE_TARGET_OS" --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
-      # 同理：交叉架构的 Electron 可执行文件在 x64 runner 上跑不起来。
-      - name: Verify CUA with the packaged Electron runtime
-        if: matrix.target.crossArch != true
-        run: node scripts/ci/cua-driver-smoke.mjs --packaged
       - name: Collect installers
         run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -302,9 +279,6 @@ jobs:
           path: packages/desktop/bundled-remote-assets
       - name: Verify bundled remote components
         run: node scripts/bundle-remote-assets.mjs verify
-      # Rust runtime 只用于 Preview；工具链必须在 runtime preparation 之前就绪。
-      - uses: dtolnay/rust-toolchain@stable
-        if: matrix.flavor == 'preview'
       - name: Prepare desktop runtime
         run: pnpm prepare:desktop-runtime
       - name: Build workspace and desktop

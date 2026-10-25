@@ -18,10 +18,9 @@ export interface ServerRuntimeManifest {
   target: ServerTarget;
   appVersion: string;
   nodeVersion: string;
-  entrypoints: { cli: string; core: string; agent: string };
+  entrypoints: { cli: string; core: string };
   native: string[];
   tools?: string[];
-  plugins?: string[];
   components?: Array<{
     id: string;
     sha256: string;
@@ -37,10 +36,9 @@ export const serverRuntimeManifestSchema = z
     target: z.enum(supportedServerTargets),
     appVersion: z.string().min(1),
     nodeVersion: z.string().min(1),
-    entrypoints: z.object({ cli: z.string(), core: z.string(), agent: z.string() }).strict(),
+    entrypoints: z.object({ cli: z.string(), core: z.string() }).strict(),
     native: z.array(z.string()),
     tools: z.array(z.string()).optional(),
-    plugins: z.array(z.string()).optional(),
     components: z
       .array(
         z
@@ -68,19 +66,18 @@ export function currentServerTarget(): ServerTarget {
 export function createRuntimeManifest(
   target = currentServerTarget(),
   appVersion = "0.0.0-dev",
-  extras: Pick<ServerRuntimeManifest, "tools" | "plugins" | "components"> = {},
+  extras: Pick<ServerRuntimeManifest, "tools" | "components"> = {},
 ): ServerRuntimeManifest {
   return {
     product: "zcode-server",
     target,
     appVersion,
     nodeVersion: SERVER_RUNTIME_NODE_VERSION,
-    // 入口是 ESM `.js`（tsup 产物）：server-cli 通过 `new URL("./server-core.js")` fork Core、
-    // 通过同目录 zcode.cjs 委派既有 CLI，三者必须同目录且文件名与产物一致。
+    // 入口是 ESM `.js`（tsup 产物）：server-cli 通过 `new URL("./server-core.js")` fork Core，
+    // 两者必须同目录且文件名与产物一致。
     entrypoints: {
       cli: "runtime/server-cli.js",
       core: "runtime/server-core.js",
-      agent: "runtime/zcode.cjs",
     },
     native: ["node-pty"],
     ...extras,

@@ -34,7 +34,7 @@ test("local-only source pins identity, materializes once per transaction and cle
     globalThis.fetch = original;
   });
   const manifest = await source.getManifest();
-  assert.equal(manifest.components.length, 7);
+  assert.equal(manifest.components.length, 6);
   const [a, b] = await Promise.all([source.resolveReleaseDir(), source.resolveReleaseDir()]);
   assert.equal(a, b);
   assert.equal(

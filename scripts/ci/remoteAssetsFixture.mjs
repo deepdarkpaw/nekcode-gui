@@ -18,7 +18,6 @@ export async function createRemoteAssetFixture(
     "server-bundle": "server",
     "node-runtime": `node/${platform}`,
     "node-pty": `node-pty/${platform}`,
-    glm: `glm/${platform}`,
     bfs: `tools/${platform}/bfs`,
     ripgrep: `tools/${platform}/ripgrep`,
     ugrep: `tools/${platform}/ugrep`,
