@@ -87,7 +87,7 @@ function useRowActions(
   };
 }
 
-function ServerList({
+export function ServerList({
   doc,
   statuses,
   statusReload,
