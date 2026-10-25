@@ -7,10 +7,7 @@
     "sha256": "1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f",
     "importRevision": null,
     "provenance": "The original copy revision is not recorded in the current checkout; this pinned license reference is not asserted to be the original import version.",
-    "roots": [
-      "packages/ui/src/components/ui",
-      "packages/ui/src/styles.css"
-    ],
+    "roots": ["packages/ui/src/components/ui", "packages/ui/src/styles.css"],
     "scope": "Upstream-derived portions only; ZCode-specific files in the same directory are not attributed to the upstream project.",
     "license": "MIT"
   },
@@ -22,10 +19,7 @@
     "sha256": "b4f9adb7c568904834d0dd6cc98d16c390d21ca32fc17ae7a267715269bd5529",
     "importRevision": null,
     "provenance": "The original copy revision is not recorded in the current checkout; this pinned license reference is not asserted to be the original import version.",
-    "roots": [
-      "packages/ui/src/components/ai-elements",
-      ".agents/skills/ai-elements"
-    ],
+    "roots": ["packages/ui/src/components/ai-elements", ".agents/skills/ai-elements"],
     "scope": "Upstream-derived UI components, skill instructions, reference documentation and example scripts only; locally adapted for ZCode imports, styling and agent workflow. Original import revision not recorded.",
     "license": "Apache-2.0",
     "modifiedFiles": [
@@ -172,10 +166,7 @@
   },
   {
     "id": "Material Icon Theme",
-    "roots": [
-      "packages/desktop/src/renderer/public/material-icons",
-      "packages/web/public/material-icons"
-    ],
+    "roots": ["packages/desktop/src/renderer/public/material-icons"],
     "license": "MIT",
     "source": "https://raw.githubusercontent.com/material-extensions/vscode-material-icon-theme/cb1dfb6d9cb73b15681a93939983d75dbba7bf5b/LICENSE",
     "file": "third-party/upstream/cdab3014d4f69b49dde2b85e81792208c72de613aa6aed7f7a9b5c6609b89670.txt",
@@ -191,11 +182,7 @@
     "sha256": "014bb31e83d5c2e76aea1cc6e82217346ab41362f32cb355ad0f5c10aa0aeaff",
     "importRevision": null,
     "provenance": "Original import revision is not recorded. This pinned upstream license/source reference is not asserted to be the original import version.",
-    "roots": [
-      ".agents/skills/agent-browser",
-      ".agents/skills/dogfood",
-      ".agents/skills/electron"
-    ],
+    "roots": [".agents/skills/agent-browser", ".agents/skills/dogfood", ".agents/skills/electron"],
     "scope": "Upstream-derived instructions, reference documents and shell templates; locally adapted for the ZCode workspace. Reference release v0.20.0 contains all three skills.",
     "license": "Apache-2.0",
     "modifiedFiles": [
@@ -234,9 +221,7 @@
     "sha256": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
     "importRevision": null,
     "provenance": "Original import revision is not recorded. This pinned upstream license/source reference is not asserted to be the original import version.",
-    "roots": [
-      "packages/ui/src/lib/builtinSkillI18n.ts"
-    ],
+    "roots": ["packages/ui/src/lib/builtinSkillI18n.ts"],
     "scope": "Superpowers-derived skill descriptions and their translations only; unrelated descriptions from other projects in this file are not covered. The former bundled plugin implementation has been removed; only its retained license remains.",
     "license": "MIT"
   },
@@ -245,9 +230,7 @@
     "referenceRevision": "063bee94c3f4df8453406c830b0a7df0f2860278",
     "source": "https://github.com/vercel-labs/agent-skills/tree/063bee94c3f4df8453406c830b0a7df0f2860278",
     "importRevision": null,
-    "roots": [
-      ".agents/skills/react-best-practices"
-    ],
+    "roots": [".agents/skills/react-best-practices"],
     "license": "MIT",
     "scope": "Vendored React/Next.js guidance and local adaptations; local README preserves Shu Ding / Vercel attribution.",
     "reviewRequired": "Pinned upstream README and skill declare MIT, but a complete original copyright/license notice has not been obtained."

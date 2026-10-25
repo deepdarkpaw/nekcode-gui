@@ -222,7 +222,6 @@ function resolveSidebarTaskViewMode(params: {
 
 export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   workspacePath,
-  workspaceRemoteSessionId,
   activePreviewPath,
   onSelectTask,
   onStartDraftInWorkspace,
@@ -261,7 +260,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   onFileTreeOpenChange,
 }: {
   workspacePath: string;
-  workspaceRemoteSessionId?: string;
   activePreviewPath?: string | null;
   onSelectTask: (
     targetWorkspacePath: string,
@@ -1630,9 +1628,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
             onThemeChange={handleThemeChange}
             onSettingsButtonClick={openSettingsTab}
             onUsageClick={openSettingsTab}
-            workspacePath={workspacePath}
-            workspaceIdentity={workspaceIdentity}
-            remoteSessionId={workspaceRemoteSessionId}
             isDesktop={isDesktop}
           />
         </div>

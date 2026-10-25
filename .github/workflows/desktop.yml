@@ -67,7 +67,7 @@ jobs:
         # workspace 包的 exports 指向 src，套件不依赖构建产物，因此放在构建步骤之后、Release tests 之前。
         # UI 留白套件依赖 @ alias 与 SSR JSX，单独使用受控配置；任一命令失败即门禁失败。
         run: |
-          pnpm vitest run packages/shared/src/webRemoteControl packages/shared/src/mcp-apps packages/ui/src/lib/webRemoteControlTarget.test.ts packages/desktop/src/main/webRemoteControl/servicePipe.test.ts packages/web/src/mobile packages/shared/src/zcode-protocol-v4
+          pnpm vitest run packages/shared/src/mcp-apps packages/shared/src/zcode-protocol-v4
           pnpm vitest run --config packages/ui/vitest.holes.config.ts
           pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnRenderUnits.test.ts
       - name: Release tests
@@ -98,14 +98,10 @@ jobs:
         run: node scripts/ci/cua-actions-smoke.mjs
       - name: Remote form browser checks
         run: node scripts/ci/remote-form-smoke.mjs
-      - name: Bundled help browser checks
-        run: node scripts/ci/bundled-help-smoke.mjs
       - name: Local feedback browser checks
         run: node scripts/ci/local-feedback-smoke.mjs
       - name: Conversation navigator browser checks
         run: node scripts/ci/conversation-navigator-smoke.mjs
-      - name: Web remote control dialog browser checks
-        run: node scripts/ci/web-remote-control-dialog-smoke.mjs
       - name: Imported conversation browser checks
         run: node scripts/ci/local-share-context-smoke.mjs
       - name: Self-managed model settings
@@ -132,9 +128,7 @@ jobs:
         run: node scripts/ci/image-search-config-smoke.mjs
       - name: Startup without official account restoration
         run: |
-          pnpm --filter @zcode/web build
           node scripts/ci/root-startup-smoke.mjs
-          node scripts/ci/web-entry-without-oauth-smoke.mjs
       - name: Conversation file browser checks
         run: |
           node scripts/ci/conversation-export-smoke.mjs

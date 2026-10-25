@@ -579,9 +579,6 @@ export default {
   },
   extraResources: [
     { from: "bundled-remote-assets", to: "remote-assets" },
-    // 手机远控的移动端 web 产物（packages/web 的 mobile.html 多入口构建）。
-    // main 的 resolveMobileAppRoot 按 resourcesPath/web-remote 解析；dev 下回退仓库 dist。
-    { from: resolve(workspaceRoot, "packages/web/dist"), to: "web-remote" },
     { from: resolve(workspaceRoot, noticesFileName), to: noticesFileName },
     ...(targetPlatform.os === "darwin"
       ? [
@@ -692,9 +689,7 @@ export default {
     // electron-builder 在签主 app 时若继续深度扫描这些目录，会显著拉长 macOS codesign 时长。
     // 这里按“任意前缀 + Contents/Resources”匹配绝对路径，避免 ^Contents/... 在 CI 中无法命中。
     // 命中后可跳过已预签名目录的重复签名/遍历，同时保留主 app 与框架签名。
-    signIgnore: [
-      "[/\\\\]Contents[/\\\\]Resources[/\\\\]tools([/\\\\]|$)",
-    ],
+    signIgnore: ["[/\\\\]Contents[/\\\\]Resources[/\\\\]tools([/\\\\]|$)"],
   },
   win: {
     target: ["nsis"],

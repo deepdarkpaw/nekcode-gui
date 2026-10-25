@@ -3,13 +3,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
     "./stdio": "./src/stdio.ts",
     "./remote": "./src/remote/index.ts",
     "./remote/*.js": "./src/remote/*.ts"
   },
   "scripts": {
-    "dev": "tsup --watch --onSuccess 'node dist/entry-http.js'",
     "build": "node build.mjs",
     "build:remote": "tsx build-remote.ts",
     "lint": "oxlint",

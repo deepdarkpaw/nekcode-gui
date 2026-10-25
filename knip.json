@@ -23,7 +23,6 @@
     },
     "packages/server": {
       "entry": [
-        "src/index.ts",
         "src/entry-stdio.ts",
         "build-remote.ts"
       ]
@@ -32,11 +31,6 @@
       "entry": [
         "src/index.ts",
         "src/storage/module.ts"
-      ]
-    },
-    "packages/relay": {
-      "entry": [
-        "src/cli.ts"
       ]
     }
   },

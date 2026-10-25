@@ -13,10 +13,6 @@ const { readDesktopHelpConfig } = await tsImport(
   "../../packages/desktop/src/main/desktopHelpConfig.ts",
   import.meta.url,
 );
-const { resolveWebHelpConfig, resolveWebCommunityUrl } = await tsImport(
-  "../../packages/web/src/communityUrl.ts",
-  import.meta.url,
-);
 const { resolveZCodeAgentPresentationSurface } = await tsImport(
   "../../packages/services/src/zcode-agent/zcodeAgentPresentationSurface.ts",
   import.meta.url,
@@ -70,12 +66,8 @@ test("Desktop packaged/development and Web help use the same bundled links witho
     }),
     expected,
   );
-  assert.deepEqual(await resolveWebHelpConfig(), expected);
   assert.equal(expected.feedback_url, "https://github.com/axiom-desu/ZCodium/issues/new");
   assert.equal(expected.feedback_use_external_form, true);
-  for (const locale of ["en-US", "zh-CN"]) {
-    assert.equal(await resolveWebCommunityUrl(locale), "https://github.com/axiom-desu/ZCodium");
-  }
   await writeFile(join(resources, "config/default.json"), "malformed");
   await assert.rejects(
     readDesktopHelpConfig({ isPackaged: true, appPath: "unused", resourcesPath: resources }),

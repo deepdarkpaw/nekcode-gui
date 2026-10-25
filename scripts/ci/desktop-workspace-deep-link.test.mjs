@@ -288,7 +288,6 @@ test("public platform and preload no longer expose proprietary OAuth callbacks",
     "packages/client/src/globals.d.ts",
     "packages/desktop/src/preload/index.ts",
     "packages/desktop/src/renderer/src/desktopPlatform.ts",
-    "packages/web/src/main.tsx",
   ]) {
     const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(

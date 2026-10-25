@@ -37,7 +37,6 @@ import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { normalizeInterfaceMode } from "@/lib/interfaceMode.js";
 import type { Theme } from "@/useTheme.js";
-import { WorkspaceWebRemoteControlTrigger } from "@/WorkspaceWebRemoteControlTrigger.js";
 import { WorkspaceSidebarUsageMenuItem } from "@/WorkspaceSidebarUsageMenuItem.js";
 
 const DESKTOP_ZOOM_MIN_LEVEL = -3;
@@ -51,9 +50,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onSettingsButtonClick,
   onUsageClick,
   settingsButtonMode = "settings",
-  workspacePath,
-  workspaceIdentity,
-  remoteSessionId,
   isDesktop = false,
   className,
 }: {
@@ -65,9 +61,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onUsageClick?: () => void;
 
   settingsButtonMode?: "settings" | "back";
-  workspacePath?: string;
-  workspaceIdentity?: string;
-  remoteSessionId?: string;
   isDesktop?: boolean;
   className?: string;
 }) {
@@ -249,14 +242,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">
-          {isDesktop && workspacePath ? (
-            <WorkspaceWebRemoteControlTrigger
-              workspacePath={workspacePath}
-              workspaceIdentity={workspaceIdentity}
-              remoteSessionId={remoteSessionId}
-              compact
-            />
-          ) : null}
           <ControlHintTooltip title={settingsButtonLabel}>
             <Button
               type="button"
