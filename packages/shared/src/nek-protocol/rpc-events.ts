@@ -35,7 +35,11 @@ export type NekAssistantMessageEvent =
   | { type: "toolcall_start"; contentIndex: number; id: string; toolName: string }
   | { type: "toolcall_delta"; contentIndex: number; delta: string }
   | { type: "toolcall_end"; contentIndex: number; toolCall: NekToolCall }
-  | { type: "done"; reason: "stop" | "length" | "toolUse" | "deferred"; message?: NekAssistantMessage }
+  | {
+      type: "done";
+      reason: "stop" | "length" | "toolUse" | "deferred";
+      message?: NekAssistantMessage;
+    }
   | { type: "error"; reason: "aborted" | "error"; error?: NekAssistantMessage };
 
 // ============================================================================
@@ -93,7 +97,13 @@ export type NekAgentSessionEvent =
       errorMessage?: string;
     }
   // 重试
-  | { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
+  | {
+      type: "auto_retry_start";
+      attempt: number;
+      maxAttempts: number;
+      delayMs: number;
+      errorMessage: string;
+    }
   | { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
   | {
       type: "summarization_retry_scheduled";
@@ -102,7 +112,11 @@ export type NekAgentSessionEvent =
       delayMs: number;
       errorMessage: string;
     }
-  | { type: "summarization_retry_attempt_start"; source: "branchSummary" | "compaction"; reason?: string }
+  | {
+      type: "summarization_retry_attempt_start";
+      source: "branchSummary" | "compaction";
+      reason?: string;
+    }
   | { type: "summarization_retry_finished" }
   // 仅 RPC 模式
   | { type: "bash_execution_update"; id?: string; delta: string }

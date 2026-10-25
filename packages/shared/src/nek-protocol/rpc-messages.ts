@@ -116,7 +116,14 @@ export interface NekDeferredHandle {
   data?: unknown;
 }
 
-export type NekStopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted" | "deferred";
+export type NekStopReason =
+  | "pending"
+  | "stop"
+  | "length"
+  | "toolUse"
+  | "error"
+  | "aborted"
+  | "deferred";
 
 export interface NekAssistantMessage {
   role: "assistant";
@@ -187,16 +194,6 @@ export interface NekCompactionSummaryMessage {
   timestamp: number;
 }
 
-/**
- * 宿主可以用 TypeScript declaration merging 给 `AgentMessage` 加角色，
- * 因此消费端必须容忍未知 role（`NekUnknownMessage`）。
- */
-export interface NekUnknownMessage {
-  role: string;
-  timestamp?: number;
-  [key: string]: unknown;
-}
-
 export type NekAgentMessage =
   | NekSystemMessage
   | NekUserMessage
@@ -205,8 +202,39 @@ export type NekAgentMessage =
   | NekBashExecutionMessage
   | NekCustomMessage
   | NekBranchSummaryMessage
-  | NekCompactionSummaryMessage
-  | NekUnknownMessage;
+  | NekCompactionSummaryMessage;
+
+/** 已知消息的 role 白名单（未知角色必须先经过这里过滤再走 switch）。 */
+export const NEK_AGENT_MESSAGE_ROLES = [
+  "system",
+  "user",
+  "assistant",
+  "toolResult",
+  "bashExecution",
+  "custom",
+  "branchSummary",
+  "compactionSummary",
+] as const;
+
+export type NekAgentMessageRole = (typeof NEK_AGENT_MESSAGE_ROLES)[number];
+
+/**
+ * 宿主可以用 TypeScript declaration merging 给 `AgentMessage` 加自定义角色。
+ * 它**不**并进 `NekAgentMessage`（否则 `role` 收窄会退化成 string）；消费端先用
+ * {@link isNekAgentMessage} 过滤，未知角色按不透明数据丢弃或记日志。
+ */
+export interface NekUnknownAgentMessage {
+  role: string;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
+/** 是否是我们认识的消息角色。 */
+export function isNekAgentMessage(message: unknown): message is NekAgentMessage {
+  if (typeof message !== "object" || message === null) return false;
+  const role = (message as { role?: unknown }).role;
+  return typeof role === "string" && (NEK_AGENT_MESSAGE_ROLES as readonly string[]).includes(role);
+}
 
 // ============================================================================
 // 会话条目（`get_entries` / `read_session_snapshot`）

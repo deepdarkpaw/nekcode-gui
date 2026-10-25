@@ -8,8 +8,20 @@
  * 线路约定：命令 `{ id?, type, ... }`；响应 `{ id?, type: "response", command, success, data? | error }`。
  * 事件没有 `id`（`bash_execution_update` 例外，它带发起命令的 id）。
  */
-import type { NekEndpointApi, NekGuiRpcCommand, NekGuiRpcResponseData, NekMode, NekThinkingLevel } from "./gui-rpc.js";
-import type { NekAgentMessage, NekImageContent, NekSessionEntry, NekSessionTreeNode, NekUsage } from "./rpc-messages.js";
+import type {
+  NekEndpointApi,
+  NekGuiRpcCommand,
+  NekGuiRpcResponseData,
+  NekMode,
+  NekThinkingLevel,
+} from "./gui-rpc.js";
+import type {
+  NekAgentMessage,
+  NekImageContent,
+  NekSessionEntry,
+  NekSessionTreeNode,
+  NekUsage,
+} from "./rpc-messages.js";
 
 // ============================================================================
 // Model / 会话状态 / 统计
@@ -288,7 +300,9 @@ export interface NekRpcResponseDataMap {
  * 注意 `undefined` 表示"成功响应不带 data"。
  */
 export type NekRpcResponseData = {
-  [K in NekRpcCommandType]: K extends keyof NekRpcResponseDataMap ? NekRpcResponseDataMap[K] : unknown;
+  [K in NekRpcCommandType]: K extends keyof NekRpcResponseDataMap
+    ? NekRpcResponseDataMap[K]
+    : unknown;
 };
 
 export type NekRpcResponseDataFor<T extends NekRpcCommandType> = NekRpcResponseData[T];
@@ -321,7 +335,9 @@ export type NekRpcResponse = NekRpcSuccessResponse | NekRpcErrorResponse;
 // ============================================================================
 
 /** 是否成功响应（类型守卫，用于 `NekRpcResponse` 收窄）。 */
-export function isNekRpcSuccessResponse(response: NekRpcResponse): response is NekRpcSuccessResponse {
+export function isNekRpcSuccessResponse(
+  response: NekRpcResponse,
+): response is NekRpcSuccessResponse {
   return response.success;
 }
 
