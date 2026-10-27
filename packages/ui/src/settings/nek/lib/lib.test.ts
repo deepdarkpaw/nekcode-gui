@@ -106,12 +106,12 @@ describe("apiKey", () => {
 
   it("writes env variables as $NAME and validates names", () => {
     expect(normalizeEnvName("${OPENAI_KEY}")).toBe("OPENAI_KEY");
-    expect(apiKeyWriteFromDraft({ mode: "env", value: "$OPENAI_KEY", keepExisting: false })).toBe(
-      "$OPENAI_KEY",
-    );
-    expect(validateApiKeyDraft({ mode: "env", value: "1BAD", keepExisting: false })).toBe(
-      "envName",
-    );
+    expect(
+      apiKeyWriteFromDraft({ mode: "env", value: "$OPENAI_KEY", keepExisting: false, remove: false }),
+    ).toBe("$OPENAI_KEY");
+    expect(
+      validateApiKeyDraft({ mode: "env", value: "1BAD", keepExisting: false, remove: false }),
+    ).toBe("envName");
   });
 });
 

@@ -3,6 +3,7 @@
  * 若干服务商与模型（含 401 / 404 演示用服务商）、MCP 服务器、子代理预设、登录状态。
  */
 import type {
+  NekBuiltinTool,
   NekCatalogModel,
   NekProviderConfig,
   NekSettingsView,
@@ -13,6 +14,20 @@ import { mockFile, type MockMachine } from "./mockMachine.js";
 export const MOCK_REMOTE_CONNECTED = "conn-dev-box";
 export const MOCK_REMOTE_DISCONNECTED = "conn-gpu-server";
 export const MOCK_PROJECT_CWD = "/home/me/projects/nekcode-gui";
+
+/** 与 services 的 `builtinTools.ts`（nek `tool-names.ts` 镜像）保持一致。 */
+export const MOCK_BUILTIN_TOOLS: NekBuiltinTool[] = [
+  { name: "read", defaultActive: true },
+  { name: "bash", defaultActive: true },
+  { name: "powershell", defaultActive: false },
+  { name: "edit", defaultActive: true },
+  { name: "write", defaultActive: true },
+  { name: "grep", defaultActive: true },
+  { name: "find", defaultActive: true },
+  { name: "ls", defaultActive: true },
+  { name: "ast_grep", defaultActive: true },
+  { name: "web_search", defaultActive: true },
+];
 
 export const MOCK_DEFAULT_SETTINGS: NekSettingsView = {
   defaultThinkingLevel: "medium",
@@ -219,6 +234,7 @@ function baseMachine(
     projectMcp: new Map(),
     yaml: mockFile(`${agentDir}/nek.yaml`, {}, false),
     projectYaml: new Map(),
+    brokenPresets: [],
     presets: [
       {
         source: "builtin",
@@ -332,6 +348,12 @@ export function createLocalMachine(): MockMachine {
     },
   );
   machine.instructions.value = "# Global instructions\n\n- Prefer early returns.\n";
+  // 一个坏掉的预设文件：列表照常返回，诊断在 Agent 页显示。
+  machine.brokenPresets.push({
+    file: `${agentDir}/agents/broken-preset.md`,
+    severity: "error",
+    message: "invalid frontmatter: unknown thinking level \"ultra\"",
+  });
   machine.auth.set("anthropic", {
     provider: "anthropic",
     name: "Anthropic (Claude Pro/Max)",

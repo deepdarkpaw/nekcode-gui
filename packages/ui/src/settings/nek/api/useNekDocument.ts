@@ -9,7 +9,12 @@
  * - 外部修改（watch）：没有未保存改动时静默刷新；有未保存改动（表单草稿登记为 dirty）时显示横幅。
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { INekConfigApi, NekConfigRevision, NekConfigTarget } from "@zcode/shared/nek-protocol";
+import type {
+  INekConfigApi,
+  NekConfigRevision,
+  NekConfigScope,
+  NekConfigTarget,
+} from "@zcode/shared/nek-protocol";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useNekSettingsContext } from "./NekSettingsContext.js";
@@ -32,8 +37,11 @@ export interface NekDocumentOptions<T extends NekConfigRevision> {
   /** 读取函数；参数变化请放进 deps。 */
   load: (api: INekConfigApi, target: NekConfigTarget) => Promise<T>;
   deps?: readonly unknown[];
-  /** watch 事件里的文件是否属于本文档；默认比较 `data.path`。 */
-  matchesFile?: (file: string, data: T) => boolean;
+  /**
+   * watch 事件里的文件是否属于本文档；默认比较 `data.path`。
+   * `scope` 来自事件（global / project），多文件文档据此区分同名文件。
+   */
+  matchesFile?: (file: string, data: T, scope: NekConfigScope) => boolean;
   enabled?: boolean;
 }
 
@@ -62,7 +70,11 @@ export function normalizeConfigPath(path: string): string {
   return path.replace(/\\/g, "/").toLowerCase();
 }
 
-function defaultMatchesFile(file: string, data: NekConfigRevision): boolean {
+function defaultMatchesFile(
+  file: string,
+  data: NekConfigRevision,
+  _scope: NekConfigScope,
+): boolean {
   const path = (data as { path?: unknown }).path;
   return typeof path === "string" && normalizeConfigPath(path) === normalizeConfigPath(file);
 }
@@ -208,7 +220,7 @@ export function useNekDocument<T extends NekConfigRevision>(
       subscribeChanges((change) => {
         const data = dataRef.current;
         const matches = latestRef.current.options.matchesFile ?? defaultMatchesFile;
-        if (!data || !matches(change.file, data)) {
+        if (!data || !matches(change.file, data, change.scope)) {
           return;
         }
         if (ownRevisionsRef.current.has(change.revision) || change.revision === data.revision) {

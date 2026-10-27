@@ -25,7 +25,7 @@ export function apiKeyViewFromWrite(
     return { kind: "none" };
   }
   if (typeof apiKey !== "string") {
-    return previous ?? { kind: "none" };
+    return "remove" in apiKey ? { kind: "none" } : (previous ?? { kind: "none" });
   }
   const env = /^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$/.exec(apiKey);
   if (env) {
@@ -83,9 +83,11 @@ export interface NekModelsDocument extends NekDocument<NekModelsConfigView> {
 }
 
 export function useNekModelsDoc(): NekModelsDocument {
-  const { config, target } = useNekSettingsContext();
+  const { config, target, projectCwd } = useNekSettingsContext();
   const doc = useNekDocument<NekModelsConfigView>({
-    load: (api, current) => api.readModelsConfig(current),
+    // 带 cwd：服务商被哪些用户 / 项目预设引用要看项目目录下的 `agents/*.md`。
+    load: (api, current) => api.readModelsConfig(current, projectCwd),
+    deps: [projectCwd],
   });
   const { mutate } = doc;
 
@@ -120,9 +122,10 @@ export function useNekModelsDoc(): NekModelsDocument {
     (from: string, to: string) =>
       mutate({
         optimistic: (data) => mapProvider(data, from, (provider) => ({ ...provider, id: to })),
-        write: (data) => config.renameProvider(target, from, to, { revision: data.revision }),
+        write: (data) =>
+          config.renameProvider(target, from, to, { revision: data.revision, cwd: projectCwd }),
       }),
-    [config, target, mutate],
+    [config, target, projectCwd, mutate],
   );
 
   const saveModel = useCallback(

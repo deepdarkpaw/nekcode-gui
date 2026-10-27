@@ -51,6 +51,7 @@ export function readMcp(
       servers: Object.entries(machine.mcp.value).map(([name, config]) => ({
         name,
         scope,
+        path: machine.mcp.path,
         config: clone(config),
         isOverride: false,
       })),
@@ -61,7 +62,13 @@ export function readMcp(
   const servers: NekMcpServerEntry[] = Object.entries(file.value).map(([name, config]) => {
     const base = machine.mcp.value[name];
     const merged = (isFullConfig(config) ? config : { ...base, ...config }) as NekMcpServerConfig;
-    return { name, scope, config: clone(merged), isOverride: !isFullConfig(config) };
+    return {
+      name,
+      scope,
+      path: file.path,
+      config: clone(merged),
+      isOverride: !isFullConfig(config),
+    };
   });
   return { path: file.path, revision: file.revision, scope, servers, diagnostics: [] };
 }

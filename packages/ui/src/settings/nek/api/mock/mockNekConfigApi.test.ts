@@ -55,7 +55,8 @@ describe("MockNekConfigApi", () => {
       status: 404,
     });
     const result = await api.fetchProviderModels(LOCAL, {
-      draft: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "sk-ok" },
+      providerId: "anthropic-proxy",
+      draft: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com" },
     });
     expect(result.ok && result.models.some((model) => model.contextWindow === undefined)).toBe(
       true,
@@ -77,7 +78,7 @@ describe("MockNekConfigApi", () => {
     const { revision } = await api.readModelsConfig(LOCAL);
     await api.renameProvider(LOCAL, "anthropic-proxy", "claude", { revision });
     const presets = await api.listAgentPresets(LOCAL);
-    expect(presets.find((entry) => entry.preset.name === "reviewer")?.preset.model).toBe(
+    expect(presets.entries.find((entry) => entry.preset.name === "reviewer")?.preset.model).toBe(
       "claude/claude-sonnet-4-5",
     );
   });

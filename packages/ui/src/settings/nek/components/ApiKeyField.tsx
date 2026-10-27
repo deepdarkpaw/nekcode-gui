@@ -5,6 +5,7 @@
 import type { ClipboardEvent } from "react";
 import { useState } from "react";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.js";
 import { IconButton } from "@/components/ui/icon-button.js";
 import { Input } from "@/components/ui/input.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -17,6 +18,7 @@ export function ApiKeyField({
   draft,
   onChange,
   maskedExisting,
+  canRemove,
   invalid,
   placeholder,
 }: {
@@ -25,6 +27,8 @@ export function ApiKeyField({
   onChange: (draft: ApiKeyDraft) => void;
   /** 已保存字面量的掩码（如 `••••1234`）。 */
   maskedExisting?: string;
+  /** 已保存过密钥：显示"清除密钥"入口（删除必须显式，不靠空串）。 */
+  canRemove?: boolean;
   invalid?: boolean;
   placeholder?: string;
 }) {
@@ -72,7 +76,12 @@ export function ApiKeyField({
         value={draft.mode}
         options={modes}
         onChange={(mode) =>
-          onChange({ mode, value: "", keepExisting: mode === "literal" && draft.keepExisting })
+          onChange({
+            mode,
+            value: "",
+            keepExisting: mode === "literal" && draft.keepExisting,
+            remove: false,
+          })
         }
       />
       {draft.mode === "env" ? (
@@ -117,6 +126,32 @@ export function ApiKeyField({
           ) : null}
         </div>
       )}
+      {draft.remove ? (
+        <div className="flex items-center gap-2">
+          <span className="text-ui-xs text-warning">
+            {intl.formatMessage({ id: "settings.nek.apiKey.removePending" })}
+          </span>
+          <Button
+            type="button"
+            variant="link"
+            size="xs"
+            onClick={() => onChange({ ...draft, remove: false })}
+          >
+            {intl.formatMessage({ id: "settings.nek.apiKey.removeUndo" })}
+          </Button>
+        </div>
+      ) : canRemove ? (
+        <div>
+          <Button
+            type="button"
+            variant="link"
+            size="xs"
+            onClick={() => onChange({ ...draft, value: "", keepExisting: false, remove: true })}
+          >
+            {intl.formatMessage({ id: "settings.nek.apiKey.remove" })}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

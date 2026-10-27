@@ -11,16 +11,18 @@ import type {
   NekConfigError,
   NekConfigTarget,
   NekMcpServerConfig,
+  NekSessionReloadOutcome,
   NekSettingsPatch,
 } from "@zcode/shared/nek-protocol";
+import type { NekConfigChange } from "../NekSettingsContext.js";
 import { MockLoginSimulator } from "./mockAuth.js";
 import { clone, mockError, nextRevision, type MockFile, type MockMachine } from "./mockMachine.js";
 import * as mcp from "./mockMcp.js";
 import * as models from "./mockModels.js";
-import { createLocalMachine, createRemoteMachines } from "./mockSeed.js";
+import { createLocalMachine, createRemoteMachines, MOCK_BUILTIN_TOOLS } from "./mockSeed.js";
 import * as settings from "./mockSettings.js";
 
-type WatchListener = (change: { file: string; revision: string; scope: "global" | "project" }) => void;
+type WatchListener = (change: NekConfigChange) => void;
 type MockFileKind = "settings" | "models" | "mcp" | "yaml" | "instructions";
 
 export interface MockNekConfigApiOptions {
@@ -38,7 +40,7 @@ export class MockNekConfigApi implements INekConfigApi {
   readonly machines = new Map<string, MockMachine>();
   readonly login: MockLoginSimulator;
   private readonly watchers = new Map<string, Set<WatchListener>>();
-  private readonly reloadListeners = new Map<string, Set<(result: Awaited<ReturnType<INekConfigApi["reloadRunningSessions"]>>) => void>>();
+  private readonly reloadListeners = new Map<string, Set<(result: NekSessionReloadOutcome) => void>>();
   private readonly failures = new Map<string, NekConfigError>();
   private readonly latencyMs: number;
 
@@ -109,14 +111,14 @@ export class MockNekConfigApi implements INekConfigApi {
   }
 
   private touchFor(target: NekConfigTarget): models.Touch {
+    const agentDir = this.machineOf(target).agentDir;
     return (file) => {
       file.revision = nextRevision();
-      const change = {
+      const change: NekConfigChange = {
         file: file.path,
         revision: file.revision,
-        scope: file.path.includes("/.nek/") && !file.path.includes("/.nek/agent/")
-          ? ("project" as const)
-          : ("global" as const),
+        // `~/.nek/agent/**` 是全局；`<cwd>/.nek/**`、`<cwd>/AGENTS.md` 是项目。
+        scope: file.path.startsWith(`${agentDir}/`) ? "global" : "project",
       };
       setTimeout(() => {
         for (const listener of this.watchers.get(keyOf(target)) ?? []) {
@@ -256,6 +258,12 @@ export class MockNekConfigApi implements INekConfigApi {
   listAvailableModels: INekConfigApi["listAvailableModels"] = (target) =>
     this.call("listAvailableModels", () => models.availableModels(this.machineOf(target)));
 
+  listBuiltinTools: INekConfigApi["listBuiltinTools"] = (target) =>
+    this.call("listBuiltinTools", () => {
+      this.machineOf(target);
+      return MOCK_BUILTIN_TOOLS.map((tool) => ({ ...tool }));
+    });
+
   // ---- settings.json ----
 
   readSettings: INekConfigApi["readSettings"] = (target, scope, cwd) =>
@@ -367,14 +375,7 @@ export class MockNekConfigApi implements INekConfigApi {
     );
 
   listAgentPresets: INekConfigApi["listAgentPresets"] = (target, cwd) =>
-    this.call("listAgentPresets", () => {
-      const entries = settings.listPresets(this.machineOf(target), cwd);
-      return {
-        entries,
-        diagnostics: [],
-        revision: entries.map((entry) => `${entry.path ?? entry.preset.name}:${entry.revision}`).sort().join("|"),
-      };
-    });
+    this.call("listAgentPresets", () => settings.listPresets(this.machineOf(target), cwd));
 
   saveAgentPreset: INekConfigApi["saveAgentPreset"] = (target, scope, preset, options) =>
     this.write(target, "saveAgentPreset", (machine, touch) =>
@@ -426,8 +427,35 @@ export class MockNekConfigApi implements INekConfigApi {
   reloadRunningSessions: INekConfigApi["reloadRunningSessions"] = (target) =>
     this.call("reloadRunningSessions", () => {
       this.machineOf(target);
-      return { reloaded: 1, deferred: 1, diagnostics: [] };
+      return { reloaded: 1, deferred: 1, diagnostics: [], failures: [] };
     });
+
+  onReloadResult: INekConfigApi["onReloadResult"] = (target, listener) => {
+    const key = keyOf(target);
+    const set = this.reloadListeners.get(key) ?? new Set();
+    set.add(listener);
+    this.reloadListeners.set(key, set);
+    return () => {
+      set.delete(listener);
+    };
+  };
+
+  /** 模拟写盘后的自动 reload 结果（含进程级失败）。 */
+  simulateReloadResult(
+    target: NekConfigTarget,
+    result: Pick<NekSessionReloadOutcome, "failures"> &
+      Partial<Omit<NekSessionReloadOutcome, "failures">>,
+  ): void {
+    const full: NekSessionReloadOutcome = {
+      reloaded: result.reloaded ?? 1,
+      deferred: result.deferred ?? 0,
+      diagnostics: result.diagnostics ?? [],
+      failures: result.failures,
+    };
+    for (const listener of this.reloadListeners.get(keyOf(target)) ?? []) {
+      listener(full);
+    }
+  }
 
   // ---- 外部修改 ----
 
