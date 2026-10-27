@@ -8,7 +8,9 @@ import type {
   NekModel,
   NekReloadResult,
   NekRpcSlashCommand,
+  NekSessionEntry,
   NekSessionStats,
+  NekSessionTreeNode,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
@@ -184,6 +186,32 @@ export async function getCommands(
   sessionKey: string,
 ): Promise<NekRpcSlashCommand[]> {
   return (await context.writableTarget(sessionKey).client.call({ type: "get_commands" })).commands;
+}
+
+/** 会话条目（`fork` / `navigateTree` / `setEntryLabel` 需要 entryId）。 */
+export async function getEntries(
+  context: NekAgentCommandContext,
+  input: { sessionKey: string; since?: string },
+): Promise<{ entries: NekSessionEntry[]; leafId: string | null }> {
+  return await context
+    .target(input.sessionKey)
+    .client.call({ type: "get_entries", since: input.since });
+}
+
+/** 分支树：navigateTree 的候选条目。 */
+export async function getTree(
+  context: NekAgentCommandContext,
+  sessionKey: string,
+): Promise<{ tree: NekSessionTreeNode[]; leafId: string | null }> {
+  return await context.target(sessionKey).client.call({ type: "get_tree" });
+}
+
+/** fork 时可回退到的用户消息。 */
+export async function getForkMessages(
+  context: NekAgentCommandContext,
+  sessionKey: string,
+): Promise<Array<{ entryId: string; text: string }>> {
+  return (await context.target(sessionKey).client.call({ type: "get_fork_messages" })).messages;
 }
 
 /** 会话存在时问会话进程（带 cwd 上下文），否则问控制进程。 */

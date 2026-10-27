@@ -7,7 +7,9 @@ import type {
   NekModel,
   NekReloadResult,
   NekRpcSlashCommand,
+  NekSessionEntry,
   NekSessionStats,
+  NekSessionTreeNode,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekConversationListener, NekMode, NekPromptInput, NekThoughtLevel } from "./types.js";
@@ -50,6 +52,15 @@ export interface NekAgentServiceCommandMethods {
   /** `extension_call nek.set_mode`：nek 没有独立的模式命令。 */
   setMode(input: { sessionKey: string; mode: NekMode }): Promise<unknown>;
   getCommands(sessionKey: string): Promise<NekRpcSlashCommand[]>;
+  /** `get_entries`：会话条目（fork / navigateTree / setEntryLabel 需要 entryId）。 */
+  getEntries(input: { sessionKey: string; since?: string }): Promise<{
+    entries: NekSessionEntry[];
+    leafId: string | null;
+  }>;
+  /** `get_tree`：分支树，navigateTree 的候选条目。 */
+  getTree(sessionKey: string): Promise<{ tree: NekSessionTreeNode[]; leafId: string | null }>;
+  /** `get_fork_messages`：fork 时可回退到的用户消息。 */
+  getForkMessages(sessionKey: string): Promise<Array<{ entryId: string; text: string }>>;
   getMentionTargets(
     input: { sessionKey?: string; cwd?: string } | string,
   ): Promise<NekMentionTargetInfo[]>;

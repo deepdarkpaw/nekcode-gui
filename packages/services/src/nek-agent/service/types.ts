@@ -33,6 +33,7 @@ export interface NekSessionRecord {
   snapshot?: NekSessionSnapshot;
   phase: NekSessionPhase;
   readonly: boolean;
+  /** 只读快照的占用者；nek 只报 `locked: true`，因此恒为 `"nek"`。 */
   lockedBy?: string;
   closing: boolean;
 }
