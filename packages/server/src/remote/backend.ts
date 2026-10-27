@@ -9,6 +9,8 @@ export interface StdioStream {
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;
   stderr: NodeJS.ReadableStream;
+  /** ssh2 channel 的可选信号接口，用于取消远端长命令。 */
+  signal?(signal: string): void;
   onClose: Event<number>; // exit code
 }
 
@@ -46,4 +48,13 @@ export interface IRemoteBackend extends IDisposable {
   exists(remotePath: string): Promise<boolean>;
   /** Read a small remote file (e.g. version string) */
   readFile(remotePath: string): Promise<string>;
+  /** Optional SSH-only OAuth callback forwarding. */
+  forwardLocalPortToRemote?(
+    localPort: number,
+    remotePort: number,
+  ): Promise<{
+    localPort: number;
+    remotePort: number;
+    close(): Promise<void>;
+  }>;
 }

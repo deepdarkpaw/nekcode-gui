@@ -26,6 +26,7 @@ import {
 } from "@zcode/server/remote/posixShell.js";
 import {
   buildSSHConnectConfig,
+  createAsyncKeyboardInteractiveResponder,
   createKeyboardInteractiveResponder,
   normalizeSSHConnectError,
 } from "@zcode/server/remote/sshAuth.js";
@@ -34,8 +35,10 @@ import {
   formatHostKeyRejectionError,
   getSSHKnownHostsPath,
   SSHHostKeyStore,
+  type HostKeyConfirmation,
   type SSHHostKeyRejection,
 } from "@zcode/server/remote/sshKnownHosts.js";
+import { forwardLocalPortToRemote, type LocalPortForwardHandle } from "./sshPortForward.js";
 import {
   createSSHUploadProgressReporter,
   formatSSHUploadError,
@@ -52,6 +55,10 @@ export interface SSHBackendOptions {
   privateKeyPassphrase?: string;
   password?: string;
   agent?: string;
+  askPassphrase?: (privateKeyPath?: string) => Promise<string | undefined> | string | undefined;
+  askPassword?: () => Promise<string | undefined> | string | undefined;
+  requireHostKeyConfirmation?: boolean;
+  confirmHostKey?: (confirmation: HostKeyConfirmation) => Promise<boolean> | boolean;
 }
 
 type SSHUploadFailureKind = "sftp-session" | "sftp-write" | "local-read" | "aborted";
@@ -155,6 +162,8 @@ export class SSHBackend implements IRemoteBackend {
         privateKeyPath: options.privateKeyPath,
         password: options.password,
       } satisfies SSHConnectOptions,
+      requireHostKeyConfirmation: options.requireHostKeyConfirmation,
+      confirmHostKey: options.confirmHostKey,
       onRejection: (rejection) => {
         this.hostKeyRejection = rejection;
       },
@@ -167,6 +176,7 @@ export class SSHBackend implements IRemoteBackend {
       passphrase: options.privateKeyPassphrase,
       password: options.password,
       agent: options.agent,
+      askPassword: options.askPassword,
       hostVerifier,
     });
     if (resolveZCodeRuntimeEnv(process.env) === "development") {
@@ -180,19 +190,20 @@ export class SSHBackend implements IRemoteBackend {
         console.debug(...safeLogArgs([`[ssh2] ${message}`]));
       };
     }
-    if (typeof options.password === "string" && options.password.length > 0) {
+    if (
+      (typeof options.password === "string" && options.password.length > 0) ||
+      options.askPassword
+    ) {
       // `ssh2` 类型定义遗漏了 keyboard-interactive 事件，但运行时确实支持。
       // 这里局部转成 EventEmitter 接口，避免为了一个事件把整段代码降级到 any。
+      const responder = options.password
+        ? createKeyboardInteractiveResponder(options.password)
+        : createAsyncKeyboardInteractiveResponder(options.askPassword!);
       (
         this.client as unknown as {
           on(event: string, listener: (...args: unknown[]) => void): void;
         }
-      ).on(
-        "keyboard-interactive",
-        createKeyboardInteractiveResponder(options.password) as unknown as (
-          ...args: unknown[]
-        ) => void,
-      );
+      ).on("keyboard-interactive", responder as unknown as (...args: unknown[]) => void);
     }
   }
 
@@ -207,6 +218,7 @@ export class SSHBackend implements IRemoteBackend {
     // 调用 ensureConnected。ssh2 Client 支持 end 后再次 connect，必须在 backend 边界阻止旧凭据复活。
     this.assertNotDisposed();
     if (this.connected) return;
+    this.hostKeyRejection = null;
     return new Promise((resolve, reject) => {
       const handleReady = () => {
         this.client.off("error", handleConnectError);
@@ -224,7 +236,11 @@ export class SSHBackend implements IRemoteBackend {
       };
       const handleConnectError = (error: unknown) => {
         this.client.off("ready", handleReady);
-        reject(normalizeSSHConnectError(error));
+        reject(
+          this.hostKeyRejection
+            ? formatHostKeyRejectionError(this.hostKeyRejection, getSSHKnownHostsPath())
+            : normalizeSSHConnectError(error),
+        );
       };
       this.client.once("ready", handleReady);
       this.client.once("error", handleConnectError);
@@ -346,10 +362,20 @@ export class SSHBackend implements IRemoteBackend {
           stdin: channel.stdin,
           stdout: channel,
           stderr: channel.stderr,
+          signal: (signal: string) => channel.signal(signal),
           onClose: onClose.event,
         });
       });
     });
+  }
+
+  async forwardLocalPortToRemote(
+    localPort: number,
+    remotePort: number,
+  ): Promise<LocalPortForwardHandle> {
+    await this.ensureConnected();
+    this.assertNotDisposed();
+    return forwardLocalPortToRemote(this.client, localPort, remotePort);
   }
 
   async exists(remotePath: string): Promise<boolean> {

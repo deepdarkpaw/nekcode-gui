@@ -3,7 +3,7 @@
  *
  * 与 `gui-rpc.ts` 分开只为控制文件长度；两者一起通过 `@zcode/shared/nek-protocol` 导出。
  */
-import type { NekThinkingLevel } from "./gui-rpc.js";
+import type { NekMcpTestResult, NekThinkingLevel } from "./gui-rpc.js";
 
 // ============================================================================
 // nek 扩展（plan / todo / subagent）经 extension_call 与 extension_event 暴露
@@ -73,6 +73,8 @@ export interface NekExtensionMethods {
   "nek.list_agent_types": { params: undefined; result: { types: NekAgentTypeInfo[] } };
   "nek.get_plan": { params: { path: string }; result: NekPlanSummary & { markdown: string } };
   "mcp.status": { params: undefined; result: { servers: NekMcpServerStatus[] } };
+  /** 连接、列出工具后断开；不改变会话里的连接状态。 */
+  "mcp.test": { params: { name: string }; result: NekMcpTestResult };
   "mcp.reconnect": { params: { name: string }; result: { server: NekMcpServerStatus } };
   "mcp.login": { params: { name: string }; result: { server: NekMcpServerStatus } };
   "mcp.logout": { params: { name: string }; result: { server: NekMcpServerStatus } };
