@@ -218,6 +218,7 @@ export class SSHBackend implements IRemoteBackend {
     // 调用 ensureConnected。ssh2 Client 支持 end 后再次 connect，必须在 backend 边界阻止旧凭据复活。
     this.assertNotDisposed();
     if (this.connected) return;
+    this.hostKeyRejection = null;
     return new Promise((resolve, reject) => {
       const handleReady = () => {
         this.client.off("error", handleConnectError);
@@ -235,7 +236,11 @@ export class SSHBackend implements IRemoteBackend {
       };
       const handleConnectError = (error: unknown) => {
         this.client.off("ready", handleReady);
-        reject(normalizeSSHConnectError(error));
+        reject(
+          this.hostKeyRejection
+            ? formatHostKeyRejectionError(this.hostKeyRejection, getSSHKnownHostsPath())
+            : normalizeSSHConnectError(error),
+        );
       };
       this.client.once("ready", handleReady);
       this.client.once("error", handleConnectError);
