@@ -1,12 +1,7 @@
-import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { IProviderSettingsService, ProviderSettingsView } from "@zcode/services";
 import { logger } from "@/logger.js";
-import {
-  getProviderSettingsSnapshot,
-  reloadProviderSettingsSnapshot,
-  subscribeProviderSettingsSnapshot,
-  type ProviderSettingsState,
-} from "@/lib/providerSettingsSnapshot.js";
+import type { ProviderSettingsState } from "@/lib/providerSettingsSnapshot.js";
 
 interface ProviderSettingsRead {
   state: ProviderSettingsState;
@@ -16,22 +11,6 @@ interface ProviderSettingsRead {
 interface ProviderSettingsServiceRead extends ProviderSettingsRead {
   /** 提交 mutation 返回的权威 View；不依赖异步 onDidChange 事件才能收敛 UI。 */
   commit(view: ProviderSettingsView): void;
-}
-
-export function useProviderSettingsView(): ProviderSettingsRead {
-  const state = useSyncExternalStore(
-    subscribeProviderSettingsSnapshot,
-    getProviderSettingsSnapshot,
-    getProviderSettingsSnapshot,
-  );
-  return {
-    state,
-    reload: useCallback(() => {
-      void reloadProviderSettingsSnapshot().catch((error) => {
-        logger.warn("[ProviderSettings] 重试加载根 Environment 失败", { error });
-      });
-    }, []),
-  };
 }
 
 interface OwnedProviderSettingsState {

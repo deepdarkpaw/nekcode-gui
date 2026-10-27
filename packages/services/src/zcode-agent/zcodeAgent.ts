@@ -3,7 +3,7 @@ import type { BackgroundBashOutputResult, SessionDebugSnapshot } from "@zcode/sh
 /* eslint-disable max-lines -- ZCode agent service 接口集中声明 protocol/session/workspace 方法，拆分会增加 service descriptor 迁移成本。 */
 import type { Event, IDisposable } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
-import type { AppUsageRange, AppUsageSnapshot, ZCodeTaskTokenUsageResult } from "@zcode/shared";
+import type { ZCodeTaskTokenUsageResult } from "@zcode/shared";
 import type { ZCodeAutomation, ZCodeAutomationRun } from "@zcode/shared";
 import type {
   ZCodeStorageStartupState,
@@ -183,11 +183,6 @@ export interface ZCodeAgentListSessionSubagentsParams extends ZCodeAgentSessionT
   endedLimit?: number;
   /** 远程 workspace 的宿主连接身份；只用于选择现有 Host，不进入 CLI wire query。 */
   remoteSessionId?: string;
-}
-
-export interface ZCodeAgentAppUsageParams {
-  range: AppUsageRange;
-  timeZone?: string;
 }
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
@@ -550,7 +545,6 @@ export interface IZCodeAgentService {
   listSessionSubagents(
     params: ZCodeAgentListSessionSubagentsParams,
   ): Promise<ZCodeSessionSubagentsResult>;
-  getAppUsageStats(params: ZCodeAgentAppUsageParams): Promise<AppUsageSnapshot>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;
   readSessionMessages(

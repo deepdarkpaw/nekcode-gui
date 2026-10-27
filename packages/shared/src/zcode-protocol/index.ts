@@ -24,7 +24,6 @@ import { executionOutputPreviewSchema } from "../execution-output-preview.js";
 import { completeModelPropertiesDataSchema } from "../model-config.js";
 import { modelExecutionSchema } from "../model-execution.js";
 import { modelSelectionSchema } from "../model-selection.js";
-import { APP_USAGE_RANGES, appUsageSnapshotSchema } from "../usage-stats.js";
 import { errorAttributionSchema } from "../zcode-protocol-v4/snapshot.js";
 // 后台详情共享精简的只读响应 schema，不携带命令或计时元数据。
 export * from "../background-bash-output.js";
@@ -1534,13 +1533,6 @@ export const zcodeSessionSubagentsParamsSchema = z
   .strict();
 export type ZCodeSessionSubagentsParams = z.infer<typeof zcodeSessionSubagentsParamsSchema>;
 
-export const zcodeUsageStatsParamsSchema = z
-  .object({
-    range: z.enum(APP_USAGE_RANGES),
-    timeZone: z.string().optional(),
-  })
-  .strict();
-export const zcodeUsageStatsResultSchema = appUsageSnapshotSchema;
 export const zcodeTaskTokenUsageParamsSchema = z
   .object({
     sessionId: nonEmptyString,
@@ -2692,11 +2684,8 @@ export const zcodeProtocolMethods = {
   automationCheckTaskBinding: "automation/checkTaskBinding",
   automationList: "automation/list",
   automationDelete: "automation/delete",
-  // @deprecated：host 消费已清零（zcodeAgentService 改走 v4/usage/stats）。
-  // 仅剩 CLI server 的 wire 兼容 case；随旧词整体删除时一并移除。
-  usageStats: "usage/stats",
   // ZCode Protocol 对 agent 只暴露 session-first 方法；task 是 UI 投影概念，不能泄露进协议方法名。
-  // @deprecated：host 已改走 v4/conversation/usage；后续与 usage/stats 一并移除。
+  // @deprecated：host 已改走 v4/conversation/usage。
   sessionUsage: "session/usage",
   // 资源管理器：CLI 回报其 MCP 子进程 pid 与插件归属（纯内存，无 I/O），采样在 Host 侧完成。
   processChildProcesses: "process/childProcesses",

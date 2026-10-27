@@ -143,14 +143,6 @@ export async function resolveCommunityUrl(options: {
   return (await readLocalHelpConfig(options.logger))?.community_urls?.[options.locale];
 }
 
-async function openFeedback(logger: {
-  warn: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
-}) {
-  const config = await readLocalHelpConfig(logger);
-  if (config?.feedback_url) await shell.openExternal(config.feedback_url);
-}
-
 async function openCommunity(
   locale: Locale,
   logger: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void },
@@ -472,9 +464,6 @@ export async function executeDesktopCommand(options: {
       return;
     case DesktopCommandIds.RelaunchApp:
       await options.onRelaunchApp();
-      return;
-    case DesktopCommandIds.OpenFeedback:
-      await openFeedback(options.logger);
       return;
     case DesktopCommandIds.OpenCommunity:
       await openCommunity(options.currentApplicationLocale, options.logger);

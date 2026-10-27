@@ -77,8 +77,6 @@ jobs:
         run: pnpm exec playwright-core install --with-deps chromium
       - name: Remote form browser checks
         run: node scripts/ci/remote-form-smoke.mjs
-      - name: Local feedback browser checks
-        run: node scripts/ci/local-feedback-smoke.mjs
       - name: Conversation navigator browser checks
         run: node scripts/ci/conversation-navigator-smoke.mjs
       - name: Imported conversation browser checks
@@ -88,8 +86,6 @@ jobs:
           pnpm --filter @zcode/desktop build:no-runtime-assets
           node scripts/ci/local-scheduler-smoke.mjs
           node scripts/ci/self-managed-models-smoke.mjs
-          node scripts/ci/local-usage-smoke.mjs
-          node scripts/ci/coding-plan-quota-smoke.mjs
           node scripts/ci/local-automations-smoke.mjs
           node scripts/ci/local-context-smoke.mjs
           node scripts/ci/session-local-errors-smoke.mjs

@@ -37,8 +37,6 @@ import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { normalizeInterfaceMode } from "@/lib/interfaceMode.js";
 import type { Theme } from "@/useTheme.js";
-import { WorkspaceSidebarUsageMenuItem } from "@/WorkspaceSidebarUsageMenuItem.js";
-
 const DESKTOP_ZOOM_MIN_LEVEL = -3;
 const DESKTOP_ZOOM_MAX_LEVEL = 5;
 
@@ -48,7 +46,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onLocaleChange,
   onThemeChange,
   onSettingsButtonClick,
-  onUsageClick,
   settingsButtonMode = "settings",
   isDesktop = false,
   className,
@@ -58,8 +55,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onLocaleChange: (value: string) => void;
   onThemeChange: (value: string) => void;
   onSettingsButtonClick?: () => void;
-  onUsageClick?: () => void;
-
   settingsButtonMode?: "settings" | "back";
   isDesktop?: boolean;
   className?: string;
@@ -76,7 +71,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
     settingsButtonMode === "back"
       ? intl.formatMessage({ id: "workspace.backToWorkspace" })
       : intl.formatMessage({ id: "settings.title" });
-  const usageButtonClick = onUsageClick ?? onSettingsButtonClick;
   const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false);
   const [desktopZoomLevel, setDesktopZoomLevel] = useState(0);
   const runDesktopZoomCommand = useCallback(
@@ -238,7 +232,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             ) : null}
-            <WorkspaceSidebarUsageMenuItem onUsageClick={usageButtonClick} />
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">

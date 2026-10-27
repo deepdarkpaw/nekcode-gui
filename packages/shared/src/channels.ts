@@ -76,8 +76,6 @@ export const ServiceChannels = {
   ModelSelection: "model-selection",
   /** 远端 Environment 内部 Provider Provisioning target */
   ProviderProvisioningTarget: "provider-provisioning-target",
-  /** 本地 usage 统计服务 */
-  UsageStats: "usage-stats",
   /** Coding Plan 订阅购买服务 */
   CodingPlanSubscription: "coding-plan-subscription",
   /** ZCode 客户端场景配置服务 */

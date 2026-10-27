@@ -7,7 +7,6 @@ import {
   Bot,
   Palette,
   Sun,
-  BarChart3,
   Terminal,
   AlarmClock,
   Anchor,
@@ -34,7 +33,7 @@ export const THEME_MODES: Array<{
   { mode: "zai-light", icon: Sun },
 ];
 
-type SettingsSectionGroupId = "basics" | "agentCapabilities" | "dataAndStats" | NekSettingsGroupId;
+type SettingsSectionGroupId = "basics" | "agentCapabilities" | NekSettingsGroupId;
 
 interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -55,7 +54,6 @@ const BASE_SETTINGS_SECTION_GROUPS: Array<{
     id: "agentCapabilities",
     titleId: "settings.sidebar.group.agentCapabilities",
   },
-  { id: "dataAndStats", titleId: "settings.sidebar.group.dataAndStats" },
 ];
 
 const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
@@ -134,12 +132,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: FileSearch,
     titleId: "settings.workspaceFileSearch.title",
     groupId: "basics",
-  },
-  {
-    id: "usage",
-    icon: BarChart3,
-    titleId: "settings.usageTitle",
-    groupId: "dataAndStats",
   },
 ];
 
