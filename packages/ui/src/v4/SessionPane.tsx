@@ -58,7 +58,6 @@ import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import { buildChatSessionScrollMemoryKey } from "@/lib/chatSessionScrollMemory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
@@ -314,7 +313,6 @@ export interface SessionPaneProps {
   onRefreshGit?: () => void;
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  onOpenAutomationsMain?: OpenAutomationsMain;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
@@ -489,8 +487,7 @@ export function SessionPane({
   onRefreshGit,
   onOpenGitReview,
   onOpenBrowserUrl,
-  onOpenAutomationsMain,
-  onOpenCodeViewer,
+    onOpenCodeViewer,
   onAutoOpenAssistantPptx,
   onOpenFileLink,
   onOpenSubagentSession,
@@ -2004,8 +2001,7 @@ export function SessionPane({
       toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
-      onOpenCodeViewer,
+            onOpenCodeViewer,
       onAutoOpenAssistantPptx: handleAutoOpenAssistantPptx,
       assistantPreviewPptxAutoOpenTarget,
       onOpenFileLink,
@@ -2062,8 +2058,7 @@ export function SessionPane({
       toolGroupingChangesEnabled,
       handleNavigateToRow,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
-      onOpenCodeViewer,
+            onOpenCodeViewer,
       handleAutoOpenAssistantPptx,
       assistantPreviewPptxAutoOpenTarget,
       onOpenFileLink,

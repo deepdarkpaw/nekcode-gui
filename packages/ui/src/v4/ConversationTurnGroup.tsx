@@ -16,7 +16,6 @@ import type {
   AttachmentRef,
   CommandAck,
   ConversationRowTarget,
-  WorkflowNotificationMeta,
 } from "@zcode/shared/zcode-protocol-v4";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
@@ -29,18 +28,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
-import {
-  CronCreateAutomationCard,
-  isCronAutomationCardToolCall,
-  readCronCreateAutomationSummary,
-  type CronCreateAutomationSummary,
-} from "@/ToolCallBlocks/renderers/cron-create.js";
-import {
-  isOffPeakCreateToolCall,
-  OffPeakCreateTaskCard,
-  readOffPeakCreateTaskSummary,
-  type OffPeakCreateTaskSummary,
-} from "@/ToolCallBlocks/renderers/offpeak-create.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { AssistantPreviewCard } from "@/lib/assistantPreviewCards.js";
 import { useAssistantCodeCommentFeatureEnabled } from "@/AssistantCodeCommentFeatureProvider.js";
@@ -60,15 +47,6 @@ import {
 } from "@/v4/conversationAssistantWorkItems.js";
 import { ConversationAgentToolCallRow } from "@/v4/ConversationAgentToolCallRow.js";
 import { ConversationFileSummaryPanel } from "@/v4/ConversationFileSummaryPanel.js";
-import { WorkflowNotificationToolRow } from "@/v4/WorkflowNotificationToolRow.js";
-import {
-  workflowNotificationOf,
-  workflowNotificationOpenRequest,
-} from "@/v4/workflowHoleNotification.js";
-import { ConversationWorkflowDigests } from "@/v4/ConversationWorkflowDigests.js";
-import { ConversationWorkflowCompletion } from "@/v4/ConversationWorkflowCompletion.js";
-import { resolveWorkflowTurnDigests } from "@/v4/workflowTurnDigests.js";
-import { resolveWorkflowTurnCompletion } from "@/v4/workflowTurnCompletion.js";
 import { ConversationAssistantTextActions } from "@/v4/ConversationRowView.js";
 import { readAssistantFeedback } from "@/v4/ConversationRowView.js";
 import type {
@@ -84,7 +62,6 @@ import type {
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
-import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
 
 interface ConversationTurnGroupProps {
   unit: ConversationTurnRenderUnit;
@@ -106,18 +83,6 @@ interface ConversationTurnGroupProps {
     selectedRowIds: ReadonlySet<number>;
     onToggle: (rowId: number) => void;
   };
-}
-
-interface CronAutomationTurnCard {
-  rowId: number;
-  toolCallId: string;
-  automation: CronCreateAutomationSummary;
-}
-
-interface OffPeakTurnCard {
-  rowId: number;
-  toolCallId: string;
-  task: OffPeakCreateTaskSummary;
 }
 
 const MIN_VISIBLE_API_RETRY_ATTEMPT = 3;
@@ -189,8 +154,7 @@ function ConversationExploreGroupRow({
         onOpenCodeViewer={context.onOpenCodeViewer}
         onOpenFileLink={context.onOpenFileLink}
         onOpenBrowserUrl={context.onOpenBrowserUrl}
-        onOpenAutomationsMain={context.onOpenAutomationsMain}
-      />
+              />
     </div>
   );
 }
@@ -217,8 +181,7 @@ function ConversationToolGroupRow({
         onOpenCodeViewer={context.onOpenCodeViewer}
         onOpenFileLink={context.onOpenFileLink}
         onOpenBrowserUrl={context.onOpenBrowserUrl}
-        onOpenAutomationsMain={context.onOpenAutomationsMain}
-      />
+              />
     </div>
   );
 }
@@ -314,145 +277,6 @@ function ConversationAssistantWorkItems({
     >
       <div className="pt-5">{content}</div>
     </CollapsibleContent>
-  );
-}
-
-function resolveCronAutomationTurnCards(
-  rows: readonly AssistantWorkRow[],
-): CronAutomationTurnCard[] {
-  let cards: CronAutomationTurnCard[] = [];
-
-  for (const row of rows) {
-    if (row.kind !== "toolCall" || row.status !== "success") {
-      continue;
-    }
-
-    const normalizedToolName = row.toolName.toLowerCase().replace(/[^a-z0-9]/gu, "");
-    if (normalizedToolName === "crondelete") {
-      const deletedAutomationId = readCronDeleteAutomationId(row);
-      if (deletedAutomationId) {
-        // 只累计本轮成功的 Create/Update 会忽略后续 CronDelete，导致已经
-        // 撤销的中间结果仍被提升成轮尾成功卡片。
-        cards = cards.filter((card) => card.automation.automationId !== deletedAutomationId);
-      }
-      continue;
-    }
-
-    const node = toolCallRowToLegacyNode(row);
-    if (!isCronAutomationCardToolCall(node.toolCall)) {
-      continue;
-    }
-
-    const automation = readCronCreateAutomationSummary(node.toolCall);
-    if (!automation) {
-      continue;
-    }
-
-    if (automation.automationId) {
-      cards = cards.filter((card) => card.automation.automationId !== automation.automationId);
-    }
-    cards.push({
-      rowId: row.rowId,
-      toolCallId: row.toolCallId,
-      automation,
-    });
-  }
-
-  return cards;
-}
-
-// 只收本轮 status==="success" 的 OffPeakCreate；同 id 重复输出保留最新一次。
-// 刻意不复用 resolveCronAutomationTurnCards——那套带 CronDelete 撤销过滤语义，闲时无对应工具。
-function resolveOffPeakTurnCards(rows: readonly AssistantWorkRow[]): OffPeakTurnCard[] {
-  let cards: OffPeakTurnCard[] = [];
-
-  for (const row of rows) {
-    if (row.kind !== "toolCall" || row.status !== "success") {
-      continue;
-    }
-    const node = toolCallRowToLegacyNode(row);
-    if (!isOffPeakCreateToolCall(node.toolCall)) {
-      continue;
-    }
-    const task = readOffPeakCreateTaskSummary(node.toolCall);
-    if (!task) {
-      continue;
-    }
-    if (task.offPeakTaskId) {
-      cards = cards.filter((card) => card.task.offPeakTaskId !== task.offPeakTaskId);
-    }
-    cards.push({
-      rowId: row.rowId,
-      toolCallId: row.toolCallId,
-      task,
-    });
-  }
-
-  return cards;
-}
-
-function parseJsonRecord(value: unknown): Record<string, unknown> | null {
-  let candidate = value;
-  if (typeof candidate === "string") {
-    try {
-      candidate = JSON.parse(candidate) as unknown;
-    } catch {
-      return null;
-    }
-  }
-  return typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)
-    ? (candidate as Record<string, unknown>)
-    : null;
-}
-
-function readCronDeleteAutomationId(
-  row: Extract<AssistantWorkRow, { kind: "toolCall" }>,
-): string | undefined {
-  for (const candidate of [row.output?.text, row.input, row.inputText]) {
-    const record = parseJsonRecord(candidate);
-    const id = record?.id;
-    if (typeof id === "string" && id.trim()) {
-      return id.trim();
-    }
-  }
-  return undefined;
-}
-
-function CronAutomationTurnCards({
-  cards,
-  context,
-}: {
-  cards: readonly CronAutomationTurnCard[];
-  context: ConversationRowRenderContext;
-}) {
-  if (cards.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {cards.map((card) => (
-        <CronCreateAutomationCard
-          key={`${card.rowId}:${card.toolCallId}`}
-          automation={card.automation}
-          onOpenAutomationsMain={context.onOpenAutomationsMain}
-        />
-      ))}
-    </div>
-  );
-}
-
-function OffPeakTurnCards({ cards }: { cards: readonly OffPeakTurnCard[] }) {
-  if (cards.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {cards.map((card) => (
-        <OffPeakCreateTaskCard key={`${card.rowId}:${card.toolCallId}`} task={card.task} />
-      ))}
-    </div>
   );
 }
 
@@ -800,19 +624,6 @@ function resolveBackgroundResultTitle(unit: ConversationTurnRenderUnit): string 
     return undefined;
   }
   return originMeta.title.trim();
-}
-
-/**
- * 该轮是否以 workflow 通知卡（ToolLayout 行）开头。
- *
- * 用于两处：`ConversationBackgroundResultWork` 决定渲染通知行还是裸标题行；轮容器决定是否
- * 去掉轮顶 `pt-14`。后台结果轮没有可见的 user 行，通知卡就是轮内第一个节点——若照常保留
- * 轮顶 padding，卡片上方会叠出 56px + 上一轮 pb-5 共约 76px 的空白，用户判为多余。
- */
-function resolveWorkflowNotification(
-  unit: ConversationTurnRenderUnit,
-): WorkflowNotificationMeta | undefined {
-  return workflowNotificationOf(unit.header);
 }
 
 function ConversationBackgroundResultWork({

@@ -11,7 +11,7 @@ import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSe
  * （见 zcodeSessionSettingsToConfigOptions），那种「名字」在这里就当作没有——屏幕上绝不出现
  * providerId（团队套餐的它是一个 UUID）。
  */
-function workflowSubagentProviderNameLookup(
+function subagentProviderNameLookup(
   configOptions: readonly ZCodeConfigOption[] | null | undefined,
 ): ((providerId: string) => string | undefined) | undefined {
   const entries = configOptions?.find((option) => option.category === "model")?.options;
@@ -36,7 +36,7 @@ function workflowSubagentProviderNameLookup(
  * 上面那张表的 hook 形态。workspacePath 缺席（宿主给不出作用域）即没有查找函数——
  * 此时拼名规则退回裸 modelId，这是刻意的兜底，不是缺陷。
  */
-export function useWorkflowSubagentModelProviderName(
+export function useSubagentModelProviderName(
   workspacePath: string | undefined,
   workspaceIdentity?: string,
 ): ((providerId: string) => string | undefined) | undefined {
@@ -45,5 +45,5 @@ export function useWorkflowSubagentModelProviderName(
       ? undefined
       : selectWorkspaceZCodeState(state, workspacePath, workspaceIdentity).configOptions,
   );
-  return useMemo(() => workflowSubagentProviderNameLookup(configOptions), [configOptions]);
+  return useMemo(() => subagentProviderNameLookup(configOptions), [configOptions]);
 }

@@ -15,10 +15,6 @@ import {
   V4SplitPaneEntryProvider,
   type V4SplitPaneSessionTarget,
 } from "@/v4/splitPaneEntryContext.js";
-import {
-  WorkflowRunOpenProvider,
-  type WorkflowRunOpenTarget,
-} from "@/v4/workflowRunOpenContext.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import type { WorkbenchSessionBinding } from "@/v4/workbenchGroupStore.js";
 import {
@@ -35,13 +31,6 @@ import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 
-import { AUTOMATIONS_TOAST_ANCHOR_ID, AutomationsSection } from "@/settings/AutomationsSection.js";
-import type {
-  SavedWorkflowLaunchTarget,
-  SavedWorkflowsOpenArtifactParams,
-  SavedWorkflowsOpenRunParams,
-} from "@/settings/saved-workflows/SavedWorkflowsSection.js";
-import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WorkspaceHeader } from "@/WorkspaceHeader.js";
 import { WorkspaceSidebar, type SidebarFileTreeOpenRequest } from "@/WorkspaceSidebar.js";
@@ -179,11 +168,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   services,
   workspaceReadOnlyReason,
   workspaceMainView,
-  openAutomationId,
-  openAutomationTab,
   onWorkspaceMainViewChange,
-  onOpenAutomationConsumed,
-  handleOpenAutomations,
   onConnectRemote,
   onSelectRemoteProject,
   onCancelRemoteProject,
@@ -285,11 +270,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleSyncSubagentSessionTabs,
   handleOpenSelectionSideChat,
   handleOpenPlanDetail,
-  handleOpenWorkflowRun,
-  handleOpenWorkflowRunDirectory,
-  handleOpenWorkflowActorSession,
-  handleOpenWorkflowWorkspace,
-  handleOpenWorkflowArtifact,
   handleCloseCodeViewer,
   handleCloseGit,
   handleActivateSidePaneTab,
@@ -885,125 +865,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     },
     [handleSelectTask, intl, shellWorkbenchBinding, showChatMainView, tabStoreApi, workspaceTabs],
   );
-  // 中枢直接启动 accepted 后切到新会话（run 卡已在顶部）：复用运行历史那条导航，
-  // target 恒带工作流所属项目坐标（不变式 7），remoteSessionId 决定连接 endpoint。
-  const handleNavigateToLaunchedRun = useCallback(
-    (target: SavedWorkflowLaunchTarget, sessionId: string) => {
-      handleSelectTaskInChat(
-        target.workspacePath,
-        sessionId,
-        target.workspaceIdentity,
-        target.remoteSessionId,
-      );
-    },
-    [handleSelectTaskInChat],
-  );
-  // 工作流运行历史「查看实例」：先回到发起它的会话（侧栏页只在 chat 视图里可见），再开实例详情页。
-  const handleOpenSavedWorkflowRun = useCallback(
-    (params: SavedWorkflowsOpenRunParams) => {
-      // 中枢是跨项目视图：实例必须开在发起它的项目，而非活动项目。
-      // params 恒带 workspacePath/identity；仅在异常缺省时兜底回退到活动 workspace。
-      const targetWorkspacePath = params.workspacePath || workspaceAbsPath;
-      const targetWorkspaceIdentity =
-        params.workspaceIdentity ?? (workspaceIdentity?.trim() ? workspaceIdentity : undefined);
-      // remoteSessionId 不在契约里：按目标 workspace 从已打开 tab 反查；命中活动项目即取活动值。
-      const targetRemoteSessionId = workspaceTabs.find(
-        (tab) =>
-          tab.workspacePath === targetWorkspacePath &&
-          (!targetWorkspaceIdentity || tab.workspaceIdentity === targetWorkspaceIdentity),
-      )?.remoteSessionId;
-      handleSelectTaskInChat(
-        targetWorkspacePath,
-        params.sessionId,
-        targetWorkspaceIdentity,
-        targetRemoteSessionId,
-      );
-      handleOpenWorkflowRun({
-        workspacePath: targetWorkspacePath,
-        ...(targetWorkspaceIdentity ? { workspaceIdentity: targetWorkspaceIdentity } : {}),
-        ...(targetRemoteSessionId ? { remoteSessionId: targetRemoteSessionId } : {}),
-        parentSessionId: params.sessionId,
-        toolCallId: params.toolCallId,
-        runId: params.runId,
-        workflowName: params.workflowName,
-      });
-    },
-    [
-      handleOpenWorkflowRun,
-      handleSelectTaskInChat,
-      workspaceAbsPath,
-      workspaceIdentity,
-      workspaceTabs,
-    ],
-  );
-  // 侧栏运行行：与 composer 徽标
-  // 同一跳转——先选中会话，再开 run pane。没有 toolCallId 的 run（不该有）只选中会话。
-  const handleOpenSidebarWorkflowRun = useCallback(
-    (target: WorkflowRunOpenTarget) => {
-      if (target.run.toolCallId === undefined) {
-        const targetRemoteSessionId = workspaceTabs.find(
-          (tab) =>
-            tab.workspacePath === target.workspacePath &&
-            (!target.workspaceIdentity || tab.workspaceIdentity === target.workspaceIdentity),
-        )?.remoteSessionId;
-        handleSelectTaskInChat(
-          target.workspacePath,
-          target.sessionId,
-          target.workspaceIdentity,
-          targetRemoteSessionId,
-        );
-        return;
-      }
-      handleOpenSavedWorkflowRun({
-        sessionId: target.sessionId,
-        runId: target.run.runId,
-        toolCallId: target.run.toolCallId,
-        workflowName: target.run.name ?? "",
-        workspacePath: target.workspacePath,
-        ...(target.workspaceIdentity ? { workspaceIdentity: target.workspaceIdentity } : {}),
-      });
-    },
-    [handleOpenSavedWorkflowRun, handleSelectTaskInChat, workspaceTabs],
-  );
-  // 中枢的产物 chip：与「查看实例」逐字同构（同一条「先回到发起它的会话」的路径），
-  // 只是终点是 `workflow-artifact` tab 而不是 run 详情页。
-  const handleOpenSavedWorkflowArtifact = useCallback(
-    (params: SavedWorkflowsOpenArtifactParams) => {
-      const targetWorkspacePath = params.workspacePath || workspaceAbsPath;
-      const targetWorkspaceIdentity =
-        params.workspaceIdentity ?? (workspaceIdentity?.trim() ? workspaceIdentity : undefined);
-      const targetRemoteSessionId = workspaceTabs.find(
-        (tab) =>
-          tab.workspacePath === targetWorkspacePath &&
-          (!targetWorkspaceIdentity || tab.workspaceIdentity === targetWorkspaceIdentity),
-      )?.remoteSessionId;
-      handleSelectTaskInChat(
-        targetWorkspacePath,
-        params.sessionId,
-        targetWorkspaceIdentity,
-        targetRemoteSessionId,
-      );
-      handleOpenWorkflowArtifact({
-        workspacePath: targetWorkspacePath,
-        ...(targetWorkspaceIdentity ? { workspaceIdentity: targetWorkspaceIdentity } : {}),
-        ...(targetRemoteSessionId ? { remoteSessionId: targetRemoteSessionId } : {}),
-        parentSessionId: params.sessionId,
-        runId: params.runId,
-        artifactId: params.artifactId,
-        ...(params.title === undefined ? {} : { title: params.title }),
-        // 中枢的 chip 载荷带得到 contentType（html 产物据它直接开浏览器 tab）；`sourcePath`
-        // 那份载荷没有，由 `handleOpenWorkflowArtifact` 自己查 journal 补。
-        ...(params.contentType === undefined ? {} : { contentType: params.contentType }),
-      });
-    },
-    [
-      handleOpenWorkflowArtifact,
-      handleSelectTaskInChat,
-      workspaceAbsPath,
-      workspaceIdentity,
-      workspaceTabs,
-    ],
-  );
   const handlePaneActiveSessionChange = useCallback(
     (
       scope: {
@@ -1407,7 +1268,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   // Draft 之前维护一套独立轻量 header，导致 side pane、caption 安全区和拖拽入口
   // 与 Task Header 分叉。桌面端统一复用 WorkspaceHeader，只由 variant 裁剪 task 专属内容；
   // 手机远控无 active task 时仍不渲染桌面 chrome，继续遵守 replayable overlay 边界。
-  const shouldRenderMainViewHeader = workspaceMainView !== "automations";
+  const shouldRenderMainViewHeader = true;
   const shouldRenderWorkspaceHeader =
     shouldRenderMainViewHeader && (activeTaskId !== null || isDesktop);
   // ErrorBoundary resetKeys 的数组如果每次 render 都重新创建，
@@ -1471,8 +1332,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                 canOpenSession={canOpenSessionInSplitPane}
                 onOpenSession={handleOpenSessionInSplitPane}
               >
-                <WorkflowRunOpenProvider onOpenRun={handleOpenSidebarWorkflowRun}>
-                  <WorkspaceSidebar
+                <WorkspaceSidebar
                     workspacePath={workspaceAbsPath}
                     activePreviewPath={activePreviewPath}
                     onSelectTask={handleSelectTaskInChat}
@@ -1507,11 +1367,8 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     goBackShortcutLabel={goBackShortcutLabel}
                     goForwardShortcutLabel={goForwardShortcutLabel}
                     onOpenCommandCenter={handleOpenCommandCenter}
-                    onOpenAutomations={handleOpenAutomations}
-                    automationsActive={workspaceMainView === "automations"}
                     onFileTreeOpenChange={setIsSidebarFileTreeOpen}
                   />
-                </WorkflowRunOpenProvider>
               </V4SplitPaneEntryProvider>
             </ScopedErrorBoundary>
           </aside>
@@ -1651,61 +1508,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                       </ScopedErrorBoundary>
                     ) : null}
                     <div className="min-h-0 flex-1 overflow-hidden">
-                      {workspaceMainView === "automations" ? (
-                        <main
-                          id={AUTOMATIONS_TOAST_ANCHOR_ID}
-                          className="flex h-full min-h-0 flex-1 flex-col bg-background"
-                        >
-                          <AutomationsMainBreadcrumbFrame
-                            isDesktop={Boolean(isDesktop)}
-                            sectionLabel={intl.formatMessage({
-                              id: "settings.automations.title",
-                            })}
-                            ariaLabel={intl.formatMessage({
-                              id: "automations.breadcrumbLabel",
-                            })}
-                          >
-                            <div
-                              // 不同 Automations tab 的内容高度不同，滚动条出现/消失会改变
-                              // mx-auto 内容列的可用宽度，造成整页左右弹动；预留稳定槽位保持居中基准不变。
-                              className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
-                            >
-                              <ScopedErrorBoundary
-                                scope="automations-main"
-                                resetKeys={workspaceOnlyResetKeys}
-                                variant="panel"
-                                className="min-h-full"
-                              >
-                                <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-4 md:px-6 md:py-6">
-                                  <AutomationsSection
-                                    workspacePath={workspaceAbsPath}
-                                    workspaceIdentity={workspaceIdentity}
-                                    onCreateViaChat={handleCreateAutomationInChat}
-                                    onNavigateToLaunchedRun={handleNavigateToLaunchedRun}
-                                    onOpenWorkflowRun={handleOpenSavedWorkflowRun}
-                                    onOpenWorkflowArtifact={handleOpenSavedWorkflowArtifact}
-                                    openAutomationId={openAutomationId}
-                                    openAutomationTab={openAutomationTab}
-                                    onOpenAutomationConsumed={onOpenAutomationConsumed}
-                                    onOpenSession={({
-                                      sessionId,
-                                      workspacePath,
-                                      workspaceIdentity,
-                                    }) =>
-                                      handleSelectTaskInChat(
-                                        workspacePath,
-                                        sessionId,
-                                        workspaceIdentity,
-                                      )
-                                    }
-                                  />
-                                </div>
-                              </ScopedErrorBoundary>
-                            </div>
-                          </AutomationsMainBreadcrumbFrame>
-                        </main>
-                      ) : (
-                        <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                      <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                           {renderChatFindDialog()}
                           <ScopedErrorBoundary
                             scope="workspace-chat"
@@ -1748,7 +1551,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                               onOpenGitReview={handleOpenGitReview}
                               onPaneActiveSessionChange={handlePaneActiveSessionChange}
                               onOpenBrowserUrl={handleOpenBrowserUrl}
-                              onOpenAutomationsMain={handleOpenAutomations}
                               onOpenCodeViewer={handleOpenCodeViewer}
                               onAutoOpenAssistantPptx={
                                 isDesktop ? handleAutoOpenAssistantPptx : undefined
@@ -1759,11 +1561,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                               onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
                               onOpenSelectionSideChat={handleOpenSelectionSideChat}
                               onOpenPlanDetail={handleOpenPlanDetail}
-                              onOpenWorkflowRun={handleOpenWorkflowRun}
-                              onOpenWorkflowArtifact={handleOpenWorkflowArtifact}
-                              onOpenWorkflowRunDirectory={handleOpenWorkflowRunDirectory}
-                              onOpenWorkflowActorSession={handleOpenWorkflowActorSession}
-                              onOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
                               onOpenFileLink={handleOpenMarkdownFileLink}
                               conversationFindQuery={conversationFindQuery}
                               conversationFindActiveIndex={conversationFindActiveIndex}
@@ -1778,12 +1575,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             />
                           </ScopedErrorBoundary>
                         </main>
-                      )}
                     </div>
                   </section>
                 </ResizablePanel>
-                {workspaceMainView !== "automations" ? (
-                  <AnimatedTerminalPanel
+                <AnimatedTerminalPanel
                     frameClassName={cn(
                       isSidePaneVisible
                         ? "rounded-[var(--workspace-panel-radius)] border border-border"
@@ -1808,8 +1603,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     panelElementRef={terminalPanelElementRef}
                     onClose={() => setIsTerminalOpen(false)}
                     onOpenBrowserUrl={handleOpenBrowserUrl}
-                  />
-                ) : null}
+                />
               </ResizablePanelGroup>
             </ResizablePanel>
             {sidePanePanel}

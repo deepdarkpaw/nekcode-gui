@@ -5,7 +5,7 @@ import {
   resolveModelProviderFamilyIdByProviderId,
 } from "@zcode/shared";
 import { thoughtLevelLabelId } from "@/chat-input-toolbar/thoughtLevelOptions.js";
-import { useWorkflowSubagentModelProviderName } from "@/hooks/useWorkflowSubagentModelProviderName.js";
+import { useSubagentModelProviderName } from "@/hooks/useSubagentModelProviderName.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { FallbackToolCallBlock } from "@/ToolCallBlocks/renderers/fallback.js";
@@ -253,7 +253,7 @@ function groupModelsByProvider(models: ListModelsEntryView[]): ListModelsGroup[]
 export function ListModelsToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCall } = context.toolCallNode;
-  const providerName = useWorkflowSubagentModelProviderName(context.workspacePath);
+  const providerName = useSubagentModelProviderName(context.workspacePath);
 
   const result = useMemo(() => readListModelsResult(toolCall), [toolCall]);
 

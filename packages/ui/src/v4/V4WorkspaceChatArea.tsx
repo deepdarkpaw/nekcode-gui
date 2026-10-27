@@ -8,7 +8,6 @@ import type {
 } from "@zcode/shared";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
-import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type {
   OpenScopedSubagentSideTabRequest,
@@ -101,7 +100,6 @@ interface V4WorkspaceChatAreaProps {
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onPaneActiveSessionChange?: (scope: PaneWorkspaceScope, sessionId: string) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  onOpenAutomationsMain?: OpenAutomationsMain;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
@@ -162,8 +160,7 @@ export function V4WorkspaceChatArea({
   onOpenGitReview,
   onPaneActiveSessionChange,
   onOpenBrowserUrl,
-  onOpenAutomationsMain,
-  onOpenCodeViewer,
+    onOpenCodeViewer,
   onAutoOpenAssistantPptx,
   onOpenFileLink,
   onOpenSubagentSession,
@@ -287,8 +284,7 @@ export function V4WorkspaceChatArea({
       onRefreshGit,
       onOpenGitReview,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
-      onOpenCodeViewer,
+            onOpenCodeViewer,
       onAutoOpenAssistantPptx,
       onOpenFileLink,
       onOpenSubagentSession,
@@ -332,8 +328,7 @@ export function V4WorkspaceChatArea({
       onRefreshGit,
       onOpenGitReview,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
-      onOpenCodeViewer,
+            onOpenCodeViewer,
       onAutoOpenAssistantPptx,
       onOpenFileLink,
       onOpenSubagentSession,

@@ -431,8 +431,7 @@ export function ExploreToolCallBlock(context: ToolCallBlockRenderContext) {
               onOpenCodeViewer={context.onOpenCodeViewer}
               onOpenFileLink={context.onOpenFileLink}
               onOpenBrowserUrl={context.onOpenBrowserUrl}
-              onOpenAutomationsMain={context.onOpenAutomationsMain}
-              onLoadFullToolCallFields={context.onLoadFullToolCallFields}
+                            onLoadFullToolCallFields={context.onLoadFullToolCallFields}
             />
           ))}
         </div>
@@ -440,8 +439,7 @@ export function ExploreToolCallBlock(context: ToolCallBlockRenderContext) {
     [
       childToolCalls,
       context.onLoadFullToolCallFields,
-      context.onOpenAutomationsMain,
-      context.onOpenBrowserUrl,
+            context.onOpenBrowserUrl,
       context.onOpenCodeViewer,
       context.onOpenFileLink,
       context.workspacePath,
