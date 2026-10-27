@@ -611,7 +611,6 @@ function ConversationComposerImpl({
     onRuntimeRestart,
     onRuntimeLifecycle,
     disabled,
-    listenAddToChatEvents: listenAddToChatEvents && !disabled,
   });
   // 对齐旧版 useChatComposer：窗口级 dragover 会在指针进入 ChatView 前预先点亮
   // 整个聊天区与桌面草稿标题栏；workspace payload 的文案优先于系统附件。
@@ -2100,7 +2099,6 @@ function ConversationComposerImpl({
           className="p-0"
           onChange={handleEditorChange}
           onSubmit={handleEditorSubmit}
-          onWhiteboardMentionSelected={attachmentsApi.handleWhiteboardMentionSelected}
           onPaste={attachmentsApi.handlePaste}
         />
         {attachmentsApi.attachmentError ? (

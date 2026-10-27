@@ -4,8 +4,6 @@ import type { WorkspaceSidePaneTab } from "@/lib/workspaceSidePane.js";
 export interface SidePaneTabPresentationLabels {
   reviewTitle: string;
   codeViewerTitle: string;
-  treemappingTitle: string;
-  whiteboardTitle: string;
   modelTrajectoryTitle: string;
   developerToolsTitle: string;
   terminalTitle: string;
@@ -51,8 +49,6 @@ export function getSidePaneTabSearchHint(tab: WorkspaceSidePaneTab): string {
     return `${tab.rootSessionId} ${tab.parentSessionId} subagent directory`;
   }
   if (tab.type === "git") return "git diff";
-  if (tab.type === "treemapping") return "file activity diff map treemapping";
-  if (tab.type === "whiteboard") return `${tab.title} whiteboard canvas draw sketch`;
   if (tab.type === "model-trajectory") {
     return `${tab.title ?? ""} ${tab.taskId} model trajectory call io`;
   }
@@ -72,8 +68,6 @@ export function getLocalizedSidePaneTabTitle(
     const titleByMessageId: Record<string, string> = {
       "sidePane.review": labels.reviewTitle,
       "codeViewer.title": labels.codeViewerTitle,
-      "treemapping.title": labels.treemappingTitle,
-      "whiteboard.title": labels.whiteboardTitle,
       "modelTrajectory.title": labels.modelTrajectoryTitle,
       "developerTools.title": labels.developerToolsTitle,
       "terminal.title": labels.terminalTitle,
@@ -106,8 +100,6 @@ export function getSidePaneTabTypeLabel(
   }
   if (tab.type === "subagent-directory") return labels.subagentDirectoryTitle;
   if (tab.type === "git") return labels.reviewTitle;
-  if (tab.type === "treemapping") return labels.treemappingTitle;
-  if (tab.type === "whiteboard") return labels.whiteboardTitle;
   if (tab.type === "model-trajectory") return labels.modelTrajectoryTitle;
   if (tab.type === "developer-tools") return labels.developerToolsTitle;
   if (tab.type === "terminal" || tab.type === "bash-output") return labels.terminalTitle;

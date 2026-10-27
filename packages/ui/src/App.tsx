@@ -206,8 +206,6 @@ export function App({
     handleOpenBrowserUrl,
     handleToggleGit,
     handleOpenGit,
-    handleOpenTreemapping,
-    handleOpenWhiteboard,
     handleOpenDeveloperTools,
     handleOpenTerminalTab,
     handleOpenSubagentSession,
@@ -239,9 +237,6 @@ export function App({
     activeTaskId,
     sidePaneOwnerId,
     platform,
-    defaultWhiteboardNamePrefix: intl.formatMessage({
-      id: "whiteboard.defaultName",
-    }),
   });
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
   const notificationEnabled = useZCodeStore((s) => s.notificationEnabled);
@@ -553,14 +548,6 @@ export function App({
       handleOpenCodeViewers(request.sources);
     },
     [handleOpenCodeViewers, isDesktop, workspaceReadOnlyReason],
-  );
-  const handleOpenTreemappingIfWritable = useCallback(
-    (...args: Parameters<typeof handleOpenTreemapping>) => {
-      if (!workspaceReadOnlyReason) {
-        handleOpenTreemapping(...args);
-      }
-    },
-    [handleOpenTreemapping, workspaceReadOnlyReason],
   );
   const projectName = getPathLeaf(workspaceAbsPath);
   const handleOpenTaskFind = useCallback(() => {
@@ -1112,8 +1099,6 @@ export function App({
         handleOpenGitReview={handleOpenGitReview}
         handleToggleSidebar={handleToggleSidebar}
         handleToggleTerminal={handleToggleTerminalIfWritable}
-        handleOpenTreemapping={handleOpenTreemappingIfWritable}
-        handleOpenWhiteboard={handleOpenWhiteboard}
         handleOpenDeveloperTools={handleOpenDeveloperTools}
         handleOpenTerminalTab={handleOpenTerminalTabIfWritable}
         handleToggleGit={handleToggleGitIfWritable}

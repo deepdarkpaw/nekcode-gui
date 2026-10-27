@@ -14,7 +14,6 @@ import {
   SESSION_MENTION_ICON_NODE,
   SKILL_MENTION_ICON_NODE,
   SUBAGENT_MENTION_ICON_NODE,
-  WHITEBOARD_MENTION_ICON_NODE,
   WORKFLOW_COMMAND_MENTION_ICON_NODE,
   type MentionLucideIconNode,
 } from "@/mentions/nodes/mentionIconDom.js";
@@ -85,14 +84,12 @@ export function decoratePromptMention(
         ? SUBAGENT_MENTION_ICON_NODE
         : category === "sessions"
           ? SESSION_MENTION_ICON_NODE
-          : category === "whiteboards"
-            ? WHITEBOARD_MENTION_ICON_NODE
-            : command === "goal"
-              ? GOAL_COMMAND_MENTION_ICON_NODE
-              : command === "workflow"
-                ? WORKFLOW_COMMAND_MENTION_ICON_NODE
-                : command === "compact"
-                  ? COMPACT_COMMAND_MENTION_ICON_NODE
-                  : COMMAND_MENTION_ICON_NODE;
+          : command === "goal"
+            ? GOAL_COMMAND_MENTION_ICON_NODE
+            : command === "workflow"
+              ? WORKFLOW_COMMAND_MENTION_ICON_NODE
+              : command === "compact"
+                ? COMPACT_COMMAND_MENTION_ICON_NODE
+                : COMMAND_MENTION_ICON_NODE;
   setMask(dom, icon);
 }

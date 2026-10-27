@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- Side pane tab 状态集中维护 Git/CodeViewer/Treemapping/Whiteboard 的打开、复用、关闭和排序规则；拆分需要同步迁移现有内存恢复逻辑。 */
+/* eslint-disable max-lines -- Side pane tab 状态集中维护 Git/CodeViewer/终端/工作流等面板的打开、复用、关闭和排序规则；拆分需要同步迁移现有内存恢复逻辑。 */
 import { createUuid } from "@zcode/shared";
 import { inferMediaPreview, isPptxPreviewPath, type CodeViewerSource } from "@/lib/codeViewer.js";
 import { normalizeCodeViewerSource } from "@/lib/codeViewerSource.js";
@@ -19,29 +19,6 @@ export interface CodeViewerSidePaneTab {
   openedAt?: number;
   source: CodeViewerSource;
   sourceKey: string | null;
-}
-
-export type TreemappingSidePaneSource =
-  | { kind: "current" }
-  | { kind: "message"; messageId: string; turnIndex?: number };
-
-export interface TreemappingSidePaneTab {
-  id: "treemapping";
-  type: "treemapping";
-  ownerTaskId?: string | null;
-  workspaceKey?: string | null;
-  openedAt?: number;
-  source?: TreemappingSidePaneSource;
-}
-
-export interface WhiteboardSidePaneTab {
-  id: string;
-  type: "whiteboard";
-  ownerTaskId?: string | null;
-  workspaceKey?: string | null;
-  boardId: string;
-  openedAt?: number;
-  title: string;
 }
 
 export interface ModelTrajectorySidePaneTab {
@@ -472,8 +449,6 @@ export type WorkspaceSidePaneTab =
   | BackgroundBashSidePaneTab
   | GitSidePaneTab
   | CodeViewerSidePaneTab
-  | TreemappingSidePaneTab
-  | WhiteboardSidePaneTab
   | ModelTrajectorySidePaneTab
   | DeveloperToolsSidePaneTab
   | TerminalSidePaneTab
@@ -509,10 +484,7 @@ export function normalizeWorkspaceSidePaneState(
     return null;
   }
 
-  // Treemapping 当前需要从侧边栏隐藏。旧版本可能已经把 treemapping tab
-  // 写进了 workspace 级 side pane 记忆，这里在状态边界统一过滤，避免恢复后入口继续出现。
-  const filteredTabs = current.tabs.filter((tab) => tab.type !== "treemapping");
-  if (filteredTabs.length === 0) {
+  if (current.tabs.length === 0) {
     return null;
   }
 
@@ -520,7 +492,7 @@ export function normalizeWorkspaceSidePaneState(
   // 字段，直接参与 getNextSelectionSideChatOrdinal 会得到 NaN/undefined 并造成标题
   // 编号冲突。这里在状态边界按 parent 分组回填最小可用编号，保持既有编号不变。
   let migratedOrdinal = false;
-  const tabs = filteredTabs.map((tab, index, allTabs) => {
+  const tabs = current.tabs.map((tab, index, allTabs) => {
     if (tab.type !== "selection-side-chat" || Number.isInteger(tab.ordinal)) {
       return tab;
     }
@@ -842,19 +814,6 @@ function createWorkflowArtifactSidePaneTab(
   };
 }
 
-function createWhiteboardSidePaneTab(options: {
-  boardId: string;
-  title: string;
-}): WhiteboardSidePaneTab {
-  return {
-    id: `whiteboard:${options.boardId}`,
-    type: "whiteboard",
-    boardId: options.boardId,
-    openedAt: Date.now(),
-    title: options.title,
-  };
-}
-
 function getCodeViewerTabSourceKey(source: CodeViewerSource): string | null {
   const workspaceScope = source.workspaceIdentity?.trim()
     ? source.workspaceIdentity.trim()
@@ -969,7 +928,6 @@ export function sidePaneOwnerKey(taskId: string | null | undefined): string {
 const WORKSPACE_GLOBAL_SIDE_PANE_TAB_TYPES = new Set<WorkspaceSidePaneTab["type"]>([
   "git",
   "developer-tools",
-  "treemapping",
 ]);
 
 function isWorkspaceGlobalSidePaneTab(tab: WorkspaceSidePaneTab): boolean {
@@ -1170,16 +1128,6 @@ export function activateGitSidePane(
   current: WorkspaceSidePaneState | null,
 ): WorkspaceSidePaneState {
   return activateSidePaneTab(current, createGitSidePaneTab());
-}
-
-export function openWhiteboardSidePane(
-  current: WorkspaceSidePaneState | null,
-  options: {
-    boardId: string;
-    title: string;
-  },
-): WorkspaceSidePaneState {
-  return activateSidePaneTab(current, createWhiteboardSidePaneTab(options));
 }
 
 export function openModelTrajectorySidePane(

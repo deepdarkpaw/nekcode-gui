@@ -19,7 +19,6 @@ import {
   closeVisibleSidePaneTabs,
   closeGitSidePane,
   closeCodeViewerSidePane,
-  openWhiteboardSidePane,
   openModelTrajectorySidePane,
   openTerminalSidePane,
   openSubagentSessionSidePane,
@@ -45,7 +44,6 @@ import {
   syncSubagentSessionSidePaneTabs,
   toggleGitSidePane,
   stampSidePaneTabsOwnership,
-  type TreemappingSidePaneTab,
   type OpenScopedSubagentSideTabRequest,
   type OpenBackgroundBashSideTabRequest,
   openBackgroundBashSidePane,
@@ -63,7 +61,6 @@ import {
 import { isSidePaneTabVisibleForParent } from "@/lib/workspaceSidePane.js";
 import { logger } from "@/logger.js";
 import { getPathLeaf } from "@/lib/path.js";
-import { useWhiteboardStore } from "@/store/whiteboardStore.js";
 import { useModelTrajectoryOpenBridge } from "@/hooks/useModelTrajectoryOpenBridge.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
@@ -109,7 +106,6 @@ export function useAppPanels(options: {
   activeTaskId: string | null;
   /** 草稿态与正式任务共用稳定 id，作为侧栏对话隔离边界。 */
   sidePaneOwnerId: string | null;
-  defaultWhiteboardNamePrefix: string;
   /** 链接一律交给系统浏览器打开。 */
   platform: Pick<IPlatformService, "openExternal">;
 }) {
@@ -119,7 +115,6 @@ export function useAppPanels(options: {
     workspaceRemoteSessionId,
     activeTaskId,
     sidePaneOwnerId,
-    defaultWhiteboardNamePrefix,
     platform,
   } = options;
   const activeWorkspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
@@ -369,42 +364,6 @@ export function useAppPanels(options: {
       return next;
     });
   }, [isOfficeMode, commitOpenedSidePaneState, revealSidePaneForCurrentOwner, workspaceAbsPath]);
-
-  const handleOpenTreemapping = useCallback(
-    (source?: TreemappingSidePaneTab["source"]) => {
-      // Treemapping 功能当前需要从侧边栏隐藏。保留回调形状给消息链路兼容，
-      // 但不再创建 side pane tab，避免 header 或旧入口绕过菜单隐藏。
-      logger.debug(
-        `[App] 已隐藏 treemapping 侧边栏入口 workspace=${workspaceAbsPath} source=${source?.kind ?? "current"}`,
-      );
-    },
-    [workspaceAbsPath],
-  );
-
-  const handleOpenWhiteboard = useCallback(() => {
-    const board = useWhiteboardStore.getState().createBoard({
-      defaultNamePrefix: defaultWhiteboardNamePrefix,
-      workspaceIdentity,
-      workspacePath: workspaceAbsPath,
-    });
-    revealSidePaneForCurrentOwner();
-    commitOpenedSidePaneState((current) => {
-      const next = openWhiteboardSidePane(current, {
-        boardId: board.id,
-        title: board.name,
-      });
-      logger.info(
-        `[App] 打开右侧面板 mode=whiteboard workspace=${workspaceAbsPath} board=${board.id} tabs=${next.tabs.length}`,
-      );
-      return next;
-    });
-  }, [
-    commitOpenedSidePaneState,
-    defaultWhiteboardNamePrefix,
-    revealSidePaneForCurrentOwner,
-    workspaceAbsPath,
-    workspaceIdentity,
-  ]);
 
   const handleOpenDeveloperTools = useCallback(() => {
     revealSidePaneForCurrentOwner();
@@ -989,8 +948,6 @@ export function useAppPanels(options: {
     handleOpenBrowserUrl,
     handleToggleGit,
     handleOpenGit,
-    handleOpenTreemapping,
-    handleOpenWhiteboard,
     handleOpenDeveloperTools,
     handleOpenTerminalTab,
     handleOpenModelTrajectory,

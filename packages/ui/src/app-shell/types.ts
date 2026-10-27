@@ -26,7 +26,6 @@ import type {
   OpenScopedWorkflowWorkspaceSideTabRequest,
   WorkspaceSidePaneState,
 } from "@/lib/workspaceSidePane.js";
-import type { TreemappingSidePaneTab } from "@/lib/workspaceSidePane.js";
 import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import type { Theme } from "@/useTheme.js";
@@ -216,8 +215,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   handleRefreshGit: () => void;
   handleToggleSidebar: () => void;
   handleToggleTerminal: () => void;
-  handleOpenTreemapping: (source?: TreemappingSidePaneTab["source"]) => void;
-  handleOpenWhiteboard: () => void;
   handleOpenDeveloperTools: () => void;
   handleOpenTerminalTab: () => void;
   handleToggleGit: () => void;

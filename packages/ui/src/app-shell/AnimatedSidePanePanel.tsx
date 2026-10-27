@@ -22,8 +22,6 @@ import { WorkspaceSidePaneToggleButton } from "@/WorkspaceSidePaneToggleButton.j
 import { DesktopWindowControls } from "@/DesktopWindowControls.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 import { GitPane } from "@/GitPane.js";
-import { TreemappingPane } from "@/TreemappingPane.js";
-import { WhiteboardPane } from "@/WhiteboardPane.js";
 import { ModelTrajectoryPane } from "@/ModelTrajectoryPane.js";
 import { DeveloperToolsPane } from "@/DeveloperToolsPane.js";
 import { cn } from "@/components/lib/utils.js";
@@ -261,7 +259,6 @@ export function AnimatedSidePanePanel({
   onCloseOtherTabs,
   onCloseAllTabs,
   onReopenClosedTab,
-  onOpenWhiteboard: _onOpenWhiteboard,
   onOpenDeveloperTools,
   onOpenTerminalTab,
   onOpenReviewTab,
@@ -317,7 +314,6 @@ export function AnimatedSidePanePanel({
   onCloseOtherTabs: (tabId: string) => void;
   onCloseAllTabs: () => void;
   onReopenClosedTab: (tabId: string) => void;
-  onOpenWhiteboard: () => void;
   onOpenDeveloperTools: () => void;
   onOpenTerminalTab: () => void;
   onOpenReviewTab: () => void;
@@ -646,15 +642,6 @@ export function AnimatedSidePanePanel({
             <span>{intl.formatMessage({ id: "sidePane.review" })}</span>
           </DropdownMenuItem>
         ) : null}
-        {/* 画板入口未启用 */}
-        {/* <DropdownMenuItem
-          onSelect={() => {
-            onOpenWhiteboard();
-          }}
-        >
-          <PaletteIcon className="size-4" />
-          <span>{intl.formatMessage({ id: "whiteboard.title" })}</span>
-        </DropdownMenuItem> */}
         {!isOfficeMode ? (
           <DropdownMenuItem
             data-side-pane-add-item="terminal"
@@ -789,8 +776,6 @@ export function AnimatedSidePanePanel({
         relativeTime: (timestamp) => formatTaskRelativeTime(timestamp, intl),
         reviewTitle: intl.formatMessage({ id: "sidePane.review" }),
         codeViewerTitle: intl.formatMessage({ id: "codeViewer.title" }),
-        treemappingTitle: intl.formatMessage({ id: "treemapping.title" }),
-        whiteboardTitle: intl.formatMessage({ id: "whiteboard.title" }),
         modelTrajectoryTitle: intl.formatMessage({
           id: "modelTrajectory.title",
         }),
@@ -1097,19 +1082,6 @@ export function AnimatedSidePanePanel({
                             onClose={onCloseGit}
                             onRefresh={onRefreshGit}
                             onRevealFileInTree={onRevealGitFileInTree}
-                          />
-                        ) : tab.type === "treemapping" ? (
-                          <TreemappingPane
-                            activeTaskId={activeTaskId}
-                            workspacePath={workspaceAbsPath}
-                            workspaceIdentity={workspaceIdentity}
-                            source={tab.source ?? { kind: "current" }}
-                          />
-                        ) : tab.type === "whiteboard" ? (
-                          <WhiteboardPane
-                            workspacePath={workspaceAbsPath}
-                            workspaceIdentity={workspaceIdentity}
-                            boardId={tab.boardId}
                           />
                         ) : tab.type === "model-trajectory" ? (
                           <ModelTrajectoryPane
