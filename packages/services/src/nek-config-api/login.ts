@@ -72,7 +72,14 @@ export class NekLoginManager {
   async authStatus(target: NekConfigTarget): Promise<NekAuthProviderStatus[]> {
     const control = await this.options.control(target);
     const data = await control.call({ type: "auth_status" });
-    return data.providers;
+    return data.providers.map((status) => ({
+      ...status,
+      state:
+        status.state ??
+        (status.kind === "oauth" && status.expiresAt && Date.parse(status.expiresAt) <= Date.now()
+          ? "expired"
+          : "ok"),
+    }));
   }
 
   async logout(target: NekConfigTarget, provider: string): Promise<void> {

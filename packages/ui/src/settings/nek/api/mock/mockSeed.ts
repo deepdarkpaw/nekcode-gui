@@ -203,6 +203,7 @@ function baseMachine(
   return {
     info: {
       target,
+      hostname: target.kind === "local" ? "DESKTOP-NEK" : label,
       label,
       detail,
       connected,
@@ -249,6 +250,7 @@ function baseMachine(
           provider: "anthropic",
           name: "Anthropic (Claude Pro/Max)",
           kind: "none",
+          state: "ok",
           loginMethods: ["oauth", "api_key"],
         },
       ],
@@ -258,6 +260,7 @@ function baseMachine(
           provider: "openai-codex",
           name: "ChatGPT Plus/Pro (Codex)",
           kind: "none",
+          state: "ok",
           loginMethods: ["oauth"],
         },
       ],
@@ -333,6 +336,7 @@ export function createLocalMachine(): MockMachine {
     provider: "anthropic",
     name: "Anthropic (Claude Pro/Max)",
     kind: "oauth",
+    state: "ok",
     loginMethods: ["oauth", "api_key"],
     expiresAt: new Date(Date.now() + 6 * 3600_000).toISOString(),
   });

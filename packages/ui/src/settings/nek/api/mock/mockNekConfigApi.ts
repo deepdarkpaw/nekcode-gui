@@ -20,7 +20,7 @@ import * as models from "./mockModels.js";
 import { createLocalMachine, createRemoteMachines } from "./mockSeed.js";
 import * as settings from "./mockSettings.js";
 
-type WatchListener = (change: { file: string; revision: string }) => void;
+type WatchListener = (change: { file: string; revision: string; scope: "global" | "project" }) => void;
 type MockFileKind = "settings" | "models" | "mcp" | "yaml" | "instructions";
 
 export interface MockNekConfigApiOptions {
@@ -38,6 +38,7 @@ export class MockNekConfigApi implements INekConfigApi {
   readonly machines = new Map<string, MockMachine>();
   readonly login: MockLoginSimulator;
   private readonly watchers = new Map<string, Set<WatchListener>>();
+  private readonly reloadListeners = new Map<string, Set<(result: Awaited<ReturnType<INekConfigApi["reloadRunningSessions"]>>) => void>>();
   private readonly failures = new Map<string, NekConfigError>();
   private readonly latencyMs: number;
 
@@ -110,7 +111,13 @@ export class MockNekConfigApi implements INekConfigApi {
   private touchFor(target: NekConfigTarget): models.Touch {
     return (file) => {
       file.revision = nextRevision();
-      const change = { file: file.path, revision: file.revision };
+      const change = {
+        file: file.path,
+        revision: file.revision,
+        scope: file.path.includes("/.nek/") && !file.path.includes("/.nek/agent/")
+          ? ("project" as const)
+          : ("global" as const),
+      };
       setTimeout(() => {
         for (const listener of this.watchers.get(keyOf(target)) ?? []) {
           listener(change);
@@ -149,7 +156,7 @@ export class MockNekConfigApi implements INekConfigApi {
 
   // ---- 服务商与模型 ----
 
-  readModelsConfig = (target: NekConfigTarget) =>
+  readModelsConfig = (target: NekConfigTarget, _cwd?: string) =>
     this.call("readModelsConfig", () => {
       const machine = this.machineOf(target);
       return {
@@ -175,10 +182,10 @@ export class MockNekConfigApi implements INekConfigApi {
       return touch(machine.models);
     });
 
-  getProviderReferences: INekConfigApi["getProviderReferences"] = (target, providerId) =>
+  getProviderReferences: INekConfigApi["getProviderReferences"] = (target, providerId, _cwd) =>
     this.call("getProviderReferences", () => models.references(this.machineOf(target), providerId));
 
-  previewProviderRename: INekConfigApi["previewProviderRename"] = (target, from, to) =>
+  previewProviderRename: INekConfigApi["previewProviderRename"] = (target, from, to, _cwd) =>
     this.call("previewProviderRename", () => ({
       from,
       to,
@@ -295,7 +302,12 @@ export class MockNekConfigApi implements INekConfigApi {
       const machine = this.machineOf(target);
       const status = machine.auth.get(provider);
       if (status) {
-        machine.auth.set(provider, { ...status, kind: "none", expiresAt: undefined });
+        machine.auth.set(provider, {
+          ...status,
+          kind: "none",
+          state: "ok",
+          expiresAt: undefined,
+        });
       }
     });
 
@@ -355,7 +367,14 @@ export class MockNekConfigApi implements INekConfigApi {
     );
 
   listAgentPresets: INekConfigApi["listAgentPresets"] = (target, cwd) =>
-    this.call("listAgentPresets", () => settings.listPresets(this.machineOf(target), cwd));
+    this.call("listAgentPresets", () => {
+      const entries = settings.listPresets(this.machineOf(target), cwd);
+      return {
+        entries,
+        diagnostics: [],
+        revision: entries.map((entry) => `${entry.path ?? entry.preset.name}:${entry.revision}`).sort().join("|"),
+      };
+    });
 
   saveAgentPreset: INekConfigApi["saveAgentPreset"] = (target, scope, preset, options) =>
     this.write(target, "saveAgentPreset", (machine, touch) =>

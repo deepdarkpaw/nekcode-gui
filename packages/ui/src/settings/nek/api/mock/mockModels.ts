@@ -58,9 +58,19 @@ export function saveProvider(
   if (!/^[a-z0-9][a-z0-9-]*$/.test(write.id)) {
     throw mockError("validation", "Invalid provider id", { id: "format" });
   }
+  if (write.apiKey === "") {
+    throw mockError("validation", "Empty API key is not a valid deletion instruction", {
+      apiKey: "empty",
+    });
+  }
   const { apiKey, ...rest } = write;
-  const resolvedKey = typeof apiKey === "object" ? existing?.apiKey : apiKey;
-  const next: NekProviderConfig = { ...clone(rest), apiKey: resolvedKey };
+  const resolvedKey =
+    apiKey === undefined
+      ? existing?.apiKey
+      : typeof apiKey === "object"
+        ? ("remove" in apiKey ? undefined : existing?.apiKey)
+        : apiKey;
+  const next: NekProviderConfig = { ...clone(rest), ...(resolvedKey ? { apiKey: resolvedKey } : {}) };
   machine.models.value = existing
     ? machine.models.value.map((item) => (item.id === write.id ? next : item))
     : [...machine.models.value, next];
@@ -146,12 +156,16 @@ export function catalog(ids?: string[]): NekCatalogModel[] {
 
 function draftOf(
   machine: MockMachine,
-  source: { providerId: string } | { draft: NekProviderDraft },
+  source: { providerId: string; draft?: NekProviderDraft },
 ): NekProviderDraft {
-  if ("draft" in source) {
-    return source.draft;
-  }
   const provider = findProvider(machine, source.providerId);
+  if (source.draft) {
+    return {
+      ...source.draft,
+      apiKey: source.draft.apiKey ?? provider.apiKey,
+    };
+  }
+
   return {
     api: provider.api as NekProviderDraft["api"],
     baseUrl: provider.baseUrl,
@@ -218,7 +232,7 @@ const REMOTE_LISTS: Record<string, NekRemoteModel[]> = {
 
 export function fetchModels(
   machine: MockMachine,
-  source: { providerId: string } | { draft: NekProviderDraft },
+  source: { providerId: string; draft?: NekProviderDraft },
 ): NekFetchModelsResult {
   const draft = draftOf(machine, source);
   const endpoint = `${draft.baseUrl.replace(/\/+$/, "")}/models`;
@@ -235,7 +249,7 @@ export function fetchModels(
 
 export function testProvider(
   machine: MockMachine,
-  source: { providerId: string } | { draft: NekProviderDraft },
+  source: { providerId: string; draft?: NekProviderDraft },
   modelId: string,
 ): NekTestProviderResult {
   const failure = simulateFailure(draftOf(machine, source));

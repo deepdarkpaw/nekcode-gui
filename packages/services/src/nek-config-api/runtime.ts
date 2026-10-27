@@ -102,6 +102,7 @@ export interface NekReloadOutcome {
   reloaded: number;
   deferred: number;
   diagnostics: NekConfigDiagnostic[];
+  failures: Array<{ sessionKey: string; message: string }>;
 }
 
 export function targetKeyOf(target: NekConfigTarget): string {
@@ -112,7 +113,10 @@ export class NekConfigRuntime {
   readonly login: NekLoginManager;
   private readonly watchHub: NekWatchHub;
   private readonly controls = new Map<string, Promise<NekControlClient>>();
-  private readonly cwdHints = new Map<string, string>();
+  private readonly reloadListeners = new Map<
+    string,
+    Set<(result: NekReloadOutcome) => void>
+  >();
   private readonly autoReload: boolean;
 
   constructor(private readonly options: NekConfigApiOptions) {
@@ -181,18 +185,12 @@ export class NekConfigRuntime {
     return this.options.sessions?.sessions(target) ?? [];
   }
 
-  /** 记住最近一次出现的项目目录：models 相关方法在契约里没有 cwd 参数，靠它定位项目预设。 */
-  rememberCwd(target: NekConfigTarget, cwd?: string): void {
-    if (!cwd) return;
-    this.cwdHints.set(targetKeyOf(target), cwd);
-  }
-
-  cwdHint(target: NekConfigTarget): string | undefined {
-    return this.cwdHints.get(targetKeyOf(target));
-  }
-
   /** 监视配置目录；`fs.watch`（本机）或轮询（远程）。 */
-  watch(target: NekConfigTarget, listener: (change: NekWatchChange) => void): () => void {
+  watch(
+    target: NekConfigTarget,
+    listener: (change: NekWatchChange) => void,
+    cwd?: string,
+  ): () => void {
     let context: NekTargetContext;
     try {
       context = this.target(target);
@@ -205,7 +203,7 @@ export class NekConfigRuntime {
         key: context.key,
         executor: context.executor,
         local: target.kind === "local",
-        dirs: this.watchDirs(context),
+        dirs: this.watchDirs(context, cwd),
       },
       listener,
     );
@@ -222,15 +220,35 @@ export class NekConfigRuntime {
       files.map((file) => ({ file: file.path, revision: file.revision })),
     );
     if (!this.autoReload) return;
-    void this.reload(target).catch((error: unknown) => {
-      this.options.logger?.warn("automatic reload after a config write failed", error);
-    });
+    void this.reload(target)
+      .then((result) => this.emitReloadResult(target, result))
+      .catch((error: unknown) => {
+        this.options.logger?.warn("automatic reload after a config write failed", error);
+        this.emitReloadResult(target, {
+          reloaded: 0,
+          deferred: 0,
+          diagnostics: [],
+          failures: [{ sessionKey: "runtime", message: error instanceof Error ? error.message : String(error) }],
+        });
+      });
+  }
+
+  onReloadResult(target: NekConfigTarget, listener: (result: NekReloadOutcome) => void): () => void {
+    const key = targetKeyOf(target);
+    const listeners = this.reloadListeners.get(key) ?? new Set();
+    listeners.add(listener);
+    this.reloadListeners.set(key, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.reloadListeners.delete(key);
+    };
   }
 
   /** 对目标机器上所有 nek 进程发 reload。回合正在跑的计入 deferred。 */
   async reload(target: NekConfigTarget): Promise<NekReloadOutcome> {
     this.target(target);
     const diagnostics: NekConfigDiagnostic[] = [];
+    const failures: NekReloadOutcome["failures"] = [];
     let reloaded = 0;
     let deferred = 0;
     const sessions = this.options.sessions?.sessions(target) ?? [];
@@ -241,6 +259,7 @@ export class NekConfigRuntime {
       reloaded += outcome.reloaded;
       deferred += outcome.deferred;
       diagnostics.push(...outcome.diagnostics);
+      failures.push(...outcome.failures);
     }
     if (this.hasControl(target)) {
       const outcome = await this.reloadOne("control", false, async () => {
@@ -250,8 +269,9 @@ export class NekConfigRuntime {
       reloaded += outcome.reloaded;
       deferred += outcome.deferred;
       diagnostics.push(...outcome.diagnostics);
+      failures.push(...outcome.failures);
     }
-    return { reloaded, deferred, diagnostics };
+    return { reloaded, deferred, diagnostics, failures };
   }
 
   dispose(): void {
@@ -261,6 +281,7 @@ export class NekConfigRuntime {
       void pending.then((client) => client.close()).catch(() => undefined);
     }
     this.controls.clear();
+    this.reloadListeners.clear();
   }
 
   // --------------------------------------------------------------------------
@@ -279,15 +300,16 @@ export class NekConfigRuntime {
         reloaded: queued ? 0 : 1,
         deferred: queued ? 1 : 0,
         diagnostics: result.diagnostics,
+        failures: [],
       };
     } catch (error) {
       return {
         reloaded: 0,
         deferred: 0,
-        diagnostics: [
+        diagnostics: [],
+        failures: [
           {
-            file: `nek process ${label}`,
-            severity: "error",
+            sessionKey: label,
             message: error instanceof Error ? error.message : String(error),
           },
         ],
@@ -295,14 +317,34 @@ export class NekConfigRuntime {
     }
   }
 
-  private watchDirs(context: NekTargetContext): string[] {
-    const dirs = [context.layout.agentDir, agentsDir(context.layout, "global")];
-    const cwd = this.cwdHint(context.target);
+  private watchDirs(
+    context: NekTargetContext,
+    cwd?: string,
+  ): Array<{ path: string; scope: "global" | "project" }> {
+    const dirs: Array<{ path: string; scope: "global" | "project" }> = [
+      { path: context.layout.agentDir, scope: "global" },
+      { path: agentsDir(context.layout, "global"), scope: "global" },
+    ];
     if (cwd) {
-      const projectDir = projectConfigDir(cwd);
-      dirs.push(projectDir, agentsDir(context.layout, "project", cwd), cwd);
+      dirs.push(
+        { path: projectConfigDir(cwd), scope: "project" },
+        { path: agentsDir(context.layout, "project", cwd), scope: "project" },
+        { path: cwd, scope: "project" },
+      );
     }
     return dirs;
+  }
+
+  private emitReloadResult(target: NekConfigTarget, result: NekReloadOutcome): void {
+    const listeners = this.reloadListeners.get(targetKeyOf(target));
+    if (!listeners) return;
+    for (const listener of listeners) {
+      try {
+        listener(result);
+      } catch (error) {
+        this.options.logger?.warn("reload result listener threw", error);
+      }
+    }
   }
 }
 

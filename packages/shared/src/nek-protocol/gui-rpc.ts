@@ -249,6 +249,8 @@ export interface NekAuthProviderStatus {
   name: string;
   /** 当前生效的凭据类型；none 表示未配置。 */
   kind: "oauth" | "api_key" | "env" | "none";
+  /** auth_status 能提供的凭据健康状态；当前 nek 版本尚未提供 refresh_failed。 */
+  state: "ok" | "expired" | "refresh_failed";
   /** 该 provider 支持的登录方式。 */
   loginMethods: Array<"oauth" | "api_key">;
   /** OAuth 访问令牌到期时间（ISO 8601）；nek 会自动刷新。 */

@@ -106,7 +106,6 @@ function validateServerConfig(name: string, config: Record<string, unknown>): Ne
 export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
   const paths = (target: NekConfigTarget, scope: NekConfigScope, cwd?: string) => {
     const context = runtime.target(target);
-    runtime.rememberCwd(target, cwd);
     return { context, path: mcpPath(context.layout, scope, cwd) };
   };
 
@@ -136,6 +135,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
           servers: Object.entries(own.servers).map<NekMcpServerEntry>(([name, config]) => ({
             name,
             scope,
+            path,
             config: config as NekMcpServerConfig,
             isOverride: false,
           })),
@@ -156,7 +156,13 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
       const servers: NekMcpServerEntry[] = [];
       for (const [name, config] of Object.entries(own.servers)) {
         if (isFullServer(config)) {
-          servers.push({ name, scope, config: config as NekMcpServerConfig, isOverride: false });
+          servers.push({
+            name,
+            scope,
+            path,
+            config: config as NekMcpServerConfig,
+            isOverride: false,
+          });
           continue;
         }
         const extra = overrideKeysOf(config);
@@ -179,6 +185,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
         servers.push({
           name,
           scope,
+          path,
           config: { ...base, ...config } as NekMcpServerConfig,
           isOverride: true,
         });

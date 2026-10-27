@@ -6,7 +6,7 @@
  */
 import type {
   NekAgentPreset,
-  NekAgentPresetEntry,
+  NekAgentPresetsView,
   NekConfigRevision,
   NekConfigScope,
   NekConfigTarget,
@@ -33,7 +33,7 @@ export interface NekResourcesResult {
 }
 
 export interface NekAgentGroup {
-  listAgentPresets: (target: NekConfigTarget, cwd?: string) => Promise<NekAgentPresetEntry[]>;
+  listAgentPresets: (target: NekConfigTarget, cwd?: string) => Promise<NekAgentPresetsView>;
   saveAgentPreset: (
     target: NekConfigTarget,
     scope: NekConfigScope,
@@ -84,7 +84,6 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
   return {
     listAgentPresets: async (target, cwd) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, cwd);
       return await listAgentPresets({
         executor: context.executor,
         agentDir: context.layout.agentDir,
@@ -95,7 +94,6 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
 
     saveAgentPreset: async (target, scope, preset, options) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, options.cwd);
       const result = await writeAgentPreset({
         executor: context.executor,
         agentDir: context.layout.agentDir,
@@ -113,7 +111,6 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
 
     deleteAgentPreset: async (target, scope, name, options) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, options.cwd);
       const result = await deleteAgentPreset({
         executor: context.executor,
         agentDir: context.layout.agentDir,
@@ -128,7 +125,6 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
 
     readInstructions: async (target, scope, cwd) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, cwd);
       const path = instructionsPath(context.layout, scope, cwd);
       const document = await readTextDocument(context.executor, path);
       return {
@@ -140,7 +136,6 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
 
     writeInstructions: async (target, scope, content, options) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, options.cwd);
       const path = instructionsPath(context.layout, scope, options.cwd);
       const document = await readTextDocument(context.executor, path);
       if (document.revision !== options.revision) throw conflict(path);

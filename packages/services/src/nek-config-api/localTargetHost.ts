@@ -4,6 +4,7 @@
  * 远程执行器（SSH 或远端 gui-server）由 host 注入；这里只负责把它们和外层契约的
  * `NekConfigTargetInfo` 拼起来，并给出本机 nek 的安装状态。
  */
+import os from "node:os";
 import type { NekConfigTarget, NekConfigTargetInfo } from "@zcode/shared/nek-protocol";
 import { NekLocator, NekLocatorError } from "../nek-agent/nekLocator.js";
 import { createLocalNekConfigHostExecutor } from "./hostExecutor.js";
@@ -16,6 +17,7 @@ export interface NekConfigRemoteHosts {
     Array<{
       connectionId: string;
       label: string;
+      hostname?: string;
       detail?: string;
       connected: boolean;
       nek: NekConfigTargetInfo["nek"];
@@ -68,6 +70,7 @@ export function createLocalNekConfigTargetHost(
     listTargets: async () => {
       const info: NekConfigTargetInfo = {
         target: { kind: "local" },
+        hostname: os.hostname(),
         label: options.label ?? "This computer",
         connected: true,
         nek: await localNekState(executor, locator),
@@ -76,6 +79,7 @@ export function createLocalNekConfigTargetHost(
       for (const remote of (await remotes?.list()) ?? []) {
         targets.push({
           target: { kind: "remote", connectionId: remote.connectionId },
+          hostname: remote.hostname ?? remote.label,
           label: remote.label,
           ...(remote.detail ? { detail: remote.detail } : {}),
           connected: remote.connected,

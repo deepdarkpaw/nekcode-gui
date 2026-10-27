@@ -80,6 +80,8 @@ export class NekConfigApi implements INekConfigApi {
     this.control.getModelCatalog(...args);
   listAvailableModels: INekConfigApi["listAvailableModels"] = (...args) =>
     this.control.listAvailableModels(...args);
+  listBuiltinTools: INekConfigApi["listBuiltinTools"] = (...args) =>
+    this.control.listBuiltinTools(...args);
 
   // ---- settings.json ----
 
@@ -140,10 +142,13 @@ export class NekConfigApi implements INekConfigApi {
   validate: INekConfigApi["validate"] = (...args) => this.control.validate(...args);
   reloadRunningSessions: INekConfigApi["reloadRunningSessions"] = async (target) =>
     await this.runtime.reload(target);
+  onReloadResult: INekConfigApi["onReloadResult"] = (target, listener) =>
+    this.runtime.onReloadResult(target, listener);
 
   // ---- 外部修改 ----
 
-  watch: INekConfigApi["watch"] = (target, listener) => this.runtime.watch(target, listener);
+  watch: INekConfigApi["watch"] = (target, listener, cwd) =>
+    this.runtime.watch(target, listener, cwd);
 
   // ---- 复制到远程 ----
 

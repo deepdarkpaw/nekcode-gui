@@ -9,6 +9,7 @@
 import { watch as fsWatch } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { join } from "node:path";
+import type { NekConfigScope } from "@zcode/shared/nek-protocol";
 import { baselineConfigFiles } from "./watchFiles.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { ABSENT_REVISION } from "./revision.js";
@@ -17,6 +18,7 @@ import { readTextDocument } from "./documents.js";
 export interface NekWatchChange {
   file: string;
   revision: string;
+  scope: NekConfigScope;
 }
 
 export interface NekWatchTarget {
@@ -25,8 +27,8 @@ export interface NekWatchTarget {
   executor: NekConfigHostExecutor;
   /** 是否本机（决定 fs.watch 还是轮询）。 */
   local: boolean;
-  /** 需要监视的目录（agent 目录、项目 `.nek` 及其 `agents/`）。 */
-  dirs: string[];
+  /** 需要监视的目录及其配置作用域。 */
+  dirs: Array<{ path: string; scope: NekConfigScope }>;
 }
 
 export interface NekWatchHubOptions {
@@ -80,12 +82,19 @@ export class NekWatchHub {
   }
 
   /** 本端写入后的即时通知（不等文件系统事件）。 */
-  publish(targetKey: string, changes: readonly NekWatchChange[]): void {
+  publish(
+    targetKey: string,
+    changes: ReadonlyArray<Omit<NekWatchChange, "scope"> & { scope?: NekConfigScope }>,
+  ): void {
     const state = this.states.get(targetKey);
     for (const change of changes) {
+      const scoped = {
+        ...change,
+        scope: change.scope ?? (state ? this.scopeOfFile(state.target, change.file) : "global"),
+      };
       if (state)
         state.episodes.set(change.file, { mtimeMs: 0, size: 0, revision: change.revision });
-      this.emit(targetKey, change);
+      this.emit(targetKey, scoped);
     }
   }
 
@@ -156,12 +165,12 @@ export class NekWatchHub {
     };
     for (const dir of state.target.dirs) {
       try {
-        const watcher = fsWatch(dir, { persistent: false }, () => schedule());
-        watcher.on("error", (error) => this.logger?.warn(`fs.watch failed for ${dir}`, error));
+        const watcher = fsWatch(dir.path, { persistent: false }, () => schedule());
+        watcher.on("error", (error) => this.logger?.warn(`fs.watch failed for ${dir.path}`, error));
         watchers.push(watcher);
       } catch (error) {
         // 目录还不存在（首次运行、项目没有 .nek）：轮询兜底会让它"永远不开始"，所以这里只记日志。
-        this.logger?.debug?.(`cannot watch ${dir}`, error);
+        this.logger?.debug?.(`cannot watch ${dir.path}`, error);
       }
     }
     if (watchers.length === 0) {
@@ -195,7 +204,11 @@ export class NekWatchHub {
     for (const [file, entry] of scanned) {
       const previous = state.episodes.get(file);
       if (previous && previous.revision === entry.revision) continue;
-      changes.push({ file, revision: entry.revision });
+      changes.push({
+        file,
+        revision: entry.revision,
+        scope: this.scopeOfFile(state.target, file),
+      });
     }
     for (const file of state.episodes.keys()) {
       if (!scanned.has(file)) changes.push({ file, revision: ABSENT_REVISION });
@@ -215,7 +228,7 @@ export class NekWatchHub {
   ): Promise<Map<string, { mtimeMs: number; size: number; revision: string }>> {
     const result = new Map<string, { mtimeMs: number; size: number; revision: string }>();
     for (const dir of target.dirs) {
-      for (const file of await this.listCandidates(target.executor, dir)) {
+      for (const file of await this.listCandidates(target.executor, dir.path)) {
         const info = await target.executor.stat(file);
         if (!info || info.isDirectory) continue;
         const cached = this.states.get(target.key)?.episodes.get(file);
@@ -228,6 +241,17 @@ export class NekWatchHub {
       }
     }
     return result;
+  }
+
+  private scopeOfFile(target: NekWatchTarget, file: string): NekConfigScope {
+    const normalized = file.replaceAll("\\", "/");
+    const project = target.dirs.find(
+      (dir) =>
+        dir.scope === "project" &&
+        (normalized === dir.path.replaceAll("\\", "/") ||
+          normalized.startsWith(`${dir.path.replaceAll("\\", "/")}/`)),
+    );
+    return project ? "project" : "global";
   }
 
   /** 目录下的候选文件：已知配置文件名 + `agents/*.md`。 */
