@@ -6,6 +6,7 @@
  */
 import type {
   NekAuthProviderStatus,
+  NekBuiltinTool,
   NekCatalogModel,
   NekConfigDiagnostic,
   NekConfigTarget,
@@ -20,12 +21,17 @@ import type {
 import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import type { NekModel } from "@zcode/shared/nek-protocol";
 import type { NekConfigRuntime } from "./runtime.js";
+import { listBuiltinTools } from "./builtinTools.js";
+import { validationError } from "./errors.js";
+import { readModelsSnapshot } from "./modelsDocument.js";
+import { modelsPath } from "./paths.js";
 
-export type ProviderSource = { providerId: string } | { draft: NekProviderDraft };
+export type ProviderSource = { providerId: string; draft?: NekProviderDraft };
 
 export interface NekControlGroup {
   getModelCatalog: (target: NekConfigTarget, ids?: string[]) => Promise<NekCatalogModel[]>;
   listAvailableModels: (target: NekConfigTarget) => Promise<NekCatalogModel[]>;
+  listBuiltinTools: (target: NekConfigTarget) => Promise<NekBuiltinTool[]>;
   fetchProviderModels: (
     target: NekConfigTarget,
     source: ProviderSource,
@@ -79,10 +85,53 @@ export function toCatalogModel(model: NekModel): NekCatalogModel {
   };
 }
 
-function sourceCommand(
+/**
+ * 请求来源 → nek 命令参数。
+ *
+ * 两种参数共用 `providerId`：没有 `draft` 时直接用已保存的 provider；有 `draft` 时
+ * 用**已保存的 apiKey**（草稿里没写就取 saved 值）加草稿里的其他字段，这样"改了 baseUrl /
+ * headers 但没重新输入密钥"也能测试。草稿里的 apiKey 优先，支持 `$ENV` / `!command`。
+ */
+async function sourceCommand(
+  runtime: NekConfigRuntime,
+  target: NekConfigTarget,
   source: ProviderSource,
-): { providerId: string } | { draft: NekProviderDraft } {
-  return "draft" in source ? { draft: source.draft } : { providerId: source.providerId };
+): Promise<{ providerId: string } | { draft: NekProviderDraft }> {
+  if (source.providerId.trim() === "") {
+    throw validationError("providerId is required", { providerId: "required" });
+  }
+  if (!source.draft) return { providerId: source.providerId };
+  const context = runtime.target(target);
+  const snapshot = await readModelsSnapshot(context.executor, modelsPath(context.layout));
+  const provider = snapshot.providers[source.providerId];
+  if (!provider) {
+    throw validationError(`unknown provider "${source.providerId}"`, { providerId: "unknown" });
+  }
+  const savedKey = typeof provider.apiKey === "string" ? provider.apiKey : undefined;
+  const apiKey = source.draft.apiKey ?? savedKey;
+  const headers = source.draft.headers ?? asHeaders(provider.headers);
+  const authHeader = source.draft.authHeader ?? asBoolean(provider.authHeader);
+  return {
+    draft: {
+      api: source.draft.api ?? (provider.api as NekProviderDraft["api"]),
+      baseUrl: source.draft.baseUrl ?? String(provider.baseUrl ?? ""),
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(headers === undefined ? {} : { headers }),
+      ...(authHeader === undefined ? {} : { authHeader }),
+    },
+  };
+}
+
+function asHeaders(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
@@ -103,9 +152,14 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
       return (data.models ?? []).map(toCatalogModel);
     },
 
+    listBuiltinTools: async (target) => {
+      runtime.target(target);
+      return listBuiltinTools();
+    },
+
     fetchProviderModels: async (target, source) => {
       const control = await runtime.control(target);
-      const resolved = sourceCommand(source);
+      const resolved = await sourceCommand(runtime, target, source);
       const command =
         "draft" in resolved
           ? { type: "fetch_provider_models" as const, draft: resolved.draft }
@@ -115,7 +169,7 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
 
     testProvider: async (target, source, modelId) => {
       const control = await runtime.control(target);
-      const resolved = sourceCommand(source);
+      const resolved = await sourceCommand(runtime, target, source);
       const command =
         "draft" in resolved
           ? { type: "test_provider" as const, modelId, draft: resolved.draft }

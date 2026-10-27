@@ -56,7 +56,7 @@ export function emptyProviderDraft(): ProviderDraft {
     idTouched: false,
     api: "openai-completions",
     baseUrl: "",
-    apiKey: { mode: "literal", value: "", keepExisting: false },
+    apiKey: { mode: "literal", value: "", keepExisting: false, remove: false },
     headers: [],
     authHeader: false,
     thinkingFormat: "",

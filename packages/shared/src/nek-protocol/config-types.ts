@@ -10,6 +10,7 @@ import type {
   NekEndpointApi,
   NekThinkingLevel,
 } from "./gui-rpc.js";
+import type { RemoteTarget } from "../remoteTarget.js";
 import type { NekMcpServerConfig } from "./gui-extension-api.js";
 
 // ============================================================================
@@ -20,6 +21,8 @@ export type NekConfigTarget = { kind: "local" } | { kind: "remote"; connectionId
 
 export interface NekConfigTargetInfo {
   target: NekConfigTarget;
+  /** 目标机器的主机名；本机由 host 使用 `os.hostname()` 填充。 */
+  hostname: string;
   /** 显示名：本机为 "本机"/"This computer"，远程为主机别名。 */
   label: string;
   /** `user@host:port` 等。 */
@@ -109,9 +112,12 @@ export interface NekModelsConfigView extends NekConfigRevision {
   diagnostics: NekConfigDiagnostic[];
 }
 
-/** 写入服务商：`apiKey` 为 undefined 表示保持原值不变。 */
+/**
+ * 写入服务商：`apiKey` 为 undefined 表示保持原值不变；`{ remove: true }` 明确删除。
+ * 空字符串不是删除指令，会被拒绝为校验错误。
+ */
 export interface NekProviderWrite extends Omit<NekProviderConfig, "apiKey"> {
-  apiKey?: string | { keep: true };
+  apiKey?: string | { keep: true } | { remove: true };
 }
 
 export interface NekProviderReferences {
@@ -207,6 +213,8 @@ export type NekSettingsPatch = { [K in keyof NekSettingsView]?: NekSettingsView[
 export interface NekMcpServerEntry {
   name: string;
   scope: NekConfigScope;
+  /** 实际提供该条目的配置文件来源。 */
+  path: string;
   config: NekMcpServerConfig;
   /** 项目级条目只覆盖 enabled/exposure/toolExposure 时为 true。 */
   isOverride: boolean;
@@ -275,6 +283,11 @@ export interface NekAgentPresetEntry extends NekConfigRevision {
   preset: NekAgentPreset;
 }
 
+export interface NekAgentPresetsView extends NekConfigRevision {
+  entries: NekAgentPresetEntry[];
+  diagnostics: NekConfigDiagnostic[];
+}
+
 // ============================================================================
 // 账号登录
 // ============================================================================
@@ -316,4 +329,121 @@ export interface NekCopyPreview {
   }>;
 }
 
+/**
+ * 复制项决议键格式固定为 `<kind>:<id>`，例如 `provider:anthropic` 或 `mcpServer:filesystem`。
+ */
 export type NekCopyResolution = Record<string, "overwrite" | "skip">;
+
+export type NekCopyItemStatus = "copied" | "skipped" | "failed";
+
+export interface NekCopyItemResult {
+  key: string;
+  status: NekCopyItemStatus;
+  /** `failed` 时是失败原因；`skipped` 时是跳过原因（可选）。 */
+  error?: string;
+}
+
+export interface NekCopyResult {
+  items: NekCopyItemResult[];
+}
+
+export interface NekBuiltinTool {
+  name: string;
+  description?: string;
+  /** nek 的 `DEFAULT_ACTIVE_TOOL_NAMES` 里包含该工具（新会话默认启用）。 */
+  defaultActive: boolean;
+}
+
+/**
+ * 写配置后让运行中的 nek 进程重新载入的结果。
+ *
+ * `failures` 是进程级失败（进程起不来、RPC 超时……）：它不影响其他进程的 reload，
+ * 但必须显示给用户并可重试，所以和"配置诊断"分开。
+ */
+export interface NekSessionReloadOutcome {
+  reloaded: number;
+  /** 当前回合未结束，已排队到回合结束后生效。 */
+  deferred: number;
+  diagnostics: NekConfigDiagnostic[];
+  failures: Array<{ sessionKey: string; message: string }>;
+}
+
+export interface NekHostFingerprint {
+  /** `SHA256:...` */
+  fingerprint: string;
+  keyType: string;
+  /** epoch ms */
+  addedAt: number;
+}
+
+export interface NekRemoteHost {
+  /** 与 `NekConfigTarget.connectionId` 一致。 */
+  connectionId: string;
+  alias: string;
+  /** 已去掉密码等 secret。 */
+  target: RemoteTarget;
+  authMethod: "agent" | "privateKey" | "password";
+  fingerprints: NekHostFingerprint[];
+  state: "connected" | "connecting" | "disconnected" | "failed";
+  error?: string;
+  nek: NekConfigTargetInfo["nek"];
+}
+
+export type NekHostTestResult =
+  | { ok: true; latencyMs: number; fingerprint: string }
+  | { ok: false; message: string };
+
+export interface NekInstallOptions {
+  channel?: "stable" | "dev";
+  repoUrl?: string;
+  nodeMirror?: string;
+}
+
+export type NekInstallResult =
+  | { ok: true; version: string }
+  | { ok: false; message: string; manualCommand: string };
+
+export interface NekUpdateCheck {
+  current: string;
+  latest: string;
+  updateAvailable: boolean;
+}
+
+export interface NekAppInfo {
+  guiVersion: string;
+  platform: string;
+  logsDir: string;
+}
+
+export interface INekSettingsHostApi {
+  listHosts(): Promise<NekRemoteHost[]>;
+  saveHost(input: {
+    connectionId?: string;
+    alias: string;
+    target: RemoteTarget;
+  }): Promise<NekRemoteHost>;
+  deleteHost(connectionId: string): Promise<void>;
+  connectHost(connectionId: string): Promise<void>;
+  disconnectHost(connectionId: string): Promise<void>;
+  testHost(connectionId: string): Promise<NekHostTestResult>;
+  installNek(
+    connectionId: string,
+    options: NekInstallOptions,
+    onLog: (line: string) => void,
+  ): Promise<NekInstallResult>;
+  /** 取消该远程主机当前正在进行的安装或更新。 */
+  cancelInstall(connectionId: string): Promise<void>;
+  removeFingerprint(connectionId: string, fingerprint: string): Promise<void>;
+  onHostsChanged(listener: () => void): () => void;
+  openPath(target: NekConfigTarget, path: string): Promise<void>;
+  openExternal(url: string): Promise<void>;
+  copyText(text: string): Promise<void>;
+  getAppInfo(): Promise<NekAppInfo>;
+  checkNekUpdate(target: NekConfigTarget): Promise<NekUpdateCheck>;
+  runNekUpdate(
+    target: NekConfigTarget,
+    onLog: (line: string) => void,
+  ): Promise<{ version: string }>;
+  exportDiagnostics(): Promise<{ path: string; sizeBytes: number }>;
+  openLogsDirectory(): Promise<void>;
+}

@@ -50,11 +50,13 @@ export function InstallNekDialog({
   const [options, setOptions] = useState<NekInstallOptions>({ channel: "stable" });
   const [logs, setLogs] = useState<string[]>([]);
   const [result, setResult] = useState<NekInstallResult | null>(null);
+  const [running, setRunning] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
   useEffect(() => {
     if (open) {
       setLogs([]);
       setResult(null);
+      setRunning(false);
     }
   }, [open]);
   useEffect(() => {
@@ -144,17 +146,32 @@ export function InstallNekDialog({
         ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t(result ? "common.close" : "common.cancel")}
+            {t(result || running ? "common.close" : "common.cancel")}
           </Button>
+          {running ? (
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                await api.cancelInstall(host.connectionId);
+              }}
+            >
+              {t("settings.nek.hosts.install.cancel")}
+            </Button>
+          ) : null}
           <AsyncButton
             onClick={async () => {
               setLogs([]);
               setResult(null);
-              const outcome = await api.installNek(host.connectionId, options, (line) =>
-                setLogs((current) => [...current, line].slice(-MAX_LOG_LINES)),
-              );
-              setResult(outcome);
-              if (!outcome.ok) throw new Error(outcome.message);
+              setRunning(true);
+              try {
+                const outcome = await api.installNek(host.connectionId, options, (line) =>
+                  setLogs((current) => [...current, line].slice(-MAX_LOG_LINES)),
+                );
+                setResult(outcome);
+                if (!outcome.ok) throw new Error(outcome.message);
+              } finally {
+                setRunning(false);
+              }
             }}
           >
             {t(

@@ -4,6 +4,7 @@
 import type {
   NekAgentPreset,
   NekAuthProviderStatus,
+  NekConfigDiagnostic,
   NekConfigError,
   NekConfigErrorCode,
   NekConfigTargetInfo,
@@ -39,6 +40,8 @@ export interface MockMachine {
   yaml: MockFile<MockYamlValues>;
   projectYaml: Map<string, MockFile<MockYamlValues>>;
   presets: MockPreset[];
+  /** 坏掉的预设文件（列表照常返回，问题在页面上显示）。 */
+  brokenPresets: NekConfigDiagnostic[];
   instructions: MockFile<string>;
   projectInstructions: Map<string, MockFile<string>>;
   auth: Map<string, NekAuthProviderStatus>;

@@ -60,6 +60,8 @@ function seedHosts(): NekRemoteHost[] {
 export class MockNekSettingsHostApi implements INekSettingsHostApi {
   hosts: NekRemoteHost[] = seedHosts();
   private readonly listeners = new Set<() => void>();
+  /** 每台主机当前进行中的安装；`cancelInstall` 用它作废进行中的迭代。 */
+  private readonly installs = new Map<string, symbol>();
   private seq = 0;
 
   constructor(
@@ -160,14 +162,27 @@ export class MockNekSettingsHostApi implements INekSettingsHostApi {
       "Installing nek 0.4.0",
       "Done",
     ];
-    for (const line of lines) {
-      await delay(Math.max(this.latencyMs, 200));
-      onLog(line);
+    const token = Symbol(connectionId);
+    this.installs.set(connectionId, token);
+    try {
+      for (const line of lines) {
+        await delay(Math.max(this.latencyMs, 200));
+        if (this.installs.get(connectionId) !== token) {
+          throw new Error("install cancelled");
+        }
+        onLog(line);
+      }
+      this.update(connectionId, {
+        nek: { state: "ready", version: "0.4.0", agentDir: "~/.nek/agent" },
+      });
+      return { ok: true as const, version: "0.4.0" };
+    } finally {
+      if (this.installs.get(connectionId) === token) this.installs.delete(connectionId);
     }
-    this.update(connectionId, {
-      nek: { state: "ready", version: "0.4.0", agentDir: "~/.nek/agent" },
-    });
-    return { ok: true as const, version: "0.4.0" };
+  }
+
+  async cancelInstall(connectionId: string) {
+    this.installs.delete(connectionId);
   }
 
   async removeFingerprint(connectionId: string, fingerprint: string) {

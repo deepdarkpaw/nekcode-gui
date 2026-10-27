@@ -5,6 +5,7 @@ import { useCallback, useMemo } from "react";
 import type {
   NekAgentPreset,
   NekAgentPresetEntry,
+  NekConfigDiagnostic,
   NekConfigScope,
   NekMcpConfigView,
   NekMcpExposure,
@@ -62,7 +63,7 @@ export function useNekMcpDoc(scope: NekConfigScope = "global", cwd?: string): Ne
           ...data,
           servers: upsertServer(
             data.servers,
-            { name: entry.name, scope, config: entry.config, isOverride: false },
+            { name: entry.name, scope, path: data.path, config: entry.config, isOverride: false },
             entry.previousName ?? entry.name,
           ),
         }),
@@ -115,9 +116,11 @@ export function useNekMcpDoc(scope: NekConfigScope = "global", cwd?: string): Ne
 // ---------------------------------------------------------------------------
 
 export interface AgentPresetsData {
-  /** 组合 revision（各文件 revision 拼接），仅用于识别变化。 */
+  /** 组合 revision（nek 扫描到的目录级 revision），仅用于识别变化。 */
   revision: string;
   entries: NekAgentPresetEntry[];
+  /** 坏掉的预设文件：不打断列表，但要让用户看见。 */
+  diagnostics: NekConfigDiagnostic[];
 }
 
 export interface NekAgentPresetsDocument extends NekDocument<AgentPresetsData> {
@@ -144,15 +147,28 @@ function isAgentsFile(file: string): boolean {
   return /\/agents\/[^/]+\.md$/.test(normalizeConfigPath(file));
 }
 
+/**
+ * 预设是**多文件**文档：全局 `agents/*.md` 与项目 `.nek/agents/*.md` 文件名可以相同，
+ * 所以按"作用域 + 文件名"匹配；没有 cwd 时项目级事件不属于本文档。
+ */
+function presetChangeMatches(
+  file: string,
+  scope: NekConfigScope,
+  cwd: string | undefined,
+): boolean {
+  if (!isAgentsFile(file)) return false;
+  return scope === "global" || Boolean(cwd);
+}
+
 export function useNekAgentPresetsDoc(cwd?: string): NekAgentPresetsDocument {
   const { config, target } = useNekSettingsContext();
   const doc = useNekDocument<AgentPresetsData>({
     load: async (api, current) => {
-      const entries = await api.listAgentPresets(current, cwd);
-      return { revision: entries.map((entry) => entry.revision).join("|"), entries };
+      const view = await api.listAgentPresets(current, cwd);
+      return { revision: view.revision, entries: view.entries, diagnostics: view.diagnostics };
     },
     deps: [cwd],
-    matchesFile: (file) => isAgentsFile(file),
+    matchesFile: (file, _data, scope) => presetChangeMatches(file, scope, cwd),
   });
   const { mutate } = doc;
 

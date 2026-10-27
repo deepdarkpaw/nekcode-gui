@@ -5,10 +5,13 @@
  * 内置预设来自 nek 代码（只读、无文件），用户与项目预设是 `<agentDir>/agents/*.md`
  * 与 `<cwd>/.nek/agents/*.md`。保存时保留未知 frontmatter 键与正文原文。
  */
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type {
   NekAgentPreset,
   NekAgentPresetEntry,
+  NekAgentPresetsView,
+  NekConfigDiagnostic,
   NekConfigScope,
 } from "@zcode/shared/nek-protocol";
 import {
@@ -167,15 +170,17 @@ export interface ListAgentPresetsArgs {
 /**
  * 列出全部预设：内置 → 用户 → 项目（同名时后者覆盖前者，与 nek 的覆盖顺序一致）。
  *
- * 坏文件不打断列表，但要留下日志：契约里的条目没有诊断字段，静默丢弃会让"预设不见了"无从排查。
+ * 坏文件不打断列表，但必须进入 diagnostics；revision 覆盖扫描到的整个目录。
  */
-export async function listAgentPresets(args: ListAgentPresetsArgs): Promise<NekAgentPresetEntry[]> {
+export async function listAgentPresets(args: ListAgentPresetsArgs): Promise<NekAgentPresetsView> {
   const { executor, agentDir, cwd, logger } = args;
   const entries: NekAgentPresetEntry[] = BUILTIN_PRESETS.map((preset) => ({
     revision: BUILTIN_PRESET_REVISION,
     source: "builtin",
     preset: { ...preset, tools: preset.tools ? [...preset.tools] : undefined },
   }));
+  const diagnostics: NekConfigDiagnostic[] = [];
+  const revisions: Array<{ path: string; revision: string }> = [];
   const scans: Array<{ dir: string; source: "user" | "project" }> = [
     { dir: agentsDir({ agentDir }, "global"), source: "user" },
   ];
@@ -184,14 +189,25 @@ export async function listAgentPresets(args: ListAgentPresetsArgs): Promise<NekA
   for (const [index, entry] of entries.entries()) byKey.set(entry.preset.name, index);
   for (const scan of scans) {
     for (const path of await listPresetFiles(executor, scan.dir)) {
-      let file: NekAgentPresetFile | null;
+      const document = await readTextDocument(executor, path);
+      if (document.content === null) continue;
+      revisions.push({ path, revision: document.revision });
+      let file: NekAgentPresetFile;
       try {
-        file = await readAgentPresetFile(executor, path);
+        const parsed = parseFrontmatterDocument(path, document.content);
+        file = {
+          path,
+          revision: document.revision,
+          frontmatter: parsed.frontmatter,
+          body: parsed.body,
+          preset: frontmatterToPreset(path, parsed.frontmatter, parsed.body),
+        };
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        diagnostics.push({ file: path, severity: "error", message });
         logger?.warn("skipping unreadable agent preset", path, error);
         continue;
       }
-      if (!file) continue;
       const entry: NekAgentPresetEntry = {
         revision: file.revision,
         source: scan.source,
@@ -207,7 +223,10 @@ export async function listAgentPresets(args: ListAgentPresetsArgs): Promise<NekA
       }
     }
   }
-  return entries;
+  const revision = createHash("sha256")
+    .update(JSON.stringify(revisions.sort((left, right) => left.path.localeCompare(right.path))))
+    .digest("hex");
+  return { entries, diagnostics, revision };
 }
 
 export interface WriteAgentPresetArgs {

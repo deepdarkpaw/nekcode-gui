@@ -3,10 +3,12 @@
  */
 import type {
   NekAgentPreset,
-  NekAgentPresetEntry,
+  NekAgentPresetsView,
   NekConfigScope,
+  NekCopyItemResult,
   NekCopyPreview,
   NekCopyResolution,
+  NekCopyResult,
   NekCopySelection,
   NekProjectTrust,
   NekSettingsPatch,
@@ -125,8 +127,9 @@ export function patchYaml(
   return touch(file);
 }
 
-export function listPresets(machine: MockMachine, cwd?: string): NekAgentPresetEntry[] {
-  return machine.presets
+/** 预设列表 + 诊断 + 目录级组合 revision（与 nek 侧的 `NekAgentPresetsView` 同形）。 */
+export function listPresets(machine: MockMachine, cwd?: string): NekAgentPresetsView {
+  const entries = machine.presets
     .filter((entry) => entry.source !== "project" || (cwd && entry.path?.startsWith(cwd)))
     .map((entry) =>
       clone({
@@ -136,6 +139,17 @@ export function listPresets(machine: MockMachine, cwd?: string): NekAgentPresetE
         preset: entry.preset,
       }),
     );
+  const diagnostics = machine.brokenPresets.filter(
+    (item) => cwd !== undefined || !item.file.includes("/.nek/agents/"),
+  );
+  return {
+    entries,
+    diagnostics: clone(diagnostics),
+    revision: entries
+      .map((entry) => `${entry.path ?? entry.preset.name}:${entry.revision}`)
+      .sort()
+      .join("|"),
+  };
 }
 
 function presetSource(scope: NekConfigScope): "user" | "project" {
@@ -293,19 +307,29 @@ export function copy(
   selection: NekCopySelection,
   resolution: NekCopyResolution,
   touch: Touch,
-): void {
+  /** 让指定项失败（测试逐项结果用）。 */
+  failItem: (key: string) => string | undefined = () => undefined,
+): NekCopyResult {
   const preview = previewCopy(from, to, selection);
-  const allowed = (kind: string, id: string, conflict: boolean) =>
-    !conflict || resolution[copyKey(kind, id)] === "overwrite";
+  const items: NekCopyItemResult[] = [];
   for (const item of preview.items) {
-    if (!allowed(item.kind, item.id, item.conflict)) {
+    const key = copyKey(item.kind, item.id);
+    const forced = failItem(key);
+    if (forced !== undefined) {
+      items.push({ key, status: "failed", error: forced });
+      continue;
+    }
+    if (item.conflict && resolution[key] !== "overwrite") {
+      items.push({ key, status: "skipped" });
       continue;
     }
     applyCopyItem(from, to, item.kind, item.id);
+    items.push({ key, status: "copied" });
   }
   touch(to.models);
   touch(to.settings);
   touch(to.mcp);
+  return { items };
 }
 
 function applyCopyItem(from: MockMachine, to: MockMachine, kind: string, id: string): void {

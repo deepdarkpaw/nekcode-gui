@@ -249,11 +249,26 @@ export interface NekAuthProviderStatus {
   name: string;
   /** 当前生效的凭据类型；none 表示未配置。 */
   kind: "oauth" | "api_key" | "env" | "none";
+  /**
+   * 凭据健康状态。`expired` / `refresh_failed` 表示需要重新登录。
+   *
+   * nek 的 `auth_status` 目前只返回 `kind` 与 `expiresAt`：`expired` 由 host 按到期时间推出，
+   * `refresh_failed` 还没有来源（nek 不暴露刷新结果）。见 `NekAuthProviderStatusWire`。
+   */
+  state: "ok" | "expired" | "refresh_failed";
   /** 该 provider 支持的登录方式。 */
   loginMethods: Array<"oauth" | "api_key">;
   /** OAuth 访问令牌到期时间（ISO 8601）；nek 会自动刷新。 */
   expiresAt?: string;
 }
+
+/**
+ * `auth_status` 的线上形状：nek 只返回 `kind` / `loginMethods` / `expiresAt`，
+ * `state` 由 host 归一化后补上（`NekAuthProviderStatus`）。
+ */
+export type NekAuthProviderStatusWire = Omit<NekAuthProviderStatus, "state"> & {
+  state?: NekAuthProviderStatus["state"];
+};
 
 export interface NekCatalogModel {
   provider: string;
@@ -333,7 +348,7 @@ export interface NekGuiRpcResponseData {
   share_session: { url: string };
   navigate_tree: { cancelled: boolean; editorText?: string };
   set_entry_label: Record<string, never>;
-  auth_status: { providers: NekAuthProviderStatus[] };
+  auth_status: { providers: NekAuthProviderStatusWire[] };
   auth_login: { provider: string };
   auth_logout: Record<string, never>;
   get_model_catalog: { models: NekCatalogModel[] };
