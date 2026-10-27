@@ -219,7 +219,6 @@ export const diagnosticMessages: readonly string[] = [
   "[PreviewPane] 读取 Office 文件预览失败",
   "[PreviewPane] 读取媒体预览失败",
   "[ProviderSettings] 加载目标 Environment 失败",
-  "[ProviderSettings] 重试加载根 Environment 失败",
   "[ProviderTemplatePicker] 创建供应商失败",
   "[RootWorkspaceContent] settings layer visibility changed",
   "[Root] WSL workspace session 关闭时跳过失败落盘，等待重连结果",

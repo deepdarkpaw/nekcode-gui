@@ -1446,7 +1446,6 @@ app.whenReady().then(async () => {
     },
     settingService: mainSettingService,
     locale: currentApplicationLocale,
-    resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
     updateFeedSource: resolveUpdateFeedSourceFromStartupConfig({
       argv: process.argv,
       env: process.env,
@@ -1570,7 +1569,7 @@ app.whenReady().then(async () => {
           logger,
           // 门禁只允许读自有更新源：上游地址下发的 minimalVersion 不是本仓库的控制面。
           // maybeBlockStartupForForceUpdate 在未配置时直接放行，这里保持同一判定来源。
-          endpointOrigin: ZCODIUM_UPDATE_ORIGIN || (await resolveCurrentZCodeEndpointOrigin()),
+          endpointOrigin: ZCODIUM_UPDATE_ORIGIN,
           onBlocked: () => {
             forceUpdateMainWindowCreationBlocked = true;
           },
