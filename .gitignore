@@ -4,6 +4,7 @@
 !README.md
 !NOTICE.md
 !THIRD-PARTY-NOTICES.md
+!PARITY.md
 !third-party/**/NOTICE.md
 
 # 隐藏目录默认忽略；CI 工作流与门禁基线是构建必需，显式放行。
