@@ -48,4 +48,13 @@ export interface IRemoteBackend extends IDisposable {
   exists(remotePath: string): Promise<boolean>;
   /** Read a small remote file (e.g. version string) */
   readFile(remotePath: string): Promise<string>;
+  /** Optional SSH-only OAuth callback forwarding. */
+  forwardLocalPortToRemote?(
+    localPort: number,
+    remotePort: number,
+  ): Promise<{
+    localPort: number;
+    remotePort: number;
+    close(): Promise<void>;
+  }>;
 }

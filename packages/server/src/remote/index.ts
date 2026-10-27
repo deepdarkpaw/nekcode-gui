@@ -30,6 +30,12 @@ export {
   type SSHJumpClientFactory,
 } from "./sshConfig.js";
 export {
+  DEFAULT_OAUTH_CALLBACK_PORTS,
+  forwardLocalPortToRemote,
+  type LocalPortForwardHandle,
+  type SSHForwardOutClient,
+} from "./sshPortForward.js";
+export {
   RemoteReconnectStateMachine,
   type ReconnectClock,
   type RemoteReconnectOptions,

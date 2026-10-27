@@ -38,6 +38,7 @@ import {
   type HostKeyConfirmation,
   type SSHHostKeyRejection,
 } from "@zcode/server/remote/sshKnownHosts.js";
+import { forwardLocalPortToRemote, type LocalPortForwardHandle } from "./sshPortForward.js";
 import {
   createSSHUploadProgressReporter,
   formatSSHUploadError,
@@ -361,6 +362,15 @@ export class SSHBackend implements IRemoteBackend {
         });
       });
     });
+  }
+
+  async forwardLocalPortToRemote(
+    localPort: number,
+    remotePort: number,
+  ): Promise<LocalPortForwardHandle> {
+    await this.ensureConnected();
+    this.assertNotDisposed();
+    return forwardLocalPortToRemote(this.client, localPort, remotePort);
   }
 
   async exists(remotePath: string): Promise<boolean> {
