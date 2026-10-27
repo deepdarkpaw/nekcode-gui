@@ -112,7 +112,7 @@ test("runtime injection plus sourcemaps use one extract/repack and preserve nati
 test("unchanged archive is not repacked and extra resources still get cleaned", async (t) => {
   const f = await fixture(t);
   const before = await readFile(f.appAsarPath);
-  const extra = join(f.resourcesDir, "web-remote");
+  const extra = join(f.resourcesDir, "remote-assets");
   await mkdir(extra);
   await writeFile(join(extra, "mobile.js"), "mobile\n//# sourceMappingURL=mobile.js.map\n");
   await writeFile(join(extra, "mobile.js.map"), "{}");

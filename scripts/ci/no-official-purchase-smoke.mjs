@@ -91,16 +91,6 @@ try {
       await page.keyboard.press("Enter");
       await page.getByRole("region", { name: "Model settings" }).waitFor();
       assert.equal((await page.evaluate(() => window.purchaseFixture)).configured, 1);
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
-      await page.getByRole("menuitem").waitFor();
-      await page.keyboard.press("Escape");
-      await page.getByRole("menu").waitFor({ state: "hidden" });
-      assert.equal((await page.evaluate(() => window.purchaseFixture)).usage, 0);
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
-      const items = page.getByRole("menuitem");
-      assert.equal(await items.count(), 1);
-      await items.first().press("Enter");
-      assert.equal((await page.evaluate(() => window.purchaseFixture)).usage, 1);
       assert.equal(await page.getByText(/开通后启用|enabled after subscription/i).count(), 0);
       if (process.env.ZCODE_TEST_SCREENSHOT_DIR) {
         await page.waitForTimeout(300);
@@ -115,7 +105,7 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(requests, []);
   console.log(
-    "Purchase removal walkthrough passed: model setup action, usage menu cancellation, zh/en narrow/wide; no purchase controls, embedded payment pages or external requests.",
+    "Purchase removal walkthrough passed: model setup action, zh/en narrow/wide; no purchase controls, embedded payment pages or external requests.",
   );
 } finally {
   await browser?.close();

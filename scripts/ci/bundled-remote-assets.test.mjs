@@ -3,19 +3,14 @@ import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { bundleRemoteAssets, verifyBundledRemoteAssets } from "../bundle-remote-assets.mjs";
-import { createRemoteAssetFixture as fixture, platform, version } from "./remoteAssetsFixture.mjs";
+import { createRemoteAssetFixture as fixture, version } from "./remoteAssetsFixture.mjs";
 
 test("a relocatable bundle includes only verified archives and a manifest, retaining tar bytes", async (t) => {
   const { root, manifest, options } = await fixture(t);
   await bundleRemoteAssets(options);
   const bundled = await verifyBundledRemoteAssets(options.outputDirectory, version);
   assert.equal(bundled.sourceCommit, options.sourceCommit);
-  assert.equal(bundled.components.length, 7);
-  assert.ok(
-    bundled.components
-      .find((component) => component.id === "glm")
-      .requiredPaths.includes("packages/node-repl-host/dist/mcp/server.js"),
-  );
+  assert.equal(bundled.components.length, 6);
   assert.deepEqual((await readdir(options.outputDirectory)).sort(), [
     "components",
     "manifest-linux-x64.json",
@@ -56,14 +51,7 @@ test("partial, duplicate, wrong platform/version and escaping manifests cannot b
 test("missing source executors and corrupt archives fail; failed rebuild withdraws old manifest", async (t) => {
   const { root, manifest, options } = await fixture(t);
   await bundleRemoteAssets(options);
-  const executor = join(
-    root,
-    "releases",
-    version,
-    "glm",
-    platform,
-    "packages/node-repl-host/dist/mcp/server.js",
-  );
+  const executor = join(root, "releases", version, "server", "zcode-server.cjs");
   await rm(executor);
   await assert.rejects(bundleRemoteAssets(options), /Missing remote component input/);
   await assert.rejects(readFile(join(options.outputDirectory, "manifest-linux-x64.json")), {

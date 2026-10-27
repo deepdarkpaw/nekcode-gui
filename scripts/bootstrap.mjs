@@ -9,7 +9,6 @@ import { runCommand } from "./spawn-command.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
-const gitCommand = "git";
 const withRemoteAssets = process.argv.includes("--with-remote");
 
 function prependPathEntries(pathValue, entries) {
@@ -88,13 +87,6 @@ function resolveBootstrapWithRemoteEnv(baseEnv = process.env) {
 const bootstrapWithRemoteEnv = resolveBootstrapWithRemoteEnv();
 const pnpmCommand = resolvePnpmCommand();
 
-function runGit(args) {
-  runCommand(gitCommand, args, {
-    cwd: rootDir,
-    env: process.env,
-  });
-}
-
 function runPnpm(args, options = {}) {
   runCommand(pnpmCommand, args, {
     cwd: rootDir,
@@ -149,7 +141,7 @@ function runBootstrapDesktopBuild() {
 }
 
 function runBootstrapWithRemoteBuild() {
-  for (const filter of ["@zcode/rpc", "@zcode/web", "@zcode/formal-proof"]) {
+  for (const filter of ["@zcode/rpc", "@zcode/formal-proof"]) {
     // pnpm -r 会在 bootstrap:with-remote 的最终构建阶段并发启动多个 Vite/esbuild/tsup。
     // remote assets 已经占过一轮内存峰值，这里显式串行包构建，且不改变 build:bootstrap/CI 命令。
     runPnpm(["--filter", filter, "build"]);
@@ -157,8 +149,6 @@ function runBootstrapWithRemoteBuild() {
   runBootstrapServerBuild();
   runBootstrapDesktopBuild();
 }
-
-runGit(["submodule", "update", "--init", "--recursive", "apps/zcode-cli"]);
 
 runPnpm(withRemoteAssets ? ["install", "--config.confirmModulesPurge=false"] : ["install"]);
 

@@ -11,54 +11,6 @@ function item(
   return { id, type: "prompt", img, labels, contents };
 }
 
-const recommendations = [
-  item(
-    "explain-project",
-    "folder-search",
-    { cn: "了解这个项目", en: "Explore this project" },
-    {
-      cn: "阅读当前项目的说明和主要入口，解释目录结构、运行方式与关键模块，并指出需要进一步确认的地方。",
-      en: "Read this project's documentation and main entry points. Explain its structure, how to run it, and the key modules. Identify anything that needs further verification.",
-    },
-  ),
-  item(
-    "review-changes",
-    "git-pull-request",
-    { cn: "审查当前改动", en: "Review current changes" },
-    {
-      cn: "审查当前 Git 改动，优先找出可能的错误、兼容性问题和缺失的验证。按严重程度说明依据，先不要修改文件。",
-      en: "Review the current Git changes for bugs, compatibility problems, and missing validation. Explain findings in severity order with evidence. Do not edit files yet.",
-    },
-  ),
-  item(
-    "investigate-failure",
-    "bug",
-    { cn: "排查问题", en: "Investigate a problem" },
-    {
-      cn: "帮我排查当前项目的问题。先确认复现步骤、预期行为和实际结果，再结合源码与必要的本地诊断区分已确认原因和待验证假设。",
-      en: "Help investigate a problem in this project. First establish reproduction steps, expected behavior, and actual results. Use source code and relevant local diagnostics to distinguish confirmed causes from hypotheses.",
-    },
-  ),
-  item(
-    "plan-change",
-    "list-checks",
-    { cn: "规划功能实现", en: "Plan a feature" },
-    {
-      cn: "根据当前项目的架构，帮我规划一个功能改动。先确认目标与验收条件，再列出涉及的模块、接口、风险和可分批验证的实现步骤。",
-      en: "Help plan a feature change using this project's architecture. Clarify the objective and acceptance criteria, then identify modules, interfaces, risks, and implementation steps that can be validated separately.",
-    },
-  ),
-  item(
-    "summarize-material",
-    "file-text",
-    { cn: "整理材料", en: "Summarize material" },
-    {
-      cn: "整理我提供的文件或材料，提取主要结论、依据和待办事项。保留来源定位，区分原文事实与推断，并说明无法读取或尚未核实的内容。",
-      en: "Summarize the files or material I provide, extracting conclusions, evidence, and action items. Preserve source references, distinguish facts from inferences, and identify unreadable or unverified content.",
-    },
-  ),
-];
-
 const scheduledPrompts = [
   {
     ...item(
@@ -100,18 +52,6 @@ const scheduledPrompts = [
 
 /** Read-only product content; no account, endpoint, image URL, or device context. */
 const bundledScenes: ClientSceneConfig[] = [
-  {
-    namespace: "zcodium",
-    scene: "draft-suggestion",
-    options: {
-      prompts: {
-        id: "prompts",
-        type: "prompts",
-        contents: { cn: "开始任务", en: "Start a task" },
-        items: recommendations,
-      },
-    },
-  },
   {
     namespace: "zcodium",
     scene: "scheduled-task",

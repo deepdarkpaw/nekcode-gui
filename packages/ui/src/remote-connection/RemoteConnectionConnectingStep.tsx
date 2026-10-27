@@ -5,7 +5,6 @@ import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { usePlatform } from "@/hooks/usePlatform.js";
 import {
   isRemoteConnectionLogScrolledToLatest,
   scrollRemoteConnectionLogsToLatestIfFollowing,
@@ -25,7 +24,6 @@ export function RemoteConnectionConnectingStep({
   onRetry: () => void;
 }) {
   const { intl } = useZCodeIntl();
-  const platform = usePlatform();
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowLatestLogRef = useRef(true);
   const latestLogId = logs.at(-1)?.id;
@@ -111,17 +109,6 @@ export function RemoteConnectionConnectingStep({
           >
             <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
             <span className="min-w-0 flex-1">{errorMessage}</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void platform.openFeedback();
-              }}
-              className="h-7 shrink-0 border-warning/30 text-warning hover:bg-warning/10"
-            >
-              {intl.formatMessage({ id: "remoteConnection.feedback" })}
-            </Button>
           </div>
         ) : null}
       </div>

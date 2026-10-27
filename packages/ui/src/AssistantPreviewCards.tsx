@@ -8,7 +8,6 @@ import {
   type AssistantPreviewCardFileStatService,
   type AssistantPreviewCardsAutoOpenRequest,
   getAssistantPreviewCardFilePath,
-  shouldOpenAssistantHtmlInBrowser,
 } from "@/lib/assistantPreviewCards.js";
 import {
   getAssistantPreviewCardsValidationSignature,
@@ -80,20 +79,10 @@ interface AssistantPreviewCardsProps {
   onAutoOpenPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
 }
 
-function shouldRenderAssistantPreviewCardAsFile(
-  card: AssistantPreviewCard,
-  scope: {
-    workspaceIdentity?: string;
-    workspaceRemoteSessionId?: string;
-  },
-): boolean {
+/** 本地 file:// 网页卡片按文件卡片渲染并在代码查看器中打开。 */
+function shouldRenderAssistantPreviewCardAsFile(card: AssistantPreviewCard): boolean {
   const filePath = getAssistantPreviewCardFilePath(card);
-  return (
-    card.type !== "website" ||
-    (card.url.startsWith("file://") &&
-      filePath !== null &&
-      !shouldOpenAssistantHtmlInBrowser({ path: filePath, ...scope }))
-  );
+  return card.type !== "website" || (card.url.startsWith("file://") && filePath !== null);
 }
 
 function useAssistantPreviewCardValidation(
@@ -267,10 +256,7 @@ function AssistantPreviewCardRow({
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
 }) {
   const filePath = getAssistantPreviewCardFilePath(card);
-  const renderAsFile = shouldRenderAssistantPreviewCardAsFile(card, {
-    workspaceIdentity,
-    workspaceRemoteSessionId,
-  });
+  const renderAsFile = shouldRenderAssistantPreviewCardAsFile(card);
   const descriptor = filePath ? resolveFileDisplayDescriptor(filePath) : null;
   const fileSource =
     renderAsFile && filePath

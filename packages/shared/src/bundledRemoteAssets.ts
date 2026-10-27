@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { BUILTIN_PLUGIN_REQUIRED_PATHS, cuaRuntimeRequiredPaths } from "./builtinPluginAssets.js";
 import { ACTIVE_REMOTE_RESOURCE_PACKAGE_IDS } from "./remoteResourcePackages.js";
 
 export const BUNDLED_REMOTE_PLATFORM = "linux-x64";
@@ -9,7 +8,6 @@ const mounts: Record<string, string> = {
   "server-bundle": "server",
   "node-runtime": "node/linux-x64",
   "node-pty": "node-pty/linux-x64",
-  glm: "glm/linux-x64",
   bfs: "tools/linux-x64/bfs",
   ripgrep: "tools/linux-x64/ripgrep",
   ugrep: "tools/linux-x64/ugrep",
@@ -23,15 +21,6 @@ export function remoteComponentRequiredPaths(id: string): string[] {
       return ["node", "LICENSE.node.txt", "NODE-SOURCES.json"];
     case "node-pty":
       return ["pty.node"];
-    case "glm":
-      return [
-        "zcode.cjs",
-        ...BUILTIN_PLUGIN_REQUIRED_PATHS.map((path) => `packages/${path}`),
-        ...cuaRuntimeRequiredPaths("linux", "x64").map((path) => `packages/node-repl-host/${path}`),
-        "packages/bundled-skills/skills/dynamic-workflows/SKILL.md",
-        "packages/bundled-skills/skills/dynamic-workflows/patterns.md",
-        "packages/bundled-skills/skills/dynamic-workflows/examples.md",
-      ];
     case "bfs":
       return ["bfs"];
     case "ripgrep":

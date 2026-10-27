@@ -1,16 +1,10 @@
 #!/usr/bin/env node
-import {
-  BUILTIN_PLUGIN_ASSETS,
-  BUILTIN_PLUGIN_REQUIRED_PATHS,
-  BUILTIN_PLUGIN_TOP_LEVEL_PATHS,
-} from "@zcode/shared/builtin-plugin-assets";
 /* eslint-disable max-lines */
 
-import { access, cp, mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import {
   chmodSync,
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -19,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -33,8 +27,6 @@ import {
 import { runCommand } from "./spawn-command.mjs";
 import { prepareRemoteNode, REMOTE_NODE_VERSION } from "./remote-node-runtime.mjs";
 import { bundleRepositoryRemoteAssets } from "./bundle-remote-assets.mjs";
-import { validateBuiltinPluginAssets } from "./builtin-plugin-assets.mjs";
-import { stageCuaDriverRuntime } from "./cua-driver-runtime-assets.mjs";
 import { getBuildMetadata } from "../packages/desktop/scripts/build-metadata.mjs";
 export { DEFAULT_NODE_DIST_BASE, nodeDistBase } from "./remote-node-runtime.mjs";
 
@@ -49,43 +41,12 @@ const mockCdnDir = join(desktopDir, "mock-cdn");
 // 的产物名匹配同源。直接读 package.json 会让 manifest.appVersion 停在裸基线上，与构建期滚动
 // 版本串漂移，beforePack 的相等校验必炸。getBuildMetadata 与打包侧读取同一函数，浅克隆告警也一致。
 const { appVersion: version } = getBuildMetadata();
-const agentVersion = require(join(rootDir, "apps/zcode-cli/package.json")).version;
 const releaseDir = join(mockCdnDir, "releases", version);
 const nodeVersion = REMOTE_NODE_VERSION;
 const componentSchemaVersion = 1;
 const remotePlatforms = ["linux-x64"];
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const isBootstrapWithRemote = process.env.ZCODE_BOOTSTRAP_WITH_REMOTE === "1";
-
-const BROWSER_USE_PLUGIN_PACKAGE_NAME = "@zcode/browser-use-plugin";
-const remoteOfficialPluginPackages = BUILTIN_PLUGIN_ASSETS;
-// 随 CLI 内置的技能包（不是插件）：远端 agent 的 bootstrap 沿官方插件同款候选目录在 zcode.cjs 旁
-// 找 packages/bundled-skills 并原地读取；与 packages/desktop/scripts/prepare-agent-node-bundle.mjs 同一份清单。
-const remoteBundledSkillPack = {
-  relativePath: "apps/zcode-cli/packages/bundled-skills",
-  requiredPaths: [
-    "skills/dynamic-workflows/SKILL.md",
-    "skills/dynamic-workflows/patterns.md",
-    "skills/dynamic-workflows/examples.md",
-  ],
-  stagedPath: "packages/bundled-skills",
-  topLevelPaths: ["skills"],
-};
-const remoteOfficialPluginTopLevelPaths = new Set(BUILTIN_PLUGIN_TOP_LEVEL_PATHS);
-const excludedOfficialPluginAssetNames = new Set([
-  ".DS_Store",
-  ".venv",
-  "__pycache__",
-  "node_modules",
-]);
-
-function shouldCopyOfficialPluginAsset(sourcePath) {
-  const name = basename(sourcePath);
-  return !excludedOfficialPluginAssetNames.has(name) && !name.endsWith(".pyc");
-}
-const remoteOfficialPluginRequiredPaths = BUILTIN_PLUGIN_REQUIRED_PATHS.map(
-  (path) => `packages/${path}`,
-);
 
 function resolveDedicatedPackageRoot(packageName, fromDir) {
   const packageEntryPath = require.resolve(packageName, { paths: [fromDir] });
@@ -218,149 +179,6 @@ function copyNodePtyPrebuilds() {
   }
 }
 
-function buildRemoteOfficialPluginRuntimes() {
-  for (const plugin of remoteOfficialPluginPackages) {
-    if (!plugin.requiresRuntime) continue;
-    console.log(`==> Building remote official plugin runtime: ${plugin.packageName}`);
-    if (isBootstrapWithRemote) {
-      buildRemoteOfficialPluginRuntimeForBootstrap(plugin);
-      assertRemoteOfficialPluginRuntime(plugin);
-      continue;
-    }
-
-    runCommand(
-      pnpmCommand,
-      ["--dir", join(rootDir, "apps/zcode-cli"), "--filter", plugin.packageName, "build"],
-      {
-        cwd: rootDir,
-        env: process.env,
-      },
-    );
-    assertRemoteOfficialPluginRuntime(plugin);
-  }
-}
-
-function buildRemoteOfficialPluginRuntimeForBootstrap(plugin) {
-  const pluginRoot = join(rootDir, plugin.relativePath);
-  const hasCompleteRuntime = plugin.requiredRuntimePaths.every((relativePath) =>
-    existsSync(join(pluginRoot, ...relativePath.split("/"))),
-  );
-  if (plugin.packageName !== BROWSER_USE_PLUGIN_PACKAGE_NAME && hasCompleteRuntime) {
-    console.log(`  [skip] reuse existing remote official plugin runtime: ${plugin.packageName}`);
-    return;
-  }
-
-  // bootstrap:with-remote 会串行准备远端资源和工作区构建。
-  // 官方插件 runtime 只在 stage 资源时需要，这里用当前 Node 执行等价构建，避免再嵌套 pnpm/tsc shim。
-  // browser-use 的 MCP server 与 browser-client 必须来自同一次构建；只凭旧 server.js 判定可复用
-  // 会让远端资源混入陈旧或缺失的 client，因此 bootstrap 模式下对该插件无条件重建。
-  runCommand(process.execPath, ["../../node_modules/typescript/bin/tsc"], {
-    cwd: pluginRoot,
-    env: process.env,
-  });
-  runCommand(process.execPath, [plugin.runtimeBuildScript], {
-    cwd: pluginRoot,
-    env: process.env,
-  });
-}
-
-function assertRemoteOfficialPluginRuntime(plugin) {
-  const pluginRoot = join(rootDir, plugin.relativePath);
-  for (const relativePath of plugin.requiredRuntimePaths) {
-    const runtimePath = join(pluginRoot, ...relativePath.split("/"));
-    if (!existsSync(runtimePath)) {
-      throw new Error(`[prepare-prebuilds] missing remote official plugin runtime: ${runtimePath}`);
-    }
-  }
-}
-
-async function stageRemoteOfficialPlugins(glmDir) {
-  for (const plugin of remoteOfficialPluginPackages) {
-    const sourceRoot = join(rootDir, plugin.relativePath);
-    const manifestPath = join(sourceRoot, ".zcodium-plugin", "plugin.json");
-    if (!existsSync(manifestPath)) {
-      throw new Error(
-        `[prepare-prebuilds] missing remote official plugin manifest: ${manifestPath}`,
-      );
-    }
-
-    const targetRoot = join(glmDir, ...plugin.stagedPath.split("/"));
-    mkdirSync(targetRoot, { recursive: true });
-    for (const entryName of remoteOfficialPluginTopLevelPaths) {
-      const sourcePath = join(sourceRoot, entryName);
-      if (!existsSync(sourcePath)) continue;
-      cpSync(sourcePath, join(targetRoot, entryName), {
-        recursive: true,
-        filter: shouldCopyOfficialPluginAsset,
-      });
-    }
-    if (plugin.directory === "node-repl-host") {
-      await stageCuaDriverRuntime(targetRoot, { platform: "linux", arch: "x64" });
-    }
-    for (const relativePath of remoteOfficialPluginRequiredPaths) {
-      if (!relativePath.startsWith(`${plugin.stagedPath}/`)) continue;
-      const stagedAssetPath = join(glmDir, ...relativePath.split("/"));
-      if (!existsSync(stagedAssetPath)) {
-        throw new Error(
-          `[prepare-prebuilds] missing staged remote official plugin seed asset: ${stagedAssetPath}`,
-        );
-      }
-    }
-    console.log(`  [ok] mock-cdn glm official plugin ${plugin.stagedPath}`);
-  }
-  await validateBuiltinPluginAssets(join(glmDir, "packages"), { platform: "linux", arch: "x64" });
-}
-
-async function stageRemoteBundledSkillPack(glmDir) {
-  const sourceRoot = join(rootDir, remoteBundledSkillPack.relativePath);
-  const targetRoot = join(glmDir, ...remoteBundledSkillPack.stagedPath.split("/"));
-  await mkdir(targetRoot, { recursive: true });
-  for (const entryName of remoteBundledSkillPack.topLevelPaths) {
-    const sourcePath = join(sourceRoot, entryName);
-    await cp(sourcePath, join(targetRoot, entryName), {
-      recursive: true,
-      filter: shouldCopyOfficialPluginAsset,
-    });
-  }
-  for (const relativePath of remoteBundledSkillPack.requiredPaths) {
-    const stagedAssetPath = join(targetRoot, ...relativePath.split("/"));
-    await access(stagedAssetPath);
-  }
-  console.log(`  [ok] mock-cdn glm bundled skill pack ${remoteBundledSkillPack.stagedPath}`);
-}
-
-// 远端 agent 现在跑编译出来的 zcode.cjs（而不是各平台独立的原生二进制）：
-// 远端部署时已经有一份独立 node（跑 zcode-server.cjs），agent 复用它执行 zcode.cjs 即可，
-// 不必再为每个平台准备一份内嵌 node 的 SEA 二进制。zcode.cjs 跨平台同一份，逐平台只是放进各自的
-// glm/<platform> 组件目录，保持现有 manifest 组件结构不变。
-async function stageRemoteAgentBundles() {
-  console.log("==> Building zcode-cli bundle for remote agents");
-  // 复用桌面同款构建脚本（turbo build:desktop-agent --filter=@zcode/cli），命中缓存时几乎瞬时。
-  runCommand(process.execPath, [join(rootDir, "scripts/build-desktop-agent-cli.mjs")], {
-    cwd: rootDir,
-    env: process.env,
-  });
-  // browser-use runtime 的 tsc 依赖 @zcode/core/dist。远端资产也必须先构建
-  // agent CLI 依赖，避免 CI 干净检出时被开发机缓存掩盖的 TS2307。
-  buildRemoteOfficialPluginRuntimes();
-  const cliBundlePath = join(rootDir, "apps/zcode-cli/packages/cli/dist/zcode.cjs");
-  if (!existsSync(cliBundlePath)) {
-    throw new Error(`[prepare-prebuilds] expected cli bundle missing: ${cliBundlePath}`);
-  }
-
-  for (const platformKey of remotePlatforms) {
-    const glmDir = join(releaseDir, "glm", platformKey);
-    // 干净重建：glm 组件现在只含 zcode.cjs，清掉历史遗留的原生二进制 / 旧 meta，
-    // 避免被打进组件 tar 把远端资源撑大。
-    rmSync(glmDir, { recursive: true, force: true });
-    mkdirSync(glmDir, { recursive: true });
-    copyFileSync(cliBundlePath, join(glmDir, "zcode.cjs"));
-    await stageRemoteOfficialPlugins(glmDir);
-    await stageRemoteBundledSkillPack(glmDir);
-    console.log(`  [ok] mock-cdn glm/${platformKey}/zcode.cjs`);
-  }
-}
-
 export async function prepareRemoteNativeSearchTools({
   platforms = remotePlatforms,
   outputDir = join(releaseDir, "tools"),
@@ -481,13 +299,6 @@ export function buildRemoteComponentDefinitions(platformKey) {
       semanticPrefix: resolveNodePtyPackageVersion(platformKey),
       mount: joinPosix("node-pty", platformKey),
       sourcePath: join(releaseDir, "node-pty", platformKey),
-    },
-    {
-      id: "glm",
-      // Agent bundle 的版本来自 CLI 构建输入，不沿用旧原生运行时描述符。
-      semanticPrefix: agentVersion,
-      mount: joinPosix("glm", platformKey),
-      sourcePath: join(releaseDir, "glm", platformKey),
     },
   ];
 
@@ -680,13 +491,11 @@ async function main() {
   buildServerBundle();
   copyServerBundle();
   copyNodePtyPrebuilds();
-  await stageRemoteAgentBundles();
   await prepareRemoteNativeSearchTools();
-  // 修复：server、pty、agent 均可独立下载，需在组件哈希计算前补齐各自的声明。
+  // 修复：server、pty 均可独立下载，需在组件哈希计算前补齐各自的声明。
   await stageThirdPartyNotices(join(releaseDir, "server"), rootDir);
   for (const platformKey of remotePlatforms) {
     await stageThirdPartyNotices(join(releaseDir, "node-pty", platformKey), rootDir);
-    await stageThirdPartyNotices(join(releaseDir, "glm", platformKey), rootDir);
   }
   prepareRemoteComponentArtifacts();
   await bundleRepositoryRemoteAssets(rootDir);

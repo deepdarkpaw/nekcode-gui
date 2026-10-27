@@ -1,15 +1,9 @@
 /* eslint-disable max-lines */
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
-  DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS,
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
-  ZCODE_PLUGIN_MANIFEST_DIR_NAME,
-  ZCODE_USER_DATA_DIR_NAME,
   createAgentStateId,
-  createPluginAgentStateId,
   modelSelectionSchema,
-  parsePluginSubagentModelSelectionOverrides,
   type AgentCreateParams,
   type AgentDeleteParams,
   type AgentDiagnostic,
@@ -20,8 +14,6 @@ import {
   type AgentsListResult,
   type BuiltInSubagentModelOverrideParams,
   type BuiltInSubagentModelSelectionOverrides,
-  type PluginSubagentModelOverrideParams,
-  type PluginSubagentModelSelectionOverrides,
   type SubAgentConfig,
   type SubagentsListMode,
   type ZCodeProvider,
@@ -30,10 +22,8 @@ import { normalizeSubagentModelSelection } from "./subagentModelSelection.js";
 import { serializeSubagentMarkdown, parseSubagentMarkdown } from "./subagentMarkdown.js";
 import {
   resolveSubagentStateFile,
-  resolveUserHomeDir,
   resolveUserSubagentRoot,
   resolveWorkspaceSubagentRoot,
-  resolveZCodeStorageRoot,
   type SubagentStorageOptions,
 } from "./subagentStorage.js";
 import type { ISubagentsService } from "./subagents.js";
@@ -41,7 +31,6 @@ import { atomicWriteText } from "#src/fs/atomicFileUtils.js";
 import {
   migrateUserSubagentMarkdown,
   migrateSubagentStateFile,
-  scanOfficialPluginCacheRoots,
   withFileLock,
 } from "@zcode/shared/node";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
@@ -50,45 +39,17 @@ const subagentLogger = createServiceLogger("subagents");
 
 interface AgentsStateFile {
   builtInModelSelectionOverrides: BuiltInSubagentModelSelectionOverrides;
-  pluginAgentModelSelectionOverrides: PluginSubagentModelSelectionOverrides;
   disabledAgentIds: string[];
   // 仅供旧版本回滚保留；新版存在选择字段后，禁止再从这两个字段恢复覆盖。
   builtInModelOverrides?: unknown;
   builtInThoughtLevelOverrides?: unknown;
 }
 
-interface InstalledPluginsStateFile {
-  plugins?: unknown;
-}
-
-interface PluginConfigSummary {
-  enabledPlugins: Record<string, boolean>;
-  suppressedBuiltins: string[];
-}
-
-interface InstalledPluginRecord {
-  id: string;
-  installPath: string;
-  name: string;
-  scope?: "user" | "workspace";
-  projectPath?: string;
-}
-
 interface SubagentsServiceOptions extends SubagentStorageOptions {
   isDesktopRuntime?: boolean;
 }
 
-interface PluginAgentDiscovery {
-  profiles: AgentSummary[];
-  runtimeAgents: AgentSummary[];
-}
-
 const BUILT_IN_AGENT_NAMES = new Set(["general-purpose", "Explore"]);
-const PLUGIN_MANIFEST_PATHS = [
-  join(ZCODE_PLUGIN_MANIFEST_DIR_NAME, "plugin.json"),
-  join(".claude-plugin", "plugin.json"),
-  join(".codex-plugin", "plugin.json"),
-] as const;
 
 function createBuiltInAgents(
   modelSelectionOverrides: BuiltInSubagentModelSelectionOverrides = {},
@@ -144,7 +105,6 @@ function createBuiltInAgents(
 function emptyAgentsState(): AgentsStateFile {
   return {
     builtInModelSelectionOverrides: {},
-    pluginAgentModelSelectionOverrides: {},
     disabledAgentIds: [],
   };
 }
@@ -163,7 +123,6 @@ function normalizeAgentsStateFile(parsed: unknown): AgentsStateFile {
     typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {}
   ) as {
     builtInModelSelectionOverrides?: unknown;
-    pluginAgentModelSelectionOverrides?: unknown;
     builtInModelOverrides?: unknown;
     builtInThoughtLevelOverrides?: unknown;
     disabledAgentIds?: unknown;
@@ -172,9 +131,6 @@ function normalizeAgentsStateFile(parsed: unknown): AgentsStateFile {
   return {
     ...record,
     builtInModelSelectionOverrides: selections,
-    pluginAgentModelSelectionOverrides: parsePluginSubagentModelSelectionOverrides(
-      record.pluginAgentModelSelectionOverrides,
-    ),
     disabledAgentIds: Array.isArray(record.disabledAgentIds)
       ? record.disabledAgentIds.filter(
           (id): id is string => typeof id === "string" && id.trim().length > 0,
@@ -325,239 +281,6 @@ function applyRuntimePrecedence(agents: AgentSummary[]): AgentSummary[] {
   return [...byName.values()];
 }
 
-async function discoverPluginAgents(params: {
-  diagnostics: AgentDiagnostic[];
-  state: AgentsStateFile;
-  reservedNames: Iterable<string>;
-  storageOptions?: SubagentStorageOptions;
-}): Promise<PluginAgentDiscovery> {
-  const storageRoot = await resolveZCodeStorageRoot(params.storageOptions);
-  const cliStorageRoot = basename(storageRoot) === "cli" ? storageRoot : join(storageRoot, "cli");
-  const pluginConfig = await readPluginConfig(params.storageOptions);
-  const records = await readEnabledPluginRecords(join(cliStorageRoot, "plugins"), pluginConfig);
-  const parsedAgents: Array<{
-    agent: AgentSummary;
-    bareName: string;
-    pluginName: string;
-  }> = [];
-
-  for (const record of records) {
-    for (const agentPath of await collectPluginAgentMarkdownPaths(record.installPath)) {
-      try {
-        const markdown = await readFile(agentPath, "utf-8");
-        const parsed = parseSubagentMarkdown({
-          content: markdown,
-          path: agentPath,
-          scope: record.scope === "workspace" ? "workspace" : "user",
-        });
-        if (parsed.diagnostic) {
-          params.diagnostics.push(parsed.diagnostic);
-          continue;
-        }
-        if (parsed.agent) {
-          const id = createPluginAgentStateId(record.id, parsed.agent.name);
-          parsedAgents.push({
-            agent: applyPluginAgentOverrides(
-              {
-                ...parsed.agent,
-                id,
-                name: `${record.name}:${parsed.agent.name}`,
-                readOnly: true,
-                source: "plugin",
-                pluginId: record.id,
-                pluginName: record.name,
-                projectPath: record.scope === "workspace" ? record.projectPath : undefined,
-              },
-              params.state,
-            ),
-            bareName: parsed.agent.name,
-            pluginName: record.name,
-          });
-        }
-      } catch {
-        params.diagnostics.push({
-          code: "agent_read_failed",
-          message: `Failed to read plugin agent Markdown: ${agentPath}`,
-          path: agentPath,
-        });
-      }
-    }
-  }
-
-  const reservedNames = new Set([...BUILT_IN_AGENT_NAMES, ...params.reservedNames]);
-  const bareNameCounts = new Map<string, number>();
-  for (const parsed of parsedAgents) {
-    bareNameCounts.set(parsed.bareName, (bareNameCounts.get(parsed.bareName) ?? 0) + 1);
-  }
-
-  const profiles: AgentSummary[] = [];
-  const runtimeAgents: AgentSummary[] = [];
-  for (const parsed of parsedAgents) {
-    profiles.push(parsed.agent);
-    runtimeAgents.push(parsed.agent);
-    if (bareNameCounts.get(parsed.bareName) === 1 && !reservedNames.has(parsed.bareName)) {
-      runtimeAgents.push({
-        ...parsed.agent,
-        id: createPluginAgentStateId(`${parsed.agent.id}:alias`, parsed.bareName),
-        name: parsed.bareName,
-      });
-    } else if (reservedNames.has(parsed.bareName)) {
-      params.diagnostics.push({
-        code: "agent_ambiguous_name",
-        message: `Plugin agent bare name conflicts with an existing profile; use ${parsed.pluginName}:${parsed.bareName}`,
-        path: parsed.agent.path,
-      });
-    } else if ((bareNameCounts.get(parsed.bareName) ?? 0) > 1) {
-      params.diagnostics.push({
-        code: "agent_ambiguous_name",
-        message: `Plugin agent bare name is ambiguous; use ${parsed.pluginName}:${parsed.bareName}`,
-        path: parsed.agent.path,
-      });
-    }
-  }
-
-  return {
-    // 裸名称只是同一插件 agent 的运行时调用别名，不能进入一文件一条的 UI 资源投影。
-    profiles: profiles.sort((left, right) => left.name.localeCompare(right.name)),
-    runtimeAgents: runtimeAgents.sort((left, right) => left.name.localeCompare(right.name)),
-  };
-}
-
-async function readPluginConfig(options?: SubagentStorageOptions): Promise<PluginConfigSummary> {
-  try {
-    const configPath = join(
-      resolveUserHomeDir(options),
-      ZCODE_USER_DATA_DIR_NAME,
-      "cli",
-      "config.json",
-    );
-    const raw = await readFile(configPath, "utf-8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed)) return { enabledPlugins: {}, suppressedBuiltins: [] };
-    const plugins = isRecord(parsed.plugins) ? parsed.plugins : {};
-    const enabledPlugins = isRecord(plugins.enabledPlugins) ? plugins.enabledPlugins : {};
-    return {
-      enabledPlugins: Object.fromEntries(
-        Object.entries(enabledPlugins).filter(
-          (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
-        ),
-      ),
-      suppressedBuiltins: Array.isArray(plugins.suppressedBuiltins)
-        ? plugins.suppressedBuiltins.filter((id): id is string => typeof id === "string")
-        : [],
-    };
-  } catch {
-    return { enabledPlugins: {}, suppressedBuiltins: [] };
-  }
-}
-
-/** 内置插件没有安装记录，只扫描 installed 文件会漏掉；缓存只补缺失身份，不能复活禁用/卸载插件。 */
-async function readEnabledPluginRecords(
-  pluginStorageRoot: string,
-  config: PluginConfigSummary,
-): Promise<InstalledPluginRecord[]> {
-  const installed = await readInstalledPluginRecords(pluginStorageRoot);
-  const records = installed.filter(
-    (record) =>
-      config.enabledPlugins[record.id] === true &&
-      // 卸载抑制优先于遗留的安装/启用记录，不能只在缓存兜底时检查而复活官方插件。
-      !(
-        record.id.endsWith(`@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID}`) &&
-        config.suppressedBuiltins.includes(record.id)
-      ),
-  );
-  const seenIds = new Set(installed.map((record) => record.id));
-  for (const cacheRoot of await scanOfficialPluginCacheRoots(pluginStorageRoot)) {
-    const id = `${cacheRoot.name}@${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID}`;
-    if (seenIds.has(id) || config.suppressedBuiltins.includes(id)) continue;
-    const enabled = config.enabledPlugins[id] ?? DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS.has(id);
-    if (!enabled) continue;
-    for (const versionRoot of cacheRoot.versionRoots) {
-      const manifest = await readPluginManifest(versionRoot);
-      if (manifest?.name !== cacheRoot.name) continue;
-      records.push({ id, installPath: versionRoot, name: cacheRoot.name, scope: "user" });
-      seenIds.add(id);
-      break;
-    }
-  }
-  return records;
-}
-
-async function readInstalledPluginRecords(
-  pluginStorageRoot: string,
-): Promise<InstalledPluginRecord[]> {
-  try {
-    const raw = await readFile(join(pluginStorageRoot, "installed_plugins.json"), "utf-8");
-    const parsed = JSON.parse(raw) as InstalledPluginsStateFile;
-    if (!Array.isArray(parsed.plugins)) return [];
-    return parsed.plugins.filter(isInstalledPluginRecord);
-  } catch {
-    return [];
-  }
-}
-
-function isInstalledPluginRecord(value: unknown): value is InstalledPluginRecord {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.installPath === "string" &&
-    typeof value.name === "string"
-  );
-}
-
-async function collectPluginAgentMarkdownPaths(rootPath: string): Promise<string[]> {
-  const manifest = await readPluginManifest(rootPath);
-  const roots = collectPluginAgentRoots(rootPath, manifest?.agents);
-  const paths = await Promise.all(roots.map((root) => collectAgentMarkdownPaths(root)));
-  return paths.flat().sort((left, right) => left.localeCompare(right));
-}
-
-async function readPluginManifest(rootPath: string): Promise<Record<string, unknown> | null> {
-  for (const relativePath of PLUGIN_MANIFEST_PATHS) {
-    try {
-      const raw = await readFile(join(rootPath, relativePath), "utf-8");
-      const parsed = JSON.parse(raw) as unknown;
-      if (isRecord(parsed)) return parsed;
-    } catch {
-      // Try the next supported manifest path.
-    }
-  }
-  return null;
-}
-
-function collectPluginAgentRoots(rootPath: string, manifestAgents: unknown): string[] {
-  const roots: string[] = [];
-  const seen = new Set<string>();
-  const root = resolve(rootPath);
-  const add = (relativePath: string) => {
-    const resolved = resolve(root, relativePath.replace(/^\.\//u, ""));
-    const relativeToRoot = relative(root, resolved);
-    if (relativeToRoot.startsWith("..") || isAbsolute(relativeToRoot)) return;
-    if (!seen.has(resolved)) {
-      seen.add(resolved);
-      roots.push(resolved);
-    }
-  };
-  add("agents");
-  if (typeof manifestAgents === "string") add(manifestAgents);
-  if (Array.isArray(manifestAgents)) {
-    for (const value of manifestAgents) {
-      if (typeof value === "string") add(value);
-    }
-  }
-  return roots;
-}
-
-function applyPluginAgentOverrides(agent: AgentSummary, state: AgentsStateFile): AgentSummary {
-  const override = state.pluginAgentModelSelectionOverrides[agent.id];
-  // 插件文件只提供默认值；覆盖替换整份选择，不能混入原模型的档位。
-  return {
-    ...agent,
-    defaultModelSelection: agent.modelSelection,
-    ...(override ? { modelSelection: override, modelSelectionOverride: override } : {}),
-  };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -632,17 +355,6 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
       const sortedWorkspaceAgents = fileAgents
         .filter((agent) => agent.scope === "workspace")
         .sort((left, right) => left.name.localeCompare(right.name));
-      // 用户页不能读项目 profile，但仍需展示本地插件的只读覆盖入口；不能把两者一并剪掉。
-      const pluginAgentDiscovery = await discoverPluginAgents({
-        diagnostics,
-        state,
-        reservedNames: [
-          ...builtInAgents.map((agent) => agent.name),
-          ...sortedUserAgents.map((agent) => agent.name),
-          ...sortedWorkspaceAgents.map((agent) => agent.name),
-        ],
-        storageOptions,
-      });
       const discoveredAgents =
         mode === "settingsUserOnly"
           ? [...builtInAgents, ...sortedUserAgents]
@@ -650,14 +362,12 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
               ...builtInAgents,
               ...sortedUserAgents,
               ...sortedWorkspaceAgents,
-              ...pluginAgentDiscovery.runtimeAgents,
             ]);
       const agents = attachEnabledState(discoveredAgents, state);
 
       return {
         agents,
         userAgents: agents.filter((agent) => agent.source === "user"),
-        pluginAgents: attachEnabledState(pluginAgentDiscovery.profiles, state),
         capability,
         diagnostics,
       };
@@ -698,23 +408,6 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
         }, storageOptions);
       };
 
-      const queued = writeQueue.then(runUpdate, runUpdate);
-      writeQueue = queued.catch(() => {});
-      await queued;
-    },
-
-    async setPluginAgentModelOverride(params: PluginSubagentModelOverrideParams): Promise<void> {
-      if (!params.agentId.startsWith("plugin:") || params.agentId.trim() !== params.agentId)
-        throw new Error("无效插件 Subagent 身份");
-      const runUpdate = async (): Promise<void> => {
-        await updateAgentStateFile((state) => {
-          const overrides = { ...state.pluginAgentModelSelectionOverrides };
-          const selection = normalizeSubagentModelSelection(params.modelSelection);
-          if (selection) overrides[params.agentId] = selection;
-          else delete overrides[params.agentId];
-          return { ...state, pluginAgentModelSelectionOverrides: overrides };
-        }, storageOptions);
-      };
       const queued = writeQueue.then(runUpdate, runUpdate);
       writeQueue = queued.catch(() => {});
       await queued;

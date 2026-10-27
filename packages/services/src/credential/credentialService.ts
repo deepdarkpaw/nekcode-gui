@@ -80,8 +80,6 @@ async function writeAll(credentialsFile: string, data: Record<string, string>): 
 
 interface CredentialServiceDependencies {
   cipherProvider?: CredentialCipherProvider;
-  /** Host 私有的持久化成功通知；不进入 Renderer/RPC 凭据接口。 */
-  onDidMutate?: (event: { operation: "save" | "delete"; key: string }) => void;
 }
 
 export function createCredentialService(
@@ -113,7 +111,6 @@ export function createCredentialService(
         creds[validatedKey] = encryptedValue;
         await writeAll(credentialsFile, creds);
       });
-      dependencies.onDidMutate?.({ operation: "save", key: validatedKey });
     },
 
     async delete(key: string): Promise<void> {
@@ -124,7 +121,6 @@ export function createCredentialService(
         delete creds[validatedKey];
         await writeAll(credentialsFile, creds);
       });
-      dependencies.onDidMutate?.({ operation: "delete", key: validatedKey });
     },
   };
 }

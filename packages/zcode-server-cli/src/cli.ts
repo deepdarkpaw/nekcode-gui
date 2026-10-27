@@ -1,8 +1,8 @@
 /* eslint-disable max-lines -- CLI 入口集中编排子命令分发与进程管理，oxfmt 换行后略超 400 行，拆分会割裂编排流程。 */
 import { fork } from "node:child_process";
-import { access, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { dirname, isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { ZCODE_VERSION } from "@zcode/shared";
 import {
   controlRequestSchema,
@@ -17,7 +17,6 @@ import {
   validateUninstallTarget,
 } from "./runtime/paths.js";
 import { validateServerInstallOwnership } from "./runtime/installationOwnership.js";
-import { createReleaseAgentWiring, type BundledAgentWiring } from "./runtime/agentWiring.js";
 import { writeStableLauncher } from "./runtime/stableLauncher.js";
 import { runUpdateCommand } from "./runtime/updateCommand.js";
 import { DataRootLock } from "./runtime/lock.js";
@@ -39,12 +38,10 @@ export interface CliIO {
   stdout?: { write(value: string): void };
   stderr?: { write(value: string): void };
   confirm?: (prompt: string) => Promise<string>;
-  legacyDelegate?: (argv: readonly string[]) => Promise<number>;
 }
 
-export interface ServerCliRuntimeOptions {
-  bundledAgentWiring?: BundledAgentWiring | null;
-}
+const SERVER_CLI_USAGE =
+  "Usage: zcode [--server-root <path>] <serve|status|stop|restart|update|uninstall> [--json]";
 
 const stdout = (io: CliIO, value: unknown): void =>
   io.stdout?.write(`${typeof value === "string" ? value : JSON.stringify(value)}\n`);
@@ -75,14 +72,14 @@ export function shouldRegisterService(
 export async function runServerCli(
   argv: readonly string[],
   io: CliIO = {},
-  runtimeOptions: ServerCliRuntimeOptions = {},
 ): Promise<number> {
   const json = argv.includes("--json");
   try {
     const parsed = parseServerCliArguments(argv);
     const command = parsed.argv[0];
     if (!command) {
-      return await (io.legacyDelegate?.(parsed.argv) ?? delegateLegacyCli(parsed.argv, io));
+      stdout(io, SERVER_CLI_USAGE);
+      return 0;
     }
     // 同一物理 data-root 的符号链接别名会派生不同 control endpoint 和 OS service
     // identity。生命周期命令统一在 IO 前收敛 root，避免第二个 Supervisor 绕过探测重复注册。
@@ -91,7 +88,7 @@ export async function runServerCli(
       : parsed.layout;
     switch (command) {
       case "serve":
-        return await runServe(parsed.argv.slice(1), io, json, layout, runtimeOptions);
+        return await runServe(parsed.argv.slice(1), io, json, layout);
       case "status":
       case "stop":
       case "restart":
@@ -103,7 +100,8 @@ export async function runServerCli(
       case "uninstall":
         return await runUninstall(io, json, layout);
       default:
-        return await (io.legacyDelegate?.(parsed.argv) ?? delegateLegacyCli(parsed.argv, io));
+        throw new Error(`Unknown command: ${command}
+${SERVER_CLI_USAGE}`);
     }
   } catch (error: unknown) {
     if (json)
@@ -139,7 +137,6 @@ async function runServe(
   io: CliIO,
   json: boolean,
   layout: ReturnType<typeof resolveServerLayout>,
-  runtimeOptions: ServerCliRuntimeOptions,
 ): Promise<number> {
   const daemonRequested = args.includes("--daemon");
   const supervisorProcess = args.includes("--supervisor");
@@ -257,14 +254,10 @@ async function runServe(
           ZCODE_DATA_BASE_DIR: layout.dataBaseDir,
           ZCODE_SERVER_ROOT: layout.serverRoot,
         };
-        const releaseWiring = runtimeRoot
-          ? createReleaseAgentWiring(runtimeRoot, runtimeNode, inheritedEnv)
-          : runtimeOptions.bundledAgentWiring;
         return fork(corePath, [String(generation)], {
           execPath: runtimeNode,
           env: {
             ...inheritedEnv,
-            ...releaseWiring,
             ...(runtimeRoot ? { ZCODE_SERVER_RUNTIME_ROOT: runtimeRoot } : {}),
           },
           stdio: ["ignore", "ignore", "ignore", "ipc"],
@@ -500,18 +493,4 @@ async function readControlStatus(
   } catch {
     return null;
   }
-}
-
-async function delegateLegacyCli(argv: readonly string[], io: CliIO): Promise<number> {
-  const candidate =
-    process.env.ZCODE_LEGACY_CLI_ENTRY?.trim() ||
-    join(dirname(fileURLToPath(import.meta.url)), "zcode.cjs");
-  try {
-    await access(candidate);
-  } catch {
-    stdout(io, argv.length ? `Unknown command: ${argv[0]}` : "ZCode TUI");
-    return argv.length ? 1 : 0;
-  }
-  const child = fork(candidate, [...argv], { stdio: "inherit" });
-  return await new Promise<number>((resolve) => child.once("exit", (code) => resolve(code ?? 1)));
 }

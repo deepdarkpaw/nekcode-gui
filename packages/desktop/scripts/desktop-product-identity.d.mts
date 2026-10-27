@@ -6,7 +6,6 @@ export interface DesktopProductIdentity {
   productName: string;
   linuxExecutableName: string;
   linuxPackageName: string;
-  cuaHelperInstallVariant: string | null;
 }
 
 export declare const desktopProductIdentities: Record<DesktopProductFlavor, DesktopProductIdentity>;

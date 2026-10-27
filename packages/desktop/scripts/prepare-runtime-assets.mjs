@@ -3,11 +3,9 @@
 import process from "node:process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadBuiltinProviderConfig } from "../../../scripts/builtin-provider-config.mjs";
 import { resolveNativeSearchReleasePlan } from "../../../scripts/native-search-tools-config.mjs";
 import { runCommand } from "../../../scripts/spawn-command.mjs";
 import { getTargetPlatform } from "./target-platform.mjs";
-import { resolveRuntimeAssetsPlan } from "./runtime-assets-plan.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDir, "..");
@@ -17,36 +15,9 @@ const nativeSearchReleasePlan = resolveNativeSearchReleasePlan({
   platform: target.os,
   arch: target.arch,
 });
-// Windows Chrome 导入入口未启用，默认构建继续编译 helper 会增加 CI 时间和发布签名面。
-// 保留显式开关，后续恢复入口时仍可复用既有原生实现和供应链校验。
-const shouldPrepareWindowsBrowserImportHelper =
-  target.os === "win32" && process.env.ZCODE_ENABLE_WINDOWS_BROWSER_IMPORT === "1";
-// CUA 权限浮窗的吸附数据源。仅 macOS；缺 swiftc 时脚本内部自行降级为跳过（浮窗 fail-open
-// 到屏幕底部，仍可用），所以无条件挂在 darwin 上不会让构建变脆。
-const shouldPrepareMacosWindowBounds = target.os === "darwin";
-// Rust CLI runtime 只在 Preview（ZCodium Rust）口味随包分发：生产口味继续只带 glm/ 的 JS bundle。
-// 修复：这里不能再只看 ZCODE_PREVIEW_IDENTITY。`ZCODE_ENV=test` 经同一 product flavor
-// 解析也是 preview，而打包后的 Main 会按该 flavor 默认选 Rust；只用 flag 会让安装包缺
-// resources/rust，首次启动即报缺 binary。资产决策必须与 tsup/builder 的 identity 同源，
-// 统一走 loadBuiltinProviderConfig().environment + process.env 的 resolveRuntimeAssetsPlan。
-// 见 .agents/specs/cli-rust-preview-default.md 与
-// packages/desktop/scripts/desktop-product-identity.mjs 的身份注释。
-const builtinProviderConfig = await loadBuiltinProviderConfig();
-const runtimeAssetsPlan = resolveRuntimeAssetsPlan({
-  environment: builtinProviderConfig.environment,
-});
-const shouldPrepareCliRust = runtimeAssetsPlan.includeRustCliRuntime;
-
-// 本机桌面包内置 agent 的 JS bundle（prepare:agent-bundle），运行时由 app 的 Electron Node runtime 执行。
 // Linux x64 远端资源由 prepare:remote-assets 生成，两种桌面包消费同一份归档。
 // native-search 归档随仓库分发，准备步骤只做本地解包校验，不需要任何下载源配置。
-const localRuntimeScripts = [
-  "prepare:agent-bundle",
-  ...(shouldPrepareCliRust ? ["prepare:cli-rust"] : []),
-  ...(nativeSearchReleasePlan.enabled ? ["prepare:native-search"] : []),
-  ...(shouldPrepareWindowsBrowserImportHelper ? ["prepare:browser-import-helper"] : []),
-  ...(shouldPrepareMacosWindowBounds ? ["prepare:macos-window-bounds"] : []),
-];
+const localRuntimeScripts = nativeSearchReleasePlan.enabled ? ["prepare:native-search"] : [];
 
 function runTimedPnpmScript(scriptName) {
   const startMs = Date.now();

@@ -136,7 +136,6 @@ function RootInner({
   supportsSettings = true,
   allowOpenWorkspace = true,
   preferDirectoryBrowser,
-  supportsEmbeddedBrowser: explicitSupportsEmbeddedBrowser,
   allowRemoteWorkspace = true,
   initialWorkspaceLoadingFallback,
 }: RootProps) {
@@ -313,7 +312,6 @@ function RootInner({
   useRootProviderSettingsSnapshot(services);
 
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
-  const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
   useEffect(() => {
     // 跨 workspace 任务列表需要一个稳定的“本地/root services”入口。
     // 桌面端 renderer 启动时会注册一次，但 Web 和测试入口也会直接挂 Root；
@@ -854,7 +852,6 @@ function RootInner({
               isDesktop={isDesktop}
               isMacDesktop={isMacDesktop}
               isWindowsDesktop={isWindowsDesktop}
-              supportsEmbeddedBrowser={supportsEmbeddedBrowser}
             />
           )}
           <ScopedErrorBoundary

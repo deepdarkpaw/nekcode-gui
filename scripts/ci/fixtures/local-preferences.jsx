@@ -46,7 +46,6 @@ const forbiddenService = new Proxy(
 const services = new Proxy(
   {
     broadcastService,
-    botsService: forbiddenService,
     zcodeAgentService: forbiddenService,
     settingService: {
       async get() {

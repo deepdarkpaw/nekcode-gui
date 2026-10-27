@@ -3,7 +3,6 @@ import { localTtftFactsSchema } from "../localTtft.js";
 // 传输外壳：连接握手 / 订阅 / 帧信封。
 // 阶段为类型占位（后半接通道层时启用），数据形状已按规范定稿。
 import { z } from "zod";
-import { APP_USAGE_RANGES, appUsageSnapshotSchema } from "../usage-stats.js";
 import { zcodeWorkspaceRefSchema } from "../zcode-protocol-legacy-types.js";
 import {
   PROTOCOL_V4_LIMITS,
@@ -360,9 +359,6 @@ export const V4_METHODS = {
   conversationWorkflowRunWorkspace: "v4/conversation/workflowRunWorkspace",
   conversationWorkflowRunNodeResult: "v4/conversation/workflowRunNodeResult",
   // usage query（模式同 rows/range：只读、无状态、超时重发安全）。
-  // usage 事实源在 CLI 的 session 库（model_usage/turn_usage 聚合），host 侧无副本，
-  // 故收敛为 v4 query 而非 host 直连；旧词 usage/stats、session/usage 就此消费清零。
-  usageStats: "v4/usage/stats",
   conversationUsage: "v4/conversation/usage",
   // 附件事务：禁止 full-data RPC。每个 chunk 的 decoded bytes <=512KiB，
   // renderer->host Channel 与 host->CLI NDJSON 都必须逐 request 证明 <=1MiB。
@@ -410,8 +406,6 @@ export const V4_NOTIFICATIONS = {
   conversationTelemetryFact: "v4/telemetry/event",
   sessionActivity: "v4/session/activity",
   localTtftFacts: "v4/telemetry/local-ttft",
-  // 仅当前进程 live ToolCallResult 产生；历史与 replayable 链路不得补造。
-  cuaPermissionObservation: "v4/cua/permission-observation",
 } as const;
 
 /** 3.3.6 SSH 历史任务归属证明与 sessions-index 冷种子共享同一有界窗口。 */
@@ -766,19 +760,6 @@ export const v4ConversationFileRewindPreviewResultSchema = z
 export type V4ConversationFileRewindPreviewResult = z.infer<
   typeof v4ConversationFileRewindPreviewResultSchema
 >;
-
-// ── usage query──
-// app 级用量聚合：range/timeZone 入参与旧 usage/stats 同形（消费者语义不变），
-// 结果 = AppUsageSnapshot（形状归属中性模块 usage-stats.ts，不与旧词表文件耦合）。
-export const v4UsageStatsParamsSchema = z
-  .object({
-    range: z.enum(APP_USAGE_RANGES),
-    timeZone: z.string().optional(),
-  })
-  .strict();
-export type V4UsageStatsParams = z.infer<typeof v4UsageStatsParamsSchema>;
-export const v4UsageStatsResultSchema = appUsageSnapshotSchema;
-export type V4UsageStatsResult = z.infer<typeof v4UsageStatsResultSchema>;
 
 // 会话级 token 用量（旧 session/usage 的 v4 名字空间落位：会话是协议一等概念，
 // task 是 UI 投影概念不进协议词表）。字段与旧 result 同形，旧 schema 随词一起死。

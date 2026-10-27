@@ -4,12 +4,7 @@ import { appToolSearchModeSchema } from "./app-runtime-preferences.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { wslUserSchema } from "./wslUserValidation.js";
 import { normalizeZCodeEndpointOrigin } from "./zcodeEndpoint.js";
-import {
-  DEFAULT_EMBEDDED_BROWSER_VIEWPORT_PREFERENCE,
-  embeddedBrowserViewportPreferenceSchema,
-} from "./browser-use/command-metadata.js";
 import { providerFamilyConnectionSelectionSettingsSchema } from "./provider-family-connection-selection.js";
-import { webRemoteControlEndpointModeSchema } from "./webRemoteControl/index.js";
 
 /** 引导职业枚举；单独导出供 onboarding 记录回填 settings 时做窄化校验。 */
 const appSettingsOccupationSchema = z.enum([
@@ -166,26 +161,6 @@ function sanitizeDesktopWindowSize(value: unknown): unknown {
   const { desktopWindowSize: _desktopWindowSize, ...next } = raw;
   // 窗口尺寸是非关键偏好，坏值若参与整份 schema 校验，会让其他合法设置全部回退默认。
   // 读取历史设置时只丢弃损坏字段；写入 patch 仍保持严格校验，避免继续产生坏数据。
-  return next;
-}
-
-function sanitizeEmbeddedBrowserViewportPreference(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
-  }
-  const raw = value as Record<string, unknown>;
-  if (!("embeddedBrowserViewportPreference" in raw)) {
-    return value;
-  }
-  const parsed = embeddedBrowserViewportPreferenceSchema.safeParse(
-    raw.embeddedBrowserViewportPreference,
-  );
-  if (parsed.success) {
-    return value;
-  }
-  const { embeddedBrowserViewportPreference: _embeddedBrowserViewportPreference, ...next } = raw;
-  // 显示偏好不是关键启动状态，单字段损坏不应让整份 setting.json 被隔离。
-  // 读取时只丢弃坏偏好并回到默认值；patch 写入仍严格拒绝非法尺寸与缩放。
   return next;
 }
 
@@ -428,13 +403,6 @@ const appSettingsObjectSchema = z.object({
   httpProxy: nonEmptyStringSchema.optional(),
   httpProxyNoProxy: nonEmptyStringSchema.optional(),
   httpProxyCaCertPath: nonEmptyStringSchema.optional(),
-  embeddedBrowserAllowInsecureCertificates: z.boolean().default(false),
-  embeddedBrowserViewportPreference: embeddedBrowserViewportPreferenceSchema.default(
-    DEFAULT_EMBEDDED_BROWSER_VIEWPORT_PREFERENCE,
-  ),
-  // 输入框电脑操作入口改为默认不展示，设置项保留、默认关闭。
-  // default 只对缺省字段生效，显式存过 false 的用户仍保持展示。
-  computerUseComposerEntryHidden: z.boolean().default(true),
   taskAutoArchiveEnabled: z.boolean().default(false),
   taskAutoArchiveOlderThanDays: z.number().int().positive().max(365).default(7),
   closeToTrayOnWindows: z.boolean().default(true),
@@ -471,38 +439,15 @@ const appSettingsObjectSchema = z.object({
   skippedElectronUpdateVersions: skippedElectronUpdateVersionsSchema,
   settingsSyncFirstRunPromptHandled: z.boolean().optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
-  // 手机远控：外部端点设备注册仅持久化 deviceSid；passHash 走 credential store。
-  webRemoteControlExternalRelayDevice: z
-    .object({ deviceSid: nonEmptyStringSchema })
-    .strict()
-    .optional(),
-  // 手机远控：启动恢复上下文（上次开启时的工作区 / 初始任务）。
-  webRemoteControlLastEnabledContext: z
-    .object({
-      workspacePath: nonEmptyStringSchema,
-      workspaceIdentity: z.string().optional(),
-      initialTaskId: z.string().optional(),
-    })
-    .strict()
-    .optional(),
-  // 手机远控：端点模式。默认 lan（仅同网可达）；custom 时读取用户自备隧道 / relay 地址。
-  // patch 侧保持 optional：update() 只覆盖调用方显式提供的字段，不把默认值写回每次补丁。
-  webRemoteControlEndpointMode: webRemoteControlEndpointModeSchema.optional(),
-  // 手机远控：用户自备端点地址（custom 模式必填，如 wss://域名/ws）。
-  webRemoteControlCustomEndpointUrl: z.string().trim().optional(),
-  // 手机远控：本机设备标识（首次开启时生成，写入 QR 的 mid 参数）。
-  webRemoteControlDeviceMid: nonEmptyStringSchema.optional(),
 });
 
 export const appSettingsSchema = z.preprocess(
   (value) =>
-    sanitizeEmbeddedBrowserViewportPreference(
-      sanitizeDesktopWindowSize(
-        migrateMessageStreamShowReasoningDefault(
-          migrateCloseToTrayOnWindowsDefault(
-            migrateLegacyLocalePreference(
-              sanitizeZCodeEndpointOrigin(migrateLegacyWorkspaceSession(value)),
-            ),
+    sanitizeDesktopWindowSize(
+      migrateMessageStreamShowReasoningDefault(
+        migrateCloseToTrayOnWindowsDefault(
+          migrateLegacyLocalePreference(
+            sanitizeZCodeEndpointOrigin(migrateLegacyWorkspaceSession(value)),
           ),
         ),
       ),
@@ -521,9 +466,6 @@ export const appSettingsPatchSchema = z.object({
   httpProxy: nonEmptyStringSchema.optional(),
   httpProxyNoProxy: nonEmptyStringSchema.optional(),
   httpProxyCaCertPath: nonEmptyStringSchema.optional(),
-  embeddedBrowserAllowInsecureCertificates: z.boolean().optional(),
-  embeddedBrowserViewportPreference: embeddedBrowserViewportPreferenceSchema.optional(),
-  computerUseComposerEntryHidden: z.boolean().optional(),
   taskAutoArchiveEnabled: z.boolean().optional(),
   taskAutoArchiveOlderThanDays: z.number().int().positive().max(365).optional(),
   closeToTrayOnWindows: z.boolean().optional(),
@@ -578,24 +520,4 @@ export const appSettingsPatchSchema = z.object({
     .optional(),
   settingsSyncFirstRunPromptHandled: z.boolean().optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
-  // 手机远控：外部端点设备注册仅持久化 deviceSid；passHash 走 credential store。
-  webRemoteControlExternalRelayDevice: z
-    .object({ deviceSid: nonEmptyStringSchema })
-    .strict()
-    .optional(),
-  // 手机远控：启动恢复上下文（上次开启时的工作区 / 初始任务）。
-  webRemoteControlLastEnabledContext: z
-    .object({
-      workspacePath: nonEmptyStringSchema,
-      workspaceIdentity: z.string().optional(),
-      initialTaskId: z.string().optional(),
-    })
-    .strict()
-    .optional(),
-  // 手机远控：端点模式。默认 lan（仅同网可达）；custom 时读取用户自备隧道 / relay 地址。
-  webRemoteControlEndpointMode: webRemoteControlEndpointModeSchema.default("lan"),
-  // 手机远控：用户自备端点地址（custom 模式必填，如 wss://域名/ws）。
-  webRemoteControlCustomEndpointUrl: z.string().trim().optional(),
-  // 手机远控：本机设备标识（首次开启时生成，写入 QR 的 mid 参数）。
-  webRemoteControlDeviceMid: nonEmptyStringSchema.optional(),
 });

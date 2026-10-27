@@ -29,6 +29,3 @@ export function SSHDialog() {
 export function DirectoryBrowser() {
   return null;
 }
-export function CuaPermissionObservationAttachment() {
-  return null;
-}

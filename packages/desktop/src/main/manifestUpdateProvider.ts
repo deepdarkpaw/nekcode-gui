@@ -1,10 +1,6 @@
 import { posix } from "node:path";
 import type { CustomPublishOptions, PackageFileInfo } from "builder-util-runtime";
-import {
-  DEFAULT_ZCODE_ENDPOINT_ORIGIN,
-  normalizeZCodeEndpointOrigin,
-  type ElectronReleaseChannel,
-} from "@zcode/shared";
+import { normalizeZCodeEndpointOrigin, type ElectronReleaseChannel } from "@zcode/shared";
 import {
   Provider,
   AppImageUpdater,
@@ -24,7 +20,8 @@ const ELECTRON_MANIFEST_API_PATH = "/api/v1/releases/electron/manifest";
 const MANIFEST_ACCEPT_HEADER = "application/x-yaml,text/yaml,text/plain,*/*";
 
 interface ManifestUpdateProviderOptions extends CustomPublishOptions {
-  endpointOrigin?: string;
+  /** 自有更新源 origin；更新源归属见 .agents/specs/update-source-ownership.md，不接受上游缺省值。 */
+  endpointOrigin: string;
   manifestUrl?: string;
   releasePlatform?: string;
   releaseChannel?: ElectronReleaseChannel;
@@ -177,7 +174,7 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
   private readonly options: ManifestUpdateProviderOptions;
   private readonly releasePlatform: string;
   private readonly linuxExtensions: readonly string[] | null;
-  private resolveBaseUrl = new URL(DEFAULT_ZCODE_ENDPOINT_ORIGIN);
+  private resolveBaseUrl: URL;
 
   constructor(
     options: ManifestUpdateProviderOptions,
@@ -188,9 +185,7 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
     this.options = options;
     this.linuxExtensions = getLinuxUpdateExtensions(updater);
     this.releasePlatform = options.releasePlatform?.trim() || getElectronReleasePlatform();
-    this.resolveBaseUrl = new URL(
-      normalizeZCodeEndpointOrigin(options.endpointOrigin ?? DEFAULT_ZCODE_ENDPOINT_ORIGIN),
-    );
+    this.resolveBaseUrl = new URL(normalizeZCodeEndpointOrigin(options.endpointOrigin));
   }
 
   override get isUseMultipleRangeRequest(): boolean {
@@ -237,10 +232,8 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
   }
 
   private async resolveEndpointOrigin(): Promise<string> {
-    const resolved =
-      (await this.options.resolveEndpointOrigin?.()) ??
-      this.options.endpointOrigin ??
-      DEFAULT_ZCODE_ENDPOINT_ORIGIN;
+    // 未配置自有更新源时直接报错：静默回退上游会把客户端更新成官方 ZCode 安装包。
+    const resolved = (await this.options.resolveEndpointOrigin?.()) ?? this.options.endpointOrigin;
     return normalizeZCodeEndpointOrigin(resolved);
   }
 

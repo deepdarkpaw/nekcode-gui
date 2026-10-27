@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- Hooks 页面聚合 Scope、插件投影、搜索与配置写入流程。 */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import type { Hook, HookConfig, ZCodeInstalledPluginSummary, ZCodePluginInfo } from "@zcode/shared";
+import type { Hook, HookConfig } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
@@ -10,13 +10,12 @@ import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { invalidateDeferredDraftSessionForRuntimeChange } from "@/lib/zcodeDraftSkillInvalidation.js";
 import { useHooksStore } from "@/store/hooksStore.js";
-import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
 import { HookForm } from "./HookForm.js";
 import { SettingsBreadcrumbReporter } from "@/settings/SettingsHeaderBreadcrumb.js";
 import { SettingsSearchInput } from "@/settings/SettingsSearchInput.js";
 import { SettingsResourceHeaderActions } from "@/settings/SettingsResourceHeaderActions.js";
 import { getWorkspaceKey } from "@/lib/workspaceKey.js";
-import { HooksList, type HookScope, type PluginHookRow } from "./HooksList.js";
+import { HooksList, type HookScope } from "./HooksList.js";
 import { useWorkspaceHookInlineTrust } from "./useWorkspaceHookInlineTrust.js";
 import { useWorkspaceHookReviewStore } from "@/store/workspaceHookReviewStore.js";
 import {
@@ -25,10 +24,6 @@ import {
   isPluginScopeWorkspaceConnected,
 } from "@/settings/PluginScopeMenu.js";
 import { PluginLoadingState, PluginSearchEmptyState } from "@/settings/PluginInstallEmptyState.js";
-import {
-  resolvePluginDisplayName,
-  resolveUniquePluginListingByName,
-} from "@/settings/pluginStoreListing.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import {
@@ -106,50 +101,10 @@ function resolveLatestReviewScopeTarget(
   return tab ? { interactionId: latest.interactionId, scopeKey: scopeKeyOf(tab) } : null;
 }
 
-function buildPluginHookRows(
-  plugins: readonly Pick<ZCodePluginInfo, "enabled" | "hookDetails" | "id" | "name">[],
-  installedPlugins: readonly Pick<ZCodeInstalledPluginSummary, "id" | "scope">[],
-  scopeMetadataKnown: boolean,
-): PluginHookRow[] {
-  const scopeByPluginId = new Map(
-    installedPlugins.map((plugin) => [plugin.id, plugin.scope] as const),
-  );
-  return plugins.flatMap((plugin) =>
-    (plugin.hookDetails ?? []).map((detail) => ({
-      detail,
-      pluginEnabled: plugin.enabled,
-      pluginId: plugin.id,
-      pluginName: plugin.name,
-      // overview 降级时 installedPlugins=[] 表示 scope 未知，不能伪造成 User。
-      pluginScope: scopeMetadataKnown ? scopeByPluginId.get(plugin.id) : undefined,
-    })),
-  );
-}
-
-function filterPluginHooksByScope(
-  pluginHooks: readonly PluginHookRow[],
-  scope: HookScope,
-): PluginHookRow[] {
-  const expectedScope = scope === "project" ? "workspace" : "user";
-  // 未知 scope 在两个 Tab 都保留并由列表标记，避免降级时隐藏真实存在的插件 Hook。
-  return pluginHooks.filter(
-    (hook) => hook.pluginScope === undefined || hook.pluginScope === expectedScope,
-  );
-}
-
 export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionProps) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl } = useZCodeIntl();
   const confirmDialog = useConfirmDialog();
   const hooksState = useHooksStore();
-  const plugins = usePluginManagementStore((state) => state.plugins);
-  const availablePlugins = usePluginManagementStore((state) => state.availablePlugins);
-  const installedPlugins = usePluginManagementStore((state) => state.installedPlugins);
-  const marketplaceAvailabilityKnown = usePluginManagementStore(
-    (state) => state.marketplaceAvailabilityKnown,
-  );
-  const pluginsLoading = usePluginManagementStore((state) => state.loading);
-  const pluginsError = usePluginManagementStore((state) => state.error);
-  const initializePlugins = usePluginManagementStore((state) => state.initialize);
   const [viewMode, setViewMode] = useState<"list" | "form">("list");
   const [editingHook, setEditingHook] = useState<Hook | null>(null);
   const [query, setQuery] = useState("");
@@ -183,9 +138,9 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
     targetWorkspaceIdentity,
     selectedWorkspace?.remoteTarget,
   );
-  // Scope 切到另一个远程 workspace 后，路径已切换但 hooks/plugin 服务仍来自
+  // Scope 切到另一个远程 workspace 后，路径已切换但 hooks 服务仍来自
   // 当前激活 workspace。这里让服务 host 与 target 身份同源，等待连接时不发送越界 RPC。
-  const { hooksService, pluginManagementService } = targetServiceResolution.services;
+  const { hooksService } = targetServiceResolution.services;
   const zcodeSessionService = useZCodeSessionService(
     targetWorkspacePath ?? undefined,
     undefined,
@@ -220,25 +175,6 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
       ),
     [activeScope, hooksState.hooks],
   );
-  const pluginHooks = useMemo(
-    () => buildPluginHookRows(plugins, installedPlugins, marketplaceAvailabilityKnown),
-    [installedPlugins, marketplaceAvailabilityKnown, plugins],
-  );
-  const pluginListingById = useMemo(
-    () => new Map(availablePlugins.map((plugin) => [plugin.id, plugin.listing])),
-    [availablePlugins],
-  );
-  const scopedPluginHooks = useMemo(
-    () =>
-      filterPluginHooksByScope(pluginHooks, activeScope).map((hook) => ({
-        ...hook,
-        pluginIconItem: {
-          name: hook.pluginName,
-          listing: pluginListingById.get(hook.pluginId),
-        },
-      })),
-    [activeScope, pluginHooks, pluginListingById],
-  );
   const normalizedQuery = deferredQuery.trim().toLowerCase();
   const filteredEditableHooks = useMemo(
     () => editableHooks.filter((hook) => hookMatchesQuery(hook, normalizedQuery)),
@@ -247,20 +183,6 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
   const filteredCompatibilityHooks = useMemo(
     () => compatibilityHooks.filter((hook) => hookMatchesQuery(hook, normalizedQuery)),
     [compatibilityHooks, normalizedQuery],
-  );
-  const filteredPluginHooks = useMemo(
-    () =>
-      scopedPluginHooks.filter((hook) =>
-        [
-          hook.pluginName,
-          hook.detail.event,
-          hook.detail.type,
-          hook.detail.matcher,
-          hook.detail.command,
-          hook.detail.sourcePath,
-        ].some((value) => value?.toLowerCase().includes(normalizedQuery)),
-      ),
-    [normalizedQuery, scopedPluginHooks],
   );
 
   useEffect(() => {
@@ -278,42 +200,16 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
     targetWorkspacePath,
   ]);
 
-  useEffect(() => {
-    if (!targetWorkspacePath || !targetServiceResolution.rpcReady) return;
-    void initializePlugins({
-      workspacePath: targetWorkspacePath,
-      workspaceIdentity: targetWorkspaceIdentity,
-      pluginService: pluginManagementService,
-    });
-  }, [
-    initializePlugins,
-    pluginManagementService,
-    targetServiceResolution.rpcReady,
-    targetWorkspaceIdentity,
-    targetWorkspacePath,
-  ]);
-
   const handleRefresh = useCallback(async () => {
     if (!targetServiceResolution.rpcReady) return;
-    await Promise.all([
-      hooksState.initialize(
-        targetWorkspacePath ?? undefined,
-        targetWorkspaceIdentity,
-        hooksService,
-      ),
-      targetWorkspacePath
-        ? initializePlugins({
-            workspacePath: targetWorkspacePath,
-            workspaceIdentity: targetWorkspaceIdentity,
-            pluginService: pluginManagementService,
-          })
-        : Promise.resolve(),
-    ]);
+    await hooksState.initialize(
+      targetWorkspacePath ?? undefined,
+      targetWorkspaceIdentity,
+      hooksService,
+    );
   }, [
     hooksService,
     hooksState.initialize,
-    initializePlugins,
-    pluginManagementService,
     targetServiceResolution.rpcReady,
     targetWorkspaceIdentity,
     targetWorkspacePath,
@@ -466,11 +362,10 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
     );
   }
 
-  const loading = hooksState.loading || pluginsLoading;
-  const error = hooksState.error || pluginsError;
-  const visibleCount =
-    filteredEditableHooks.length + filteredCompatibilityHooks.length + filteredPluginHooks.length;
-  const totalCount = editableHooks.length + compatibilityHooks.length + scopedPluginHooks.length;
+  const loading = hooksState.loading;
+  const error = hooksState.error;
+  const visibleCount = filteredEditableHooks.length + filteredCompatibilityHooks.length;
+  const totalCount = editableHooks.length + compatibilityHooks.length;
   const hasSearchResultEmpty = Boolean(normalizedQuery) && visibleCount === 0;
   const showWorkspaceHookTrustNotice = shouldShowWorkspaceHookTrustNotice({
     hooks: editableHooks,
@@ -528,7 +423,6 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
           compatibilityHooks={filteredCompatibilityHooks}
           editableHooks={filteredEditableHooks}
           operatingHookId={hooksState.operatingHookId}
-          pluginHooks={filteredPluginHooks}
           showInstalledSection={!normalizedQuery}
           installedEmptyTitle={intl.formatMessage({
             id: "settings.plugin.hooks.emptyInstalledTitle",
@@ -548,17 +442,6 @@ export function HooksSection({ workspacePath, workspaceIdentity }: HooksSectionP
               onNew={handleCreateHook}
               newActionId="settings.hooks.add"
             />
-          }
-          formatPluginName={(name, pluginId) =>
-            resolvePluginDisplayName(
-              {
-                name,
-                listing:
-                  (pluginId ? pluginListingById.get(pluginId) : undefined) ??
-                  resolveUniquePluginListingByName(availablePlugins, name),
-              },
-              locale,
-            )
           }
           onEdit={(target) => {
             setEditingHook(target);

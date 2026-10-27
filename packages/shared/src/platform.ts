@@ -1,12 +1,11 @@
 import type { RendererHeapSample } from "./validation.js";
-/* eslint-disable max-lines -- 跨端 platform contract 集中声明 renderer 能力；原生操作与 browser lifecycle 必须保持 desktop/web 类型合同，本 MR 不拆分平台边界。 */
+/* eslint-disable max-lines -- 跨端 platform contract 集中声明 renderer 能力；原生操作必须保持 desktop/web 类型合同，本 MR 不拆分平台边界。 */
 import type {
   DockerConnectOptions,
   RemoteTarget,
   SSHConnectOptions,
   WSLConnectOptions,
 } from "./remoteTarget.js";
-import type { PluginSandboxPlatformPort } from "./mcp-apps/contract.js";
 import type {
   LoadCliMcpFromUserDirectoryRequest,
   LoadCliMcpFromUserDirectoryResult,
@@ -15,20 +14,6 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
 } from "./mcp.js";
 import type { AppSettings, Locale } from "./protocol.js";
-import type {
-  CuaAccessibilitySettingsResult,
-  CuaPermissionRequestResult,
-  OpenCuaPermissionOnboardingOptions,
-  PrepareCuaHelperPermissionDragResult,
-} from "./cuaAccessibilitySettings.js";
-import type { BrowserViewportSize } from "./browser-use/command-metadata.js";
-import type {
-  WebRemoteControlResetPairingRequest,
-  WebRemoteControlStartRequest,
-  WebRemoteControlStatusSnapshot,
-  WebRemoteControlTaskSync,
-  WebRemoteControlWorkspaceSync,
-} from "./webRemoteControl/index.js";
 import type {
   PostUpdateReleaseNotesPayload,
   UpdateCheckResultPayload,
@@ -57,64 +42,6 @@ export interface TaskNotificationPayload {
   body: string;
 }
 
-/** Main 将一次能够定位真实 tab 的 browser-use 操作投递给其 origin renderer。 */
-export interface BrowserViewOperationPayload {
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-  tabId: string;
-  browserId: string;
-  browserGeneration: number;
-  /** 当前模型命令会打开、激活或改变 Browser 布局，renderer 应重建 resize observation baseline。 */
-  resetsResizeBaseline?: boolean;
-}
-
-export type BrowserTabResidencyState =
-  | "live-visible"
-  | "live-background"
-  | "suspend-pending"
-  | "suspended"
-  | "restoring";
-
-/** 仅用于创建尚未提交首个 navigation entry 的 residency restore guest。 */
-export const BROWSER_VIEW_RESTORE_BOOTSTRAP_URL = "zcode-browser-restore://pending";
-
-/** Renderer 上报 tab shell 的展示事实；windowId 必须由 main 绑定可信 IPC sender。 */
-export interface BrowserViewResidencyReportPayload {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-  selected: boolean;
-  visible: boolean;
-  currentTask: boolean;
-  loading: boolean;
-  restoreUrl?: string | null;
-  title?: string | null;
-  faviconUrl?: string | null;
-}
-
-export interface BrowserViewResidencyTransitionPayload {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId: string | undefined;
-  sessionId: string;
-  browserId: string;
-  browserGeneration: number;
-  generation: number;
-  residency: Extract<
-    BrowserTabResidencyState,
-    "live-visible" | "live-background" | "suspended" | "restoring"
-  >;
-}
-
-export interface BrowserViewCloseTabRequest {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-}
-
 export const LOCAL_MEDIA_PREVIEW_SCHEME = "zcode-media";
 
 export function buildLocalMediaPreviewUrl(path: string): string {
@@ -122,97 +49,6 @@ export function buildLocalMediaPreviewUrl(path: string): string {
   url.searchParams.set("path", path);
   return url.toString();
 }
-
-/**
- * main→renderer 的关闭通知。
- *
- * 旧 payload 只有 tabId，renderer 只能在“当前活跃 workspace”的 side pane 状态里查找；
- * 用户已切到别的 workspace 时通知会被静默丢弃，原 workspace 的持久化状态里留下关不掉的幽灵 tab。
- * 带上 owner scope 后，renderer 可以直接定位到对应 workspace 的 side pane 内存删除该 tab。
- * scope 字段可缺省：recovery-orphan 等内部路径只有 tabId，renderer 此时退回“仅当前 workspace”语义。
- */
-export interface BrowserViewCloseTabNotification {
-  tabId: string;
-  workspaceKey?: string;
-  remoteSessionId?: string;
-  sessionId?: string;
-  reason?: "recovery-orphan";
-}
-
-/** 跨重启先恢复 logical shell；renderer 初始不得一次 mount 全部 guest。 */
-export interface BrowserViewRestoredTabShell {
-  tabId: string;
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId: string;
-  browserId: string;
-  browserGeneration: number;
-  origin: "agent" | "user";
-  restoreUrl: string | null;
-  title: string | null;
-  faviconUrl: string | null;
-  openedAt: number;
-  lastSelectedAt: number | null;
-}
-
-export interface BrowserViewRestoreTabsRequest {
-  workspaceKey: string;
-  remoteSessionId?: string;
-  sessionId?: string;
-}
-
-/** Main 将 Agent viewport 变更定向投递给目标 tab 的 origin renderer。 */
-export interface BrowserViewViewportChangedPayload extends BrowserViewOperationPayload {
-  viewport: BrowserViewportSize | null;
-}
-
-// 旧默认预算 1500ms 在慢机器或后台窗口中不足以等待连续稳定帧；main 与 renderer
-// 共用这个默认值，并由 prepare payload 传递实际覆盖值，避免两端 deadline 再次漂移。
-export const BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS = 3_000;
-
-/** 截图/录制握手对 renderer 预览比例的瞬时要求；缺失时沿用用户当前预览。 */
-export type BrowserViewSurfaceScaleMode = "current" | "unscaled";
-
-/** Main 请求 owner renderer 在截图前准备后台 guest 合成表面。 */
-export interface BrowserViewScreenshotSurfacePreparePayload extends BrowserViewOperationPayload {
-  requestId: string;
-  webContentsId: number;
-  viewport: BrowserViewportSize;
-  /** 自然 viewport 不使用 metrics 的 guest 布局补偿；缺失时保持原仿真行为（含录制）。 */
-  viewportMode?: "natural" | "emulated";
-  /** `unscaled` 只在 lease 生命周期内强制真实 100% surface，不写回用户的 Fit/固定比例。 */
-  surfaceScaleMode?: BrowserViewSurfaceScaleMode;
-  /** Main 当前实际使用的 prepare 超时；旧 payload 缺失时 renderer 回退到共享默认值。 */
-  timeoutMs?: number;
-}
-
-/** Owner renderer 确认目标 guest 的逻辑 viewport 与原生预览 surface 比例均已稳定。 */
-export interface BrowserViewScreenshotSurfaceReadyPayload extends BrowserViewScreenshotSurfacePreparePayload {
-  surfaceScale: number;
-}
-
-/** Main 通知 owner renderer 释放临时后台截图合成表面。 */
-export type BrowserViewScreenshotSurfaceReleasePayload = Omit<
-  BrowserViewScreenshotSurfacePreparePayload,
-  "viewport" | "viewportMode" | "surfaceScaleMode" | "timeoutMs"
->;
-
-export type BrowserGuestAttachRejectReason =
-  | "not-found"
-  | "destroyed"
-  | "not-webview"
-  | "closed"
-  | "window-mismatch"
-  | "workspace-mismatch"
-  | "session-mismatch"
-  | "remote-session-mismatch"
-  | "residency-suspended"
-  | "residency-generation-mismatch";
-
-/** Renderer 上报 guest 后 main 返回的绑定结果；拒绝不能再被伪装成无返回的 ready timeout。 */
-export type BrowserGuestAttachResult =
-  | { ok: true; guestGeneration: number }
-  | { ok: false; reason: BrowserGuestAttachRejectReason; recoveryRequested: boolean };
 
 /** 已安装的编辑器/终端信息 */
 export interface EditorInfo {
@@ -364,53 +200,6 @@ export interface WindowScreenshotResult {
   size: number;
 }
 
-export type ChromeBrowserDataImportError =
-  | "chrome_profile_not_found"
-  | "chrome_profile_ambiguous"
-  | "chrome_executable_not_found"
-  | "chrome_cookie_access_denied"
-  | "chrome_cookie_elevation_required"
-  | "chrome_cookie_elevation_cancelled"
-  | "chrome_cookie_helper_verification_failed"
-  | "chrome_cookie_app_bound_decryption_failed"
-  | "chrome_cookie_protection_unsupported"
-  | "chrome_profile_locked"
-  | "chrome_local_storage_import_failed"
-  | "chrome_import_not_supported"
-  | "chrome_browser_data_import_unavailable"
-  | "chrome_data_import_failed"
-  | "chrome_default_profile_not_found";
-
-export interface ChromeBrowserDataImportOptions {
-  /** Windows App-Bound Cookie 只能在本次显式确认后触发 UAC；不得持久化为全局授权。 */
-  allowElevatedChromeDecryption?: boolean;
-}
-
-/** Chrome 浏览器数据导入只返回数量和状态；Cookie/LocalStorage 值和解密材料不得跨进程。 */
-export interface ChromeBrowserDataImportResult {
-  success: boolean;
-  cookies: {
-    imported: number;
-    skipped: number;
-    failed: number;
-  };
-  localStorage: {
-    originsImported: number;
-    entriesImported: number;
-    originsSkipped: number;
-    originsFailed: number;
-    error?: ChromeBrowserDataImportError;
-  };
-  /** 部分成功时保留可操作问题；不得包含 Profile 绝对路径或站点数据。 */
-  issues?: ChromeBrowserDataImportError[];
-  error?: ChromeBrowserDataImportError;
-}
-
-export interface EmbeddedBrowserDataClearResult {
-  success: boolean;
-  error?: string;
-}
-
 export interface WindowControlsOverlayMetrics {
   leftPaddingPx?: number;
   rightPaddingPx?: number;
@@ -454,25 +243,6 @@ export interface RemoteSessionClosedEvent {
   signal: string | null;
 }
 
-export interface EmbeddedBrowserOpenUrlRequest {
-  url: string;
-  disposition: "default" | "foreground-tab" | "background-tab" | "new-window" | "other";
-  /** 触发 popup 的 browser-use tab 归属；旧版事件缺失时由 renderer 按当前 scope 兼容处理。 */
-  workspaceKey?: string;
-  remoteSessionId?: string;
-  sessionId?: string;
-  browserId?: string;
-  browserGeneration?: number;
-  sourceTabId?: string;
-}
-
-export interface BotRemoteWorkspaceReconnectedEvent {
-  sessionId: string;
-  workspacePath: string;
-  workspaceIdentity: string;
-  target: RemoteTarget;
-}
-
 export interface ConnectRemoteRequest {
   target: RemoteTarget;
   requestId?: string;
@@ -507,7 +277,6 @@ export const DesktopCommandIds = {
   OpenChangelog: "openChangelog",
   CheckForUpdates: "checkForUpdates",
   RelaunchApp: "relaunchApp",
-  OpenFeedback: "openFeedback",
   OpenCommunity: "openCommunity",
   ExportLogs: "exportLogs",
   ToggleDevTools: "toggleDevTools",
@@ -518,24 +287,9 @@ export const DesktopCommandIds = {
   SetZCodeEndpointCustom: "setZCodeEndpointCustom",
   ResetZCodeEndpoint: "resetZCodeEndpoint",
   ClearAllData: "clearAllData",
-  ClearCodingPlanWebviewStorage: "clearCodingPlanWebviewStorage",
-  GetCuaOsSupport: "getCuaOsSupport",
 } as const;
 
 export type DesktopCommandId = (typeof DesktopCommandIds)[keyof typeof DesktopCommandIds];
-
-/**
- * CUA Helper 的操作系统支持态（macOS 版本门槛判定结果，主进程经
- * GetCuaOsSupport 下发给 renderer）。
- * - supported：满足门槛（含非版本因素，如解析失败时按宽松处理）。
- * - macos-below-minimum：macOS 低于承诺地板（Helper LSMinimumSystemVersion 12.0），
- *   低版本上 Helper 会被 LaunchServices -10825 拒启，表象是授权反复无响应。
- * - not-applicable：非 darwin 平台，无 macOS 版本门槛概念。
- */
-export type CuaOsSupport =
-  | { kind: "supported" }
-  | { kind: "macos-below-minimum"; minimumMacOs: string; currentMacOs: string }
-  | { kind: "not-applicable" };
 
 /**
  * 平台操作接口 —— 替代直接访问 window.zcode
@@ -550,12 +304,6 @@ export type CuaOsSupport =
 export interface IPlatformService {
   /** 当前平台的文件选择框是否能返回 agent 可访问的本地绝对路径 */
   canSelectFilePath?: boolean;
-
-  /**
-   * 插件 UI 沙箱平台端口。只有桌面端实现；
-   * web / 手机远控为 undefined，plugin-ui 据此回退到普通 MCP 工具卡片。
-   */
-  pluginSandbox?: PluginSandboxPlatformPort;
 
   /** 打开系统目录选择框，返回选中路径或 null */
   selectDirectory(): Promise<string | null>;
@@ -601,25 +349,6 @@ export interface IPlatformService {
   /** 订阅远程 workspace session 关闭事件，返回 disposer */
   onRemoteSessionClosed(handler: (event: RemoteSessionClosedEvent) => void): () => void;
 
-  /** 订阅 Bot 触发的远程 workspace 重连成功事件，返回 disposer */
-  onBotRemoteWorkspaceReconnected(
-    handler: (event: BotRemoteWorkspaceReconnectedEvent) => void,
-  ): () => void;
-
-  /** 订阅手机远控状态变化（idle/starting/connecting/running/active/error），返回 disposer */
-  onWebRemoteControlStatusChanged(
-    handler: (snapshot: WebRemoteControlStatusSnapshot) => void,
-  ): () => void;
-
-  /** 订阅桌面端请求：请 renderer 重连指定 workspace 的远端会话 */
-  onWebRemoteControlReconnectWorkspace(
-    handler: (request: { requestId: string; workspaceKey: string }) => Promise<{
-      requestId: string;
-      success: boolean;
-      error?: string;
-    }>,
-  ): () => void;
-
   /** 检查目录是否已在其他窗口打开；如果是则激活该窗口并切到对应 tab */
   activateOrSetWorkspace(path: string): Promise<{ activated: boolean }>;
 
@@ -644,28 +373,6 @@ export interface IPlatformService {
 
   /** 释放当前窗口里已创建的远程 session */
   disposeRemoteSession(sessionId: string): Promise<void>;
-
-  /** 开启当前窗口的手机远控（默认仅同网可达；跨网由用户自备端点） */
-  startWebRemoteControl(
-    request: WebRemoteControlStartRequest,
-  ): Promise<WebRemoteControlStatusSnapshot>;
-
-  /** 停止当前窗口的手机远控并作废配对 */
-  stopWebRemoteControl(): Promise<void>;
-
-  /** 查询当前窗口的手机远控状态 */
-  getWebRemoteControlStatus(): Promise<WebRemoteControlStatusSnapshot>;
-
-  /** 刷新配对：作废旧二维码/链接并重新注册 */
-  refreshWebRemoteControlPairing(
-    request: WebRemoteControlResetPairingRequest,
-  ): Promise<WebRemoteControlStatusSnapshot>;
-
-  /** 同步窗口内已打开的工作区清单给远控运行时 */
-  syncWebRemoteControlWorkspaces(payload: WebRemoteControlWorkspaceSync): Promise<void>;
-
-  /** 同步窗口内任务清单给远控运行时 */
-  syncWebRemoteControlTasks(payload: WebRemoteControlTaskSync): Promise<void>;
 
   /** 检查本机 Docker daemon 是否可用 */
   isDockerAvailable(): Promise<boolean>;
@@ -702,9 +409,6 @@ export interface IPlatformService {
     request: string | ApplicationIconRequest,
   ): Promise<ApplicationIconInfo | null>;
 
-  /** 打开反馈入口，由平台自行解析最终地址 */
-  openFeedback(): Promise<void>;
-
   /** 打开用户社群入口，由平台自行解析当前语言对应渠道 */
   openCommunity(): Promise<void>;
 
@@ -719,28 +423,6 @@ export interface IPlatformService {
 
   /** 查询当前生效的 ZCode Built-in Provider Config 物化副本；Web 平台不支持。 */
   getBuiltinProviderConfigFile?(): Promise<BuiltinProviderConfigFileInfo>;
-
-  /** 打开 ZCode Computer Use 的完整权限引导。Desktop only。 */
-  openCuaPermissionOnboarding?(
-    options?: OpenCuaPermissionOnboardingOptions,
-  ): Promise<CuaAccessibilitySettingsResult>;
-  /** 取消本 renderer 以 operationId 发起的 onboarding participant。Desktop only。 */
-  cancelCuaPermissionOnboarding?(operationId: string): void;
-  /**
-   * 申请 macOS TCC 授权（辅助功能 / 屏幕录制）。必须由 Electron main 在 app.whenReady()
-   * 之后调用，TCC 弹窗才归属 ZCode.app 而不是 MCP worker。Desktop only。
-   */
-  requestCuaPermissions?(): Promise<CuaPermissionRequestResult>;
-  /** 打开 macOS「屏幕录制」系统设置面板。Desktop only。 */
-  openCuaPermissionSystemSettings?(): Promise<boolean>;
-  /**
-   * 预热并缓存已验证的 Helper 路径 + 指纹，使随后的 dragstart 能同步 startDrag。
-   * 必须在拖拽浮窗挂载时调用：Electron 原生拖拽要求在 dragstart 事件链路里同步调用
-   * startDrag，等不了 install/verify 这类异步 I/O（否则错过 OS 拖拽手势窗口）。Desktop only。
-   */
-  prepareCuaHelperPermissionDrag?(): Promise<PrepareCuaHelperPermissionDragResult>;
-  /** 从权限浮窗把 Helper.app 拖进 macOS 权限列表。Desktop only。 */
-  startCuaHelperPermissionDrag?(): void;
 
   /** 通知 main process renderer 已就绪，触发缓存的冷启动 deep link 转发 */
   notifyRendererReady(): void;
@@ -773,66 +455,6 @@ export interface IPlatformService {
 
   /** 注册 main 进程请求关闭当前上下文的回调，返回 disposer */
   onCloseActiveContextRequest?(handler: () => void): () => void;
-
-  /** 注册内置浏览器 webview 请求打开新页面的回调，返回 disposer */
-  onOpenBrowserUrl?(handler: (request: EmbeddedBrowserOpenUrlRequest) => void): () => void;
-  /** 注册 agent 首次 browser 命令建好受控 view 的回调（自动开 browser-use tab），返回 disposer */
-  onBrowserViewReady?(
-    handler: (payload: {
-      workspaceKey: string;
-      remoteSessionId?: string;
-      sessionId: string;
-      tabId: string;
-      browserId: string;
-      browserGeneration: number;
-    }) => void,
-  ): () => void;
-
-  /** browser-use 命中真实 tab 时刷新标签页操作状态，返回 disposer。 */
-  onBrowserViewOperation?(handler: (payload: BrowserViewOperationPayload) => void): () => void;
-
-  /** browser visibility capability：显式显示/隐藏当前 IAB browser-use pane。 */
-  onBrowserViewVisibility?(
-    handler: (payload: {
-      visible: boolean;
-      workspaceKey: string;
-      remoteSessionId: string | undefined;
-      sessionId: string;
-      tabId?: string;
-      browserId: string;
-      browserGeneration: number;
-    }) => void,
-  ): () => void;
-
-  /** Agent setViewportSize 与 renderer 自由尺寸的单 tab 同步事件。 */
-  onBrowserViewViewportChanged?(
-    handler: (payload: BrowserViewViewportChangedPayload) => void,
-  ): () => void;
-
-  /** 注册 main 截图前准备后台 guest 合成表面的回调，返回 disposer。 */
-  onBrowserViewScreenshotSurfacePrepare?(
-    handler: (payload: BrowserViewScreenshotSurfacePreparePayload) => void,
-  ): () => void;
-
-  /** 注册 main 截图完成后释放后台 guest 合成表面的回调，返回 disposer。 */
-  onBrowserViewScreenshotSurfaceRelease?(
-    handler: (payload: BrowserViewScreenshotSurfaceReleasePayload) => void,
-  ): () => void;
-
-  /** 上报目标 guest 已在连续动画帧中稳定的截图合成表面。 */
-  browserViewScreenshotSurfaceReady?(payload: BrowserViewScreenshotSurfaceReadyPayload): void;
-
-  onBrowserViewCloseTab?(handler: (payload: BrowserViewCloseTabNotification) => void): () => void;
-
-  /** main 请求 renderer 卸载 guest、保留 logical shell。 */
-  onBrowserViewSuspend?(
-    handler: (payload: BrowserViewResidencyTransitionPayload) => void,
-  ): () => void;
-
-  /** main 请求 renderer 为 suspended shell 重新挂载 guest。 */
-  onBrowserViewRestore?(
-    handler: (payload: BrowserViewResidencyTransitionPayload) => void,
-  ): () => void;
 
   /** 注册 main 进程触发新建任务的回调，返回 disposer */
   onNewTask(handler: () => void): () => void;
@@ -876,52 +498,6 @@ export interface IPlatformService {
 
   /** 截取当前窗口，用于错误反馈携带现场画面；Web fallback 可返回 null */
   captureWindowScreenshot?(): Promise<WindowScreenshotResult | null>;
-
-  /** `<webview>` guest 上报；active=true 表示 agent 无 tabId 命令优先读取当前可见页。 */
-  browserViewAttachGuest?(payload: {
-    key: string;
-    webContentsId: number;
-    active?: boolean;
-    workspaceKey?: string;
-    remoteSessionId?: string;
-    /** human browser tab 的对话归属；缺失时 main 必须保持不可认领，避免跨对话泄漏。 */
-    sessionId?: string;
-    residencyGeneration?: number;
-  }): Promise<BrowserGuestAttachResult>;
-
-  /** 重建 `<webview>` 前让 main 精确断开旧 guest 的 CDP；false 时不得销毁旧节点。 */
-  browserViewDetachGuest?(payload: { key: string; webContentsId: number }): Promise<boolean>;
-
-  /** 用户显式关闭 Browser tab；与 budget suspend 使用不同 IPC authority。 */
-  browserViewCloseTab?(payload: BrowserViewCloseTabRequest): Promise<void>;
-
-  /** 上报 selected/visible/loading 与恢复元数据。 */
-  browserViewReportResidency?(payload: BrowserViewResidencyReportPayload): Promise<void>;
-
-  /** renderer 已按指定 generation 卸载 guest。 */
-  browserViewSuspendReady?(payload: { tabId: string; generation: number }): Promise<void>;
-
-  /** 用户选中 suspended tab 时请求 main single-flight 恢复。 */
-  browserViewEnsureResident?(payload: BrowserViewCloseTabRequest): Promise<void>;
-
-  /** workspace/task 启动时读取持久化 logical shells。 */
-  browserViewRestoreTabs?(
-    payload: BrowserViewRestoreTabsRequest,
-  ): Promise<BrowserViewRestoredTabShell[]>;
-
-  /** Renderer 自由尺寸回写 main；null 表示恢复宿主自然 viewport。 */
-  browserViewUpdateViewport?(payload: {
-    tabId: string;
-    viewport: BrowserViewportSize | null;
-  }): Promise<void>;
-
-  /** 从自动发现的本机 Chrome Profile 一次性导入 Cookie 与 LocalStorage。 */
-  importChromeBrowserData?(
-    options?: ChromeBrowserDataImportOptions,
-  ): Promise<ChromeBrowserDataImportResult>;
-
-  /** 清理内置浏览器持久化分区；cache 模式保留认证数据，all 模式清理全部站点数据。 */
-  clearEmbeddedBrowserData?(mode: "cache" | "all"): Promise<EmbeddedBrowserDataClearResult>;
 
   /** 注册新版本已下载完毕的回调，参数为新版本号，返回 disposer */
   onUpdateReady(callback: (version: string) => void): () => void;
@@ -995,8 +571,7 @@ export interface IPlatformService {
   ): Promise<{ success: boolean; error?: string }>;
 
   /** 执行桌面窗口级命令（标题栏菜单、缩放、窗口控制等）。
-   *  返回值直通 main 进程 handler 的 return（大多数命令无返回值；
-   *  GetCuaOsSupport 返回 CuaOsSupport），因此放宽为 unknown。 */
+   *  返回值直通 main 进程 handler 的 return，因此放宽为 unknown。 */
   executeDesktopCommand(command: DesktopCommandId): Promise<unknown>;
 
   /** 同步应用菜单语言，驱动 main 进程重建原生菜单 */

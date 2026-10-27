@@ -57,7 +57,6 @@ export function createWindow(options: {
   runtimeProcessEnvWaitTimeoutMs?: number;
   /** Local Host map insertion completed; presentation facts can now be replayed safely. */
   onHostProcessReady?: (windowKey: number) => void;
-  resolveBrowserViewOwner?: Parameters<typeof createBrowserWindow>[0]["resolveBrowserViewOwner"];
 }) {
   const win = createBrowserWindow({
     iconPath: options.iconPath,
@@ -73,7 +72,6 @@ export function createWindow(options: {
     initialDesktopZoomLevel: options.initialDesktopZoomLevel,
     initialWindowSize: options.initialWindowSize,
     currentApplicationLocale: options.currentApplicationLocale,
-    resolveBrowserViewOwner: options.resolveBrowserViewOwner,
   });
   const label = `local-${win.webContents.id}`;
 

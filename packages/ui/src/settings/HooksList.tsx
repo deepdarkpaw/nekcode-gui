@@ -1,37 +1,20 @@
 import type { ReactNode } from "react";
 import { Anchor, Download, ShieldCheck } from "lucide-react";
-import type { Hook, PluginHookDetail, PluginScope } from "@zcode/shared";
-import { Badge } from "@/components/ui/badge.js";
+import type { Hook } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { PluginInstallEmptyState } from "@/settings/PluginInstallEmptyState.js";
-import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
-import type { StorePluginItem } from "@/settings/pluginStoreListing.js";
 import { settingsResourceRowInteraction } from "@/settings/settingsResourceRowInteraction.js";
 import { requiresWorkspaceHookTrust } from "@/settings/WorkspaceHookTrustNotice.js";
 
 export type HookScope = "user" | "project";
 
-export interface PluginHookRow {
-  detail: PluginHookDetail;
-  pluginEnabled: boolean;
-  pluginId: string;
-  pluginName: string;
-  pluginScope?: PluginScope;
-  pluginIconItem?: Pick<StorePluginItem, "name" | "listing">;
-}
-
 type HookSection =
   | { kind: "installed"; title: "Installed"; count: number; hooks: Hook[] }
-  | { kind: "legacy"; title: "Legacy"; count: number; hooks: Hook[] }
-  | { kind: "plugin"; title: string; pluginId: string; count: number; hooks: PluginHookRow[] };
+  | { kind: "legacy"; title: "Legacy"; count: number; hooks: Hook[] };
 
-function groupHookSections(
-  editableHooks: Hook[],
-  compatibilityHooks: Hook[],
-  pluginHooks: PluginHookRow[],
-): HookSection[] {
+function groupHookSections(editableHooks: Hook[], compatibilityHooks: Hook[]): HookSection[] {
   const sections: HookSection[] = [];
   if (editableHooks.length > 0) {
     sections.push({
@@ -39,22 +22,6 @@ function groupHookSections(
       title: "Installed",
       count: editableHooks.length,
       hooks: editableHooks,
-    });
-  }
-  const pluginGroups = new Map<string, PluginHookRow[]>();
-  for (const hook of pluginHooks) {
-    const key = hook.pluginId || hook.pluginName.trim().toLocaleLowerCase();
-    pluginGroups.set(key, [...(pluginGroups.get(key) ?? []), hook]);
-  }
-  for (const [, hooks] of [...pluginGroups.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    sections.push({
-      kind: "plugin",
-      pluginId: hooks[0]?.pluginId ?? "",
-      title: hooks[0]?.pluginName ?? "",
-      count: hooks.length,
-      hooks,
     });
   }
   if (compatibilityHooks.length > 0) {
@@ -72,14 +39,12 @@ export function HooksList({
   compatibilityHooks,
   editableHooks,
   operatingHookId,
-  pluginHooks,
   trustActionAvailable = false,
   trustingHookId,
   onEdit,
   onImport,
   onTrust,
   onToggle,
-  formatPluginName = (name) => name,
   installedAction,
   installedEmptyActions,
   installedEmptyDescription,
@@ -89,14 +54,12 @@ export function HooksList({
   compatibilityHooks: Hook[];
   editableHooks: Hook[];
   operatingHookId: string | null;
-  pluginHooks: PluginHookRow[];
   trustActionAvailable?: boolean;
   trustingHookId?: string | null;
   onEdit: (hook: Hook) => void;
   onImport: (hook: Hook) => Promise<void>;
   onTrust?: (hook: Hook) => Promise<void>;
   onToggle: (hook: Hook, enabled: boolean) => Promise<void>;
-  formatPluginName?: (name: string, pluginId?: string) => string;
   installedAction?: ReactNode;
   installedEmptyActions?: ReactNode;
   installedEmptyDescription?: string;
@@ -104,7 +67,7 @@ export function HooksList({
   showInstalledSection?: boolean;
 }) {
   const { intl } = useZCodeIntl();
-  const groupedSections = groupHookSections(editableHooks, compatibilityHooks, pluginHooks);
+  const groupedSections = groupHookSections(editableHooks, compatibilityHooks);
   const sections: HookSection[] =
     showInstalledSection && editableHooks.length === 0
       ? [{ kind: "installed", title: "Installed", count: 0, hooks: [] }, ...groupedSections]
@@ -113,20 +76,15 @@ export function HooksList({
   return (
     <div className="space-y-6">
       {sections.map((section) => (
-        <section
-          key={`${section.kind}:${section.kind === "plugin" ? section.pluginId : section.title}`}
-          className="space-y-4"
-        >
+        <section key={`${section.kind}:${section.title}`} className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="flex h-7 items-center gap-1.5 text-ui-base font-medium text-foreground">
-              {section.kind === "plugin"
-                ? formatPluginName(section.title, section.pluginId)
-                : intl.formatMessage({
-                    id:
-                      section.kind === "installed"
-                        ? "settings.hooks.group.installed"
-                        : "settings.hooks.group.legacy",
-                  })}
+              {intl.formatMessage({
+                id:
+                  section.kind === "installed"
+                    ? "settings.hooks.group.installed"
+                    : "settings.hooks.group.legacy",
+              })}
               <span className="text-ui-sm font-normal text-foreground-subtle">{section.count}</span>
             </h3>
             {section.kind === "installed" ? installedAction : null}
@@ -139,37 +97,30 @@ export function HooksList({
             />
           ) : (
             <div className="overflow-hidden rounded-xl bg-surface">
-              {section.kind === "plugin"
-                ? section.hooks.map((hook, index) => (
-                    <div key={`${hook.pluginId}-${hook.detail.sourcePath}-${index}`}>
-                      {index > 0 ? <div className="h-px bg-border/50" aria-hidden="true" /> : null}
-                      <PluginHookItem hook={hook} />
-                    </div>
-                  ))
-                : section.hooks.map((hook, index) => (
-                    <div key={hook.id}>
-                      {index > 0 ? <div className="h-px bg-border/50" aria-hidden="true" /> : null}
-                      {section.kind === "installed" ? (
-                        <ConfiguredHookRow
-                          hook={hook}
-                          busy={operatingHookId === hook.id}
-                          readOnly={hook.editable === false}
-                          requiresTrust={requiresWorkspaceHookTrust(hook)}
-                          trustActionAvailable={trustActionAvailable}
-                          trusting={trustingHookId === hook.id}
-                          onToggle={onToggle}
-                          onEdit={onEdit}
-                          onTrust={onTrust}
-                        />
-                      ) : (
-                        <CompatibilityHookRow
-                          hook={hook}
-                          busy={operatingHookId === hook.id}
-                          onImport={onImport}
-                        />
-                      )}
-                    </div>
-                  ))}
+              {section.hooks.map((hook, index) => (
+                <div key={hook.id}>
+                  {index > 0 ? <div className="h-px bg-border/50" aria-hidden="true" /> : null}
+                  {section.kind === "installed" ? (
+                    <ConfiguredHookRow
+                      hook={hook}
+                      busy={operatingHookId === hook.id}
+                      readOnly={hook.editable === false}
+                      requiresTrust={requiresWorkspaceHookTrust(hook)}
+                      trustActionAvailable={trustActionAvailable}
+                      trusting={trustingHookId === hook.id}
+                      onToggle={onToggle}
+                      onEdit={onEdit}
+                      onTrust={onTrust}
+                    />
+                  ) : (
+                    <CompatibilityHookRow
+                      hook={hook}
+                      busy={operatingHookId === hook.id}
+                      onImport={onImport}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -182,13 +133,11 @@ function HookItemFrame({
   actions,
   children,
   onEdit,
-  pluginIconItem,
   testId,
 }: {
   actions?: ReactNode;
   children: ReactNode;
   onEdit?: () => void;
-  pluginIconItem?: Pick<StorePluginItem, "name" | "listing">;
   testId?: string;
 }) {
   return (
@@ -197,21 +146,12 @@ function HookItemFrame({
       data-testid={testId}
       {...settingsResourceRowInteraction(onEdit)}
     >
-      {pluginIconItem ? (
-        <PluginStoreAvatar
-          item={pluginIconItem}
-          className="size-9 bg-background"
-          iconClassName="size-4"
-          fallbackIcon={<Anchor className="size-4" />}
-        />
-      ) : (
-        <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-foreground-subtle"
-          aria-hidden="true"
-        >
-          <Anchor className="size-4" />
-        </div>
-      )}
+      <div
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-foreground-subtle"
+        aria-hidden="true"
+      >
+        <Anchor className="size-4" />
+      </div>
       <div className="min-w-0">{children}</div>
       {actions ? (
         <div className="col-start-2 flex shrink-0 items-center justify-end gap-2 sm:col-start-auto">
@@ -329,25 +269,6 @@ function CompatibilityHookRow({
       }
     >
       <HookContent event={hook.event} command={[hook.command, ...(hook.args ?? [])].join(" ")} />
-    </HookItemFrame>
-  );
-}
-
-function PluginHookItem({ hook }: { hook: PluginHookRow }) {
-  const { intl } = useZCodeIntl();
-  return (
-    <HookItemFrame testId="plugin-hook-row" pluginIconItem={hook.pluginIconItem}>
-      <HookContent
-        event={hook.detail.event}
-        command={[hook.detail.command, ...(hook.detail.args ?? [])].join(" ")}
-        trailingBadges={
-          !hook.pluginScope ? (
-            <Badge variant="secondary" className="bg-surface text-foreground-subtle">
-              {intl.formatMessage({ id: "settings.hooks.scopeUnknown" })}
-            </Badge>
-          ) : null
-        }
-      />
     </HookItemFrame>
   );
 }

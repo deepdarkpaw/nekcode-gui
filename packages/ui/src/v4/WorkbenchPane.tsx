@@ -557,7 +557,6 @@ export function WorkbenchLeafPane({
           workspacePath={scope.workspacePath}
           workspaceIdentity={scope.workspaceIdentity}
           remoteSessionId={scope.remoteSessionId}
-          isDesktop={shell.isDesktop}
           provider={isPrimary && isShellWorkspace ? shell.provider : undefined}
           onSessionCreated={handleSessionCreated}
           onSessionDeleted={handleSessionDeleted}

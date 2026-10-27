@@ -8,13 +8,10 @@ import {
   BugIcon,
   FileCode2Icon,
   FileDiffIcon,
-  MapIcon,
   MessageSquareTextIcon,
   ListTreeIcon,
-  PlugIcon,
   NotepadTextIcon,
   PackageIcon,
-  PaletteIcon,
   SquareTerminalIcon,
   TerminalIcon,
   WaypointsIcon,
@@ -32,8 +29,6 @@ import { TabsTrigger } from "@/components/ui/tabs.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
 import type { WorkspaceSidePaneTab } from "@/lib/workspaceSidePane.js";
 import { Button } from "@/components/ui/button.js";
-import { BrowserUseTabIcon } from "@/app-shell/BrowserUseTabIcon.js";
-import { BrowserTabFavicon } from "@/app-shell/BrowserTabFavicon.js";
 import { SidePaneTabTitleTooltip } from "@/app-shell/SidePaneTabTitleTooltip.js";
 
 // tab 默认按 156px 等宽排列；空间不足时以相同 grow/shrink 参数平均收缩到 60px，
@@ -271,9 +266,6 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
   if (tab.type === "plan-detail") {
     return <NotepadTextIcon className="size-3.5" />;
   }
-  if (tab.type === "plugin-ui") {
-    return <PlugIcon className="size-3.5" />;
-  }
   // 同一条约定：来源卡片（CreateWorkflow）用 lucide Workflow，tab 必须与它一致。
   if (tab.type === "workflow-run") {
     return <WorkflowIcon className="size-3.5" />;
@@ -308,20 +300,8 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <ListTreeIcon className="size-3.5" />;
   }
 
-  if (tab.type === "browser") {
-    return <BrowserTabFavicon faviconUrl={tab.faviconUrl} />;
-  }
-
   if (tab.type === "git") {
     return <FileDiffIcon className="size-3.5" />;
-  }
-
-  if (tab.type === "treemapping") {
-    return <MapIcon className="size-3.5" />;
-  }
-
-  if (tab.type === "whiteboard") {
-    return <PaletteIcon className="size-3.5" />;
   }
 
   if (tab.type === "model-trajectory") {
@@ -334,14 +314,6 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
 
   if (tab.type === "terminal" || tab.type === "bash-output") {
     return <SquareTerminalIcon className="size-3.5" />;
-  }
-
-  // 同 getSidePaneTabTitle——browser-use tab 无 source，若不在此拦截会 fallthrough
-  // 到下方 `tab.source.type` 读 undefined.type 崩溃。
-  // agent 导航后由 <webview> favicon 事件回填 faviconUrl，与 human browser tab 一致地展示真实图标；
-  // 缺省（about:blank/未取到）回退地球图标。
-  if (tab.type === "browser-use") {
-    return <BrowserUseTabIcon tab={tab} />;
   }
 
   if (tab.source.type === "patch") {
@@ -515,21 +487,8 @@ export function getSidePaneTabTitle(
     return formatMessage({ id: "sidePane.subagentDirectory" });
   }
 
-  if (tab.type === "browser") {
-    const pageTitle = tab.title?.trim();
-    return pageTitle || formatMessage({ id: "browser.title" });
-  }
-
   if (tab.type === "git") {
     return formatMessage({ id: "sidePane.review" });
-  }
-
-  if (tab.type === "treemapping") {
-    return formatMessage({ id: "treemapping.title" });
-  }
-
-  if (tab.type === "whiteboard") {
-    return tab.title || formatMessage({ id: "whiteboard.title" });
   }
 
   if (tab.type === "model-trajectory") {
@@ -542,17 +501,6 @@ export function getSidePaneTabTitle(
 
   if (tab.type === "terminal" || tab.type === "bash-output") {
     return tab.title || formatMessage({ id: "terminal.title" });
-  }
-
-  // browser-use tab 之前未在此分派，会 fallthrough 到底部 `tab.source.title`，
-  // 而 browser-use tab 无 source 字段 → 读 undefined.title 触发 React 崩溃（整棵 workspace 子树挂掉）。
-  // 用页面标题（agent 导航后由 getState 回填），缺省复用 browser.title 文案。
-  if (tab.type === "browser-use") {
-    return tab.title?.trim() || formatMessage({ id: "browser.title" });
-  }
-
-  if (tab.type === "plugin-ui") {
-    return tab.title.trim() || formatMessage({ id: "sidePane.pluginUi" });
   }
 
   return tab.source.title || formatMessage({ id: "codeViewer.title" });

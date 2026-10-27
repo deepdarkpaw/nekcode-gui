@@ -16,7 +16,6 @@ import { safeLogArgs } from "@zcode/shared";
  */
 import { createHostDatabaseStartup } from "./hostDatabaseStartup.js";
 import { randomUUID } from "node:crypto";
-import { createPluginSandboxRegistrationBridge } from "./pluginSandbox/index.js";
 import {
   MessagePortProtocol,
   ChannelServer,
@@ -28,13 +27,9 @@ import {
 import { registerHostNetworkTelemetry, stopHostNetworkTelemetry } from "./hostNetworkTelemetry.js";
 import { registerHostServiceResourceTelemetry } from "./hostServiceResourceTelemetry.js";
 import { resolveResourceTelemetryEnvironmentKey } from "./hostResourceTelemetryEnvironment.js";
-import { createBrowserControlMainBridge } from "./browserControlMainBridge.js";
-import { materializeBrowserRecordingArtifact } from "./browserRecordingArtifactMaterializer.js";
 import {
   ServiceCollection,
-  IBotsService,
   IFileService,
-  IClientConfigService,
   IMediaPreviewService,
   IModelSelectionService,
   ISettingService,
@@ -43,7 +38,6 @@ import {
   IZCodeAgentService,
   IZCodeTaskService,
   IZCodeSessionService,
-  ICredentialService,
   createZCodeAgentConnectionScope,
   type ZCodeAgentV4ClientMode,
   collectServiceMemoryDiagnostics,
@@ -56,18 +50,11 @@ import {
   createServiceLogger,
   createHostApiNetworkTransport,
   createSettingService,
-  getAstrBotBridgeProvider,
-  getAppConfigDir,
 } from "@zcode/services/node";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { createHostResourceUsageResponder } from "./hostResourceUsage.js";
-import { startBotsBridgeServer, type BotsBridgeServerHandle } from "./botsBridgeServer.js";
 import {
   HostMessageTypes,
   HostResponseTypes,
-  DEFAULT_BOT_COMMANDS,
-  DEFAULT_BOT_REPLY_GRANULARITY,
   ZCODE_VERSION,
   formatLogPrefix,
   formatZCodeHostProcessName,
@@ -112,7 +99,6 @@ import {
   createRemoteMediaPreviewProxy,
   type RemoteMediaPreviewProxy,
 } from "./remoteMediaPreviewProxy.js";
-import { watchCronRunBotDelivery } from "./cronBotDelivery.js";
 import { createHostRemoteWorkspaceProxyState } from "./hostRemoteWorkspaceProxyState.js";
 import { createRemoteWorkspaceServiceCollection } from "./remoteWorkspaceServiceCollection.js";
 import { getRemoteProviderProvisioningExecutor } from "./remoteProviderProvisioningService.js";
@@ -149,7 +135,6 @@ type RemoteBackendHostConnection = RemoteConnection & {
 };
 type HostRemoteConnection = RemoteBackendHostConnection;
 interface HostRemoteConnectionCapabilities {
-  browserRecordingUploader?: Pick<IRemoteBackend, "upload">;
   remoteMediaPreviewFactory?: (
     scope: Extract<WindowHostAttachmentScope, { kind: "remote" }>,
   ) => RemoteMediaPreviewProxy;
@@ -209,45 +194,6 @@ function authorizeLocalMediaPreviewPath(path: string): Promise<string> {
     }
   });
 }
-
-const pluginSandboxRegistrationBridge = createPluginSandboxRegistrationBridge({
-  send: (message) => {
-    if (!parentPort) throw new Error("parentPort unavailable");
-    parentPort.postMessage(message);
-  },
-});
-
-// browser-use host↔main 桥：把 agent 的 browser 命令经 parentPort 转给 main（WebContentsView+CDP）。
-// parentPort 为空（不应发生于 host 进程）时 postToMain 抛错，bridge 自身返回 backend_unavailable。
-const browserControlMainBridge = createBrowserControlMainBridge({
-  postToMain: (message) => {
-    if (!parentPort) {
-      throw new Error("parentPort unavailable");
-    }
-    parentPort.postMessage(message);
-  },
-  materializeRecording: (input) => {
-    let remoteBackend: Pick<IRemoteBackend, "upload"> | undefined;
-    if (input.remoteSessionId) {
-      const workspaceIdentity = input.workspaceIdentity;
-      if (!workspaceIdentity?.trim()) {
-        throw new Error("remote Browser recording materialization requires workspaceIdentity");
-      }
-      // Window Host 重构后同一进程可同时持有多个远端连接，旧的进程级
-      // remoteConnection 会串 session。必须用完整 scope 从 registry 的权威 entry 取 uploader。
-      remoteBackend = windowRemoteConnectionRegistry.resolveScopedCapabilities({
-        kind: "remote",
-        remoteSessionId: input.remoteSessionId,
-        workspacePath: input.workspacePath,
-        workspaceIdentity,
-      })?.browserRecordingUploader;
-    }
-    return materializeBrowserRecordingArtifact({
-      ...input,
-      ...(remoteBackend ? { remoteBackend } : {}),
-    });
-  },
-});
 
 function reportHostLog(level: HostLogLevel, args: unknown[]): void {
   args = safeLogArgs(args);
@@ -546,26 +492,6 @@ async function dispatchCronRun(request: CronRunDispatchRequest): Promise<{
         mode: request.mode,
       });
     }
-    const botsService = targetServices.getOptional(IBotsService);
-    if (botsService) {
-      try {
-        await watchCronRunBotDelivery({
-          automationId: request.automationId,
-          workspaceKey,
-          workspacePath: request.workspacePath,
-          ...(request.workspaceIdentity ? { workspaceIdentity: request.workspaceIdentity } : {}),
-          taskId: task.taskId,
-          repo: cronAutomationRepo,
-          botsService,
-        });
-      } catch (error) {
-        // Bot 回推是 best-effort 辅助通道；配置/凭据/订阅失败不能阻断 automation 派发与结算。
-        logger.warn(
-          `automation Bot delivery subscription failed automation=${request.automationId} provider=unknown`,
-          error,
-        );
-      }
-    }
     trackedKey = cronRunSubscriptionKey(task.taskId, promptTraceId);
     trackCronRunOutcome({
       zcodeTaskService,
@@ -731,18 +657,6 @@ const runtimeTaskReporter = {
     });
   },
 } satisfies NonNullable<Parameters<typeof createLocalServices>[0]>["taskRuntimeReporter"];
-
-const cuaOperationStateReporter = {
-  onStateChanged(event) {
-    if (!parentPort) {
-      return;
-    }
-    parentPort.postMessage({
-      type: HostResponseTypes.CuaOperationState,
-      ...event,
-    });
-  },
-} satisfies NonNullable<Parameters<typeof createLocalServices>[0]>["cuaOperationStateReporter"];
 
 let untrackedPromptRpcCount = 0;
 function reportHostRunningTaskCount(): void {
@@ -1252,7 +1166,6 @@ async function createWindowRemoteConnectionHandle(params: {
   signal: AbortSignal;
 }): Promise<WindowRemoteConnectionHandle<ServiceCollection, HostRemoteConnectionCapabilities>> {
   if (!activeServices) throw new Error("Local Host services are not initialized.");
-  const clientConfigService = activeServices.get(IClientConfigService);
   if (params.signal.aborted) {
     throw new Error("远程连接已取消");
   }
@@ -1296,7 +1209,6 @@ async function createWindowRemoteConnectionHandle(params: {
     },
   );
   const services = createRemoteWorkspaceServiceCollection({
-    clientConfigService,
     connectionServices: backendConnection.services,
     sourceServices: activeServices ?? undefined,
     parentPort,
@@ -1346,12 +1258,7 @@ async function createWindowRemoteConnectionHandle(params: {
   return {
     services,
     capabilities:
-      "backend" in connection
-        ? {
-            browserRecordingUploader: connection.backend,
-            ...(remoteMediaPreviewFactory ? { remoteMediaPreviewFactory } : {}),
-          }
-        : {},
+      "backend" in connection && remoteMediaPreviewFactory ? { remoteMediaPreviewFactory } : {},
     onDidClose(listener) {
       closeListeners.add(listener);
       return { dispose: () => closeListeners.delete(listener) };
@@ -1483,140 +1390,6 @@ function disposeLocalResourceTelemetry(): void {
   } finally {
     activeLocalResourceTelemetry = null;
   }
-}
-
-const BOTS_BRIDGE_TOKEN_KEY = "bot:bridge:token";
-const BOTS_BRIDGE_RUNTIME_FILE = "bots-bridge.runtime.v2.json";
-const BOTS_BRIDGE_LEGACY_CONFIG_FILE = "bots-bridge.v2.json";
-const BOTS_BRIDGE_LEGACY_BINDINGS_FILE = "bots-bindings.v2.json";
-
-/**
- * v2.0 → v2.1 迁移：读一次旧桥接配置（enabled/allowedWorkspaces），
- * 随后把旧配置/绑定文件备份为 .bak。会话/绑定不迁移（见 spec 迁移边界）。
- */
-async function readLegacyBotsBridgeConfig(): Promise<{
-  enabled: boolean;
-  allowedWorkspaces: string[];
-} | null> {
-  const dir = getAppConfigDir();
-  let legacy: { enabled?: unknown; allowedWorkspaces?: unknown } | null = null;
-  try {
-    legacy = JSON.parse(await readFile(join(dir, BOTS_BRIDGE_LEGACY_CONFIG_FILE), "utf-8"));
-  } catch {
-    legacy = null;
-  }
-  for (const name of [BOTS_BRIDGE_LEGACY_CONFIG_FILE, BOTS_BRIDGE_LEGACY_BINDINGS_FILE]) {
-    await rename(join(dir, name), join(dir, `${name}.bak`)).catch(() => undefined);
-  }
-  if (!legacy) {
-    return null;
-  }
-  const allowedWorkspaces = Array.isArray(legacy.allowedWorkspaces)
-    ? legacy.allowedWorkspaces.filter(
-        (value): value is string => typeof value === "string" && value.trim().length > 0,
-      )
-    : [];
-  return {
-    enabled: legacy.enabled !== false,
-    allowedWorkspaces: allowedWorkspaces.length > 0 ? allowedWorkspaces : ["*"],
-  };
-}
-
-let activeBotsBridge: {
-  attachment: { dispose(): void };
-  handle: BotsBridgeServerHandle;
-} | null = null;
-
-/**
- * 启动 AstrBot 桥接：官方 BotsService 持业务状态，astrbotProvider 持传输。
- * inbound 帧走 handleProviderCallback("astrbot", ...)，outbound 由 provider 经 handle.transport 广播。
- * token 存 credential store；url/port/token/bindCode 另写 0600 运行时文件，方便插件配置。
- */
-async function startBotsBridge(services: ServiceCollection): Promise<void> {
-  const botsService = services.getOptional(IBotsService);
-  // 传输控制面走专用 getter，不经 ServiceCollection（否则会暴露到通用 RPC）。
-  const astrBotProvider = getAstrBotBridgeProvider(services);
-  if (!botsService || !astrBotProvider) {
-    return;
-  }
-  // 确保存在一个 astrbot BotConfig（首次启动时创建默认项）。
-  const legacy = await readLegacyBotsBridgeConfig();
-  let bot = (await botsService.getConfig()).bots.find((item) => item.provider === "astrbot");
-  if (!bot) {
-    bot = await botsService.saveBot({
-      bot: {
-        id: `astrbot-${randomUUID()}`,
-        name: "AstrBot",
-        provider: "astrbot",
-        enabled: legacy?.enabled ?? true,
-        allowedWorkspaces: legacy?.allowedWorkspaces ?? ["*"],
-        allowedCommands: { ...DEFAULT_BOT_COMMANDS },
-        currentOptions: {},
-        replyMode: DEFAULT_BOT_REPLY_GRANULARITY,
-      },
-    });
-  }
-  const botId = bot.id;
-  const credentials = services.getOptional(ICredentialService);
-  let token = credentials ? await credentials.load(BOTS_BRIDGE_TOKEN_KEY) : null;
-  if (!token) {
-    token = `${randomUUID()}${randomUUID()}`.replace(/-/gu, "");
-    if (credentials) {
-      await credentials.save(BOTS_BRIDGE_TOKEN_KEY, token);
-    }
-  }
-  const handle = await startBotsBridgeServer({
-    token,
-    service: {
-      isEnabled: async () =>
-        (await botsService.getConfig()).bots.some((item) => item.id === botId && item.enabled),
-      getWorkspaceCount: async () => (await botsService.listWorkspaceRefs()).length,
-      handleCommand: async (frame) => {
-        const bindingId = astrBotProvider.beginTurn(frame, botId);
-        try {
-          await botsService.handleProviderCallback("astrbot", { ...frame, zcodeBotId: botId });
-        } finally {
-          astrBotProvider.settleTurn(bindingId);
-        }
-      },
-      ackDeliveryByFrameId: (deliveryId) => astrBotProvider.ackDeliveryByFrameId(deliveryId),
-      resolveResume: (cursors) => astrBotProvider.resolveResume(cursors),
-      buildSnapshot: (bindingId) => astrBotProvider.buildSnapshot(bindingId),
-    },
-  });
-  const attachment = astrBotProvider.attachTransport(handle.transport);
-  activeBotsBridge = { attachment, handle };
-  // 还没有任何 bot 上下文时生成一次性绑定码，写进运行时文件供用户在聊天里 /bind。
-  const bindCode =
-    (await botsService.getBotStates()).length === 0
-      ? await botsService.createBindCode({ botId })
-      : null;
-  const dir = getAppConfigDir();
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    join(dir, BOTS_BRIDGE_RUNTIME_FILE),
-    `${JSON.stringify(
-      {
-        url: handle.url,
-        port: handle.port,
-        token,
-        ...(bindCode ? { bindCode: bindCode.code, bindCodeExpiresAt: bindCode.expiresAt } : {}),
-      },
-      null,
-      2,
-    )}\n`,
-    { encoding: "utf-8", mode: 0o600 },
-  );
-}
-
-async function disposeBotsBridge(): Promise<void> {
-  const current = activeBotsBridge;
-  activeBotsBridge = null;
-  if (!current) {
-    return;
-  }
-  current.attachment.dispose();
-  await current.handle.close().catch(() => undefined);
 }
 
 type ExposedServicePortHandle = {
@@ -1887,7 +1660,6 @@ async function disposeHostResources(reason: string): Promise<HostShutdownResult>
   disposeHostResourcesInFlight = (async () => {
     logger.info(`disposing host resources, reason=${reason}`);
 
-    pluginSandboxRegistrationBridge.dispose();
     stopHostNetworkTelemetry();
     hostSelfResourceTelemetry.stop();
     disposeLocalResourceTelemetry();
@@ -1897,8 +1669,6 @@ async function disposeHostResources(reason: string): Promise<HostShutdownResult>
       disposeCronRunSubscription(key);
     }
     cronAutomationRepo.close();
-
-    await disposeBotsBridge();
 
     if (activeSessionRealtimePort) {
       activeSessionRealtimePort.dispose();
@@ -1954,7 +1724,6 @@ function disposeHostResourcesBestEffort(reason: string): void {
   hasDisposedHostResources = true;
 
   logger.info(`disposing host resources, reason=${reason}`);
-  pluginSandboxRegistrationBridge.dispose();
   stopHostNetworkTelemetry();
   disposeLocalResourceTelemetry();
   disposeAttachedServicePorts();
@@ -2068,11 +1837,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     return;
   }
 
-  if (msg.type === HostMessageTypes.PluginSandboxRegisterResult) {
-    pluginSandboxRegistrationBridge.accept(msg);
-    return;
-  }
-
   if (msg.type === HostMessageTypes.CronRun) {
     if (databaseStartup?.coordinator.snapshot.phase !== "ready") {
       parentPort.postMessage({
@@ -2106,15 +1870,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
         });
       }
     })();
-    return;
-  }
-
-  if (msg.type === HostMessageTypes.BrowserExecuteResult) {
-    // main 的 WebContentsView+CDP 执行完 browser 命令，按 requestId 关联回 bridge 的 pending。
-    void browserControlMainBridge.handleResult({
-      requestId: msg.requestId,
-      result: msg.result,
-    });
     return;
   }
 
@@ -2396,16 +2151,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     return;
   }
 
-  if (
-    msg.type === HostMessageTypes.BotRemoteWorkspaceReconnectResult ||
-    msg.type === HostMessageTypes.BotRemoteWorkspaceConnectionStatusResult ||
-    msg.type === HostMessageTypes.BotRemoteWorkspaceRuntimePort
-  ) {
-    // Bugfix: Bot bridge 也监听 parentPort，main 回传的 runtime MessagePort 是给 Bot 作为
-    // 远端 RPC client 使用的。host 入口必须跳过这些控制消息，避免误把同一个端口注册成 ChannelServer。
-    return;
-  }
-
   if (msg.type === HostMessageTypes.AttachServicePort) {
     if (!port) {
       logger.error("attach-service-port message missing MessagePort");
@@ -2473,11 +2218,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     });
     databaseStartup = createHostDatabaseStartup({
       startupId: msg.databaseStartupId,
-      cwd: msg.agentSpawnFallbackCwd ?? process.cwd(),
-      workingDirectories:
-        msg.agentWarmupTargets?.map((target) => target.workspacePath) ??
-        (msg.workspacePath ? [msg.workspacePath] : []),
-      env: msg.runtimeProcessEnvPatch,
       publish: (state) => {
         parentPort?.postMessage({ type: HostResponseTypes.DatabaseStartupState, state });
         if (state.phase === "ready") {
@@ -2517,7 +2257,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
               settingService,
               hostApiNetworkTransport,
               authorizeLocalMediaPreviewPath,
-              registerPluginSandbox: pluginSandboxRegistrationBridge.register,
               runtimeProcessEnvPatch: msg.runtimeProcessEnvPatch,
               agentRuntimeContext: {
                 runtimeSurface: "desktop_local_host",
@@ -2540,12 +2279,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
                   trigger,
                 });
               },
-              // browser-use：agent 的 interaction/browserExecute 经 zcodeAgentService 转到这个 executor，
-              // 再经 parentPort 到 main 的 WebContentsView+CDP 执行。
-              browserControlExecutor: browserControlMainBridge,
-              // CUA 顶部提示属于物理 Windows 桌面投影；非 Windows 和远端 authority 都不得上报。
-              cuaOperationStateReporter:
-                process.platform === "win32" ? cuaOperationStateReporter : undefined,
             });
             activeServices = initializedServices;
             return initializedServices;
@@ -2562,9 +2295,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
           services.register(IZCodeTaskService, reportingZCodeTaskService);
         }
         wireLocalResourceTelemetry(services);
-        await startBotsBridge(services).catch((error) => {
-          logger.warn("start bots bridge failed", error);
-        });
         hasDisposedHostResources = false;
         disposeHostResourcesInFlight = null;
         const agentWarmupTargets =

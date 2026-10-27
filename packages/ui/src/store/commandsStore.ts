@@ -16,7 +16,6 @@ interface CommandsStoreState {
   loadedWorkspaceIdentity: string | null;
   commands: ZCodeCommand[];
   userCommands: UserCommand[];
-  pluginCommands: ZCodeCommand[];
   capability: { userScopeAvailable: boolean };
   loading: boolean;
   error: string | null;
@@ -68,7 +67,6 @@ export const useCommandsStore = create<CommandsStoreState>((set, get) => ({
   loadedWorkspaceIdentity: null,
   commands: [],
   userCommands: [],
-  pluginCommands: [],
   capability: { userScopeAvailable: true },
   loading: false,
   error: null,
@@ -96,7 +94,6 @@ export const useCommandsStore = create<CommandsStoreState>((set, get) => ({
         set({
           commands: result.commands,
           userCommands: result.userCommands,
-          pluginCommands: result.pluginCommands,
           capability: result.capability,
           loadedWorkspacePath: workspacePath ?? null,
           loadedWorkspaceIdentity: normalizedWorkspaceIdentity,
@@ -127,7 +124,6 @@ export const useCommandsStore = create<CommandsStoreState>((set, get) => ({
       set({
         commands: result.commands,
         userCommands: result.userCommands,
-        pluginCommands: result.pluginCommands,
         capability: result.capability,
         loadedWorkspacePath: workspacePath,
         loadedWorkspaceIdentity: workspaceIdentity,

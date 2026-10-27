@@ -12,11 +12,10 @@ import type {
   UpdateStatePayload,
 } from "@zcode/shared";
 import type { IServiceAccessor } from "@zcode/services";
-import type { BrowserNavigationRequest, RecentClosedSidePaneTab } from "@/hooks/useAppPanels.js";
+import type { RecentClosedSidePaneTab } from "@/hooks/useAppPanels.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type {
-  BrowserSidePaneMetadata,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
   OpenSelectionSideChatRequest,
@@ -27,7 +26,6 @@ import type {
   OpenScopedWorkflowWorkspaceSideTabRequest,
   WorkspaceSidePaneState,
 } from "@/lib/workspaceSidePane.js";
-import type { TreemappingSidePaneTab } from "@/lib/workspaceSidePane.js";
 import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import type { Theme } from "@/useTheme.js";
@@ -104,7 +102,6 @@ export interface AppProps {
   isDesktop?: boolean;
   isMacDesktop?: boolean;
   isWindowsDesktop?: boolean;
-  supportsEmbeddedBrowser?: boolean;
 }
 
 export interface GitChangeSummary {
@@ -112,19 +109,16 @@ export interface GitChangeSummary {
   removed: number;
 }
 
-export type WorkspaceMainView = "chat" | "automations" | "plugin-store";
+export type WorkspaceMainView = "chat" | "automations";
 
 export interface WorkspaceShellLayoutProps extends AppProps {
   workspaceReadOnlyReason?: string;
   workspaceMainView: WorkspaceMainView;
-  pluginStoreOpenVersion: number;
   openAutomationId: string | null;
   openAutomationTab: AutomationsNavigationTab | null;
   onWorkspaceMainViewChange: (view: WorkspaceMainView) => void;
   onOpenAutomationConsumed: () => void;
   handleOpenAutomations: OpenAutomationsMain;
-  handleOpenPluginStore: () => void;
-  handleManageInstalledPlugins: () => void;
   workspaceShellZCodeState: WorkspaceShellZCodeState;
   theme: Theme;
   isMacFullscreen: boolean;
@@ -145,8 +139,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   canTaskNavForward: boolean;
   isTerminalOpen: boolean;
   isSidebarVisible: boolean;
-  isBrowserOpen: boolean;
-  supportsEmbeddedBrowser: boolean;
   isGitOpen: boolean;
   isSidePaneOpen: boolean;
   summaryPanelVariantOverride: ChatViewSummaryPanelVariant | null;
@@ -180,8 +172,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   gitWorktreeChangeSummary: GitChangeSummary;
   activeGitSourceId: GitChangeSourceId;
   gitState: ReturnType<typeof import("@/hooks/useGitRepository.js").useGitRepository>;
-  browserNavigationRequest: BrowserNavigationRequest | null;
-  browserRestoreUrls: Record<string, string>;
   taskNativeSessionLogFile: ReturnType<
     typeof import("@/hooks/useTaskNativeSessionLogFile.js").useTaskNativeSessionLogFile
   >;
@@ -223,14 +213,8 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   ) => void;
   handleOpenCommandCenter: () => void;
   handleRefreshGit: () => void;
-  handleBrowserUrlChange: (tabId: string, url: string) => void;
-  handleBrowserPageMetadataChange: (tabId: string, metadata: BrowserSidePaneMetadata) => void;
   handleToggleSidebar: () => void;
   handleToggleTerminal: () => void;
-  handleToggleBrowser: () => void;
-  handleOpenBrowserTab: () => void;
-  handleOpenTreemapping: (source?: TreemappingSidePaneTab["source"]) => void;
-  handleOpenWhiteboard: () => void;
   handleOpenDeveloperTools: () => void;
   handleOpenTerminalTab: () => void;
   handleToggleGit: () => void;
@@ -264,7 +248,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   handleCloseOtherSidePaneTabs: (tabId: string) => void;
   handleCloseAllSidePaneTabs: () => void;
   handleReopenClosedSidePaneTab: (tabId: string) => void;
-  handleBrowserNavigationRequestHandled: (requestId: string) => void;
   setIsTerminalOpen: (open: boolean) => void;
   setGitSelectedSourceId: (value: GitChangeSourceId) => void;
   taskFindDialogProps: TaskFindDialogProps;

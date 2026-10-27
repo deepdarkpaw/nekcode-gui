@@ -8,7 +8,6 @@ import {
   type RemoteResourcePackageSelection,
 } from "@zcode/shared";
 import type { IRemoteBackend, RemoteEnvironment } from "./backend.js";
-import { deployZCodeAgentRuntime } from "./zcodeAgentDeploy.js";
 import {
   deployNodePtyPrebuilds,
   deployNodeRuntime,
@@ -22,8 +21,6 @@ import { LocalUploadAssetInstaller } from "@zcode/server/remote/remoteAssetInsta
 import { BundledRemoteSource } from "@zcode/server/remote/bundledRemoteSource.js";
 import {
   checkRemoteAssetComponentIdentity,
-  hasRemoteAssetComponentRefreshPending,
-  markRemoteAssetComponentRefreshPending,
   writeRemoteAssetComponentMeta,
 } from "@zcode/server/remote/remoteAssetLiveIdentity.js";
 import { assertSupportedRemoteEnvironment } from "@zcode/server/remote/remotePlatformSupport.js";
@@ -54,7 +51,7 @@ export interface DeployOptions {
 
 /**
  * Deploy the zcode server to the remote machine.
- * Uploads Node.js binary, server bundle, and node-pty prebuild.
+ * Uploads Node.js binary, server bundle, node-pty prebuild and runtime tools.
  *
  * Returns true if a deploy was performed, false if skipped (version matches).
  */
@@ -103,24 +100,11 @@ export async function deployServer(
     serverDeployDecision: ServerDeployDecision,
     expectedServerBundleSha256: string | null,
   ): Promise<boolean> => {
-    const hasPendingAppVersionRefresh = await hasRemoteAssetComponentRefreshPending(backend, {
-      componentId: "glm",
-      platformArch,
-    });
+    // server 安装失败时远端 SHA marker 不会更新，下次连接仍判定 appVersionChanged，
+    // 因此不需要额外持久化强刷状态。
     const shouldForceRefreshContentAddressedAssets =
       Boolean(options?.force) ||
-      hasPendingAppVersionRefresh ||
       (serverDeployDecision.shouldDeploy && serverDeployDecision.appVersionChanged === true);
-
-    if (shouldForceRefreshContentAddressedAssets) {
-      // server 会先于 GLM 更新；若后续步骤失败，下次连接时 server 版本
-      // 已经匹配。必须持久化升级强刷状态，让重试继续绕过旧 SHA marker，直到 GLM 成功覆盖 marker。
-      await markRemoteAssetComponentRefreshPending(backend, {
-        componentId: "glm",
-        platformArch,
-        appVersion: ZCODE_VERSION,
-      });
-    }
 
     await deployNodeRuntime(
       backend,
@@ -138,7 +122,6 @@ export async function deployServer(
     if (!serverDeployDecision.shouldDeploy) {
       log("skipped — remote version matches");
       // 主 server 版本相同只证明 node/zcode-server.cjs 可启动，不代表随包工具仍存在。
-      // glm 内容跟随 app/server 版本刷新；但 wrapper/bundle 被清理或制品内容变化时仍要按实体检查修复。
       if (shouldDeployResourcePackage("node-pty")) {
         await deployNodePtyPrebuilds(
           backend,
@@ -153,18 +136,6 @@ export async function deployServer(
           { log, logWarn },
         );
       }
-      await deployZCodeAgentRuntime(
-        backend,
-        env,
-        {
-          ...assetDeployOptions,
-          platformArch,
-          installer,
-          force: shouldForceRefreshContentAddressedAssets,
-          selectedResourcePackageIds,
-        },
-        { log, logWarn },
-      );
       await deployRuntimeTools(
         backend,
         env,
@@ -190,7 +161,7 @@ export async function deployServer(
       sourceRelativePath: "server/zcode-server.cjs",
       remotePath: `${REMOTE_BASE}/zcode-server.cjs`,
       // App 版本变化是新的发布边界，不能只凭历史 cache 的 `.ready`
-      // 判断 server-bundle 可复用；与 GLM 一致，必须重新读取并校验当前随包制品。
+      // 判断 server-bundle 可复用，必须重新读取并校验当前随包制品。
       forceRefresh: shouldForceRefreshContentAddressedAssets,
     });
     if (expectedServerBundleSha256) {
@@ -222,22 +193,6 @@ export async function deployServer(
 
     log("all uploads complete");
 
-    // 部署 ZCode Agent runtime 到远程，历史资源包选择已在入口统一忽略。
-    await deployZCodeAgentRuntime(
-      backend,
-      env,
-      {
-        ...assetDeployOptions,
-        platformArch,
-        installer,
-        // 旧版 App 会覆盖 agents/glm，却不会同步新版引入的 GLM SHA marker。
-        // App 版本变化后该 marker 可能与实际 bundle 不一致，必须绕过旧 marker，
-        // 按当前 App 的 manifest 重新上传并部署；同 App 版本内仍按 SHA 精确判断。
-        force: shouldForceRefreshContentAddressedAssets,
-        selectedResourcePackageIds,
-      },
-      { log, logWarn },
-    );
     await deployRuntimeTools(
       backend,
       env,

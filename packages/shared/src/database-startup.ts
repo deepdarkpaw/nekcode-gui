@@ -12,7 +12,6 @@ export const databaseStartupErrorCodeSchema = z.enum([
   "sql_failed",
   "startup_status_timeout",
   "transport_closed",
-  "unsupported_runtime",
 ]);
 export type DatabaseStartupErrorCode = z.infer<typeof databaseStartupErrorCodeSchema>;
 
@@ -88,7 +87,6 @@ export type StartupDiskSummary = z.infer<typeof startupDiskSummarySchema>;
 export const databaseStartupPhaseSchema = z.enum([
   "starting",
   "preparing_host_storage",
-  "preparing_session_storage",
   "starting_services",
   "ready",
   "failed",
@@ -172,7 +170,6 @@ export function canRetryDatabaseStartup(
       "checksum_mismatch",
       "transport_closed",
       "startup_status_timeout",
-      "unsupported_runtime",
     ].includes(state.errorCode ?? "sql_failed")
   );
 }

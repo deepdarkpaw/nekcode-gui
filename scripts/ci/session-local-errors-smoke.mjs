@@ -100,13 +100,6 @@ try {
           .getByRole("button", { name: locale === "en-US" ? "Retry" : "重试", exact: true })
           .click();
         assert.equal(await page.evaluate(() => window.errorFixture.retries), 1);
-        await banner
-          .getByRole("button", {
-            name: locale === "en-US" ? "Report issue" : "反馈问题",
-            exact: true,
-          })
-          .click();
-        assert.equal(await page.evaluate(() => window.errorFixture.diagnostics), 1);
         if (process.env.ZCODE_TEST_SCREENSHOTS) {
           await mkdir(process.env.ZCODE_TEST_SCREENSHOTS, { recursive: true });
           await page.screenshot({

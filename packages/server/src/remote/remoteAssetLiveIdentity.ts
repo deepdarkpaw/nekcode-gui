@@ -14,7 +14,6 @@ export interface RemoteAssetComponentMeta {
   id: string;
   version?: string;
   sha256?: string;
-  pendingRefreshAppVersion?: string;
   platformArch: string;
 }
 
@@ -80,9 +79,7 @@ export async function readRemoteAssetComponentMeta(
       typeof parsed.id !== "string" ||
       typeof parsed.platformArch !== "string" ||
       (parsed.version !== undefined && typeof parsed.version !== "string") ||
-      (parsed.sha256 !== undefined && typeof parsed.sha256 !== "string") ||
-      (parsed.pendingRefreshAppVersion !== undefined &&
-        typeof parsed.pendingRefreshAppVersion !== "string")
+      (parsed.sha256 !== undefined && typeof parsed.sha256 !== "string")
     ) {
       return null;
     }
@@ -90,9 +87,6 @@ export async function readRemoteAssetComponentMeta(
       id: parsed.id,
       ...(parsed.version ? { version: parsed.version } : {}),
       ...(parsed.sha256 ? { sha256: parsed.sha256 } : {}),
-      ...(parsed.pendingRefreshAppVersion
-        ? { pendingRefreshAppVersion: parsed.pendingRefreshAppVersion }
-        : {}),
       platformArch: parsed.platformArch,
     };
   } catch {
@@ -118,34 +112,6 @@ export async function writeRemoteAssetComponentMeta(
     ].join(" && "),
   );
   await waitForClose(stream);
-}
-
-export async function markRemoteAssetComponentRefreshPending(
-  backend: IRemoteBackend,
-  options: {
-    componentId: string;
-    platformArch: string;
-    appVersion: string;
-  },
-): Promise<void> {
-  await writeRemoteAssetComponentMeta(backend, {
-    id: options.componentId,
-    platformArch: options.platformArch,
-    pendingRefreshAppVersion: options.appVersion,
-  });
-}
-
-export async function hasRemoteAssetComponentRefreshPending(
-  backend: IRemoteBackend,
-  options: { componentId: string; platformArch: string },
-): Promise<boolean> {
-  const meta = await readRemoteAssetComponentMeta(backend, options.componentId);
-  return Boolean(
-    meta &&
-    meta.id === options.componentId &&
-    meta.platformArch === options.platformArch &&
-    meta.pendingRefreshAppVersion,
-  );
 }
 
 function buildRemoteAssetComponentMetaPath(componentId: string): string {

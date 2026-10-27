@@ -9,7 +9,7 @@ const params = new URLSearchParams(location.search);
 const locale = params.get("locale") || "en-US";
 const theme = params.get("theme") === "dark" ? "dark" : "light";
 document.documentElement.className = theme === "dark" ? "dark zai-dark" : "zai-light";
-window.errorFixture = { copies: [], retries: 0, diagnostics: 0 };
+window.errorFixture = { copies: [], retries: 0 };
 Object.defineProperty(navigator, "clipboard", {
   configurable: true,
   value: {
@@ -18,11 +18,7 @@ Object.defineProperty(navigator, "clipboard", {
     },
   },
 });
-const platform = {
-  openFeedback() {
-    window.errorFixture.diagnostics++;
-  },
-};
+const platform = {};
 function Fixture() {
   const [visible, setVisible] = useState(true);
   return (

@@ -33,49 +33,24 @@ import {
   onLocalDatabaseStartupReady,
   configureDatabaseStartupQuit,
 } from "./databaseStartupRelay.js";
-import { buildBrowserViewCloseTabNotification } from "./browserView/browserCloseTabNotification.js";
-import { BrowserGuestManager } from "./browserView/browserGuestManager.js";
-import { createElectronBrowserWebmRecorder } from "./browserView/electronBrowserWebmRecorder.js";
-import { installBrowserRestoreBootstrapProtocol } from "./browserView/browserRestoreBootstrapProtocol.js";
 import {
   createLocalMediaPreviewPathRegistry,
   installLocalMediaPreviewProtocol,
   registerLocalMediaPreviewScheme,
 } from "./localMediaPreviewProtocol.js";
-import { createDesktopBrowserScreenshotSurfaceCoordinator } from "./browserView/browserScreenshotSurfaceCoordinatorWiring.js";
-import { EMBEDDED_BROWSER_PARTITION } from "./browserDataManager.js";
-import { EmbeddedBrowserJavaScriptDialogController } from "./embeddedBrowserJavaScriptDialog.js";
-import {
-  browserOperationResetsResizeBaseline,
-  resolveBrowserOperationTabId,
-} from "./browserView/browserOperationIndicator.js";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  nativeImage,
-  protocol,
-  session,
-  webContents,
-} from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, protocol, session } from "electron";
 import type { UtilityProcess as ElectronUtilityProcess } from "electron";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import {
   createSettingService,
-  createCredentialService,
   buildRuntimeProcessEnvPatch,
   captureLoginShellEnvSnapshot,
   getConversationWorkspaceDir,
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
 } from "@zcode/services/node";
-import {
-  createWebRemoteControl,
-  type WebRemoteControlRuntimeHandle,
-} from "./webRemoteControl/index.js";
 import {
   desktopMenuMessageIds,
   type Locale,
@@ -132,7 +107,6 @@ import type { DesktopWindowSize } from "./desktopWindowSize.js";
 import { maybeWarnArchitectureMismatch } from "./desktopArchitectureGuard.js";
 import { maybeBlockStartupForForceUpdate } from "./forceUpdateGuard.js";
 import { createWindowsDesktopTray, updateWindowsDesktopTrayMenu } from "./desktopTray.js";
-import { createWindowsCuaOperationIndicator } from "./windowsCuaOperationIndicator.js";
 import {
   configureDockMenu,
   createWindow,
@@ -149,7 +123,6 @@ import {
   listAvailableDockerContainers,
   listAvailableWSLDistros,
   loadHostProcessEnvFromLocalFiles,
-  resolveBundledGlmBinaryPath,
   resolveRemoteAssetDirs,
   resolveZCodeEndpointEnvBaseOrigin,
   runtimeApplicationName,
@@ -186,10 +159,7 @@ import {
 } from "./desktopDeepLinkUrl.js";
 import { createRemoteWorkspaceSessionManager } from "./desktopRemoteSessions.js";
 import { resolveCanonicalWslTarget } from "./desktopWslTargetResolver.js";
-import {
-  listRegisteredHostAgentProcessIds,
-  setBrowserUseGuestWebContentsIdsProvider,
-} from "./resourceManagerWindow.js";
+import { listRegisteredHostAgentProcessIds } from "./resourceManagerWindow.js";
 import { registerPlatformIpcHandlers } from "./desktopMainIpcPlatform.js";
 import { registerRemoteIpcHandlers } from "./desktopMainIpcRemote.js";
 import { applyDesktopChromiumNetworkPolicies } from "./desktopNetworkPolicy.js";
@@ -202,13 +172,8 @@ import {
   WINDOWS_UPDATE_LOCK_RELEASE_GRACE_MS,
 } from "./windowsInstallResourceLocks.js";
 import { mainMemoryDiagnosticsRegistry } from "./mainMemoryDiagnostics.js";
-import {
-  PLUGIN_SANDBOX_PRIVILEGED_SCHEME,
-  getPluginSandboxHost,
-  installPluginSandboxHost,
-} from "./pluginSandbox/index.js";
 
-registerLocalMediaPreviewScheme(protocol, [PLUGIN_SANDBOX_PRIVILEGED_SCHEME]);
+registerLocalMediaPreviewScheme(protocol);
 const localMediaPreviewPathRegistry = createLocalMediaPreviewPathRegistry();
 
 // e2e 由 Chromedriver 管理远程调试端口；如果这里继续固定到 9229，
@@ -284,218 +249,6 @@ function reconcileKeepAwakeBlocker(): void {
   }
 }
 
-const embeddedBrowserDialogController = new EmbeddedBrowserJavaScriptDialogController({
-  iconPath,
-  getLocale: () => currentApplicationLocale,
-  logger,
-});
-ipcMain.on(PlatformChannels.EmbeddedBrowserJavaScriptDialog, (event, payload: unknown) => {
-  event.returnValue = embeddedBrowserDialogController.handleDialogRequest(
-    event.sender.id,
-    event.senderFrame?.url ?? "",
-    payload,
-  );
-});
-// browser-use CDP-on-guest pivot：main 进程按 key 管理 `<webview>` guest 的
-// webContents + CDP，为 executor 提供 ControlledView。所有 execute/attach 出口都走这里。
-// BrowserGuestManager 虽是 main singleton，但 tab owner 带 window/workspace/session/generation；
-// create/close 只投递到 owner window，禁止旧的全窗口广播造成跨窗口 attach。
-const browserScreenshotSurfaceCoordinator = createDesktopBrowserScreenshotSurfaceCoordinator({
-  fromId: (windowId) => BrowserWindow.fromId(windowId),
-  fromWebContentsId: (webContentsId) => webContents.fromId(webContentsId) ?? null,
-  log: (message) => logger.debug(message),
-  warn: (message) => logger.warn(message),
-});
-const browserGuestManager = new BrowserGuestManager(
-  (msg) => logger.debug(msg),
-  undefined,
-  (tabId, owner) => {
-    const win = owner ? BrowserWindow.fromId(owner.windowId) : null;
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(
-        PlatformChannels.BrowserViewCloseTab,
-        buildBrowserViewCloseTabNotification(tabId, owner),
-      );
-    }
-  },
-  (tabId, owner) => {
-    const win = BrowserWindow.fromId(owner.windowId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(PlatformChannels.BrowserViewReady, {
-        workspaceKey: owner.workspaceKey,
-        ...(owner.remoteSessionId ? { remoteSessionId: owner.remoteSessionId } : {}),
-        sessionId: owner.sessionId,
-        tabId,
-        browserId: owner.browserId,
-        browserGeneration: owner.browserGeneration,
-      });
-    }
-  },
-  (visible, owner, tabId) => {
-    const win = BrowserWindow.fromId(owner.windowId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(PlatformChannels.BrowserViewVisibility, {
-        visible,
-        workspaceKey: owner.workspaceKey,
-        remoteSessionId: owner.remoteSessionId,
-        sessionId: owner.sessionId,
-        ...(tabId ? { tabId } : {}),
-        browserId: owner.browserId,
-        browserGeneration: owner.browserGeneration,
-      });
-    }
-  },
-  (viewport, owner, tabId) => {
-    const win = BrowserWindow.fromId(owner.windowId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(PlatformChannels.BrowserViewViewportChanged, {
-        workspaceKey: owner.workspaceKey,
-        ...(owner.remoteSessionId ? { remoteSessionId: owner.remoteSessionId } : {}),
-        sessionId: owner.sessionId,
-        tabId,
-        browserId: owner.browserId,
-        browserGeneration: owner.browserGeneration,
-        viewport,
-      });
-    }
-  },
-  (base64Png, target) => {
-    const source = nativeImage.createFromBuffer(Buffer.from(base64Png, "base64"));
-    if (source.isEmpty()) return undefined;
-    const resized = source.resize({
-      width: target.width,
-      height: target.height,
-      quality: "best",
-    });
-    if (resized.isEmpty()) return undefined;
-    return resized.toPNG().toString("base64");
-  },
-  browserScreenshotSurfaceCoordinator,
-  {
-    // Browser shell/pageState 不跨进程恢复，以保持“完整退出即清空”的语义，
-    // 并避免恢复的 shell 与新 webview 重复 attach。因此不注入 recoveryStore；
-    // 进程内 residency 事件仍保留给现有 IPC 兼容层。
-    onSuspendTabRequested: (payload) => {
-      const tabOwner = browserGuestManager.getTabOwner(payload.tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewSuspend, payload);
-      }
-    },
-    onRestoreTabRequested: (payload) => {
-      const tabOwner = browserGuestManager.getTabOwner(payload.tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewRestore, payload);
-      }
-    },
-    onResidencyChanged: (payload) => {
-      const tabOwner = browserGuestManager.getTabOwner(payload.tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewRestore, payload);
-      }
-    },
-    onRecoveryOrphanCloseRequested: ({ tabId, reason }) => {
-      const tabOwner = browserGuestManager.getTabOwner(tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewCloseTab, {
-          tabId,
-          reason,
-        });
-      }
-    },
-    warn: (message) => logger.warn(message),
-    recording: {
-      createRecorder: (input) =>
-        createElectronBrowserWebmRecorder(input, (message) => logger.debug(message)),
-    },
-  },
-  // 隐藏窗口截图的透明 presentation：capture 期间 showInactive + opacity 0 主动要帧。
-  (windowId) => BrowserWindow.fromId(windowId),
-);
-setBrowserUseGuestWebContentsIdsProvider(() => browserGuestManager.listGuestWebContentsIds());
-
-// browser-use：带诊断日志地执行 browser 命令（两处 spawnHostProcess wiring 共用）。
-// 打入口/出口便于定位卡点（如 navigate loadURL 挂起、CDP 报错等）。
-// CDP-on-guest pivot：execute 走 browserGuestManager（不再传 win —— guest 已由 attachGuest 关联）。
-async function runBrowserCommandOnView(params: {
-  win: BrowserWindow;
-  requestId: string;
-  browserId?: string;
-  browserGeneration?: number;
-  sessionId: string;
-  turnId?: string;
-  workspaceKey?: string;
-  workspacePath?: string;
-  workspaceIdentity?: string;
-  remoteSessionId?: string;
-  clientMode?: "desktop-continuous" | "web-remote-replayable";
-  sessionContext?: "live" | "cached";
-  command: unknown;
-}): Promise<{ ok: boolean; [k: string]: unknown }> {
-  const endDialogAutomation = embeddedBrowserDialogController.beginAutomation(params.win.id);
-  const command = params.command as { method?: string; tabId?: unknown } | null;
-  const method = command?.method ?? "?";
-  const workspaceKey =
-    params.workspaceIdentity?.trim() ||
-    params.workspaceKey ||
-    params.workspacePath ||
-    params.sessionId;
-  const requestedTabId = resolveBrowserOperationTabId(command);
-  const resetsResizeBaseline = browserOperationResetsResizeBaseline(command);
-  const sendOperation = (tabId: string) => {
-    if (params.win.isDestroyed()) return;
-    params.win.webContents.send(PlatformChannels.BrowserViewOperation, {
-      workspaceKey,
-      ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
-      sessionId: params.sessionId,
-      tabId,
-      browserId: params.browserId ?? "legacy-iab",
-      browserGeneration: params.browserGeneration ?? 0,
-      resetsResizeBaseline,
-    });
-  };
-  // 交互说明：绝大多数 Tab API 都显式携带 tabId，可在命令真正执行前亮起操作图标；
-  // newTab / default-tab 兼容调用要等 manager 返回真实 meta.tabId 后再补发，避免猜 tab identity。
-  if (requestedTabId) sendOperation(requestedTabId);
-  logger.debug(
-    `[browser-use] execute start browserId=${params.browserId ?? "legacy-iab"} sessionId=${params.sessionId} method=${method}`,
-  );
-  try {
-    const result = await browserGuestManager.execute(
-      {
-        requestId: params.requestId,
-        browserId: params.browserId ?? "legacy-iab",
-        browserGeneration: params.browserGeneration ?? 0,
-        windowId: params.win.id,
-        workspaceKey,
-        sessionId: params.sessionId,
-        ...(params.turnId ? { turnId: params.turnId } : {}),
-        ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
-        clientMode: params.clientMode ?? "desktop-continuous",
-      },
-      params.command as Parameters<typeof browserGuestManager.execute>[1],
-    );
-    logger.debug(
-      `[browser-use] execute done sessionId=${params.sessionId} method=${method} ok=${result.ok} elapsedMs=${(result as { elapsedMs?: number }).elapsedMs ?? "?"}`,
-    );
-    if (!requestedTabId) {
-      const resolvedTabId = resolveBrowserOperationTabId(command, result);
-      if (resolvedTabId) sendOperation(resolvedTabId);
-    }
-    return result;
-  } catch (error) {
-    logger.error(
-      `[browser-use] execute threw sessionId=${params.sessionId} method=${method}:`,
-      error,
-    );
-    throw error;
-  } finally {
-    endDialogAutomation();
-  }
-}
 let currentDesktopZoomLevel = 0;
 let currentDesktopWindowSize: DesktopWindowSize | undefined;
 const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
@@ -510,9 +263,6 @@ const taskRealtimeBus = new TaskRealtimeBus({ logger });
 // 一次写主日志。will-download 监听数用于观察关窗后 defaultSession 是否残留监听。
 mainMemoryDiagnosticsRegistry.register("taskBus", () => taskRealtimeBus.collectMemoryDiagnostics());
 mainMemoryDiagnosticsRegistry.register("broadcast", () => broadcastHub.collectMemoryDiagnostics());
-mainMemoryDiagnosticsRegistry.register("guest", () =>
-  browserGuestManager.collectMemoryDiagnostics(),
-);
 mainMemoryDiagnosticsRegistry.register("app", () => ({
   windows: BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed()).length,
   willDownloadListeners: session.defaultSession.listenerCount("will-download"),
@@ -589,11 +339,6 @@ const windowTaskRealtimeHostIdMap = new Map<number, string>();
 const windowUnreadCountMap = new Map<number, number>();
 const windowHostProcessMap = new Map<number, ElectronUtilityProcess>();
 const hostRunningTaskCountMap = new Map<ElectronUtilityProcess, number>();
-const windowsCuaOperationIndicator = createWindowsCuaOperationIndicator({
-  platform: process.platform,
-  getLocale: () => currentApplicationLocale,
-  logger,
-});
 
 // 常驻 cron scheduler 进程句柄；app ready 后拉起，退出前销毁。
 let cronScheduler: CronSchedulerHandle | null = null;
@@ -639,8 +384,6 @@ const remoteSessionManager = createRemoteWorkspaceSessionManager({
   resolveRemoteAssetDirs,
   resolveWslTarget: resolveCanonicalWslTarget,
 });
-// 手机远控运行时：main 持有配对/传输/bridge；IPC 在 webRemoteControl/ipc.ts 注册。
-let webRemoteControlHandle: WebRemoteControlRuntimeHandle | null = null;
 
 ipcMain.on(PlatformChannels.ReportDiagnostic, (_event, input: unknown) => {
   const parsed = DiagnosticRecordSchema.safeParse(input);
@@ -687,7 +430,7 @@ function resolveExternalWorkspaceConfirmationCopy() {
 }
 
 function focusForceUpdateGateWindow() {
-  const gateWindow = getApplicationWindowsExcludingCuaIndicator()[0];
+  const gateWindow = getApplicationWindows()[0];
   if (!gateWindow) {
     return;
   }
@@ -702,7 +445,7 @@ function focusForceUpdateGateWindow() {
 }
 
 const primaryWindowCoordinator = createPrimaryWindowCoordinator({
-  listWindows: getApplicationWindowsExcludingCuaIndicator,
+  listWindows: getApplicationWindows,
   resolveStartupWindowBootstrap: () => {
     if (startupOpenWorkspaceRequest) {
       const request = startupOpenWorkspaceRequest;
@@ -786,7 +529,7 @@ function syncImmediateAppSettings(patch: Partial<AppSettings>) {
     // 这里重建应用菜单 accelerator，并通知所有窗口刷新设置快照 —— 其他窗口的
     // useAppKeyboard 生效表与设置页跟随更新。先例：setAutoDownloadAndInstallUpdates 的全窗口广播。
     rebuildMenu();
-    for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+    for (const win of getApplicationWindows()) {
       if (!win.isDestroyed()) {
         win.webContents.send(PlatformChannels.SettingsChanged);
       }
@@ -808,7 +551,7 @@ async function setAutoDownloadAndInstallUpdates(enabled: boolean) {
   syncImmediateAppSettings({
     autoDownloadAndInstallUpdates: enabled,
   });
-  for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+  for (const win of getApplicationWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(PlatformChannels.SettingsChanged);
     }
@@ -841,8 +584,6 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   notifyStabilityAppExit(
     activeAppShutdownKind === "update-install" ? "update_install" : "app_quit",
   );
-  windowsCuaOperationIndicator.dispose();
-  browserScreenshotSurfaceCoordinator.dispose();
 
   const cronSchedulerToDispose = cronScheduler;
   cronScheduler = null;
@@ -1029,30 +770,6 @@ function logWindowsPackagedResourceWritableProbe(stage: string) {
   }
 }
 
-function logWindowsBundledRuntimeIntegrityDiagnostic() {
-  if (process.platform !== "win32" || !app.isPackaged) {
-    return;
-  }
-
-  const binaryPaths = {
-    glm: resolveBundledGlmBinaryPath(),
-  };
-  const missingProviders = Object.entries(binaryPaths)
-    .filter(([, binaryPath]) => !binaryPath)
-    .map(([provider]) => provider);
-  if (missingProviders.length === 0) {
-    return;
-  }
-
-  // bundled runtime 缺失不一定影响用户当前 provider，启动阶段只静默落日志。
-  // 这样既能在下次用户日志里确认安装资源是否已损坏，也不会因为未使用的 provider 缺失打断启动。
-  logger.warn(
-    `[startup] Windows bundled runtime missing providers: ${missingProviders.join(", ")} resources=${JSON.stringify(
-      snapshotWindowsPackagedResources(process.resourcesPath),
-    )}`,
-  );
-}
-
 async function prepareWindowsProcessesForUpdateInstall() {
   const trackedAgentCount = listRegisteredHostAgentProcessIds().length;
 
@@ -1130,9 +847,7 @@ function confirmAppQuit(originWindow?: BrowserWindow | null) {
   const targetWindow =
     originWindow && !originWindow.isDestroyed()
       ? originWindow
-      : (BrowserWindow.getFocusedWindow() ??
-        getApplicationWindowsExcludingCuaIndicator()[0] ??
-        null);
+      : (BrowserWindow.getFocusedWindow() ?? getApplicationWindows()[0] ?? null);
   const dialogOptions = {
     type: "question" as const,
     buttons: isZh ? ["退出", "取消"] : ["Quit", "Cancel"],
@@ -1252,14 +967,12 @@ function resolveFocusedDesktopZoomLevel(): number {
   return resolveDesktopZoomLevelFromFactor(focusedWindow.webContents.getZoomFactor());
 }
 
-function getApplicationWindowsExcludingCuaIndicator(): BrowserWindow[] {
-  return BrowserWindow.getAllWindows().filter(
-    (win) => !win.isDestroyed() && !windowsCuaOperationIndicator.ownsWindow(win),
-  );
+function getApplicationWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed());
 }
 
 function getMainApplicationWindows(): BrowserWindow[] {
-  return getApplicationWindowsExcludingCuaIndicator().filter((win) => win !== updateStatusWindow);
+  return getApplicationWindows().filter((win) => win !== updateStatusWindow);
 }
 
 function isUpdateStatusWindowCloseLocked(state: UpdateStatePayload) {
@@ -1519,92 +1232,9 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onAgentProcessReady: recordAgentProcessReady,
           onAgentProcessSpawned: recordAgentProcessStarted,
           onMcpTelemetry: (message) => recordMcpDiagnostic(message.event),
-          onCuaOperationStateChanged: (source, event) =>
-            windowsCuaOperationIndicator.handleState(source, event),
-          onCuaOperationStateSourceExited: (source) =>
-            windowsCuaOperationIndicator.clearSource(source),
           onCronRunResult: forwardCronRunResult,
           onCronSchedulerWakeRequested: wakeCronScheduler,
           authorizeLocalMediaPreviewPath: localMediaPreviewPathRegistry.authorize,
-          registerPluginSandbox: (input) => {
-            const host = getPluginSandboxHost();
-            if (!host) throw new Error("Plugin UI sandbox host is not installed.");
-            const { requestId: _requestId, ...registerInput } = input;
-            return host.registerFromHost(registerInput);
-          },
-          // Bugfix: bot service 运行在本地窗口 host 内，/reconnect 必须能从本地 host 请求 main 创建远端 session。
-          handleBotRemoteWorkspaceReconnectRequest: async ({
-            win,
-            requestId,
-            workspacePath,
-            workspaceIdentity,
-            target,
-          }) => {
-            try {
-              const sessionId = await remoteSessionManager.reconnectBotRemoteWorkspaceSession(win, {
-                target,
-                workspacePath,
-                workspaceIdentity,
-                requestId,
-              });
-              if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                win.webContents.send(PlatformChannels.BotRemoteWorkspaceReconnected, {
-                  sessionId,
-                  workspacePath,
-                  workspaceIdentity,
-                  target,
-                });
-              }
-              return { ok: true, sessionId };
-            } catch (error) {
-              return {
-                ok: false,
-                error: error instanceof Error ? error.message : String(error),
-              };
-            }
-          },
-          handleBotRemoteWorkspaceConnectionStatusRequest: async ({
-            win,
-            target,
-            workspacePath,
-            workspaceIdentity,
-          }) => ({
-            ok: true,
-            // Bugfix: Bot 远端连接状态必须按 workspaceIdentity/workspacePath 精确隔离。
-            // 只按 SSH target 判断会把同一台机器上的其他目录误判为当前 workspace 已连接。
-            connected: remoteSessionManager.hasRemoteWorkspaceSessionForTarget(win, target, {
-              workspacePath,
-              workspaceIdentity,
-            }),
-          }),
-          handleBotRemoteWorkspaceRuntimePortRequest: async ({
-            win,
-            requestId,
-            workspacePath,
-            workspaceIdentity,
-            target,
-          }) => {
-            try {
-              const port = await remoteSessionManager.createBotRemoteWorkspaceRuntimePort(
-                win,
-                {
-                  target,
-                  workspacePath,
-                  workspaceIdentity,
-                },
-                requestId,
-              );
-              return { ok: true, port };
-            } catch (error) {
-              return {
-                ok: false,
-                error: error instanceof Error ? error.message : String(error),
-              };
-            }
-          },
-          // browser-use：main 用 WebContentsView+CDP 执行命令。
-          handleBrowserExecuteRequest: ({ win: browserWin, ...request }) =>
-            runBrowserCommandOnView({ win: browserWin, ...request }),
         },
         {
           taskRealtime: {
@@ -1647,8 +1277,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
     initialDesktopZoomLevel: currentDesktopZoomLevel,
     initialWindowSize: currentDesktopWindowSize,
     currentApplicationLocale: () => currentApplicationLocale,
-    resolveBrowserViewOwner: (webContentsId) =>
-      browserGuestManager.getTabOwnerByWebContentsId(webContentsId),
     persistWindowSize: async (state) => {
       currentDesktopWindowSize = state;
       await mainSettingService.update({ desktopWindowSize: state });
@@ -1667,7 +1295,7 @@ app.on("open-url", (event, url) => {
     focusForceUpdateGateWindow();
     return;
   }
-  if (workspacePath && getApplicationWindowsExcludingCuaIndicator().length === 0) {
+  if (workspacePath && getApplicationWindows().length === 0) {
     // macOS 冷启动 Finder Service 会先触发 open-url，再创建首窗。
     // 把目标目录按 deep link 来源记录，首窗 bootstrap 前仍要走确认 gate。
     startupOpenWorkspaceRequest = { path: workspacePath, source: "deep-link" };
@@ -1678,7 +1306,7 @@ app.on("open-url", (event, url) => {
   }
   handleDeepLink(url, logger, {
     confirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
-    resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+    resolveApplicationWindow: () => getApplicationWindows()[0] ?? null,
   });
 });
 const gotTheLock = app.requestSingleInstanceLock(createDeepLinkSingleInstanceData(process.argv));
@@ -1698,10 +1326,9 @@ app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
           allowWithoutReadyWindow: true,
           ...options,
           resolveApplicationWindow:
-            options?.resolveApplicationWindow ??
-            (() => getApplicationWindowsExcludingCuaIndicator()[0] ?? null),
+            options?.resolveApplicationWindow ?? (() => getApplicationWindows()[0] ?? null),
         }),
-      resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+      resolveApplicationWindow: () => getApplicationWindows()[0] ?? null,
       logger,
       workspaceConfirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
     })
@@ -1709,7 +1336,7 @@ app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
     return;
   }
 
-  const win = getApplicationWindowsExcludingCuaIndicator()[0];
+  const win = getApplicationWindows()[0];
   if (win) {
     if (win.isMinimized()) {
       win.restore();
@@ -1726,31 +1353,11 @@ app.whenReady().then(async () => {
   installLocalMediaPreviewProtocol(session.defaultSession.protocol, {
     isPathAuthorized: localMediaPreviewPathRegistry.isAuthorized,
   });
-  // 插件 UI 沙箱：注册表 + renderer 可调 IPC；scheme 的 privileged 注册已随 zcode-media 在 ready 前完成。
-  installPluginSandboxHost({
-    preloadPath: join(import.meta.dirname, "../preload/pluginSandbox.cjs"),
-    rendererDir: join(import.meta.dirname, "../renderer"),
-    aliasDir: join(import.meta.dirname, "../plugin-sandbox"),
-    // 开发模式 out/renderer 没有 shell 产物，从 renderer dev server 代理（同 cua-permission-panel 的做法）。
-    ...(!app.isPackaged && process.env["ELECTRON_RENDERER_URL"]
-      ? { devServerUrl: process.env["ELECTRON_RENDERER_URL"] }
-      : {}),
-    logger: console,
-    // e2e L05（配额）：只在 e2e run 里允许缩小注册表容量。
-    ...(process.env.ZCODE_E2E_RUN_ID?.trim() &&
-    Number.isInteger(Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES)) &&
-    Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES) > 0
-      ? { registryMaxEntries: Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES) }
-      : {}),
-  });
   // 灰度模块 desktopContextPromptRollout 已在 38632dec「replace remote rollout and help config
   // with local defaults」整体删除，此处不再有可预热的远端灰度请求。
   // 注意：该引用曾被上游 cherry-pick 反复带回，且在缺少声明的 whenReady 回调里直接求值，
   // 打包产物会抛 ReferenceError: desktopContextPromptRollout is not defined，
   // 使主进程启动链断裂、窗口不再创建（见 issue #58），不要再加回。
-  installBrowserRestoreBootstrapProtocol(
-    session.fromPartition(EMBEDDED_BROWSER_PARTITION).protocol,
-  );
   // Bootstrap: 从设置文件读取自定义数据目录，在所有 host 进程启动前生效
   let loadedBootstrapLocale = false;
   let bootstrapSettings: AppSettings | undefined;
@@ -1824,7 +1431,6 @@ app.whenReady().then(async () => {
   }
 
   await hydratePendingPostUpdateReleaseNotes(mainSettingService);
-  logWindowsBundledRuntimeIntegrityDiagnostic();
 
   // 启动自动更新检查（后台执行，不阻塞主界面）
   // Preview 身份无论连接哪个后端都不自动更新：stable feed 上只分发正式 ZCode 安装包，
@@ -1840,7 +1446,6 @@ app.whenReady().then(async () => {
     },
     settingService: mainSettingService,
     locale: currentApplicationLocale,
-    resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
     updateFeedSource: resolveUpdateFeedSourceFromStartupConfig({
       argv: process.argv,
       env: process.env,
@@ -1872,64 +1477,12 @@ app.whenReady().then(async () => {
     logger,
   });
 
-  // 手机远控：设置/凭据/窗口 host 就绪后组装运行时；失败不影响桌面启动。
-  webRemoteControlHandle = await createWebRemoteControl({
-    logger,
-    settingService: mainSettingService,
-    credentialService: createCredentialService(),
-    resolveHostProcess: (webContentsId) => windowHostProcessMap.get(webContentsId),
-    resolveRemoteWorkspaceConnectionState: (remoteSessionId: string) =>
-      remoteSessionManager.hasAttachableRemoteSession({ remoteSessionId })
-        ? "connected"
-        : "disconnected",
-  }).catch((error) => {
-    logger.error("[web-remote-control] failed to initialize:", error);
-    return null;
-  });
-
   registerPlatformIpcHandlers({
     logger,
-    // CDP-on-guest pivot：renderer `<webview>` dom-ready 上报 guest webContentsId → attach。
-    attachBrowserGuest: (key, webContentsId, options) => {
-      const result = browserGuestManager.attachGuest(key, webContentsId, options);
-      if (result.ok && options?.windowId !== undefined) {
-        embeddedBrowserDialogController.bindGuest(key, webContentsId, options.windowId);
-      }
-      return result;
-    },
-    updateBrowserGuestViewport: (tabId, viewport, windowId, desktopZoomFactor) =>
-      browserGuestManager.updateViewportFromRenderer(tabId, viewport, windowId, desktopZoomFactor),
-    reportBrowserScreenshotSurfaceReady: (windowId, senderWebContentsId, payload) => {
-      logger.debug("[browser-screenshot-surface] renderer ready", {
-        windowId,
-        senderWebContentsId,
-        requestId: payload.requestId,
-        tabId: payload.tabId,
-        webContentsId: payload.webContentsId,
-        viewport: payload.viewport,
-        surfaceScale: payload.surfaceScale,
-      });
-      browserScreenshotSurfaceCoordinator.handleReady({
-        windowId,
-        senderWebContentsId,
-        payload,
-      });
-    },
-    browserViewResidencyHandlers: {
-      detachBrowserGuest: (key, webContentsId, windowId) =>
-        browserGuestManager.detachGuestBeforeReplacement(key, webContentsId, windowId),
-      closeBrowserTab: (payload) => browserGuestManager.closeTabFromRenderer(payload),
-      reportBrowserTabResidency: (payload) => browserGuestManager.reportResidency(payload),
-      acknowledgeBrowserTabSuspend: (payload) => browserGuestManager.acknowledgeSuspend(payload),
-      ensureBrowserTabResident: (payload) =>
-        browserGuestManager.ensureResidentFromRenderer(payload),
-      restoreBrowserTabs: (payload) => browserGuestManager.restoreTabs(payload),
-    },
     applyApplicationLocale: async (locale) => {
       currentApplicationLocale = locale;
-      windowsCuaOperationIndicator.refreshContent();
       rebuildMenu();
-      for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+      for (const win of getApplicationWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send(PlatformChannels.ApplicationLocaleChanged, currentApplicationLocale);
         }
@@ -2004,8 +1557,7 @@ app.whenReady().then(async () => {
   registerRendererHeapSampleIpc();
 
   // 本地未打包 dev 构建（app.isPackaged === false）必须跳过远端强制升级 gate。
-  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建（如 dev:desktop:cua
-  // 连真实后端测 computer use）虽指向 production 后端，版本号却滞后于线上 release（feature
+  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建虽指向 production 后端，版本号却滞后于线上 release（feature
   // 分支不 bump 版本），会被 release minimalVersion 误判为"需强制升级"而启动秒退。force-update
   // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
   // gate 照常生效，对真实用户零影响。
@@ -2017,7 +1569,7 @@ app.whenReady().then(async () => {
           logger,
           // 门禁只允许读自有更新源：上游地址下发的 minimalVersion 不是本仓库的控制面。
           // maybeBlockStartupForForceUpdate 在未配置时直接放行，这里保持同一判定来源。
-          endpointOrigin: ZCODIUM_UPDATE_ORIGIN || (await resolveCurrentZCodeEndpointOrigin()),
+          endpointOrigin: ZCODIUM_UPDATE_ORIGIN,
           onBlocked: () => {
             forceUpdateMainWindowCreationBlocked = true;
           },
@@ -2040,7 +1592,7 @@ app.whenReady().then(async () => {
   void maybeWarnArchitectureMismatch({
     locale: currentApplicationLocale,
     logger,
-    parentWindow: getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+    parentWindow: getApplicationWindows()[0] ?? null,
     icon: nativeImage.createFromPath(iconPath),
   }).catch((error) => {
     logger.warn("[architecture] 架构检测弹框失败:", error);
@@ -2050,7 +1602,7 @@ app.whenReady().then(async () => {
   if (startupDeepLinkConsumptionGate.shouldHandleReadyProtocolUrl(protocolUrl)) {
     handleDeepLink(protocolUrl, logger, {
       confirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
-      resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
+      resolveApplicationWindow: () => getApplicationWindows()[0] ?? null,
     });
   }
 });
@@ -2058,8 +1610,6 @@ app.whenReady().then(async () => {
 app.on("browser-window-created", (_, win) => {
   const windowWebContentsId = win.webContents.id;
   win.on("closed", () => {
-    browserScreenshotSurfaceCoordinator.handleWindowDestroyed(win.id);
-    browserGuestManager.closeWindow(win.id);
     windowWorkspaceMap.delete(win.id);
     windowTaskRealtimeHostIdMap.delete(win.id);
     if (windowUnreadCountMap.delete(win.id)) {
@@ -2068,7 +1618,6 @@ app.on("browser-window-created", (_, win) => {
     // Electron 进入 closed 回调时，win.webContents 可能已经被销毁。
     // 之前这里现取 win.webContents.id，会在关窗收尾阶段抛出 "Object has been destroyed"。
     // 改为在窗口创建时缓存 webContents id，确保清理工作区深链接状态时不再访问已销毁对象。
-    void webRemoteControlHandle?.manager.disposeWindow(win.id);
     clearWorkspaceDeepLinkStateForWindow(windowWebContentsId);
     // 录制中关窗/崩溃时 renderer 不会发复位 IPC，这里按发起 webContents 复位录制态，
     // 防止菜单 accelerator 被永久摘除。
@@ -2103,7 +1652,7 @@ app.on("before-quit", (event) => {
     localMediaPreviewPathRegistry.clear();
     event.preventDefault();
     void prepareAppQuit("app-before-quit").finally(() => {
-      const remainingWindows = getApplicationWindowsExcludingCuaIndicator();
+      const remainingWindows = getApplicationWindows();
       logger.info(
         `[app-quit] preparation finished, resuming quit with windows=${remainingWindows.length}`,
       );
@@ -2118,7 +1667,7 @@ app.on("before-quit", (event) => {
 
       let exitRequested = false;
       const exitAfterLastWindowClosed = () => {
-        if (exitRequested || getApplicationWindowsExcludingCuaIndicator().length > 0) {
+        if (exitRequested || getApplicationWindows().length > 0) {
           return;
         }
         exitRequested = true;

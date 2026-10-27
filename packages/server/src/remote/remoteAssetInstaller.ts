@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, join, posix } from "node:path";
+import { join, posix } from "node:path";
 import type { IRemoteBackend } from "@zcode/server/remote/backend.js";
 import {
   buildRemoteExecutableReplaceCommand,
@@ -14,7 +12,6 @@ import {
   waitForClose,
 } from "@zcode/server/remote/deployShared.js";
 import { quotePosixPathArg, quotePosixShellArg } from "@zcode/server/remote/posixShell.js";
-import { createTarGzArchive } from "@zcode/server/remote/localTarGz.js";
 import {
   detectRemoteAssetTools,
   type RemoteAssetTools,
@@ -30,13 +27,6 @@ export interface RemoteAssetInstaller {
     sourceRelativePath: string;
     remotePath: string;
     executable?: boolean;
-    forceRefresh?: boolean;
-  }): Promise<void>;
-  installDirectory(params: {
-    componentId: string;
-    sourceRelativePath: string;
-    remoteDir: string;
-    requiredRelativePaths?: string[];
     forceRefresh?: boolean;
   }): Promise<void>;
 }
@@ -124,7 +114,6 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
   async tryResolveLocalPath(
     componentIds: string[],
     sourceRelativePath: string,
-    requiredReleasePaths?: string[],
     forceRefresh = false,
   ): Promise<string | null> {
     const releaseDir =
@@ -139,18 +128,7 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
 
     const localPath = join(releaseDir, sourceRelativePath);
     if (await fileExists(localPath)) {
-      const missingRequiredPaths = await findMissingLocalRequiredReleasePaths(
-        releaseDir,
-        requiredReleasePaths,
-      );
-      if (missingRequiredPaths.length === 0) {
-        return localPath;
-      }
-      // 解包目录可能已经有 packages 父目录，但缺少本次部署要求的 plugin.json。
-      // 这里不能只看父目录存在，否则会继续上传残缺官方插件资源。
-      this.loggers.logWarn(
-        `[remote-assets] local release asset incomplete: source=${localPath} missing=${missingRequiredPaths.join(",")}`,
-      );
+      return localPath;
     }
 
     return null;
@@ -159,15 +137,9 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
   async resolveLocalPath(
     componentIds: string[],
     sourceRelativePath: string,
-    requiredReleasePaths?: string[],
     forceRefresh = false,
   ): Promise<string> {
-    const localPath = await this.tryResolveLocalPath(
-      componentIds,
-      sourceRelativePath,
-      requiredReleasePaths,
-      forceRefresh,
-    );
+    const localPath = await this.tryResolveLocalPath(componentIds, sourceRelativePath, forceRefresh);
     if (localPath) {
       return localPath;
     }
@@ -201,7 +173,6 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
     const localPath = await this.resolveLocalPath(
       [params.componentId],
       params.sourceRelativePath,
-      undefined,
       Boolean(params.forceRefresh),
     );
     // 本地解包完成后仍需检查取消，不得让迟到 continuation 再写远端 staging。
@@ -258,150 +229,6 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
       throw error;
     }
   }
-
-  async installDirectory(params: {
-    componentId: string;
-    sourceRelativePath: string;
-    remoteDir: string;
-    requiredRelativePaths?: string[];
-    forceRefresh?: boolean;
-  }): Promise<void> {
-    throwIfRemoteAssetInstallAborted(this.options.signal);
-    const localPath = await this.resolveLocalPath(
-      [params.componentId],
-      params.sourceRelativePath,
-      buildRequiredReleasePaths(params.sourceRelativePath, params.requiredRelativePaths),
-      Boolean(params.forceRefresh),
-    );
-    const localTarPath = join(
-      tmpdir(),
-      `zcode-remote-${params.componentId}-${Date.now()}-${randomUUID()}.tar.gz`,
-    );
-    await createTarGzArchive(localTarPath, [
-      { sourcePath: localPath, archivePath: basename(localPath) },
-    ]);
-
-    const ownerSuffix = `${Date.now()}-${randomUUID()}`;
-    // 目录上传曾复用 `<remoteDir>.tar.gz`，并发部署会互相覆盖压缩包，
-    // 甚至把半写文件解压到最终目录。archive/extract 都带 owner，失败时也只清理自己的 staging。
-    const remoteTarPath = `${params.remoteDir}.tar.gz-${ownerSuffix}`;
-    const remoteExtractDir = `${params.remoteDir}.extract-${ownerSuffix}`;
-    const remoteBackupDir = `${params.remoteDir}.backup-${ownerSuffix}`;
-    const extractedSourceDir = `${remoteExtractDir}/${basename(localPath)}`;
-    const cleanupRemoteStaging = async (): Promise<void> => {
-      try {
-        const cleanupStream = await this.backend.exec(
-          `rm -f ${quotePosixPathArg(remoteTarPath)} && rm -rf ${quotePosixPathArg(remoteExtractDir)}`,
-        );
-        await waitForClose(cleanupStream);
-      } catch (error) {
-        this.loggers.logWarn(
-          `[remote-assets] failed to clean owned directory staging ${ownerSuffix}: ${String(error)}`,
-        );
-      }
-    };
-
-    try {
-      // 本地归档不共享远端生命周期；归档完成后再次检查，禁止取消后创建远端 staging。
-      throwIfRemoteAssetInstallAborted(this.options.signal);
-      this.loggers.log(
-        `[remote-assets] uploading ${params.sourceRelativePath} to ${params.remoteDir}`,
-      );
-      const remoteParentDir = posix.dirname(params.remoteDir);
-      const remoteDirName = posix.basename(params.remoteDir);
-      const prepareCommands = [
-        ...(this.options.signal
-          ? [
-              buildStaleRemoteStagingCleanupCommand(remoteParentDir, [
-                `${remoteDirName}.tar.gz-*`,
-                `${remoteDirName}.extract-*`,
-              ]),
-            ]
-          : []),
-        `mkdir -p ${quotePosixPathArg(remoteParentDir)}`,
-      ];
-      const mkdirStream = await this.backend.exec(prepareCommands.join("\n"));
-      await waitForClose(mkdirStream);
-      await this.backend.upload(localTarPath, remoteTarPath, {
-        signal: this.options.signal,
-      });
-      throwIfRemoteAssetInstallAborted(this.options.signal);
-      await this.verifyUploadedFile(localTarPath, remoteTarPath);
-      const stream = await this.backend.exec(
-        [
-          "set -eu",
-          "promoted=0",
-          // 先删旧目录再 mv 会在 promotion 失败时丢失可工作的插件；保留本 owner 备份并由 trap 回滚。
-          "cleanup_staging() {",
-          `  if [ "$promoted" = 0 ] && [ -e ${quotePosixPathArg(remoteBackupDir)} ] && [ ! -e ${quotePosixPathArg(params.remoteDir)} ]; then`,
-          `    ${buildRemoteMoveCommand(remoteBackupDir, params.remoteDir)} || echo 'Remote plugin rollback failed; backup retained' >&2`,
-          "  fi",
-          `  rm -f ${quotePosixPathArg(remoteTarPath)}`,
-          `  rm -rf ${quotePosixPathArg(remoteExtractDir)}`,
-          `  if [ "$promoted" = 1 ]; then rm -rf ${quotePosixPathArg(remoteBackupDir)}; fi`,
-          "}",
-          "trap cleanup_staging EXIT",
-          "trap 'exit 129' HUP",
-          "trap 'exit 130' INT",
-          "trap 'exit 143' TERM",
-          `rm -rf ${quotePosixPathArg(remoteExtractDir)}`,
-          `mkdir -p ${quotePosixPathArg(remoteExtractDir)} ${quotePosixPathArg(posix.dirname(params.remoteDir))}`,
-          `tar -xzf ${quotePosixPathArg(remoteTarPath)} -C ${quotePosixPathArg(remoteExtractDir)}`,
-          `test -d ${quotePosixPathArg(extractedSourceDir)}`,
-          `if [ -e ${quotePosixPathArg(params.remoteDir)} ] || [ -L ${quotePosixPathArg(params.remoteDir)} ]; then ${buildRemoteMoveCommand(params.remoteDir, remoteBackupDir)}; fi`,
-          buildRemoteMoveCommand(extractedSourceDir, params.remoteDir),
-          "promoted=1",
-          "cleanup_staging",
-          "trap - EXIT HUP INT TERM",
-        ].join("\n"),
-      );
-      await waitForClose(stream);
-    } catch (error) {
-      // 连接取消监听会先释放 SSH backend；若随后仍用同一 backend 清理 staging，
-      // SSH 实现可能以旧凭据重新连接。取消路径只保留唯一 owner staging，不再触碰正式目录。
-      if (!this.options.signal?.aborted) {
-        await cleanupRemoteStaging();
-      }
-      throw error;
-    } finally {
-      try {
-        await rm(localTarPath, { force: true });
-      } catch {
-        // 忽略临时文件清理失败，部署结果不应受本地清理影响。
-      }
-    }
-  }
 }
 
-function buildRequiredReleasePaths(
-  sourceRelativePath: string,
-  requiredRelativePaths: readonly string[] | undefined,
-): string[] {
-  const sourcePath = sourceRelativePath.replace(/^\/+|\/+$/gu, "");
-  if (!sourcePath) {
-    return [];
-  }
 
-  const paths = [sourcePath];
-  for (const requiredRelativePath of requiredRelativePaths ?? []) {
-    const normalizedRequiredPath = requiredRelativePath.replace(/^\/+|\/+$/gu, "");
-    if (normalizedRequiredPath) {
-      paths.push(posix.join(sourcePath, normalizedRequiredPath));
-    }
-  }
-  return paths;
-}
-
-async function findMissingLocalRequiredReleasePaths(
-  releaseDir: string,
-  requiredReleasePaths: readonly string[] | undefined,
-): Promise<string[]> {
-  const missingPaths: string[] = [];
-  for (const requiredReleasePath of requiredReleasePaths ?? []) {
-    const absolutePath = join(releaseDir, requiredReleasePath);
-    if (!(await fileExists(absolutePath))) {
-      missingPaths.push(absolutePath);
-    }
-  }
-  return missingPaths;
-}

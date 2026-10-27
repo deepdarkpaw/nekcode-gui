@@ -92,7 +92,7 @@ test(
   async (t) => {
     const { deploy, uploads, installed } = await fixture(t);
     assert.equal(await deploy(), true);
-    assert.equal(uploads.length, 8);
+    assert.equal(uploads.length, 6);
     const firstUploads = uploads.length;
     assert.equal(await deploy(), false);
     assert.equal(uploads.length, firstUploads);
@@ -100,7 +100,6 @@ test(
       "node",
       "build/Release/pty.node",
       "tools/ripgrep/rg",
-      "agents/glm/packages/bundled-skills/skills/dynamic-workflows/SKILL.md",
     ]) {
       const before = uploads.length;
       await rm(installed(relativePath));
@@ -136,15 +135,15 @@ test(
     const { deploy, uploads, installed } = await fixture(t);
     await deploy();
     const initialUploads = uploads.length;
-    const changed = (id, path) => contentForPath(id, path) + (id === "glm" ? "\nupdated" : "");
-    const agentUpdate = await createRemoteAssetFixture(t, changed, version);
-    await bundleRemoteAssets(agentUpdate.options);
-    const agentOptions = { bundledRemoteAssetsDir: agentUpdate.options.outputDirectory };
-    assert.equal(await deploy(agentOptions), false);
-    assert.equal(uploads.length, initialUploads + 2);
-    assert.equal(await readFile(installed("agents/glm/zcode.cjs"), "utf8"), "fixture\nupdated");
-    await deploy(agentOptions);
-    assert.equal(uploads.length, initialUploads + 2);
+    const changed = (id, path) => contentForPath(id, path) + (id === "ripgrep" ? "\nupdated" : "");
+    const toolUpdate = await createRemoteAssetFixture(t, changed, version);
+    await bundleRemoteAssets(toolUpdate.options);
+    const toolOptions = { bundledRemoteAssetsDir: toolUpdate.options.outputDirectory };
+    assert.equal(await deploy(toolOptions), false);
+    assert.equal(uploads.length, initialUploads + 1);
+    assert.equal(await readFile(installed("tools/ripgrep/rg"), "utf8"), "fixture\nupdated");
+    await deploy(toolOptions);
+    assert.equal(uploads.length, initialUploads + 1);
 
     const nodeUpdate = await createRemoteAssetFixture(
       t,
@@ -155,15 +154,15 @@ test(
     await bundleRemoteAssets(nodeUpdate.options);
     const nodeOptions = { bundledRemoteAssetsDir: nodeUpdate.options.outputDirectory };
     await deploy(nodeOptions);
-    assert.equal(uploads.length, initialUploads + 3);
+    assert.equal(uploads.length, initialUploads + 2);
     await deploy(nodeOptions);
-    assert.equal(uploads.length, initialUploads + 3);
+    assert.equal(uploads.length, initialUploads + 2);
 
     await writeFile(installed("zcode-server.cjs"), 'require("fs").writeSync(1, "0.0.0-old");');
     assert.equal(await deploy(nodeOptions), true);
-    assert.equal(uploads.length, initialUploads + 6);
+    assert.equal(uploads.length, initialUploads + 3);
     await deploy(nodeOptions);
-    assert.equal(uploads.length, initialUploads + 6);
+    assert.equal(uploads.length, initialUploads + 3);
   },
 );
 

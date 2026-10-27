@@ -13,20 +13,14 @@ import {
   IZCodeAgentService,
   IZCodeSessionService,
   IConversationShareService,
-  IBotsService,
   IFileWatcherService,
   IModelSelectionService,
   IProviderSettingsService,
-  IUsageStatsService,
   ICodingPlanSubscriptionService,
-  IClientConfigService,
   IClientScenesService,
   ISkillsService,
   ISkillSyncService,
   IMcpSyncService,
-  IPluginSyncService,
-  IPluginsService,
-  IPluginManagementService,
   ISubagentsService,
   ICommandsService,
   IHooksService,
@@ -44,8 +38,6 @@ import {
   createHostApiNetworkTransport,
   registerHostApiNetworkTransportForDispose,
   createSettingsSyncService,
-  createBotsService,
-  createUsageStatsService,
   createCodingPlanSubscriptionService,
   createClientScenesService,
   createServiceLogger,
@@ -66,7 +58,6 @@ import {
 const runtimePreferencesLogger = createServiceLogger("remote-runtime-preferences");
 
 export function createRemoteWorkspaceServiceCollection(params: {
-  clientConfigService: IClientConfigService;
   connectionServices: IServiceAccessor;
   sourceServices?: ServiceCollection;
   parentPort: Parameters<typeof createBroadcastService>[0];
@@ -234,42 +225,19 @@ export function createRemoteWorkspaceServiceCollection(params: {
     .register(IZCodeAgentService, params.connectionServices.zcodeAgentService)
     .register(IZCodeSessionService, remoteZCodeSessionService)
     .register(IConversationShareService, conversationShareService)
-    .register(
-      IBotsService,
-      createBotsService({
-        credentialService: localCredentialService,
-        zcodeTaskService: remoteZCodeTaskService,
-        broadcastService: localBroadcastService,
-        settingService: localSettingService,
-        modelSelectionService: params.connectionServices.modelSelectionService,
-        // 修复原因：remote workspace host 首屏只需要远端文件/agent 能力；
-        // bot 启动后台任务如果立即轮询或 getAll，会重复拉本机 preset 并放大 SSH/Docker 连接耗时。
-        runStartupBackgroundTasks: false,
-      }),
-    )
     .register(IFileWatcherService, params.connectionServices.fileWatcherService)
     // Provider/Model 事实属于目标 Environment。远端 workspace 的选择和设置视图
     // 必须直接读取远端 Registry，不能继续显示 Desktop 本地 Provider。
     .register(IModelSelectionService, params.connectionServices.modelSelectionService)
     .register(IProviderSettingsService, params.connectionServices.providerSettingsService)
-    .register(
-      IUsageStatsService,
-      createUsageStatsService({
-        zcodeAgentService: params.connectionServices.zcodeAgentService,
-      }),
-    )
     .register(ICodingPlanSubscriptionService, localCodingPlanSubscriptionService)
-    .register(IClientConfigService, params.clientConfigService)
     .register(IClientScenesService, createClientScenesService())
     // 远端 workspace 的项目级 skills/plugins/commands 位于 SSH/Docker 文件系统。
     // 这里必须透出远端服务，避免本机服务拿远端 workspacePath 去本机目录扫描。
     .register(ISkillsService, params.connectionServices.skillsService)
     .register(ISkillSyncService, params.connectionServices.skillSyncService)
     .register(IMcpSyncService, params.connectionServices.mcpSyncService)
-    .register(IPluginSyncService, params.connectionServices.pluginSyncService)
-    .register(IPluginsService, params.connectionServices.pluginsService)
     // 远端设置页插件管理也必须打到远端 agent（插件目录在远端文件系统）。
-    .register(IPluginManagementService, params.connectionServices.pluginManagementService)
     .register(ICommandsService, params.connectionServices.commandsService)
     .register(ISubagentsService, createSubagentsService({ isDesktopRuntime: true }))
     .register(IHooksService, params.connectionServices.hooksService)

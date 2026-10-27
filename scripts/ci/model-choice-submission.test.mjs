@@ -5,7 +5,6 @@ import { loadComponentCallback } from "./fixtures/component-callback.mjs";
 
 const pane = "packages/ui/src/v4/SessionPane.tsx";
 const automation = "packages/ui/src/settings/AutomationEditView.tsx";
-const subagents = "packages/ui/src/settings/SubagentsSection.tsx";
 const selection = Object.freeze({
   providerId: "fixture-api",
   modelId: "fixture-model",
@@ -162,59 +161,5 @@ test("automation save and run preserve the selected model and original validatio
       assert.equal(saved[0].workspaceIdentity, "fixture-remote");
     }
     assert.deepEqual(events, scenario === "save" ? ["save", "back"] : saved.length ? ["save"] : []);
-  }
-});
-
-test("built-in subagent override persists the chosen config and rolls back failures", async () => {
-  for (const failure of [false, true]) {
-    const states = [],
-      pending = [],
-      saved = [];
-    const previous = { model: "fixture-old" },
-      next = { model: "fixture-new", thoughtLevel: "high" };
-    const agent = { name: "Explore" };
-    const callback = await loadComponentCallback(subagents, "persistConfig", {
-      recommendStartPlan: forbidden,
-      pending: false,
-      config: previous,
-      agent,
-      setConfig: (value) => states.push(value),
-      setPending: (value) => pending.push(value),
-      toSubagentModelSelection: () => selection,
-      onModelOverrideChange: async (...args) => {
-        saved.push(args);
-        if (failure) throw new Error("Fixture save failure");
-      },
-    });
-    await callback(next);
-    assert.deepEqual(saved, [[agent, next]]);
-    assert.equal(states.at(-1), failure ? previous : next);
-    assert.deepEqual(pending, [true, false]);
-  }
-});
-
-test("user subagent form saves explicit or inherited model without plan substitution", async () => {
-  for (const modelSelection of [selection, undefined]) {
-    const saved = [];
-    const callback = await loadComponentCallback(subagents, "handleSubmit", {
-      recommendStartPlan: forbidden,
-      hasExplicitModelChanged: () => true,
-      validate: () => true,
-      toSubagentModelSelection: () => modelSelection,
-      persistedModel: "fixture-model",
-      thoughtLevel: "high",
-      initial: undefined,
-      name: "Fixture",
-      description: "Fixture description",
-      systemPrompt: "Fixture prompt",
-      color: "blue",
-      injectAgentsMd: true,
-      inheritAllTools: true,
-      onSave: async (input) => saved.push(input),
-    });
-    await callback({ preventDefault() {} });
-    assert.equal(saved.length, 1);
-    assert.equal(saved[0].modelSelection, modelSelection);
-    if (!modelSelection) assert.ok(!Object.hasOwn(saved[0], "modelSelection"));
   }
 });

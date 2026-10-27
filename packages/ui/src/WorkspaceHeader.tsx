@@ -98,7 +98,6 @@ export function WorkspaceHeader({
   isSidePaneOpen: boolean;
   onRefreshGit: () => void;
   onToggleTerminal: () => void;
-  onToggleBrowser: () => void;
   onToggleSidePane: () => void;
   toggleSidePaneShortcutLabel?: string;
   onReloadSession: (options?: {

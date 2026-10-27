@@ -26,7 +26,6 @@ const PRODUCTION_IDENTITY = Object.freeze({
   productName: "ZCodium Exp",
   linuxExecutableName: "zcodium-exp",
   linuxPackageName: "zcodium-exp",
-  cuaHelperInstallVariant: null,
 });
 
 const PREVIEW_IDENTITY = Object.freeze({
@@ -35,7 +34,6 @@ const PREVIEW_IDENTITY = Object.freeze({
   productName: "ZCodium Rust",
   linuxExecutableName: "zcodium-rust",
   linuxPackageName: "zcodium-rust",
-  cuaHelperInstallVariant: "preview",
 });
 
 export const desktopProductIdentities = Object.freeze({

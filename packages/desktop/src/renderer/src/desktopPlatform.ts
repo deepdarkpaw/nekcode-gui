@@ -1,16 +1,12 @@
 import { selectBrowserFileData } from "@zcode/ui";
 import { DesktopCommandIds, buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
 
-import { desktopBrowserPlatformBridge } from "./desktopBrowserPlatformBridge.js";
-import { createDesktopPluginSandboxPlatform } from "./plugin-sandbox/desktopPluginSandboxPlatform.js";
-
 export function createDesktopPlatform(options: {
   isLocalDevelopmentRuntime: boolean;
 }): IPlatformService {
   return {
     selectFileData: selectBrowserFileData,
     canSelectFilePath: true,
-    pluginSandbox: createDesktopPluginSandboxPlatform(),
     createLocalMediaPreviewUrl: buildLocalMediaPreviewUrl,
     isLocalDevelopmentRuntime: options.isLocalDevelopmentRuntime,
     selectDirectory: () => window.zcode.selectDirectory(),
@@ -19,8 +15,6 @@ export function createDesktopPlatform(options: {
     createTempTextAttachment: (payload) => window.zcode.createTempTextAttachment(payload),
     onRemoteConnectionLog: (handler) => window.zcode.onRemoteConnectionLog(handler),
     onRemoteSessionClosed: (handler) => window.zcode.onRemoteSessionClosed(handler),
-    onBotRemoteWorkspaceReconnected: (handler) =>
-      window.zcode.onBotRemoteWorkspaceReconnected(handler),
     activateOrSetWorkspace: (path) =>
       window.zcode.activateOrSetWorkspace?.(path) ?? Promise.resolve({ activated: false }),
     connectRemote: (remoteOptions, requestId, context) =>
@@ -30,18 +24,6 @@ export function createDesktopPlatform(options: {
     bindRemoteWorkspaceSessionContext: (context) =>
       window.zcode.bindRemoteWorkspaceSessionContext?.(context) ?? Promise.resolve(),
     disposeRemoteSession: (sessionId) => window.zcode.disposeRemoteSession(sessionId),
-    startWebRemoteControl: (request) => window.zcode.startWebRemoteControl(request),
-    stopWebRemoteControl: () => window.zcode.stopWebRemoteControl(),
-    getWebRemoteControlStatus: () => window.zcode.getWebRemoteControlStatus(),
-    refreshWebRemoteControlPairing: (request) =>
-      window.zcode.refreshWebRemoteControlPairing(request),
-    syncWebRemoteControlWorkspaces: (payload) =>
-      window.zcode.syncWebRemoteControlWorkspaces(payload),
-    syncWebRemoteControlTasks: (payload) => window.zcode.syncWebRemoteControlTasks(payload),
-    onWebRemoteControlStatusChanged: (handler) =>
-      window.zcode.onWebRemoteControlStatusChanged(handler),
-    onWebRemoteControlReconnectWorkspace: (handler) =>
-      window.zcode.onWebRemoteControlReconnectWorkspace(handler),
     isDockerAvailable: () => window.zcode.isDockerAvailable(),
     listWSLDistros: () => window.zcode.listWSLDistros(),
     listDockerContainers: () => window.zcode.listDockerContainers(),
@@ -50,33 +32,11 @@ export function createDesktopPlatform(options: {
     saveMcpToUserDirectory: (payload) => window.zcode.saveMcpToUserDirectory(payload),
     migrateLegacyCommonMcp: (payload) => window.zcode.migrateLegacyCommonMcp(payload),
     openExternal: (url) => window.zcode.openExternal(url),
-    openFeedback: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenFeedback),
     openCommunity: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenCommunity),
     canOpenCommunity: (locale) => window.zcode.canOpenCommunity(locale),
     openInFileManager: (path) => window.zcode.openInFileManager(path),
     openExternalFile: (path) => window.zcode.openExternalFile(path),
     getBuiltinProviderConfigFile: () => window.zcode.getBuiltinProviderConfigFile(),
-    openCuaPermissionOnboarding: window.zcode.openCuaPermissionOnboarding
-      ? (permissionOptions) =>
-          window.zcode.openCuaPermissionOnboarding?.(permissionOptions) ??
-          Promise.resolve({ success: false, error: "not_supported" })
-      : undefined,
-    prepareCuaHelperPermissionDrag: window.zcode.prepareCuaHelperPermissionDrag
-      ? () =>
-          window.zcode.prepareCuaHelperPermissionDrag?.() ??
-          Promise.resolve({ success: false, error: "not_supported" })
-      : undefined,
-    requestCuaPermissions: window.zcode.requestCuaPermissions
-      ? () =>
-          window.zcode.requestCuaPermissions?.() ??
-          Promise.resolve({ ok: false, accessibility: false, screenRecording: false })
-      : undefined,
-    openCuaPermissionSystemSettings: window.zcode.openCuaPermissionSystemSettings
-      ? () => window.zcode.openCuaPermissionSystemSettings?.() ?? Promise.resolve(false)
-      : undefined,
-    startCuaHelperPermissionDrag: window.zcode.startCuaHelperPermissionDrag
-      ? () => window.zcode.startCuaHelperPermissionDrag?.()
-      : undefined,
     notifyRendererReady: () => window.zcode.notifyRendererReady(),
     reportDiagnostic: (record) => window.zcode.reportDiagnostic(record),
     reportRendererHeapSample: (sample) => window.zcode.reportRendererHeapSample(sample),
@@ -91,14 +51,6 @@ export function createDesktopPlatform(options: {
     onNewTab: (handler) => window.zcode.onNewTab(handler),
     onCloseActiveContextRequest: (handler) =>
       window.zcode.onCloseActiveContextRequest?.(handler) ?? (() => {}),
-    onOpenBrowserUrl: (handler) => window.zcode.onOpenBrowserUrl?.(handler) ?? (() => {}),
-    onBrowserViewScreenshotSurfacePrepare: (handler) =>
-      window.zcode.onBrowserViewScreenshotSurfacePrepare?.(handler) ?? (() => {}),
-    onBrowserViewScreenshotSurfaceRelease: (handler) =>
-      window.zcode.onBrowserViewScreenshotSurfaceRelease?.(handler) ?? (() => {}),
-    browserViewScreenshotSurfaceReady: (payload) =>
-      window.zcode.browserViewScreenshotSurfaceReady?.(payload),
-    ...desktopBrowserPlatformBridge,
     onNewTask: (handler) => window.zcode.onNewTask(handler),
     onOpenWorkspace: (handler) => {
       // 开发态或升级后的旧窗口可能仍运行未暴露 onOpenWorkspace 的 preload，

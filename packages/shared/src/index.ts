@@ -91,7 +91,6 @@ export * from "./account-provider-state.js";
 export * from "./zcode-protocol-legacy-types.js";
 export * from "./zcode-task-types-core.js";
 export * from "./task-realtime-core.js";
-export * from "./bots/bridge.js";
 export * from "./remote-workspace-identity.js";
 export * from "./zcode-api-retry-status.js";
 export * from "./zcode-network-debug-status.js";
@@ -100,7 +99,6 @@ export * from "./official-mcp-tool-error.js";
 export * from "./conversation-message-projection-policy.js";
 export * from "./conversation-share.js";
 export * from "./conversation-archive.js";
-export * from "./webRemoteControl/index.js";
 export * from "./conversation-preview-artifacts.js";
 export * from "./zcode-session-task-status.js";
 export * from "./zcode-tool-projection-memory.js";
@@ -109,8 +107,6 @@ export * from "./zcodeEndpoint.js";
 export * from "./zcode-agent-policy.js";
 export * from "./zcode-media-policy.js";
 export * from "./media-preview.js";
-export * from "./plugin-display-name.js";
-export * from "./zcode-agent-runtime.js";
 export * from "./runtimeEnv.js";
 export * from "./dynamic-workflow-feature.js";
 export * from "./markdown-artifact-images.js";
@@ -134,10 +130,7 @@ export * from "./remoteAppConfig.js";
 export * from "./helpAppConfig.js";
 export * from "./onboardingRecord.js";
 export * from "./remoteResourcePackages.js";
-export * from "./plan-identity.js";
 export {
-  BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS,
-  BROWSER_VIEW_RESTORE_BOOTSTRAP_URL,
   LOCAL_MEDIA_PREVIEW_SCHEME,
   DesktopCommandIds,
   buildLocalMediaPreviewUrl,
@@ -149,22 +142,6 @@ export { LAUNCH_MARKS_QUERY_KEY, parseLaunchMarks, serializeLaunchMarks } from "
 export type {
   CancelPendingRemoteConnectionRequest,
   BindRemoteWorkspaceSessionContextRequest,
-  BotRemoteWorkspaceReconnectedEvent,
-  BrowserTabResidencyState,
-  BrowserViewCloseTabNotification,
-  BrowserViewCloseTabRequest,
-  BrowserViewOperationPayload,
-  BrowserViewResidencyReportPayload,
-  BrowserViewResidencyTransitionPayload,
-  BrowserViewRestoredTabShell,
-  BrowserViewRestoreTabsRequest,
-  BrowserViewScreenshotSurfacePreparePayload,
-  BrowserViewScreenshotSurfaceReadyPayload,
-  BrowserViewScreenshotSurfaceReleasePayload,
-  BrowserViewViewportChangedPayload,
-  ChromeBrowserDataImportError,
-  ChromeBrowserDataImportOptions,
-  ChromeBrowserDataImportResult,
   ConnectRemoteRequest,
   CreateTempTextAttachmentRequest,
   CreateTempTextAttachmentResult,
@@ -173,7 +150,6 @@ export type {
   SaveFileResult,
   PrintPageToPdfResult,
   DesktopCommandId,
-  CuaOsSupport,
   DesktopWindowChromeState,
   DesktopTitleBarTheme,
   DockerContainerInfo,
@@ -181,10 +157,6 @@ export type {
   ApplicationIconInfo,
   ApplicationIconLocator,
   ApplicationIconRequest,
-  BrowserGuestAttachRejectReason,
-  BrowserGuestAttachResult,
-  EmbeddedBrowserDataClearResult,
-  EmbeddedBrowserOpenUrlRequest,
   IPlatformService,
   OpenInEditorRemoteTarget,
   OpenInEditorOptions,
@@ -200,13 +172,6 @@ export type {
   WSLDistro,
   ZCodeStdioTapDevState,
 } from "./platform.js";
-export type {
-  CuaAccessibilitySettingsResult,
-  CuaPermissionKind,
-  CuaPermissionRequestResult,
-  OpenCuaPermissionOnboardingOptions,
-  PrepareCuaHelperPermissionDragResult,
-} from "./cuaAccessibilitySettings.js";
 export type { ZCodeTaskCreateResult } from "./zcode-task-types.js";
 export * from "./zcode-task-types.js";
 export * from "./automation-types.js";
@@ -231,21 +196,17 @@ export * from "./official-glm-model-id.js";
 export * from "./skills-types.js";
 export * from "./skill-sync.js";
 export * from "./mcp-sync.js";
-export * from "./plugin-sync.js";
 export * from "./remote-sync.js";
-export * from "./plugin-types.js";
 export * from "./subagents-types.js";
 export * from "./settings-source.js";
 export * from "./settings-errors.js";
 export * from "./app-runtime-preferences.js";
 export * from "./command-types.js";
-export * from "./plugin-marketplaces.js";
 export * from "./lineChangeStat.js";
 export * from "./process-names.js";
 export * from "./mcp.js";
 export * from "./runtime-tool-runtime.js";
 export * from "./git.js";
-export * from "./bots.js";
 export * from "./assistant-message-parts.js";
 export * from "./zcodePersistedMessageMerge.js";
 export * from "./assistant-presentation.js";
@@ -256,7 +217,6 @@ export * from "./tool-plan-adapter.js";
 export * from "./permission-request-preview.js";
 export * from "./settings-sync.js";
 export * from "./uuid.js";
-export * from "./usage-stats.js";
 export * from "./forceUpdate.js";
 export * from "./intranetProbe.js";
 export * from "./intranetDefaults.js";
@@ -264,9 +224,6 @@ export * from "./hooks.js";
 export * from "./openrouter-attribution.js";
 export * from "./workspaceSessionRestore.js";
 export * from "./skill-scan-policy.js";
-export * from "./browser-use/index.js";
-
-export * from "./coding-plan-reset.js";
 export {
   parseSubagentMarkdownSelection,
   formatSubagentMarkdownModel,
@@ -278,9 +235,6 @@ export * from "./execution-state.js";
 export { bashOutputDisplaySchema } from "./bash-output-display.js";
 
 export * from "./localTtft.js";
-export * from "./pluginStoreOrder.js";
-export * from "./clientConfig.js";
-export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 
 export * from "./processResourceTelemetry.js";

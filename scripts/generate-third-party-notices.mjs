@@ -1,11 +1,9 @@
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { assertNoticeOverrideVersions, collectNpmNotices, hashBytes } from "./third-party-npm.mjs";
-import { readCuaLicenseReview } from "./cua-license-review.mjs";
 import {
   noticesFileName,
   readNativeSearchNotices,
-  readRustTuiNotices,
   repositoryRoot,
 } from "./third-party-notices.mjs";
 
@@ -29,8 +27,6 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
   await readInput("pnpm-lock.yaml");
   await readInput("pnpm-workspace.yaml");
   await readInput("third-party/native-search/sources.json");
-  const cuaReview = await readCuaLicenseReview(root);
-  for (const file of cuaReview.files) await readInput(file);
   const { packages, notInstalled, workspaceManifests } = await collectNpmNotices(root, overrides);
   // 修复：递归扫描会把 bundled-agents/mock-cdn 的可删除缓存当作源码输入，重建立即失效。
   // workspace 边界由 pnpm 解析，同一份项目集合用于依赖图和 manifest 新鲜度检查。
@@ -118,14 +114,6 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
     patches.push({ package: name, file, sha256: hashBytes(await readInput(file)) });
   }
   const native = await readNativeSearchNotices(root, { verify: true });
-  const rustTui = await readRustTuiNotices(root, { verify: true });
-  await readInput(rustTui.inventoryFile);
-  for (const crate of rustTui.inventory.crates) {
-    if (crate.upstreamEvidence?.sourceMatch)
-      await readInput(crate.upstreamEvidence.sourceMatch.file);
-    for (const notice of [...crate.notices, ...(crate.upstreamNotices ?? [])])
-      await readInput(notice.file);
-  }
   for (const file of Object.keys(native.inventory.inputs)) await readInput(file);
   for (const component of native.inventory.components) {
     for (const notice of component.notices) await readInput(notice.file);
@@ -150,7 +138,6 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
       (item) =>
         `- ${item.id} (${item.license ?? "not established"}): ${item.roots.join(", ")}. License reference: ${item.source ?? "not established"}. Original import revision: ${item.importRevision ?? "not recorded"}.${item.reviewRequired ? ` Review required: ${item.reviewRequired}` : ""}`,
     ),
-    "Fig autocomplete source carries the repository's MIT license; the generated registry records npm @withfig/autocomplete@2.692.3 metadata as ISC. The original source MIT notice is retained below.",
     "## Embedded native and WASM components",
     ...embedded.map(
       (item) =>
@@ -172,12 +159,7 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
       "````text\n" + record.bytes.toString("utf8") + "\n````",
     );
   }
-  sections.push(
-    "## Native search tools",
-    "````text\n" + native.bytes.toString("utf8") + "\n````",
-    "## Rust TUI dependency notices",
-    "````text\n" + rustTui.bytes.toString("utf8") + "\n````",
-  );
+  sections.push("## Native search tools", "````text\n" + native.bytes.toString("utf8") + "\n````");
   const bytes = Buffer.from(`${sections.join("\n\n")}\n`);
   const inventory = {
     schemaVersion: 1,
@@ -214,12 +196,6 @@ export async function generateThirdPartyNotices(root = repositoryRoot) {
         .map((item) => ({
           id: `${item.id}@${item.version}`,
           reason: "No original notice snapshot for this recorded native component.",
-        })),
-      ...rustTui.inventory.crates
-        .filter((item) => item.reviewRequired)
-        .map((item) => ({
-          id: `${item.name}@${item.version}`,
-          reason: item.reviewRequired,
         })),
     ],
   };

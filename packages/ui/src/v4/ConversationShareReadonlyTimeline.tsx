@@ -20,7 +20,6 @@ import {
   FileTextIcon,
   FilesIcon,
   InfoIcon,
-  MonitorIcon,
   SearchIcon,
   SquareTerminalIcon,
   WrenchIcon,
@@ -50,12 +49,10 @@ import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ToolLayout } from "@/ToolCallBlocks/ToolLayout.js";
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
-import { PluginReferenceIconProvider } from "@/v4/pluginReferenceIconContext.js";
 import {
   buildAssistantWorkRenderItems,
   type ConversationAssistantWorkRenderItem,
 } from "@/v4/conversationAssistantWorkItems.js";
-import type { ConversationCuaGroupRenderItem } from "@/v4/conversationCuaGroups.js";
 import {
   buildConversationTurnRenderUnits,
   type ConversationTurnRenderUnit,
@@ -116,7 +113,6 @@ export type ConversationShareArtifactOpenAction = ComponentType<{
 
 interface ReadonlyLabels {
   history: string;
-  computerUse: string;
   explore: string;
   execute: string;
   changes: string;
@@ -592,7 +588,7 @@ function renderReadonlyRow(
 
 type GroupedToolItem = Extract<
   ConversationAssistantWorkRenderItem,
-  { kind: "cuaGroup" | "exploreGroup" | "executeGroup" | "changesGroup" }
+  { kind: "exploreGroup" | "executeGroup" | "changesGroup" }
 >;
 
 function GroupedToolPresentation({
@@ -615,17 +611,13 @@ function GroupedToolPresentation({
   const { intl } = useZCodeIntl();
   const rows = item.rows;
   const groupLabel =
-    item.kind === "cuaGroup"
-      ? labels.computerUse
-      : item.kind === "exploreGroup"
-        ? labels.explore
-        : item.kind === "executeGroup"
-          ? labels.execute
-          : labels.changes;
+    item.kind === "exploreGroup"
+      ? labels.explore
+      : item.kind === "executeGroup"
+        ? labels.execute
+        : labels.changes;
   const groupIcon =
-    item.kind === "cuaGroup" ? (
-      <MonitorIcon className="size-4 shrink-0" aria-hidden="true" />
-    ) : item.kind === "executeGroup" ? (
+    item.kind === "executeGroup" ? (
       <SquareTerminalIcon className="size-4 shrink-0" aria-hidden="true" />
     ) : item.kind === "changesGroup" ? (
       <FilesIcon className="size-4 shrink-0" aria-hidden="true" />
@@ -646,41 +638,17 @@ function GroupedToolPresentation({
       : "success";
   const content = (
     <div className="flex flex-col gap-4">
-      {item.kind === "cuaGroup"
-        ? item.events.map((event) =>
-            event.kind === "tool" ? (
-              <ToolCallPresentation
-                key={event.row.rowId}
-                row={event.row}
-                theme={theme}
-                codePreviewSettings={codePreviewSettings}
-                artifactNames={artifactNames}
-                onOpenExternalUrl={onOpenExternalUrl}
-              />
-            ) : event.kind === "assistantMessage" ? (
-              <AssistantTextPresentation
-                key={event.row.rowId}
-                row={event.row}
-                theme={theme}
-                codePreviewSettings={codePreviewSettings}
-                artifactNames={artifactNames}
-                onOpenExternalUrl={onOpenExternalUrl}
-              />
-            ) : (
-              <ReasoningPresentation key={event.row.rowId} row={event.row} />
-            ),
-          )
-        : rows.map((row) =>
-            renderReadonlyRow(
-              row,
-              theme,
-              codePreviewSettings,
-              artifactUrls,
-              artifactNames,
-              labels,
-              onOpenExternalUrl,
-            ),
-          )}
+      {rows.map((row) =>
+        renderReadonlyRow(
+          row,
+          theme,
+          codePreviewSettings,
+          artifactUrls,
+          artifactNames,
+          labels,
+          onOpenExternalUrl,
+        ),
+      )}
     </div>
   );
   const statusLabel = resolveToolStatusLabel(groupStatus, intl.formatMessage);
@@ -726,7 +694,6 @@ function ReadonlyAssistantWorkItems({
         { messageStreamShowReasoning: true },
         {
           stageTailIsRunning,
-          enableCuaGrouping: true,
           enableExploreGrouping: true,
           enableTerminalGrouping: true,
           enableChangesGrouping: false,
@@ -820,36 +787,6 @@ function ReadonlyHistoryStatus({
   );
 }
 
-function ReadonlyCuaGroup({
-  item,
-  theme,
-  codePreviewSettings,
-  artifactUrls,
-  artifactNames,
-  labels,
-  onOpenExternalUrl,
-}: {
-  item: ConversationCuaGroupRenderItem;
-  theme: Theme;
-  codePreviewSettings: CodePreviewSettings;
-  artifactUrls: ReadonlyMap<string, string>;
-  artifactNames: ReadonlyMap<string, string>;
-  labels: ReadonlyLabels;
-  onOpenExternalUrl: (url: string) => void;
-}) {
-  return (
-    <GroupedToolPresentation
-      item={item}
-      theme={theme}
-      codePreviewSettings={codePreviewSettings}
-      artifactUrls={artifactUrls}
-      artifactNames={artifactNames}
-      labels={labels}
-      onOpenExternalUrl={onOpenExternalUrl}
-    />
-  );
-}
-
 function ReadonlySegment({
   segment,
   locale,
@@ -873,11 +810,7 @@ function ReadonlySegment({
   useEffect(() => {
     setHistoryOpen(segment.assistantHistoryDefaultOpen);
   }, [segment.assistantHistoryDefaultOpen, segment.key]);
-  const hasHistory = segment.flowItems.some(
-    (item) =>
-      item.kind === "assistantHistory" ||
-      (item.kind === "cuaGroup" && item.flowKind === "assistantHistory"),
-  );
+  const hasHistory = segment.flowItems.some((item) => item.kind === "assistantHistory");
   const open = segment.assistantHistoryDefaultOpen || historyOpen;
   const firstAssistantFlowItemIndex = segment.flowItems.findIndex(
     (flowItem) => flowItem.kind !== "userInput",
@@ -902,26 +835,6 @@ function ReadonlySegment({
               onOpenExternalUrl={onOpenExternalUrl}
             />
           );
-        } else if (item.kind === "cuaGroup") {
-          const group = (
-            <ReadonlyCuaGroup
-              item={item}
-              theme={theme}
-              codePreviewSettings={codePreviewSettings}
-              artifactUrls={artifactUrls}
-              artifactNames={artifactNames}
-              labels={labels}
-              onOpenExternalUrl={onOpenExternalUrl}
-            />
-          );
-          content =
-            item.flowKind === "assistantHistory" ? (
-              <CollapsibleContent data-history-open={String(open)}>
-                <div className="pt-5">{group}</div>
-              </CollapsibleContent>
-            ) : (
-              <div>{group}</div>
-            );
         } else if (item.kind === "assistantHistory") {
           content = (
             <CollapsibleContent data-history-open={String(open)}>
@@ -1098,7 +1011,6 @@ export function ConversationShareReadonlyTimeline({
     locale === "zh-CN"
       ? {
           history: "思考过程",
-          computerUse: "电脑操作",
           explore: "探索",
           execute: "执行",
           changes: "修改",
@@ -1109,7 +1021,6 @@ export function ConversationShareReadonlyTimeline({
         }
       : {
           history: "Reasoning",
-          computerUse: "Computer use",
           explore: "Explore",
           execute: "Execute",
           changes: "Changes",
@@ -1149,35 +1060,33 @@ export function ConversationShareReadonlyTimeline({
   return (
     <TooltipProvider delayDuration={0}>
       <ZCodeIntlProvider initialLocale={locale}>
-        <PluginReferenceIconProvider value={null}>
-          <ArtifactOpenContext.Provider value={artifactOpenContext}>
-            <div className="@container/conversation flex flex-col" data-conversation-share-timeline>
-              {unsupportedRowCount > 0 ? (
-                // 中性信息语义，不用黄色 warning：分享本身没出错，只是这个 build 认不出其中几行。
-                <div
-                  data-conversation-share-unsupported-notice="true"
-                  className="mx-4 mb-2 flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-ui-xs text-foreground-subtle"
-                >
-                  <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span className="min-w-0 break-words">{labels.unsupportedRows}</span>
-                </div>
-              ) : null}
-              {units.map((unit) => (
-                <ReadonlyTurn
-                  key={unit.key}
-                  unit={unit}
-                  locale={locale}
-                  theme={theme}
-                  codePreviewSettings={codePreviewSettings}
-                  artifactUrls={artifactUrls}
-                  artifactNames={artifactNames}
-                  labels={labels}
-                  onOpenExternalUrl={openShareExternalUrl}
-                />
-              ))}
-            </div>
-          </ArtifactOpenContext.Provider>
-        </PluginReferenceIconProvider>
+        <ArtifactOpenContext.Provider value={artifactOpenContext}>
+          <div className="@container/conversation flex flex-col" data-conversation-share-timeline>
+            {unsupportedRowCount > 0 ? (
+              // 中性信息语义，不用黄色 warning：分享本身没出错，只是这个 build 认不出其中几行。
+              <div
+                data-conversation-share-unsupported-notice="true"
+                className="mx-4 mb-2 flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-ui-xs text-foreground-subtle"
+              >
+                <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />
+                <span className="min-w-0 break-words">{labels.unsupportedRows}</span>
+              </div>
+            ) : null}
+            {units.map((unit) => (
+              <ReadonlyTurn
+                key={unit.key}
+                unit={unit}
+                locale={locale}
+                theme={theme}
+                codePreviewSettings={codePreviewSettings}
+                artifactUrls={artifactUrls}
+                artifactNames={artifactNames}
+                labels={labels}
+                onOpenExternalUrl={openShareExternalUrl}
+              />
+            ))}
+          </div>
+        </ArtifactOpenContext.Provider>
       </ZCodeIntlProvider>
     </TooltipProvider>
   );

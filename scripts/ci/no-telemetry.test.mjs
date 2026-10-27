@@ -32,7 +32,6 @@ test("application dependencies contain no telemetry SDK or workspace package", a
   const paths = [
     join(root, "package.json"),
     ...(await files(join(root, "packages"))),
-    ...(await files(join(root, "apps/zcode-cli"))),
   ];
   const found = [];
   for (const path of paths.filter((path) => basename(path) === "package.json")) {
@@ -52,7 +51,6 @@ test("application dependencies contain no telemetry SDK or workspace package", a
 test("product code cannot enable official or proprietary telemetry collectors", async () => {
   const paths = [
     ...(await files(join(root, "packages"))),
-    ...(await files(join(root, "apps/zcode-cli/packages"))),
     ...(await files(join(root, "scripts"))),
   ];
   const forbidden =

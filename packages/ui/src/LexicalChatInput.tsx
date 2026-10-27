@@ -1329,7 +1329,6 @@ interface LexicalChatInputProps {
   editorApiRef?: React.MutableRefObject<LexicalChatInputHandle | null>;
   promptHistory?: readonly string[];
   compactPlaceholder?: boolean;
-  onWhiteboardMentionSelected?: (boardId: string) => void | Promise<void>;
   onPaste?: (event: ChatComposerPasteEvent) => void;
   excludedSlashCommandNames?: readonly string[];
   /** App 层本地斜杠命令（如 `/side`），选中即执行 UI 行为，不发送。 */
@@ -1361,7 +1360,6 @@ export function LexicalChatInput({
   editorApiRef,
   promptHistory = [],
   compactPlaceholder = false,
-  onWhiteboardMentionSelected,
   onPaste,
   excludedSlashCommandNames,
   appSlashCommands,
@@ -1518,7 +1516,6 @@ export function LexicalChatInput({
             provider={activeTaskProvider}
             container={triggerPanelContainer}
             disabled={disabled}
-            onWhiteboardMentionSelected={onWhiteboardMentionSelected}
           />
         ) : null}
       </LexicalComposer>
