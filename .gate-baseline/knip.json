@@ -310,10 +310,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000duplicates\u0000packages/ui/src/app-shell/workflow-artifacts/presets/ArtifactChartView.tsx\u0000",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/desktop/scripts/app-asar-repack.mjs\u0000ASAR_UNPACK_NATIVE_GLOB",
       "count": 1
     },
@@ -399,10 +395,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/desktop/src/main/about.ts\u0000readBuildMetadata",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/desktopCommandHandlers.ts\u0000clearCodingPlanWebviewStorage",
       "count": 1
     },
     {
@@ -1654,6 +1646,18 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000BACKGROUND_WORK_CANCEL_REJECTED_FAULT_PREFIX",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000SAVED_WORKFLOW_START_REJECTED_FAULT_PREFIX",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000WORKFLOW_RUN_RESUME_REJECTED_FAULT_PREFIX",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000commandQueryItemSchema",
       "count": 1
     },
@@ -1667,6 +1671,10 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000parseCommandEnvelope",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000savedWorkflowStartRejectionReasonSchema",
       "count": 1
     },
     {
@@ -1766,7 +1774,19 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000isSessionWorkflowRunLive",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000sessionWorkflowPhaseStatusSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000sessionWorkflowPhaseSummarySchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000sessionWorkflowRunSummarySchema",
       "count": 1
     },
     {
@@ -1783,6 +1803,14 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/shared-context-import.ts\u0000restoreSharedContextImportState",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/snapshot.ts\u0000MAX_PERMISSION_FEEDBACK_CHARS",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/snapshot.ts\u0000PERMISSION_FULL_ACCESS_OPTION_ID",
       "count": 1
     },
     {
@@ -1882,6 +1910,18 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4ConversationWorkflowRunEventsParamsSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4ConversationWorkflowRunSummarySchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4ConversationWorkflowRunsParamsSchema",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4UsageStatsParamsSchema",
       "count": 1
     },
@@ -1902,11 +1942,47 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000v4ConversationWorkflowRunArtifactDataParamsSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000v4ConversationWorkflowRunArtifactReadParamsSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000v4ConversationWorkflowRunArtifactsParamsSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000workflowRunArtifactSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000workflowRunArtifactVersionSchema",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-observation-display.ts\u0000WORKFLOW_RUN_OBSERVATION_STATUSES",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000workflowBlockedMetaSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000workflowSettingsAmendMetaSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000WORKFLOW_RUN_SETTINGS_REJECTED_FAULT_PREFIX",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000workflowRunSettingsRejectionReasonSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-caps.ts\u0000workflowRunStepCounts",
       "count": 1
     },
     {
@@ -1942,11 +2018,23 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000v4ConversationWorkflowRunNodeResultParamsSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000v4ConversationWorkflowRunWorkspaceParamsSchema",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeErrorSchema",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeKindSchema",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeSchema",
       "count": 1
     },
     {
@@ -2006,6 +2094,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/ui/src/ModelConfigSelect.tsx\u0000MODEL_CONFIG_SELECT_BADGE_CLASS_NAME",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/ui/src/ModelTrajectoryPane.tsx\u0000resolveTrajectoryInputMessages",
       "count": 1
     },
@@ -2034,14 +2126,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/ToolCallBlocks/renderers/create-workflow.tsx\u0000readWorkflowKindMessageId",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/ToolCallBlocks/renderers/workflowFillInput.ts\u0000workflowFillKindMessageId",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/WorkspaceSidebar.tsx\u0000WorkspaceSidebarCollapsedRail",
       "count": 1
     },
@@ -2058,15 +2142,15 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/app-shell/workflowRunPanel.ts\u0000workflowRunEventLines",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/contextUsage.tsx\u0000getContextCompressionCommand",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/contextUsage.tsx\u0000getRenderableTaskUsage",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/display.tsx\u0000ConfigSelect",
       "count": 1
     },
     {
@@ -2139,6 +2223,10 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/hooks/useFocusRestore.ts\u0000canRestoreFocusTo",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/hooks/useModelSelectionView.ts\u0000useModelSelectionView",
       "count": 1
     },
     {
@@ -2302,6 +2390,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/ui/src/lib/zcodeSessionProjection.ts\u0000formatModelPickerValue",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/ui/src/lib/zcodeSessionProjection.ts\u0000zcodeSessionSettingsToConfigOptions",
       "count": 1
     },
@@ -2323,26 +2415,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/root/useRemoteWorkspaceHistory.ts\u0000reconnectRemoteWorkspaceHistoryEntry",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/AutomationDesignPrimitives.tsx\u0000AutomationCancelActionIcon",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/AutomationDesignPrimitives.tsx\u0000AutomationIdleTimeIcon",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/AutomationDesignPrimitives.tsx\u0000AutomationInfoIcon",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/AutomationIcons.tsx\u0000AutomationCancelActionIcon",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/AutomationIcons.tsx\u0000AutomationIdleTimeIcon",
       "count": 1
     },
     {
@@ -2391,34 +2463,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/ProviderCardSections.tsx\u0000resolveProviderConnectionApiFormatOptions",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000BIGMODEL_REGISTRATION_URL",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000CODING_PLAN_PROVIDER_SPECS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000PRESET_PROVIDER_SPECS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000PRESET_PROVIDER_SPEC_BY_ID",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000PRESET_SUBSCRIPTION_TIMEOUT_MS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000generateId",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/utils.tsx\u0000createCodingPlanProviderNodeKey",
       "count": 1
     },
     {
@@ -2582,10 +2626,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/saved-workflows/AutomationsPageTitleSwitch.tsx\u0000AutomationsPageTitleSwitch",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/settingsPageConfig.ts\u0000SETTINGS_SECTIONS",
       "count": 1
     },
@@ -2642,7 +2682,15 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/ui/src/store/tabStore.ts\u0000isWorkspaceTabReadOnly",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/ui/src/v4/V4ConversationContext.tsx\u0000V4ConversationContext",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/v4/V4ConversationContext.tsx\u0000useHasV4Conversation",
       "count": 1
     },
     {
@@ -2658,11 +2706,23 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/ui/src/v4/composer/modelTriggerDisplay.ts\u0000formatProviderModelLabel",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/v4/composer/modelTriggerDisplay.ts\u0000resolveV4ModelTriggerLabel",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/ui/src/v4/diagnostics/ConversationDiagnosticAttachment.tsx\u0000useScopedConversationDiagnosticForegroundEnabled",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/v4/diagnostics/ConversationDiagnosticAttachment.tsx\u0000useScopedConversationDiagnostics",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/v4/pendingInteractionAdapter.ts\u0000pendingPermissionToLegacyRequest",
       "count": 1
     },
     {
@@ -2974,19 +3034,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/ui/src/app-shell/WorkflowRunSectionToggle.tsx\u0000packages/ui/src/app-shell/WorkflowRunSectionToggle.tsx",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/ui/src/chat-input-toolbar/contextQuotaMeterGrid.ts\u0000packages/ui/src/chat-input-toolbar/contextQuotaMeterGrid.ts",
       "count": 1
     },
     {
       "key": "knip\u0000files\u0000packages/ui/src/hooks/useTypeToFocus.ts\u0000packages/ui/src/hooks/useTypeToFocus.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/accountProviderAccess.ts\u0000packages/ui/src/lib/accountProviderAccess.ts",
       "count": 1
     },
     {
@@ -3015,6 +3067,10 @@
     },
     {
       "key": "knip\u0000files\u0000packages/ui/src/lib/oauthProviderIcon.tsx\u0000packages/ui/src/lib/oauthProviderIcon.tsx",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/lib/permissionRequest.ts\u0000packages/ui/src/lib/permissionRequest.ts",
       "count": 1
     },
     {
@@ -3099,18 +3155,6 @@
     },
     {
       "key": "knip\u0000files\u0000packages/ui/test/providerModelCatalogSelection.test.ts\u0000packages/ui/test/providerModelCatalogSelection.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/test/workflowHoleOnlySurfaces.test.ts\u0000packages/ui/test/workflowHoleOnlySurfaces.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/test/workflowHoles.test.ts\u0000packages/ui/test/workflowHoles.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/vitest.holes.config.ts\u0000packages/ui/vitest.holes.config.ts",
       "count": 1
     },
     {
@@ -4346,6 +4390,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000SavedWorkflowStartRejectionReason",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000SharedContextRef",
       "count": 1
     },
@@ -4375,6 +4423,14 @@
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/core.ts\u0000Timestamp",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/create-workflow-display.ts\u0000ToolCallCreateWorkflowCausalityGraph",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/create-workflow-display.ts\u0000ToolCallCreateWorkflowDisplay",
       "count": 1
     },
     {
@@ -4434,7 +4490,27 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowLaunchMeta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowNotificationMeta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowSettingsAmendMeta",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SessionWorkflowPhaseStatus",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SessionWorkflowPhaseSummary",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SessionWorkflowRunSummary",
       "count": 1
     },
     {
@@ -4598,6 +4674,18 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4ConversationWorkflowRunEventsParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4ConversationWorkflowRunSummary",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4ConversationWorkflowRunsParams",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4UsageStatsParams",
       "count": 1
     },
@@ -4622,11 +4710,47 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000V4ConversationWorkflowRunArtifactDataParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000V4ConversationWorkflowRunArtifactReadParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000V4ConversationWorkflowRunArtifactsParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000WorkflowRunArtifact",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000WorkflowRunArtifactVersion",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000BackgroundResultOriginMeta",
       "count": 1
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowBlockedMeta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowLaunchMeta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowNotificationMeta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowSettingsAmendMeta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000AmendWorkflowRunSettingsPayload",
       "count": 1
     },
     {
@@ -4651,6 +4775,18 @@
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-unlisted.ts\u0000WorkflowRunUnlistedDelta",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000V4ConversationWorkflowRunNodeResultParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000V4ConversationWorkflowRunWorkspaceParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WorkflowRunWorkspaceNode",
       "count": 1
     },
     {
@@ -4710,6 +4846,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/ui/src/ChatEmptyState.tsx\u0000ChatEmptyWorkspaceMenuTab",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/ui/src/ModelConfigSelect.tsx\u0000ModelSelectFooterAction",
       "count": 1
     },
@@ -4718,7 +4858,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/renderers/createWorkflowInput.ts\u0000WorkflowRetuneCall",
+      "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/renderers/read.tsx\u0000ReadSummary",
       "count": 1
     },
     {
@@ -4731,6 +4871,14 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/shared.tsx\u0000RawToolCallFileSummary",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/shared.tsx\u0000WorkflowDraftPosition",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/shared.tsx\u0000WorkflowRunCardSummary",
       "count": 1
     },
     {
@@ -4810,11 +4958,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/lib/permissionRequest.ts\u0000PermissionRequestFileChange",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/lib/permissionRequest.ts\u0000PermissionRequestPreview",
+      "key": "knip\u0000types\u0000packages/ui/src/lib/modelSelectionGroups.ts\u0000ModelProviderGroupLabelOptions",
       "count": 1
     },
     {
@@ -4839,18 +4983,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/settings/RemoteSkillSyncDialog.tsx\u0000RemoteSkillSyncRow",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/settings/automationTemplateCatalog.ts\u0000AutomationTemplateLocalizedText",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000CodingPlanEntitlementState",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/settings/model-provider-section/constants.ts\u0000PresetProviderSpec",
       "count": 1
     },
     {
@@ -5031,6 +5163,10 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/v4/conversationShareAttempt.ts\u0000ConversationShareAttempt",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/v4/workspaceConnectionRegistry.ts\u0000WorkspaceConnectionAgentService",
       "count": 1
     },
     {

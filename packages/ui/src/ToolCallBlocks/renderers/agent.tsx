@@ -62,7 +62,7 @@ function AgentChildToolList({
           onOpenCodeViewer={onOpenCodeViewer}
           onOpenFileLink={onOpenFileLink}
           onOpenBrowserUrl={onOpenBrowserUrl}
-                    onLoadFullToolCallFields={onLoadFullToolCallFields}
+          onLoadFullToolCallFields={onLoadFullToolCallFields}
           suppressSourceLabel
         />
       ))}
@@ -336,7 +336,7 @@ export function AgentToolCallBlock(context: ToolCallBlockRenderContext) {
           onOpenCodeViewer={context.onOpenCodeViewer}
           onOpenFileLink={context.onOpenFileLink}
           onOpenBrowserUrl={context.onOpenBrowserUrl}
-                    onLoadFullToolCallFields={context.onLoadFullToolCallFields}
+          onLoadFullToolCallFields={context.onLoadFullToolCallFields}
         />
       </div>
     ),

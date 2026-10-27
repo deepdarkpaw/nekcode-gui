@@ -276,7 +276,7 @@ export function ChangesGroupToolCallBlock(context: ToolCallBlockRenderContext) {
             onOpenCodeViewer={context.onOpenCodeViewer}
             onOpenFileLink={context.onOpenFileLink}
             onOpenBrowserUrl={context.onOpenBrowserUrl}
-                        onLoadFullToolCallFields={context.onLoadFullToolCallFields}
+            onLoadFullToolCallFields={context.onLoadFullToolCallFields}
           />
         ))}
       </div>
@@ -286,7 +286,7 @@ export function ChangesGroupToolCallBlock(context: ToolCallBlockRenderContext) {
       context.onOpenBrowserUrl,
       context.onOpenCodeViewer,
       context.onOpenFileLink,
-            context.onLoadFullToolCallFields,
+      context.onLoadFullToolCallFields,
       context.theme,
       context.codePreviewSettings,
       context.workspacePath,

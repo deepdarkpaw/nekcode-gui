@@ -420,11 +420,6 @@ interface ConversationComposerProps {
   onSwitchMode: (mode: string) => void;
   /** 打开当前 session 的 Status panel，并直达 Running 明细。 */
   onOpenRunningBackgroundWorks?: () => void;
-  /**
-   * 后台任务入口点击的落点：`"workflow-run"` = 唯一在跑的工作流直达详情页（宿主判定），
-   * 缺省 `"panel"` = 展开状态胶囊。入口据此换 tooltip；行为本身在 onOpenRunningBackgroundWorks 里。
-   */
-  backgroundWorkOpenTarget?: "panel" | "workflow-run";
   runningSubagentCount?: number;
   /** prepare/configOptions 失败时，custom provider 选择走 workspace recovery 链。 */
   onRecoverCustomModelSelection?: (
@@ -506,7 +501,6 @@ function ConversationComposerImpl({
   onSelectThought,
   onSwitchMode,
   onOpenRunningBackgroundWorks,
-  backgroundWorkOpenTarget = "panel",
   runningSubagentCount = 0,
   onRecoverCustomModelSelection,
   onSendCompressionCommand,
@@ -1977,7 +1971,6 @@ function ConversationComposerImpl({
           backgroundWorks={snapshot?.backgroundWorks ?? []}
           runningSubagentCount={runningSubagentCount}
           onOpen={onOpenRunningBackgroundWorks}
-          openTarget={backgroundWorkOpenTarget}
         />
       </>
     ),
@@ -1987,7 +1980,6 @@ function ConversationComposerImpl({
       disabled,
       draftConfig,
       handleConfigPickerOpenChange,
-      backgroundWorkOpenTarget,
       onOpenRunningBackgroundWorks,
       onSwitchMode,
       provider,

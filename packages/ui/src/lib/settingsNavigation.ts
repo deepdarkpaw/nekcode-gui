@@ -15,7 +15,6 @@ export type SettingsSectionId =
   | "commands"
   | "hooks"
   | "workspaceFileSearch"
-  | "automations"
   | "shortcuts"
   | NekSettingsSectionId;
 
@@ -25,9 +24,6 @@ const SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY = "zcode-settings-model-provider-id-
 const SETTINGS_SECTION_INTENT_EVENT = "zcode:settings-section-intent",
   SETTINGS_LAST_SECTION_STORAGE_KEY = "zcode-settings-last-section";
 const HIDDEN_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
-  // 产品语义：定时任务是 workspace 主视图，不能再作为设置页分区出现。
-  // 注意：hooks 已是正式设置页分区，不在此列。
-  "automations",
   // 工作区搜索（.zcodiumignore）设置入口先隐藏：规则文件仍生效并可手动编辑，
   // 编辑页代码保留，放开时从这里移除即可。
   "workspaceFileSearch",
@@ -71,7 +67,6 @@ function isSettingsSectionId(value: string): value is SettingsSectionId {
     value === "commands" ||
     value === "hooks" ||
     value === "workspaceFileSearch" ||
-    value === "automations" ||
     value === "shortcuts" ||
     isNekSettingsSectionId(value)
   );

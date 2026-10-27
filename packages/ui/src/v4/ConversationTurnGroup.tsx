@@ -154,7 +154,7 @@ function ConversationExploreGroupRow({
         onOpenCodeViewer={context.onOpenCodeViewer}
         onOpenFileLink={context.onOpenFileLink}
         onOpenBrowserUrl={context.onOpenBrowserUrl}
-              />
+      />
     </div>
   );
 }
@@ -181,7 +181,7 @@ function ConversationToolGroupRow({
         onOpenCodeViewer={context.onOpenCodeViewer}
         onOpenFileLink={context.onOpenFileLink}
         onOpenBrowserUrl={context.onOpenBrowserUrl}
-              />
+      />
     </div>
   );
 }
@@ -777,38 +777,6 @@ function ConversationTurnGroupImpl({
       latestAssistantTextRow?.state,
     ],
   );
-  const cronAutomationTurnCards = useMemo(
-    () => (unit.isRunning ? [] : resolveCronAutomationTurnCards(unit.assistantWorkRows)),
-    [unit.assistantWorkRows, unit.isRunning],
-  );
-  // 上方已是工具摘要；下方运行卡在联接到 run 后立即显示，不能再等主代理回复结束。
-  // 依赖联接表保持实时更新，并由解析器按 runId 去重。直接启动轮
-  // 的 run 卡也从这里出：那一轮没有用户气泡、没有助手内容，run 卡就是它的全部呈现。
-  const workflowRunByToolCallId = context.workflowRunByToolCallId;
-  const workflowRunByRunId = context.workflowRunByRunId;
-  const workflowGraphByToolCallId = context.workflowGraphByToolCallId;
-  const workflowTurnDigests = useMemo(
-    () =>
-      resolveWorkflowTurnDigests(unit, {
-        byToolCallId: workflowRunByToolCallId,
-        byRunId: workflowRunByRunId,
-        graphByToolCallId: workflowGraphByToolCallId,
-      }),
-    [unit, workflowGraphByToolCallId, workflowRunByRunId, workflowRunByToolCallId],
-  );
-  // 完成卡：主代理消化 completed 通知的那一轮，轮尾落卡。
-  // 同一条门（轮结束）；联接只认 byRunId——通知轮里没有 CreateWorkflow 行可按 toolCallId 联。
-  const workflowTurnCompletion = useMemo(
-    () =>
-      unit.isRunning
-        ? undefined
-        : resolveWorkflowTurnCompletion(unit.header, { byRunId: workflowRunByRunId }),
-    [unit.header, unit.isRunning, workflowRunByRunId],
-  );
-  const offPeakTurnCards = useMemo(
-    () => (unit.isRunning ? [] : resolveOffPeakTurnCards(unit.assistantWorkRows)),
-    [unit.assistantWorkRows, unit.isRunning],
-  );
   const canRenderAssistantActions =
     !unit.timelineOnly &&
     latestAssistantTextRow?.state === "complete" &&
@@ -833,8 +801,7 @@ function ConversationTurnGroupImpl({
     hasAssistantWorkContent ||
     Boolean(unit.header?.fileChanges) ||
     canRenderAssistantActions ||
-    hasHookActions ||
-    workflowTurnDigests.length > 0;
+    hasHookActions;
   const editWorkspaceRewindAvailability = useMemo<EditWorkspaceRewindAvailability>(() => {
     const fileChanges = unit.header?.fileChanges;
     if (!fileChanges || fileChanges.files <= 0) return { enabled: false, reason: "noFiles" };
@@ -845,10 +812,6 @@ function ConversationTurnGroupImpl({
     }
     return { enabled: true, reason: "available" };
   }, [unit.header?.actions?.canRewindFiles, unit.header?.fileChanges, unit.isRunning]);
-
-  // workflow 通知卡开头的轮去掉轮顶 padding：卡片只贴上一轮 pb-5 的常规流内间距。
-  const startsWithWorkflowNotificationCard =
-    backgroundResultTitle !== undefined && resolveWorkflowNotification(unit) !== undefined;
 
   const shareSelectionRows = shareSelection
     ? unit.visibleUserInputs.filter(
@@ -915,10 +878,7 @@ function ConversationTurnGroupImpl({
     <section
       data-turn-id={unit.turnId}
       data-turn-key={unit.key}
-      className={cn(
-        "relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5",
-        startsWithWorkflowNotificationCard ? "pt-0" : "pt-14",
-      )}
+      className="relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5 pt-14"
     >
       {unit.leadingBoundaryRows.map((row) => (
         <ConversationTurnRow
@@ -993,24 +953,6 @@ function ConversationTurnGroupImpl({
               }
             />
           )}
-          {/* 完成卡：这一轮消化的那条 run 做了什么、花了多少，紧跟最后一段正文。 */}
-          {workflowTurnCompletion === undefined ? null : (
-            <ConversationWorkflowCompletion
-              completion={workflowTurnCompletion}
-              context={context}
-              turnKey={unit.key}
-            />
-          )}
-          {/* 轮尾摘要：这一轮留下在跑的 run，排在完成卡之后、其余轮尾块之前。 */}
-          <ConversationWorkflowDigests
-            context={context}
-            digests={workflowTurnDigests}
-            turnKey={unit.key}
-          />
-          {/* CronCreate/CronUpdate 工具本身仍按普通工具行展示；成功卡片属于整轮
-              完成后的结果摘要，必须等回复结束再跟随最终 assistant 正文收尾。 */}
-          <CronAutomationTurnCards cards={cronAutomationTurnCards} context={context} />
-          <OffPeakTurnCards cards={offPeakTurnCards} />
           {!isOfficeMode && unit.header?.fileChanges ? (
             <ConversationFileSummaryPanel header={unit.header} context={context} />
           ) : null}

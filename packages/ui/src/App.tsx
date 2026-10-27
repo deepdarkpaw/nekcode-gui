@@ -214,11 +214,6 @@ export function App({
     handleSyncSubagentSessionTabs,
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,
-    handleOpenWorkflowRun,
-    handleOpenWorkflowRunDirectory,
-    handleOpenWorkflowActorSession,
-    handleOpenWorkflowWorkspace,
-    handleOpenWorkflowArtifact,
     handleToggleTerminal,
     handleToggleSidebar,
     handleToggleSidePaneCollapse,
@@ -1112,11 +1107,6 @@ export function App({
         handleSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
         handleOpenSelectionSideChat={handleOpenSelectionSideChat}
         handleOpenPlanDetail={handleOpenPlanDetail}
-        handleOpenWorkflowRun={handleOpenWorkflowRun}
-        handleOpenWorkflowRunDirectory={handleOpenWorkflowRunDirectory}
-        handleOpenWorkflowActorSession={handleOpenWorkflowActorSession}
-        handleOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
-        handleOpenWorkflowArtifact={handleOpenWorkflowArtifact}
         handleCloseCodeViewer={handleCloseCodeViewer}
         handleCloseGit={handleCloseGit}
         handleActivateSidePaneTab={handleActivateSidePaneTab}

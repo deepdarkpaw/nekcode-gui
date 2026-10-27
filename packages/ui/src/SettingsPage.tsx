@@ -38,7 +38,6 @@ import {
 } from "@/lib/settingsNavigation.js";
 import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
 import { UsageStatsSection } from "@/settings/UsageStatsSection.js";
-import { AutomationsSection } from "@/settings/AutomationsSection.js";
 import { CapabilitySection } from "@/settings/CapabilitySection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
@@ -1000,11 +999,6 @@ export function SettingsPage({
                           />
                         ) : activeSection === "usage" ? (
                           <UsageStatsSection />
-                        ) : activeSection === "automations" ? (
-                          <AutomationsSection
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                          />
                         ) : activeSection === "commands" ? (
                           <CapabilitySection
                             mode="command"

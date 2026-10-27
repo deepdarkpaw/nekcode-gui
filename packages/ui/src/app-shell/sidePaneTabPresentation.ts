@@ -11,33 +11,11 @@ export interface SidePaneTabPresentationLabels {
   subagentDirectoryTitle: string;
   selectionChatTitle: string;
   planTitle: string;
-  workflowRunTitle: string;
-  workflowDirectoryTitle: string;
-  workflowActorTitle: string;
-  workflowScriptTitle: string;
-  workflowArtifactTitle: string;
 }
 
 export function getSidePaneTabSearchHint(tab: WorkspaceSidePaneTab): string {
   if (tab.type === "plan-detail") {
     return `${tab.parentSessionId} ${tab.toolCallId} plan ExitPlanMode`;
-  }
-  if (tab.type === "workflow-run") {
-    return `${tab.workflowName ?? ""} ${tab.runId} ${tab.toolCallId} ${tab.parentSessionId} workflow run CreateWorkflow AmendWorkflow`;
-  }
-  if (tab.type === "workflow-directory") {
-    return `${tab.parentSessionId} workflow runs directory history ended`;
-  }
-  if (tab.type === "workflow-actor-session") {
-    // 会话 id 也进搜索面：排查时手里往往只有它（日志与 journal 都记它）。
-    return `${tab.actorName ?? ""} ${tab.siteId}@${tab.ordinal} ${tab.actorSessionId ?? ""} ${tab.runId} ${tab.parentSessionId} workflow subagent actor transcript`;
-  }
-  if (tab.type === "workflow-workspace") {
-    return `${tab.workflowName ?? ""} ${tab.runId} ${tab.toolCallId} ${tab.parentSessionId} workflow script steps workspace transcript files git run`;
-  }
-  if (tab.type === "workflow-artifact") {
-    // 产物 id 是脚本里写死的字面量，用户与排查者手里往往就是它。
-    return `${tab.title ?? ""} ${tab.artifactId} ${tab.runId} ${tab.parentSessionId} workflow artifact deliverable`;
   }
   if (tab.type === "selection-side-chat") {
     return `${tab.parentSessionId} ${tab.childSessionId} ${tab.ordinal} selection side chat`;
@@ -75,10 +53,6 @@ export function getLocalizedSidePaneTabTitle(
       "sidePane.subagentDirectory": labels.subagentDirectoryTitle,
       "sidePane.selectionChat": labels.selectionChatTitle,
       "planTool.panel.planTab": labels.planTitle,
-      "sidePane.workflowRun": labels.workflowRunTitle,
-      "sidePane.workflowActor": labels.workflowActorTitle,
-      "sidePane.workflowScript": labels.workflowScriptTitle,
-      "sidePane.workflowArtifact": labels.workflowArtifactTitle,
     };
     return titleByMessageId[descriptor.id] ?? descriptor.id;
   });
@@ -89,11 +63,6 @@ export function getSidePaneTabTypeLabel(
   labels: SidePaneTabPresentationLabels,
 ): string {
   if (tab.type === "plan-detail") return labels.planTitle;
-  if (tab.type === "workflow-run") return labels.workflowRunTitle;
-  if (tab.type === "workflow-directory") return labels.workflowDirectoryTitle;
-  if (tab.type === "workflow-actor-session") return labels.workflowActorTitle;
-  if (tab.type === "workflow-workspace") return labels.workflowScriptTitle;
-  if (tab.type === "workflow-artifact") return labels.workflowArtifactTitle;
   if (tab.type === "selection-side-chat") return labels.selectionChatTitle;
   if (tab.type === "subagent-session") {
     return tab.subagentType.trim() || labels.subagentTypeLabel;

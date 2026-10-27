@@ -235,7 +235,7 @@ function ToolCallBlockComponent({
               onOpenCodeViewer={toolPreviewCodeViewer}
               onOpenFileLink={onOpenFileLink}
               onOpenBrowserUrl={onOpenBrowserUrl}
-               onOpenPlanDetail={onOpenPlanDetail}
+              onOpenPlanDetail={onOpenPlanDetail}
               onOpenWorkflowRun={onOpenWorkflowRun}
               onLoadFullToolCallFields={onLoadFullToolCallFields}
               suppressSourceLabel={suppressSourceLabel}
@@ -252,7 +252,7 @@ function ToolCallBlockComponent({
       childToolCalls,
       depth,
       onLoadFullToolCallFields,
-          onOpenBrowserUrl,
+      onOpenBrowserUrl,
       onOpenPlanDetail,
       onOpenFileLink,
       showIcon,
@@ -291,7 +291,7 @@ function ToolCallBlockComponent({
       onOpenCodeViewer: toolPreviewCodeViewer,
       onOpenFileLink,
       onOpenBrowserUrl,
-          onOpenPlanDetail,
+      onOpenPlanDetail,
       // onOpenWorkflowRun 之前只被透传给子工具卡，从未进过 renderContext，
       // 于是 CreateWorkflow renderer 永远收不到它——「打开详情页」的入口不是被埋深了，
       // 是根本没渲染过。run 态紧凑卡就挂在这个回调上，所以它必须在这里。
@@ -316,7 +316,7 @@ function ToolCallBlockComponent({
       errorText,
       isRunning,
       onLoadFullToolCallFields,
-          onOpenBrowserUrl,
+      onOpenBrowserUrl,
       onOpenPlanDetail,
       onOpenWorkflowRun,
       onResumeWorkflowRun,
