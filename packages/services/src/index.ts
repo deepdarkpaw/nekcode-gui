@@ -225,11 +225,6 @@ export { isValidCronExpr } from "./session/automationCronValidation.js";
 export { ISkillsService } from "./skills/skills.js";
 export { ISkillSyncService } from "./skill-sync/skillSync.js";
 export { IMcpSyncService } from "./mcp-sync/mcpSync.js";
-export { IPluginSyncService } from "./plugin-sync/pluginSync.js";
-// Plugins service — IPluginsService is both a type (interface) and value (descriptor)
-export { IPluginsService } from "./plugins/plugins.js";
-// 设置页插件管理薄服务（UI 平台能力面不再直触 zcodeAgentService）
-export { IPluginManagementService } from "./plugins/pluginManagement.js";
 
 // Subagents service — ISubagentsService is both a type (interface) and value (descriptor)
 export { ISubagentsService } from "./subagents/subagents.js";
@@ -246,39 +241,3 @@ export type {
   PromptAttachmentTransferPhase,
   PromptAttachmentTransferProgress,
 } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
-// 插件 UI 桥：描述符、参数类型与工厂；App-Provided Tools 另有独立描述符。
-export {
-  createPluginUiBridgeService,
-  createPluginUiAppToolsService,
-  createPluginUiSamplingService,
-  IPluginUiSamplingService,
-  type PluginUiSamplingParams,
-  type PluginUiCancelSamplingParams,
-  PluginUiBridgeError,
-  IPluginUiAppToolsService,
-  type PluginUiAppToolInstanceParams,
-  type PluginUiAppToolCallParams,
-  type PluginUiAppToolAcceptedResult,
-  type PluginUiRegisterAppToolsParams,
-  type PluginUiRegisterAppToolsResult,
-  type PluginUiResolveAppToolCallParams,
-} from "./plugin-ui-bridge/index.js";
-export {
-  IPluginUiBridgeService,
-  type PluginUiCallToolParams,
-  type PluginUiCallToolResult,
-  type PluginUiPrepareSandboxParams,
-  type PluginUiReadResourceParams,
-  type PluginUiReadResourceResult,
-  type PluginUiPluginScope,
-  type PluginUiListResourcesParams,
-  type PluginUiListResourcesResult,
-  type PluginUiListResourceTemplatesResult,
-  type PluginUiResourceSubscriptionParams,
-  type PluginUiSurfaceEntry,
-  type PluginUiWorkspaceTarget,
-} from "./plugin-ui-bridge/contract.js";
-export { IClientConfigService } from "./client-config/clientConfig.js";
-
-export { IGenUiService } from "./gen-ui/contract.js";
-export type { GenUiPrepareParams } from "./gen-ui/contract.js";

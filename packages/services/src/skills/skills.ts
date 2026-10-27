@@ -12,7 +12,7 @@ export interface ISkillsService {
     workspacePath: string;
     workspaceIdentity?: string;
     provider?: ZCodeProvider;
-    scope?: "workspace" | "user" | "plugin";
+    scope?: "workspace" | "user";
     skillId: string;
     enabled: boolean;
   }): Promise<void>;

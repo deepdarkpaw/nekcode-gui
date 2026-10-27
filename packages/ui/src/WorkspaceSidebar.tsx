@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   Archive,
-  Blocks,
   CalendarClock,
   Clock3,
   Cloud,
@@ -254,9 +253,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel: _goForwardShortcutLabel,
   onOpenCommandCenter,
   onOpenAutomations,
-  onOpenPluginStore,
   automationsActive = false,
-  pluginStoreActive = false,
   onFileTreeOpenChange,
 }: {
   workspacePath: string;
@@ -302,9 +299,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel?: string;
   onOpenCommandCenter: () => void;
   onOpenAutomations?: () => void;
-  onOpenPluginStore?: () => void;
   automationsActive?: boolean;
-  pluginStoreActive?: boolean;
   onFileTreeOpenChange?: (open: boolean) => void;
 }) {
   const { intl, localePreference, setLocalePreference } = useZCodeIntl();
@@ -739,9 +734,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     [setLocalePreference],
   );
 
-  const handleOpenPluginStoreMain = useCallback(() => {
-    onOpenPluginStore?.();
-  }, [onOpenPluginStore]);
   const handleOpenAutomationsMain = useCallback(() => {
     onOpenAutomations?.();
   }, [onOpenAutomations]);
@@ -1308,21 +1300,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
             >
               <CalendarClock className="size-4" />
               {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={handleOpenPluginStoreMain}
-              data-icon="inline-start"
-              data-testid="plugin-store-sidebar-open"
-              size="lg"
-              aria-pressed={pluginStoreActive}
-              className={cn(
-                "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
-                pluginStoreActive && "bg-selected text-foreground",
-              )}
-            >
-              <Blocks className="size-4" />
-              {intl.formatMessage({ id: "workspace.openPluginsSettings" })}
             </Button>
           </div>
 

@@ -1,7 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": [
-    "packages/desktop/src/renderer/src/plugin-sandbox/genUiTweakRuntime.js",
     "THIRD-PARTY-NOTICES.md",
     "third-party/inventory.json",
     "third-party/upstream/**",

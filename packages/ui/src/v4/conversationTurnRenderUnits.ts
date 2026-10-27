@@ -10,7 +10,6 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import type { ConversationTurnRenderUnitCache } from "./conversationTurnRenderUnitCache.js";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
-import type { PluginUiRowPinResolver } from "@/plugin-ui/index.js";
 import {
   isWorkflowLaunchUserInputRow,
   resolveWorkflowLaunchMeta,
@@ -75,7 +74,6 @@ export interface BuildConversationTurnRenderUnitsOptions {
   nowMs?: number;
   sessionPhase?: SessionPhase;
   /** 插件卡片折叠裁决（时间线由推导结果 + 手动状态组装）。 */
-  pluginUiPinResolver?: PluginUiRowPinResolver;
 }
 
 interface DraftTurnRenderUnit {
@@ -325,7 +323,6 @@ function materializeDraftUnit(
     forceOpenHistory,
     timelineOnly,
     nowMs: options.nowMs,
-    ...(options.pluginUiPinResolver ? { pluginUiPinResolver: options.pluginUiPinResolver } : {}),
   });
   const orderedAssistantHistoryRows = workSegments.flatMap(
     (segment) => segment.assistantHistoryRows,

@@ -23,7 +23,6 @@ import {
   type ActivePromptInputTrigger,
 } from "../lib/promptInputTriggers.js";
 import { ContextMentionOptionContent } from "@/mentions/components/ContextMentionOptionContent.js";
-import { PluginMentionOptionContent } from "@/mentions/components/PluginMentionOptionContent.js";
 import {
   MentionPanel,
   type MentionPanelOption,
@@ -43,7 +42,6 @@ import {
 } from "./mentionPanelRouting.js";
 import { $createPromptMentionNode } from "./nodes/PromptMentionNode.js";
 import { useFileMentionProvider } from "./providers/fileMentionProvider.js";
-import { usePluginsMentionProvider } from "./providers/pluginsMentionProvider.js";
 import { useSessionsMentionProvider } from "./providers/sessionsMentionProvider.js";
 import { useSkillsMentionProvider } from "./providers/skillsMentionProvider.js";
 import { useWhiteboardMentionProvider } from "./providers/whiteboardMentionProvider.js";
@@ -205,18 +203,6 @@ export function MentionPlugin({
     intl.formatMessage({ id: "chat.mention.sessions.empty" }),
     intl.formatMessage({ id: "chat.mention.sessions.title" }),
   );
-  // Plugins 分组：新建草稿（sessionId=null）读 workspace
-  // 当前 catalog，已有 Session 读 session-owned 冻结 catalog；冲突项由 provider 标记禁选。
-  const pluginsResult = usePluginsMentionProvider(
-    workspacePath,
-    workspaceIdentity,
-    sessionId ?? null,
-    deferredActiveQuery,
-    isOpen && isContextTrigger,
-    intl.formatMessage({ id: "chat.mention.plugins.empty" }),
-    intl.formatMessage({ id: "chat.mention.plugins.title" }),
-  );
-
   const panelGroups = useMemo<MentionResultGroup<MentionItem>[]>(() => {
     const groupsById = {
       files: {
@@ -226,14 +212,6 @@ export function MentionPlugin({
         loading: fileResult.loading,
         errorText: fileResult.error?.message ?? null,
         emptyText: fileResult.emptyText,
-      },
-      plugins: {
-        id: "plugins",
-        title: pluginsResult.title,
-        items: pluginsResult.items,
-        loading: pluginsResult.loading,
-        errorText: pluginsResult.error?.message ?? null,
-        emptyText: pluginsResult.emptyText,
       },
       sessions: {
         id: "sessions",
@@ -261,7 +239,7 @@ export function MentionPlugin({
       },
     } satisfies Record<MentionPanelGroupId, MentionResultGroup<MentionItem>>;
 
-    // 产品约束：@ 固定为 Plugin → 文件 → 对话 → 画板；旧 # / $ 面板继续走
+    // 产品约束：@ 固定为 文件 → 对话 → 画板；旧 # / $ 面板继续走
     // 原单分组 provider。这里仅重排发现入口，候选自身的 canonical markdown 不变。
     return buildVisibleMentionGroups(
       getMentionPanelGroupOrder(activeTrigger?.trigger).map((groupId) => groupsById[groupId]),
@@ -273,11 +251,6 @@ export function MentionPlugin({
     fileResult.loading,
     fileResult.title,
     activeTrigger?.trigger,
-    pluginsResult.emptyText,
-    pluginsResult.error,
-    pluginsResult.items,
-    pluginsResult.loading,
-    pluginsResult.title,
     sessionsResult.emptyText,
     sessionsResult.error,
     sessionsResult.items,
@@ -341,8 +314,6 @@ export function MentionPlugin({
               </span>
             ) : item.category === "sessions" ? (
               <ContextMentionOptionContent item={item} workspacePath={workspacePath} />
-            ) : item.category === "plugins" ? (
-              <PluginMentionOptionContent item={item} />
             ) : undefined,
         })),
         loading: group.loading,

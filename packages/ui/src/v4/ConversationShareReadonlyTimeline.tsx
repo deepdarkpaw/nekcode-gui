@@ -49,7 +49,6 @@ import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ToolLayout } from "@/ToolCallBlocks/ToolLayout.js";
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
-import { PluginReferenceIconProvider } from "@/v4/pluginReferenceIconContext.js";
 import {
   buildAssistantWorkRenderItems,
   type ConversationAssistantWorkRenderItem,
@@ -1061,35 +1060,33 @@ export function ConversationShareReadonlyTimeline({
   return (
     <TooltipProvider delayDuration={0}>
       <ZCodeIntlProvider initialLocale={locale}>
-        <PluginReferenceIconProvider value={null}>
-          <ArtifactOpenContext.Provider value={artifactOpenContext}>
-            <div className="@container/conversation flex flex-col" data-conversation-share-timeline>
-              {unsupportedRowCount > 0 ? (
-                // 中性信息语义，不用黄色 warning：分享本身没出错，只是这个 build 认不出其中几行。
-                <div
-                  data-conversation-share-unsupported-notice="true"
-                  className="mx-4 mb-2 flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-ui-xs text-foreground-subtle"
-                >
-                  <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span className="min-w-0 break-words">{labels.unsupportedRows}</span>
-                </div>
-              ) : null}
-              {units.map((unit) => (
-                <ReadonlyTurn
-                  key={unit.key}
-                  unit={unit}
-                  locale={locale}
-                  theme={theme}
-                  codePreviewSettings={codePreviewSettings}
-                  artifactUrls={artifactUrls}
-                  artifactNames={artifactNames}
-                  labels={labels}
-                  onOpenExternalUrl={openShareExternalUrl}
-                />
-              ))}
-            </div>
-          </ArtifactOpenContext.Provider>
-        </PluginReferenceIconProvider>
+        <ArtifactOpenContext.Provider value={artifactOpenContext}>
+          <div className="@container/conversation flex flex-col" data-conversation-share-timeline>
+            {unsupportedRowCount > 0 ? (
+              // 中性信息语义，不用黄色 warning：分享本身没出错，只是这个 build 认不出其中几行。
+              <div
+                data-conversation-share-unsupported-notice="true"
+                className="mx-4 mb-2 flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-ui-xs text-foreground-subtle"
+              >
+                <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />
+                <span className="min-w-0 break-words">{labels.unsupportedRows}</span>
+              </div>
+            ) : null}
+            {units.map((unit) => (
+              <ReadonlyTurn
+                key={unit.key}
+                unit={unit}
+                locale={locale}
+                theme={theme}
+                codePreviewSettings={codePreviewSettings}
+                artifactUrls={artifactUrls}
+                artifactNames={artifactNames}
+                labels={labels}
+                onOpenExternalUrl={openShareExternalUrl}
+              />
+            ))}
+          </div>
+        </ArtifactOpenContext.Provider>
       </ZCodeIntlProvider>
     </TooltipProvider>
   );

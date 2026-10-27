@@ -195,13 +195,8 @@ import {
   WINDOWS_UPDATE_LOCK_RELEASE_GRACE_MS,
 } from "./windowsInstallResourceLocks.js";
 import { mainMemoryDiagnosticsRegistry } from "./mainMemoryDiagnostics.js";
-import {
-  PLUGIN_SANDBOX_PRIVILEGED_SCHEME,
-  getPluginSandboxHost,
-  installPluginSandboxHost,
-} from "./pluginSandbox/index.js";
 
-registerLocalMediaPreviewScheme(protocol, [PLUGIN_SANDBOX_PRIVILEGED_SCHEME]);
+registerLocalMediaPreviewScheme(protocol);
 const localMediaPreviewPathRegistry = createLocalMediaPreviewPathRegistry();
 
 // e2e 由 Chromedriver 管理远程调试端口；如果这里继续固定到 9229，
@@ -1479,12 +1474,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onCronRunResult: forwardCronRunResult,
           onCronSchedulerWakeRequested: wakeCronScheduler,
           authorizeLocalMediaPreviewPath: localMediaPreviewPathRegistry.authorize,
-          registerPluginSandbox: (input) => {
-            const host = getPluginSandboxHost();
-            if (!host) throw new Error("Plugin UI sandbox host is not installed.");
-            const { requestId: _requestId, ...registerInput } = input;
-            return host.registerFromHost(registerInput);
-          },
           // browser-use：main 用 WebContentsView+CDP 执行命令。
           handleBrowserExecuteRequest: ({ win: browserWin, ...request }) =>
             runBrowserCommandOnView({ win: browserWin, ...request }),
@@ -1607,23 +1596,6 @@ app.whenReady().then(async () => {
   markMainLaunchAppReady();
   installLocalMediaPreviewProtocol(session.defaultSession.protocol, {
     isPathAuthorized: localMediaPreviewPathRegistry.isAuthorized,
-  });
-  // 插件 UI 沙箱：注册表 + renderer 可调 IPC；scheme 的 privileged 注册已随 zcode-media 在 ready 前完成。
-  installPluginSandboxHost({
-    preloadPath: join(import.meta.dirname, "../preload/pluginSandbox.cjs"),
-    rendererDir: join(import.meta.dirname, "../renderer"),
-    aliasDir: join(import.meta.dirname, "../plugin-sandbox"),
-    // 开发模式 out/renderer 没有 shell 产物，从 renderer dev server 代理。
-    ...(!app.isPackaged && process.env["ELECTRON_RENDERER_URL"]
-      ? { devServerUrl: process.env["ELECTRON_RENDERER_URL"] }
-      : {}),
-    logger: console,
-    // e2e L05（配额）：只在 e2e run 里允许缩小注册表容量。
-    ...(process.env.ZCODE_E2E_RUN_ID?.trim() &&
-    Number.isInteger(Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES)) &&
-    Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES) > 0
-      ? { registryMaxEntries: Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES) }
-      : {}),
   });
   // 灰度模块 desktopContextPromptRollout 已在 38632dec「replace remote rollout and help config
   // with local defaults」整体删除，此处不再有可预热的远端灰度请求。

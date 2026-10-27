@@ -57,17 +57,14 @@ jobs:
       - name: Unused code and dependencies
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm gate:knip
-      - name: Plugin UI domain regressions
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/plugin-ui/domain packages/ui/src/plugin-ui/contract.test.ts
       - name: Vitest suites
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        # 这批测试用 vitest，覆盖远控分片/重传/ack、MCP Apps 契约、adapter 出站响应等回归场景；
+        # 这批测试用 vitest，覆盖远控分片/重传/ack、adapter 出站响应等回归场景；
         # 此前 CI 只跑了 scripts/ci 与包级 node:test，这些套件一直没进门禁。
         # workspace 包的 exports 指向 src，套件不依赖构建产物，因此放在构建步骤之后、Release tests 之前。
         # UI 留白套件依赖 @ alias 与 SSR JSX，单独使用受控配置；任一命令失败即门禁失败。
         run: |
-          pnpm vitest run packages/shared/src/mcp-apps packages/shared/src/zcode-protocol-v4
+          pnpm vitest run packages/shared/src/zcode-protocol-v4
           pnpm vitest run --config packages/ui/vitest.holes.config.ts
           pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnRenderUnits.test.ts
       - name: Release tests
@@ -91,23 +88,16 @@ jobs:
           pnpm --filter @zcode/desktop build:no-runtime-assets
           node scripts/ci/local-scheduler-smoke.mjs
           node scripts/ci/self-managed-models-smoke.mjs
-          node scripts/ci/model-choice-smoke.mjs
           node scripts/ci/local-usage-smoke.mjs
           node scripts/ci/coding-plan-quota-smoke.mjs
           node scripts/ci/local-automations-smoke.mjs
           node scripts/ci/local-context-smoke.mjs
           node scripts/ci/session-local-errors-smoke.mjs
           node scripts/ci/local-onboarding-smoke.mjs
-      - name: Bundled catalog browser checks
-        run: |
-          node scripts/ci/client-catalog-smoke.mjs
-          node scripts/ci/bundled-plugin-marketplace-smoke.mjs
       - name: Model setup without official purchases
         run: node scripts/ci/no-official-purchase-smoke.mjs
       - name: Local preferences without official accounts
         run: node scripts/ci/local-preferences-smoke.mjs
-      - name: Verify self-managed image search configuration
-        run: node scripts/ci/image-search-config-smoke.mjs
       - name: Startup without official account restoration
         run: |
           node scripts/ci/root-startup-smoke.mjs

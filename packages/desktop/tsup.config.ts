@@ -176,7 +176,6 @@ export default defineConfig([
       "preload/browserVideoRecorder": "src/preload/browserVideoRecorder.ts",
       "preload/index": "src/preload/index.ts",
       "preload/resourceManager": "src/preload/resourceManager.ts",
-      "preload/pluginSandbox": "src/preload/pluginSandbox/index.ts",
     },
     outDir: "out",
     format: "cjs",
@@ -190,29 +189,6 @@ export default defineConfig([
       applyDesktopTsupEsbuildSecurityOptions(options);
     },
     onSuccess: createDevReadyMarkerHook("preload"),
-    ...desktopTsupBundleSecurityOptions,
-  },
-  {
-    // 插件 iframe 内的 window.zcode / window.openai 别名脚本（官方 ext-apps `App` 上的薄封装）：IIFE、浏览器平台，
-    // 由 zcode-sandbox:// protocol handler 同源服务。
-    name: "plugin-sandbox-alias",
-    loader: { ".css": "text" },
-    entry: {
-      "plugin-sandbox-alias": "src/renderer/src/plugin-sandbox/alias.ts",
-      "gen-ui": "src/renderer/src/plugin-sandbox/genUi.ts",
-    },
-    // 不能放 out/renderer：vite renderer 构建 emptyOutDir 会把先落盘的别名脚本清掉。
-    outDir: "out/plugin-sandbox",
-    format: "iife",
-    platform: "browser",
-    target: "es2022",
-    // 沙箱页面没有 node_modules：SDK（ext-apps / client / core / zod）必须全部打进 IIFE。
-    noExternal: [/.*/],
-    outExtension: () => ({ js: ".js" }),
-    define: createSharedDefines(),
-    esbuildOptions(options) {
-      applyDesktopTsupEsbuildSecurityOptions(options);
-    },
     ...desktopTsupBundleSecurityOptions,
   },
   {

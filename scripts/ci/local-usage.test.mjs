@@ -76,12 +76,6 @@ test("old usage tab intent is consumed without affecting local usage or other se
     assert.equal(Object.hasOwn(events.at(-1).detail, "usageTab"), false);
     navigation.setPendingSettingsSectionIntent("modelProvider", { modelProviderId: "fixture-api" });
     assert.equal(events.at(-1).detail.modelProviderId, "fixture-api");
-    navigation.setPendingSettingsPluginIntent("plugins", {
-      scopeKey: "fixture-workspace",
-      origin: "plugin-store",
-    });
-    assert.equal(events.at(-1).section, "plugin");
-    assert.equal(events.at(-1).detail.pluginScopeKey, "fixture-workspace");
     stop();
   } finally {
     if (previous === undefined) delete globalThis.window;

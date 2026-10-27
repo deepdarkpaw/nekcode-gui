@@ -16,7 +16,6 @@ import { safeLogArgs } from "@zcode/shared";
  */
 import { createHostDatabaseStartup } from "./hostDatabaseStartup.js";
 import { randomUUID } from "node:crypto";
-import { createPluginSandboxRegistrationBridge } from "./pluginSandbox/index.js";
 import {
   MessagePortProtocol,
   ChannelServer,
@@ -33,7 +32,6 @@ import { materializeBrowserRecordingArtifact } from "./browserRecordingArtifactM
 import {
   ServiceCollection,
   IFileService,
-  IClientConfigService,
   IMediaPreviewService,
   IModelSelectionService,
   ISettingService,
@@ -199,13 +197,6 @@ function authorizeLocalMediaPreviewPath(path: string): Promise<string> {
     }
   });
 }
-
-const pluginSandboxRegistrationBridge = createPluginSandboxRegistrationBridge({
-  send: (message) => {
-    if (!parentPort) throw new Error("parentPort unavailable");
-    parentPort.postMessage(message);
-  },
-});
 
 // browser-use host↔main 桥：把 agent 的 browser 命令经 parentPort 转给 main（WebContentsView+CDP）。
 // parentPort 为空（不应发生于 host 进程）时 postToMain 抛错，bridge 自身返回 backend_unavailable。
@@ -1210,7 +1201,6 @@ async function createWindowRemoteConnectionHandle(params: {
   signal: AbortSignal;
 }): Promise<WindowRemoteConnectionHandle<ServiceCollection, HostRemoteConnectionCapabilities>> {
   if (!activeServices) throw new Error("Local Host services are not initialized.");
-  const clientConfigService = activeServices.get(IClientConfigService);
   if (params.signal.aborted) {
     throw new Error("远程连接已取消");
   }
@@ -1254,7 +1244,6 @@ async function createWindowRemoteConnectionHandle(params: {
     },
   );
   const services = createRemoteWorkspaceServiceCollection({
-    clientConfigService,
     connectionServices: backendConnection.services,
     sourceServices: activeServices ?? undefined,
     parentPort,
@@ -1711,7 +1700,6 @@ async function disposeHostResources(reason: string): Promise<HostShutdownResult>
   disposeHostResourcesInFlight = (async () => {
     logger.info(`disposing host resources, reason=${reason}`);
 
-    pluginSandboxRegistrationBridge.dispose();
     stopHostNetworkTelemetry();
     hostSelfResourceTelemetry.stop();
     disposeLocalResourceTelemetry();
@@ -1776,7 +1764,6 @@ function disposeHostResourcesBestEffort(reason: string): void {
   hasDisposedHostResources = true;
 
   logger.info(`disposing host resources, reason=${reason}`);
-  pluginSandboxRegistrationBridge.dispose();
   stopHostNetworkTelemetry();
   disposeLocalResourceTelemetry();
   disposeAttachedServicePorts();
@@ -1887,11 +1874,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     } else {
       pending.reject(new Error(msg.error ?? "本地视频预览路径授权失败"));
     }
-    return;
-  }
-
-  if (msg.type === HostMessageTypes.PluginSandboxRegisterResult) {
-    pluginSandboxRegistrationBridge.accept(msg);
     return;
   }
 
@@ -2324,7 +2306,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
               settingService,
               hostApiNetworkTransport,
               authorizeLocalMediaPreviewPath,
-              registerPluginSandbox: pluginSandboxRegistrationBridge.register,
               runtimeProcessEnvPatch: msg.runtimeProcessEnvPatch,
               agentRuntimeContext: {
                 runtimeSurface: "desktop_local_host",

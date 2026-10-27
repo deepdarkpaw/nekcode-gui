@@ -79,7 +79,6 @@ import {
 } from "@/settings/RemoteSyncActions.js";
 import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
 import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
-import { refreshWorkspacePluginCapabilitiesAfterRemoteSync } from "@/lib/remotePluginSyncRefresh.js";
 import { useMcpStore } from "@/store/mcpStore.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { releaseWorkspaceRuntimeAfterProjectRemoval } from "@/lib/workspaceRuntimeRelease.js";
@@ -258,7 +257,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const [isRemoteErrorCopied, setIsRemoteErrorCopied] = useState(false);
   const [remoteSkillSyncOpen, setRemoteSkillSyncOpen] = useState(false);
   const [remoteMcpSyncOpen, setRemoteMcpSyncOpen] = useState(false);
-  const [remotePluginSyncOpen, setRemotePluginSyncOpen] = useState(false);
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
@@ -924,11 +922,9 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                           <RemoteSyncMenuItems
                             canSyncSkills={showRemoteSkillSyncAction}
                             canSyncMcp={showRemoteSkillSyncAction}
-                            canSyncPlugins={showRemoteSkillSyncAction}
                             stopMouseDownPropagation
                             onOpenSkillSync={() => setRemoteSkillSyncOpen(true)}
                             onOpenMcpSync={() => setRemoteMcpSyncOpen(true)}
-                            onOpenPluginSync={() => setRemotePluginSyncOpen(true)}
                           />
                           <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
@@ -1139,26 +1135,17 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       <RemoteSyncDialogs
         canSyncSkills={showRemoteSkillSyncAction}
         canSyncMcp={showRemoteSkillSyncAction}
-        canSyncPlugins={showRemoteSkillSyncAction}
         skillOpen={remoteSkillSyncOpen}
         mcpOpen={remoteMcpSyncOpen}
-        pluginOpen={remotePluginSyncOpen}
         onSkillOpenChange={setRemoteSkillSyncOpen}
         onMcpOpenChange={setRemoteMcpSyncOpen}
-        onPluginOpenChange={setRemotePluginSyncOpen}
         localSkillSyncService={baseServices.skillSyncService}
         remoteSkillSyncService={services.skillSyncService}
         localMcpSyncService={baseServices.mcpSyncService}
         remoteMcpSyncService={services.mcpSyncService}
-        localPluginSyncService={baseServices.pluginSyncService}
-        remotePluginSyncService={services.pluginSyncService}
-        localZCodeAgentService={baseServices.zcodeAgentService}
-        remoteZCodeAgentService={services.zcodeAgentService}
         remoteTarget={tab.remoteTarget}
         skillWorkspacePath={tab.workspacePath}
         mcpWorkspacePath={tab.workspacePath}
-        pluginWorkspacePath={tab.workspacePath}
-        pluginLocalWorkspacePath={tab.localWorkspacePath}
         mcpLocalWorkspacePath={tab.localWorkspacePath}
         workspaceIdentity={tab.workspaceIdentity}
         onSkillsSynced={async () => {
@@ -1182,18 +1169,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
               services.mcpSyncService,
               tab.workspaceIdentity,
             );
-        }}
-        onPluginsSynced={async () => {
-          await refreshWorkspacePluginCapabilitiesAfterRemoteSync({
-            commandsService: services.commandsService,
-            mcpSyncService: services.mcpSyncService,
-            reason: "sidebar-remote-plugin-sync",
-            skillsService: services.skillsService,
-            workspaceIdentity: tab.workspaceIdentity,
-            workspacePath: tab.workspacePath,
-            zcodeAgentService: services.zcodeAgentService,
-            zcodeSessionService: services.zcodeSessionService,
-          });
         }}
       />
     </li>

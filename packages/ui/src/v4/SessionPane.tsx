@@ -43,8 +43,6 @@ import type {
   V4ConversationFileChangesResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { logger } from "@/logger.js";
-import { PluginUiSessionProvider } from "@/plugin-ui/index.js";
-import { buildGenUiModelContext } from "@zcode/shared/gen-ui";
 import {
   getConversationShareErrorDetails,
   resolveConversationShareFallbackIssueCode,
@@ -119,7 +117,6 @@ import {
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { shouldIgnoreEscapeForStopGeneration } from "@/v4/composer/escapeStop.js";
 import { ConversationDraftEmptyState } from "@/v4/ConversationDraftEmptyState.js";
-import { ConversationDraftSuggestedPromptsContainer } from "@/v4/ConversationDraftSuggestedPromptsContainer.js";
 import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHeader.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
@@ -155,7 +152,6 @@ import {
 } from "@/v4/conversationShareModePolicy.js";
 import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUnits.js";
 import { buildConversationTurnNavigatorItems } from "@/v4/conversationTurnNavigatorHelpers.js";
-import { SessionPluginReferenceIconBoundary } from "@/v4/SessionPluginReferenceIconProvider.js";
 import {
   resolveConversationStatusPanelVariant,
   shouldUseConversationStatusPanelInlineLayout,
@@ -192,10 +188,6 @@ import {
   resolveLatestCompletedAssistantPreviewTurn,
   type AssistantPreviewPptxAutoOpenTarget,
 } from "@/v4/assistantPreviewPptxAutoOpen.js";
-import {
-  hasPluginReferenceUserRows,
-  isSessionPluginCatalogReady,
-} from "@/v4/pluginReferenceIconProjection.js";
 import { shouldResyncForStaleAuthority } from "@/v4/staleAuthorityRecovery.js";
 import { createCommandEnvelope } from "@/v4/commandFactory.js";
 import { createConfigCommandBarrier } from "@/v4/configCommandBarrier.js";
@@ -285,7 +277,6 @@ export interface SessionPaneProps {
   workspacePath: string;
   workspaceIdentity?: string;
   remoteSessionId?: string | null;
-  isDesktop?: boolean;
   provider?: ZCodeProvider;
   onSessionCreated?: (sessionId: string) => void;
   /** deleteSession：删除当前会话后回到 draft（shell 起新草稿）。 */
@@ -477,7 +468,6 @@ export function SessionPane({
   workspacePath,
   workspaceIdentity,
   remoteSessionId,
-  isDesktop = false,
   provider,
   onSessionCreated,
   onSelectionSideChatUnavailable,
@@ -534,7 +524,6 @@ export function SessionPane({
   } = useV4Conversation();
   const { conversationShareService, modelSelectionService, zcodeSessionService, zcodeTaskService } =
     useServices();
-  const baseWorkspaceServices = useServices();
   const { intl, locale } = useZCodeIntl();
   const platform = usePlatform();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
@@ -960,9 +949,6 @@ export function SessionPane({
       timers.clear();
     };
   }, [lease, sessionId]);
-  const pluginReferenceIconsEnabled =
-    isSessionPluginCatalogReady(state.status, sessionId, snapshot?.sessionId) &&
-    hasPluginReferenceUserRows(snapshot?.rows.window ?? []);
   const fileChangesRequestCache = useMemo(
     () => new Map<string, Promise<V4ConversationFileChangesResult>>(),
     [fileChanges, sessionId, snapshot?.logEpoch],
@@ -1295,24 +1281,6 @@ export function SessionPane({
     },
     [onSessionCreated, sessionId],
   );
-  // Gen UI 页面状态只作为下一轮模型上下文附加，读取失败不阻断发送。
-  const readGenUiModelContext = useCallback(
-    async (targetSessionId: string | null): Promise<string> => {
-      if (!targetSessionId || !baseWorkspaceServices.genUiService) return "";
-      try {
-        const entries = await baseWorkspaceServices.genUiService.listState({
-          workspacePath,
-          workspaceIdentity,
-          sessionId: targetSessionId,
-        });
-        return buildGenUiModelContext(entries);
-      } catch {
-        logger.warn("[gen-ui] Widget context unavailable");
-        return "";
-      }
-    },
-    [baseWorkspaceServices, workspacePath, workspaceIdentity],
-  );
   const dispatchCommand = useCallback(
     async (
       type: CommandType,
@@ -1324,10 +1292,6 @@ export function SessionPane({
       onEnvelopeCreated?: (envelope: CommandEnvelope) => void,
       sessionCreateSource?: SessionCreateSource,
     ): Promise<CommandAck> => {
-      if (type === "sendText" && typeof payload.text === "string") {
-        const genUiContext = await readGenUiModelContext(targetSessionId ?? sessionId);
-        if (genUiContext) payload = { ...payload, text: `${payload.text}\n\n${genUiContext}` };
-      }
       const submission = submissionConfigFromCommand(type, payload);
       const acceptRecent = submission
         ? captureComposerRecentSubmission(workspacePath, submission, workspaceIdentity)
@@ -4247,41 +4211,10 @@ export function SessionPane({
         />
       ) : null}
       {composerNode}
-      {/* 办公模式显示主动任务推荐；编程模式保留原有小型场景入口。 */}
-      {isDraft && (!isOfficeMode || sharedSettings?.proactiveSuggestionsEnabled === true) ? (
-        <ConversationDraftSuggestedPromptsContainer
-          className={isOfficeMode ? "mt-4" : "mt-6"}
-          proactive={isOfficeMode}
-          onOpenAutomations={
-            onOpenAutomationsMain
-              ? (automationTab) => onOpenAutomationsMain(undefined, automationTab)
-              : undefined
-          }
-          workspacePath={workspacePath}
-          workspaceIdentity={workspaceIdentity}
-          remoteSessionId={remoteSessionId ?? undefined}
-          isDesktop={isDesktop}
-        />
-      ) : null}
     </>
   );
   // 进入/退出分享时 chat dock 与分享 dock 高度不同；共享同一个 grid 单元做上下位移淡入淡出，
   // 避免父高度突变导致的硬跳。prefers-reduced-motion 由 transition 组件内部降级为立即切换。
-  // 插件 ui/message 的图片走与粘贴截图相同的 v4 attachmentPut；草稿（无 sessionId）没有插件 UI。
-  const pluginUiUploadAttachment = useCallback(
-    async (input: { fileName: string; mime: string; dataBase64: string }) => {
-      if (!sessionId) throw new Error("Plugin UI attachments need an open session");
-      const { ref } = await attachmentPut({ sessionId, ...input });
-      const padding = input.dataBase64.endsWith("==") ? 2 : input.dataBase64.endsWith("=") ? 1 : 0;
-      return {
-        ref,
-        fileName: input.fileName,
-        mime: input.mime,
-        bytes: Math.floor((input.dataBase64.length * 3) / 4) - padding,
-      };
-    },
-    [attachmentPut, sessionId],
-  );
   const conversationBottomDock = conversationBottomDockContent ? (
     <ConversationBottomDockTransition mode={shareActive && sessionId ? "confirmation" : "chat"}>
       {conversationBottomDockContent}
@@ -4289,16 +4222,6 @@ export function SessionPane({
   ) : null;
 
   return (
-    <PluginUiSessionProvider
-      workspacePath={workspacePath}
-      workspaceIdentity={workspaceIdentity}
-      remoteSessionId={remoteSessionId}
-      sessionId={sessionId}
-      readOnly={readOnly}
-      sendText={dispatchSendText}
-      uploadAttachment={pluginUiUploadAttachment}
-      projectionStore={sessionLeaseReady && lease ? lease.store : null}
-    >
       <div
         data-testid={testId(TID_V4_SESSION_PANE, paneId)}
       data-session-id={sessionId ?? "draft"}
@@ -4443,13 +4366,6 @@ export function SessionPane({
             onReconnect={handleRetrySubscribe}
           />
         ) : (
-          <SessionPluginReferenceIconBoundary
-            enabled={pluginReferenceIconsEnabled}
-            remoteSessionId={remoteSessionId}
-            sessionId={sessionId}
-            workspaceIdentity={workspaceIdentity}
-            workspacePath={workspacePath}
-          >
             <ConversationTimeline
               scrollToBottomActionRef={timelineScrollToBottomRef}
               scrollToQueryActionRef={timelineScrollToQueryRef}
@@ -4543,10 +4459,8 @@ export function SessionPane({
                   : undefined
               }
             />
-          </SessionPluginReferenceIconBoundary>
         )}
       </div>
       </div>
-    </PluginUiSessionProvider>
   );
 }

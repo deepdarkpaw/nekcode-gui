@@ -1,5 +1,5 @@
 import type { ZCodeSavedWorkflowMeta, ZCodeSavedWorkflowScope } from "@zcode/shared";
-import type { ZCodeAgentWorkspaceTarget } from "./zcodeAgentPluginParams.js";
+import type { ZCodeAgentWorkspaceTarget } from "./zcodeAgentWorkspaceParams.js";
 
 // 已保存工作流的 GUI 中枢：五个 workspace 级、无会话的方法。
 // 与 Skill catalog 同一条路径（workspace agent client），不走独立插件管理进程——文件在

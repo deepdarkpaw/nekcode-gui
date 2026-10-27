@@ -36,7 +36,6 @@ import {
 import { GoalToolCallBlock } from "@/ToolCallBlocks/renderers/goal.js";
 import { NodeReplToolCallBlock } from "@/ToolCallBlocks/renderers/node-repl.js";
 import { McpToolCallBlock, readMcpToolPresentation } from "@/ToolCallBlocks/renderers/mcp.js";
-import * as PluginUi from "@/plugin-ui/index.js";
 import { PlanGuidanceToolCallBlock } from "@/ToolCallBlocks/renderers/plan-guidance.js";
 import { ReadToolCallBlock } from "@/ToolCallBlocks/renderers/read.js";
 import { ReadSessionContextToolCallBlock } from "@/ToolCallBlocks/renderers/read-session-context.js";
@@ -114,7 +113,6 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
   if (identity.family === "node-repl") {
     return NodeReplToolCallBlock;
   }
-  if (PluginUi.shouldRenderPluginUi(context)) return PluginUi.PluginUiToolCallBlock;
   if (readMcpToolPresentation(context)) {
     return McpToolCallBlock;
   }

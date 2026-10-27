@@ -30,12 +30,7 @@ import { usePlatform } from "@/hooks/usePlatform.js";
 import { getPathLeaf } from "@/lib/path.js";
 import {
   addPendingSettingsSectionListener,
-  clearPendingSettingsPluginOrigin,
-  clearPendingSettingsPluginScopeKey,
   consumeInitialSettingsSection,
-  consumePendingSettingsPluginOrigin,
-  consumePendingSettingsPluginScopeKey,
-  consumePendingSettingsPluginTab,
   consumePendingSettingsModelProviderTarget,
   resolveSettingsSection,
   writeLastSettingsSectionPreference,
@@ -43,9 +38,8 @@ import {
 } from "@/lib/settingsNavigation.js";
 import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
 import { UsageStatsSection } from "@/settings/UsageStatsSection.js";
-import { SubagentsSection } from "@/settings/SubagentsSection.js";
 import { AutomationsSection } from "@/settings/AutomationsSection.js";
-import { PluginsSection } from "@/settings/PluginsSection.js";
+import { CapabilitySection } from "@/settings/CapabilitySection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
@@ -85,7 +79,6 @@ import {
 } from "./settingsPageHelpers.js";
 import { AppearanceSectionContent } from "./settingsCodePreview.js";
 import type { SettingsSectionId } from "@/lib/settingsNavigation.js";
-import { requestPluginStoreOpen } from "@/lib/pluginStoreNavigation.js";
 
 function SettingsSidebarButton({
   icon: Icon,
@@ -162,20 +155,7 @@ export function SettingsPage({
     writeLastSettingsSectionPreference(visibleInitialSection);
     return visibleInitialSection;
   });
-  const [pluginTab, setPluginTab] = useState(() => consumePendingSettingsPluginTab());
-  const [pluginNavigationOrigin, setPluginNavigationOrigin] = useState(() =>
-    consumePendingSettingsPluginOrigin(),
-  );
-  const [pluginScopeKey, setPluginScopeKey] = useState(() =>
-    consumePendingSettingsPluginScopeKey(),
-  );
   const [settingsSectionNavigationVersion, setSettingsSectionNavigationVersion] = useState(0);
-  useEffect(() => {
-    // React Strict Mode 会双执行 state initializer；来源和 scopeKey 都在挂载完成后再清理，
-    // Marketplace 只返回 User 已安装视图；Workspace 仍通过设置页自身的配置层切换进入。
-    clearPendingSettingsPluginOrigin();
-    clearPendingSettingsPluginScopeKey();
-  }, []);
   const [settingsBreadcrumbItems, setSettingsBreadcrumbItems] = useState<
     readonly SettingsBreadcrumbItem[]
   >([]);
@@ -205,9 +185,6 @@ export function SettingsPage({
     },
     [activeSection],
   );
-  const handleOpenModelProviderSettings = useCallback(() => {
-    setActiveSettingsSection("modelProvider");
-  }, [setActiveSettingsSection]);
   const handleOpenUsageSettings = useCallback(() => {
     // 设置页 sidebar footer 里的齿轮/返回按钮复用 onBack，
     // 但头像菜单的“使用统计”应该停留在设置页并切到 Usage，不能跟着返回工作区。
@@ -317,13 +294,6 @@ export function SettingsPage({
         setActiveSettingsSection(section, activeSection);
         // 设置入口是一级路由边界。即使仍落在同一 section，也必须销毁旧的 New/Edit/Detail 子状态。
         setSettingsSectionNavigationVersion((version) => version + 1);
-        if (resolveSettingsSection(section) === "plugin" && detail?.pluginTab) {
-          setPluginTab(detail.pluginTab);
-          setPluginNavigationOrigin(detail.pluginOrigin);
-          setPluginScopeKey(detail.pluginScopeKey);
-        } else if (resolveSettingsSection(section) !== "plugin") {
-          setPluginNavigationOrigin(undefined);
-        }
         if (section === "modelProvider" && detail?.modelProviderId) {
           setPendingModelProviderTarget({
             providerId: detail.modelProviderId,
@@ -648,18 +618,13 @@ export function SettingsPage({
   const activeSectionLabel = intl.formatMessage({
     id: activeSectionMeta.contentTitleId ?? activeSectionMeta.titleId,
   });
-  const settingsBreadcrumbSectionLabel =
-    activeSection === "plugin" && pluginNavigationOrigin === "plugin-store"
-      ? intl.formatMessage({ id: "workspace.openPluginsSettings" })
-      : activeSectionLabel;
+  const settingsBreadcrumbSectionLabel = activeSectionLabel;
   const visibleSettingsBreadcrumbItems =
     settingsBreadcrumbItems[0]?.label === settingsBreadcrumbSectionLabel
       ? settingsBreadcrumbItems
       : [];
   const hasVisibleSettingsBreadcrumb = visibleSettingsBreadcrumbItems.length >= 2;
-  const showActiveSectionTitle =
-    !hasVisibleSettingsBreadcrumb ||
-    (activeSection === "plugin" && pluginNavigationOrigin === "plugin-store");
+  const showActiveSectionTitle = !hasVisibleSettingsBreadcrumb;
 
   return (
     <>
@@ -708,14 +673,7 @@ export function SettingsPage({
                         id: "workspace.backToWorkspace",
                       })}
                       className="m-1 w-[calc(100%-0.5rem)] justify-start gap-2 rounded-xl px-1.5 text-foreground-subtle hover:bg-surface-hover hover:text-foreground max-lg:m-1 max-lg:size-10 max-lg:justify-center max-lg:px-0"
-                      onClick={() => {
-                        (() => {
-                          if (pluginNavigationOrigin === "plugin-store") {
-                            requestPluginStoreOpen("user");
-                          }
-                          onBack?.();
-                        })();
-                      }}
+                      onClick={() => onBack?.()}
                     >
                       <ArrowLeft className="size-4" />
                       <span className="max-lg:sr-only">
@@ -775,7 +733,6 @@ export function SettingsPage({
                               data-testid={testId(TID_SETTINGS_SECTION_NAV, id)}
                               onClick={() => {
                                 (() => {
-                                  setPluginNavigationOrigin(undefined);
                                   setSettingsSectionNavigationVersion((version) => version + 1);
                                   setActiveSettingsSection(id);
                                 })();
@@ -1046,46 +1003,13 @@ export function SettingsPage({
                               workspaceDisplayNames={memoryWorkspaceDisplayNames}
                             />
                           </ServiceProvider>
-                        ) : activeSection === "plugin" ? (
-                          <PluginsSection
-                            key={`plugin:${settingsSectionNavigationVersion}`}
-                            initialTab={pluginTab}
-                            initialScopeKey={pluginScopeKey}
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            showMarketplaceBreadcrumb={pluginNavigationOrigin === "plugin-store"}
-                            onCreateTask={onCreateTask}
-                            onOpenPluginStore={(_returnScopeKey, intent) => {
-                              // 添加市场与浏览插件都先离开设置层，再显示商店。
-                              requestPluginStoreOpen({ returnScopeKey: "user", intent });
-                              onBack?.();
-                            }}
-                          />
-                        ) : activeSection === "mcp" ? (
-                          <PluginsSection
-                            key={`mcp:${settingsSectionNavigationVersion}`}
-                            mode="mcp"
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            onCreateTask={onCreateTask}
-                            onOpenPluginStore={(_returnScopeKey, intent) => {
-                              // 添加市场与浏览插件都先离开设置层，再显示商店。
-                              requestPluginStoreOpen({ returnScopeKey: "user", intent });
-                              onBack?.();
-                            }}
-                          />
                         ) : activeSection === "skill" ? (
-                          <PluginsSection
+                          <CapabilitySection
                             key={`skill:${settingsSectionNavigationVersion}`}
                             mode="skill"
                             workspacePath={activeWorkspacePath}
                             workspaceIdentity={activeWorkspaceIdentity}
                             onCreateTask={onCreateTask}
-                            onOpenPluginStore={(_returnScopeKey, intent) => {
-                              // 添加市场与浏览插件都先离开设置层，再显示商店。
-                              requestPluginStoreOpen({ returnScopeKey: "user", intent });
-                              onBack?.();
-                            }}
                           />
                         ) : activeSection === "migration" ? (
                           <MigrationSection
@@ -1095,28 +1019,17 @@ export function SettingsPage({
                           />
                         ) : activeSection === "usage" ? (
                           <UsageStatsSection />
-                        ) : activeSection === "subagents" ? (
-                          <SubagentsSection
-                            onManageModels={handleOpenModelProviderSettings}
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                          />
                         ) : activeSection === "automations" ? (
                           <AutomationsSection
                             workspacePath={activeWorkspacePath}
                             workspaceIdentity={activeWorkspaceIdentity}
                           />
                         ) : activeSection === "commands" ? (
-                          <PluginsSection
+                          <CapabilitySection
                             mode="command"
                             workspacePath={activeWorkspacePath}
                             workspaceIdentity={activeWorkspaceIdentity}
                             onCreateTask={onCreateTask}
-                            onOpenPluginStore={(_returnScopeKey, intent) => {
-                              // 添加市场与浏览插件都先离开设置层，再显示商店。
-                              requestPluginStoreOpen({ returnScopeKey: "user", intent });
-                              onBack?.();
-                            }}
                           />
                         ) : activeSection === "hooks" ? (
                           <HooksSection
@@ -1132,8 +1045,6 @@ export function SettingsPage({
                           <BrowserSettingsSection
                             isDesktop={Boolean(isDesktop)}
                             isWindowsDesktop={isWindowsDesktop}
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
                             embeddedBrowserAllowInsecureCertificates={
                               embeddedBrowserAllowInsecureCertificates
                             }

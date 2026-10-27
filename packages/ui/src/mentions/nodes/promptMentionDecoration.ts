@@ -4,7 +4,6 @@ import {
   INLINE_FALLBACK_FILE_ICON_SRC,
   resolveFileDisplayDescriptor,
 } from "@/lib/fileDisplay.js";
-import { resolvePluginIconSource } from "@/lib/pluginIconSource.js";
 import type { MentionCategory, MentionItemData } from "@/mentions/mentionTypes.js";
 import {
   COMMAND_MENTION_ICON_NODE,
@@ -65,10 +64,7 @@ export function decoratePromptMention(
 ) {
   pendingImages.delete(dom);
   if (category === "plugins") {
-    const fallback = () => setMask(dom, PLUGIN_MENTION_ICON_NODE);
-    const icon = resolvePluginIconSource(value, data?.icon);
-    if (icon) setImage(dom, icon, fallback);
-    else fallback();
+    setMask(dom, PLUGIN_MENTION_ICON_NODE);
     return;
   }
   if (category === "files") {

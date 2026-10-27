@@ -7,7 +7,6 @@ import type {
   TurnHeaderRow,
   UserInputRow,
 } from "@zcode/shared/zcode-protocol-v4";
-import { deriveLogicalUiInstances, type PluginUiRowPinResolver } from "@/plugin-ui/index.js";
 import { ConversationTurnRenderUnitCache } from "./conversationTurnRenderUnitCache.js";
 import {
   buildConversationTurnRenderUnits,
@@ -42,7 +41,7 @@ function turn(id: number, running = false): ConversationRow[] {
   return [header, user, assistant];
 }
 
-function pluginRow(id: number, turnId: string): ToolCallRow {
+function toolRow(id: number, turnId: string): ToolCallRow {
   return {
     kind: "toolCall",
     rowId: id,
@@ -53,12 +52,7 @@ function pluginRow(id: number, turnId: string): ToolCallRow {
     toolName: "mcp__fixture__edit",
     status: "success",
     inputText: "{}",
-    display: {
-      kind: "mcp_tool",
-      serverName: "fixture",
-      toolName: "edit",
-      ui: { pluginId: "fixture", resourceUri: "ui://fixture", surface: "panel" },
-    },
+    display: { kind: "mcp_tool", serverName: "fixture", toolName: "edit" },
   };
 }
 
@@ -127,7 +121,7 @@ describe("conversation turn render cache", () => {
     const build = fixture();
     const rows = turn(0);
     const screenshot: ToolCallRow = {
-      ...pluginRow(20, "turn-0"),
+      ...toolRow(20, "turn-0"),
       display: { kind: "node_repl_images", source: "browser_turn_end" },
     };
     const screenshotRows = [rows[0]!, rows[1]!, screenshot];
@@ -213,67 +207,6 @@ describe("conversation turn render cache", () => {
     expect(after[0]?.workSegments?.[0]?.workStatus?.durationMs).toBe(500);
     expect(after[0]?.workSegments?.[1]?.workStatus?.durationMs).toBe(1500);
     expect(after[0]).not.toBe(before[0]);
-  });
-
-  it("uses effective plugin pin results, not resolver function identity", () => {
-    const build = fixture();
-    const first = turn(0);
-    const tool = pluginRow(20, "turn-0");
-    const rows = [first[0]!, first[1]!, tool, first[2]!, ...turn(1)];
-    const resolver =
-      (manualPinned: boolean): PluginUiRowPinResolver =>
-      () => ({ manualPinned });
-    const before = build(rows, { pluginUiPinResolver: resolver(true) });
-    const equivalent = build(rows, { pluginUiPinResolver: resolver(true) });
-    expect(equivalent[0]).toBe(before[0]);
-    const after = build(rows, { pluginUiPinResolver: resolver(false) });
-    expect(after[0]).not.toBe(before[0]);
-    expect(after[1]).toBe(before[1]);
-    expect(after[0]?.assistantHistoryRows).toContain(tool);
-  });
-
-  it("invalidates cross-turn plugin supersession and recent-turn eligibility", () => {
-    const build = fixture();
-    const withPlugin = (id: number) => {
-      const rows = turn(id);
-      return [rows[0]!, rows[1]!, pluginRow(100 + id, `turn-${id}`), rows[2]!];
-    };
-    const derive = (rows: ConversationRow[]) => {
-      const derivation = deriveLogicalUiInstances(rows);
-      return build(rows, {
-        pluginUiPinResolver: (id) => ({ disposition: derivation.byToolCallId[id] }),
-      });
-    };
-    const first = withPlugin(0);
-    const before = derive(first);
-    const after = derive([...first, ...withPlugin(1)]);
-    expect(after[0]?.assistantHistoryRows).toContain(first[2]);
-    expect(after[0]).not.toBe(before[0]);
-    derive([...first, ...turn(1), ...turn(2), ...turn(3)]);
-    derive([...first, ...turn(1)]);
-  });
-
-  it.each(["error", "cancelled", "isError"])("handles plugin failure %s", (failure) => {
-    const build = fixture();
-    const rows = turn(0);
-    const tool = pluginRow(20, "turn-0");
-    build([rows[0]!, rows[1]!, tool, rows[2]!]);
-    const failed: ToolCallRow =
-      failure === "isError"
-        ? {
-            ...tool,
-            display: {
-              ...tool.display!,
-              kind: "mcp_tool",
-              serverName: "fixture",
-              toolName: "edit",
-              ui: { pluginId: "fixture", resourceUri: "ui://fixture", isError: true },
-            },
-          }
-        : { ...tool, status: failure as "error" | "cancelled" };
-    build([rows[0]!, rows[1]!, failed, rows[2]!], {
-      pluginUiPinResolver: () => ({ manualPinned: true }),
-    });
   });
 
   it("does not share units across cache instances", () => {

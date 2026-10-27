@@ -5,7 +5,6 @@ import { z } from "zod";
 import { bashOutputDisplaySchema } from "../bash-output-display.js";
 import { timestampSchema } from "./core.js";
 import { OFFICIAL_MCP_TOOL_ERROR_CODES } from "../official-mcp-tool-error.js";
-import { mcpToolDisplayUiSchema } from "../mcp-apps/schemas.js";
 import { toolCallCreateWorkflowDisplaySchema } from "./create-workflow-display.js";
 import {
   toolCallEvalWorkflowSnippetDisplaySchema,
@@ -75,8 +74,6 @@ const toolResultDisplaySchema = z.discriminatedUnion("kind", [
       .object({ code: z.enum(OFFICIAL_MCP_TOOL_ERROR_CODES) })
       .strict()
       .optional(),
-    // 插件 UI 元数据；与 CLI contracts 的 mcpToolResultDisplayPayloadSchema 同源复用，见 mcp-apps/schemas.ts。
-    ui: mcpToolDisplayUiSchema.optional(),
   }),
   // buildToolOutput 把 CLI 侧 ToolResultDisplayPayload 原样塞进 toolOutput.display，
   // 而这条 union 是 strict 的——create_workflow 不在成员里，CreateWorkflow 的 display 会被整段
@@ -180,7 +177,6 @@ const toolCallMcpDisplaySchema = z
       .object({ code: z.enum(OFFICIAL_MCP_TOOL_ERROR_CODES) })
       .strict()
       .optional(),
-    ui: mcpToolDisplayUiSchema.optional(),
   })
   .strict();
 

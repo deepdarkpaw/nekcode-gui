@@ -20,11 +20,6 @@ import {
   RUNTIME_ZCODE_DEBUG,
   serializeLaunchMarks,
 } from "@zcode/shared";
-import type {
-  PluginSandboxHandle,
-  PluginSandboxRegisterRequestPayload,
-  PluginSandboxRegisterResultPayload,
-} from "@zcode/shared/mcp-apps";
 import type { UtilityProcess as ElectronUtilityProcess, MessagePortMain } from "electron";
 import {
   app,
@@ -199,10 +194,6 @@ export function spawnHostProcess(
     }) => Promise<{ ok: boolean; [k: string]: unknown }>;
     /** Host 已完成附件授权后，由 Main 将本地视频 realpath 加入精确协议授权集合。 */
     authorizeLocalMediaPreviewPath?: (path: string) => Promise<string>;
-    /** Host 校验完插件 UI HTML 后交给 Main 沙箱注册表登记，返回句柄。 */
-    registerPluginSandbox?: (
-      input: PluginSandboxRegisterRequestPayload,
-    ) => PluginSandboxHandle | Promise<PluginSandboxHandle>;
   },
   options?: SpawnHostProcessOptions,
 ): ElectronUtilityProcess {
@@ -338,32 +329,6 @@ export function spawnHostProcess(
             error: error instanceof Error ? error.message : String(error),
           });
         });
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.PluginSandboxRegisterRequest) {
-      const request = result.data;
-      const register = dependencies.registerPluginSandbox;
-      const reply = (payload: PluginSandboxRegisterResultPayload) =>
-        child.postMessage({ type: HostMessageTypes.PluginSandboxRegisterResult, ...payload });
-      if (!register || win.isDestroyed() || request.ownerWebContentsId !== win.webContents.id) {
-        reply({
-          requestId: request.requestId,
-          ok: false,
-          error: "Plugin UI sandbox is unavailable.",
-        });
-        return;
-      }
-      void Promise.resolve()
-        .then(() => register(request))
-        .then((handle) => reply({ requestId: request.requestId, ok: true, ...handle }))
-        .catch((error: unknown) =>
-          reply({
-            requestId: request.requestId,
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
       return;
     }
 

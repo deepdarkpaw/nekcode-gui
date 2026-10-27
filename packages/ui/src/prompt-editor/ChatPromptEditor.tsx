@@ -400,7 +400,7 @@ export function ChatPromptEditor({
                   workspaceIdentity={workspaceIdentity}
                   sessionId={taskId}
                   container={resolvedTriggerPanelContainer}
-                  showPlugins={enableMentionPanel !== false}
+                  showMentions={enableMentionPanel !== false}
                 />
               ) : null}
               {/* 权限/模式选择曾作为 leadingActions 先于动作菜单渲染，导致常驻顺序与产品规范相反。*/}

@@ -636,10 +636,6 @@ export const TID_V4_SUBAGENT_OPEN_SIDE_PANE = "v4-subagent-open-side-pane";
 /** v4 userInput 行附件列表（动态后缀为 rowId） */
 export const TID_V4_ROW_ATTACHMENTS = "v4-row-attachments";
 
-// Plugin 商店
-/** Plugin 设置页里进入插件商店的入口按钮（商店是 WorkspaceShell 主视图，不是设置页分区） */
-export const TID_PLUGIN_STORE_BROWSE = "plugin-store-browse";
-
 // Automations / 定时任务
 export const TID_AUTOMATIONS_OPEN = "automations-open";
 export const TID_AUTOMATIONS_LIST = "automations-list";
@@ -683,10 +679,6 @@ export function testId(base: string, suffix: string): string {
   return `${base}-${suffix}`;
 }
 
-/** 插件 UI 沙箱卡片容器与其中的 webview。 */
-export const TID_PLUGIN_UI_CARD = "plugin-ui-card";
-export const TID_PLUGIN_UI_OPEN_SIDE_PANE = "plugin-ui-open-side-pane";
-export const TID_PLUGIN_UI_WEBVIEW = "plugin-ui-webview";
 export const TID_START_PLAN_RECOMMENDATION_DIALOG = "start-plan-recommendation-dialog";
 
 /** 用户反馈的诊断日志授权开关 */
