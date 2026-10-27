@@ -28,7 +28,7 @@ export interface CreateLocalTargetHostOptions {
   executor?: NekConfigHostExecutor;
   locator?: NekLocator;
   remotes?: NekConfigRemoteHosts;
-  /** 本机显示名，默认「本机」。 */
+  /** 本机显示名；缺省 "This computer"（与契约里的示例一致，具体文案由 host 决定）。 */
   label?: string;
 }
 
@@ -68,7 +68,7 @@ export function createLocalNekConfigTargetHost(
     listTargets: async () => {
       const info: NekConfigTargetInfo = {
         target: { kind: "local" },
-        label: options.label ?? "Local",
+        label: options.label ?? "This computer",
         connected: true,
         nek: await localNekState(executor, locator),
       };
