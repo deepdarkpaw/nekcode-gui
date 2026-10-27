@@ -9,6 +9,8 @@ export interface StdioStream {
   stdin: NodeJS.WritableStream;
   stdout: NodeJS.ReadableStream;
   stderr: NodeJS.ReadableStream;
+  /** ssh2 channel 的可选信号接口，用于取消远端长命令。 */
+  signal?(signal: string): void;
   onClose: Event<number>; // exit code
 }
 

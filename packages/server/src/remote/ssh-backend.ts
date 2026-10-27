@@ -356,6 +356,7 @@ export class SSHBackend implements IRemoteBackend {
           stdin: channel.stdin,
           stdout: channel,
           stderr: channel.stderr,
+          signal: (signal: string) => channel.signal(signal),
           onClose: onClose.event,
         });
       });

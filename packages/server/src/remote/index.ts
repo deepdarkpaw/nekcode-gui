@@ -30,6 +30,15 @@ export {
   type SSHJumpClientFactory,
 } from "./sshConfig.js";
 export {
+  detectRemoteNek,
+  installRemoteNek,
+  buildNekInstallCommand,
+  type InstallNekOptions,
+  type InstallNekResult,
+  type RemoteNekCheckResult,
+  type RemoteNekStatus,
+} from "./nekRemote.js";
+export {
   computeHostKeyFingerprint,
   createSSHHostVerifier,
   formatHostKeyRejectionError,
