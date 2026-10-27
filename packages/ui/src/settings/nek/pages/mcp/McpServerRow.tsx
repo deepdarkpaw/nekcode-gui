@@ -190,6 +190,12 @@ export function McpServerRow({
                 {entry.config.description}
               </span>
             ) : null}
+            <span
+              title={entry.path}
+              className="truncate font-mono text-ui-xs text-foreground-subtlest"
+            >
+              {t("settings.nek.mcp.source", { path: entry.path })}
+            </span>
           </span>
         </FoldTrigger>
         <span

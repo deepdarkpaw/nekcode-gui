@@ -256,6 +256,9 @@ function MaintenanceSection() {
   const api = useNekConfigApi();
   const { target, targetInfo } = useNekTarget();
   const [reloadResult, setReloadResult] = useState<string | null>(null);
+  const [reloadFailures, setReloadFailures] = useState<
+    Array<{ sessionKey: string; message: string }>
+  >([]);
   const agentDir = targetInfo?.nek.state === "ready" ? targetInfo.nek.agentDir : undefined;
   return (
     <SettingSection title={t("settings.nek.advanced.maintenance")}>
@@ -280,11 +283,29 @@ function MaintenanceSection() {
                 deferred: result.deferred,
               }),
             );
+            setReloadFailures(result.failures);
           }}
         >
           {t("settings.nek.advanced.reloadRun")}
         </AsyncButton>
       </SettingRow>
+      {reloadFailures.length > 0 ? (
+        <div role="alert" className="flex flex-col gap-1 rounded-lg bg-warning/10 px-3 py-2">
+          <p className="text-ui-sm font-medium text-warning">
+            {t("settings.nek.reload.failed", {
+              count: reloadFailures.length,
+              reason: reloadFailures[0]?.message ?? "",
+            })}
+          </p>
+          <ul className="flex flex-col gap-0.5 text-ui-xs text-foreground-subtle">
+            {reloadFailures.map((failure) => (
+              <li key={`${failure.sessionKey}:${failure.message}`}>
+                <span className="font-mono">{failure.sessionKey}</span>: {failure.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </SettingSection>
   );
 }

@@ -129,8 +129,14 @@ describe("defaultTools", () => {
   });
 
   it("writes deltas and null when equal to defaults", () => {
-    expect(buildDefaultToolsSetting(new Set(["read", "bash"]), defaults)).toEqual(["-web_search"]);
-    expect(buildDefaultToolsSetting(new Set(defaults), defaults)).toBeNull();
+    const known = ["read", "bash", "grep", "web_search"];
+    expect(buildDefaultToolsSetting(new Set(["read", "bash"]), defaults, known)).toEqual([
+      "-web_search",
+    ]);
+    expect(buildDefaultToolsSetting(new Set(defaults), defaults, known)).toBeNull();
+    expect(buildDefaultToolsSetting(new Set([...defaults, "grep"]), defaults, known)).toEqual([
+      "+grep",
+    ]);
   });
 });
 

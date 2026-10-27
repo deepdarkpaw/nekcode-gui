@@ -6506,6 +6506,7 @@ const enUS: Record<string, string> = {
   "settings.nek.target.connect": "Connect",
   "settings.nek.target.connectFailed": "Failed to connect to {host}: {reason}",
   "settings.nek.target.editing": "Editing nek configuration on {host}",
+  "settings.nek.target.hostname": "Target host name: {hostname}",
   "settings.nek.target.disconnectedTitle": "{host} is not connected",
   "settings.nek.target.disconnectedDescription":
     "Connect to read and edit the nek configuration on this host.",
@@ -6527,6 +6528,9 @@ const enUS: Record<string, string> = {
   "settings.nek.apiKey.show": "Show key",
   "settings.nek.apiKey.hide": "Hide key",
   "settings.nek.apiKey.keepPlaceholder": "Saved {masked}; leave empty to keep",
+  "settings.nek.apiKey.remove": "Clear key",
+  "settings.nek.apiKey.removePending": "The saved key is deleted when you save",
+  "settings.nek.apiKey.removeUndo": "Keep key",
   "settings.nek.accounts.pageDescription":
     "Sign in to nek with a subscription. Credentials live in auth.json on the target host and are refreshed by nek.",
   "settings.nek.accounts.claude.title": "Claude",
@@ -6542,6 +6546,12 @@ const enUS: Record<string, string> = {
     "Access token expired at {expires}. nek will try to refresh it on next use; sign in again if that fails",
   "settings.nek.accounts.state.otherCredential":
     "Using an API key or environment variable, not a subscription",
+  "settings.nek.accounts.state.refreshFailed":
+    "Token refresh failed; the access token expired at {expires} — sign in again",
+  "settings.nek.accounts.hint.expired":
+    "The token expired: sign in again, otherwise requests will fail with 401.",
+  "settings.nek.accounts.hint.refreshFailed":
+    "nek could not exchange the refresh token for a new access token (usually revoked or signed in elsewhere), so sign in again.",
   "settings.nek.accounts.autoRefresh": "nek refreshes it automatically before it expires.",
   "settings.nek.accounts.login": "Sign in",
   "settings.nek.accounts.relogin": "Sign in again",
@@ -6607,6 +6617,9 @@ const enUS: Record<string, string> = {
   "settings.nek.provider.field.apiKey": "API key",
   "settings.nek.provider.field.apiKeyHint":
     "Enter the key directly, or read it from an environment variable (written as $NAME).",
+  "settings.nek.provider.field.test": "Test these edits",
+  "settings.nek.provider.field.testHint":
+    "Uses the saved key plus the endpoint and headers in this form; no need to save first.",
   "settings.nek.provider.field.headers": "Custom headers",
   "settings.nek.provider.field.authHeader": "Send Authorization header",
   "settings.nek.provider.field.authHeaderHint":
@@ -6641,6 +6654,7 @@ const enUS: Record<string, string> = {
   "settings.nek.provider.test.noModels": "No models",
   "settings.nek.provider.test.needModel": "Add a model before testing the connection",
   "settings.nek.provider.test.run": "Test connection",
+  "settings.nek.provider.test.draftRun": "Test edited configuration",
   "settings.nek.provider.test.ok": "Connected in {ms} ms",
   "settings.nek.provider.test.failed": "Connection failed: {reason}",
   "settings.nek.provider.test.okShort": "{ms} ms",
@@ -6813,6 +6827,9 @@ const enUS: Record<string, string> = {
     "Written to defaultTools as +name / -name so the default tool list is not frozen.",
   "settings.nek.tools.optional": "Off by default",
   "settings.nek.tools.unset": "not set (defaults)",
+  "settings.nek.tools.builtinEmpty": "Built-in tool list unavailable",
+  "settings.nek.tools.builtinEmptyHint":
+    "nek did not return a tool list, so the defaultTools checkboxes cannot be shown.",
   "settings.nek.tools.desc.read": "Read files",
   "settings.nek.tools.desc.bash": "Run shell commands",
   "settings.nek.tools.desc.powershell": "Run PowerShell commands",
@@ -6860,6 +6877,7 @@ const enUS: Record<string, string> = {
   "settings.nek.mcp.scope.global": "Global",
   "settings.nek.mcp.scope.project": "Project",
   "settings.nek.mcp.scope.override": "Project override",
+  "settings.nek.mcp.source": "From {path}",
   "settings.nek.mcp.state.connected": "Connected",
   "settings.nek.mcp.state.connecting": "Connecting",
   "settings.nek.mcp.state.failed": "Failed",
@@ -7092,6 +7110,7 @@ const enUS: Record<string, string> = {
   "settings.nek.hosts.install.run": "Install nek",
   "settings.nek.hosts.install.updateRun": "Update nek",
   "settings.nek.hosts.install.done": "Installed nek {version}",
+  "settings.nek.hosts.install.cancel": "Cancel install",
   "settings.nek.hosts.install.manual": "You can run this manually in a remote terminal:",
   "settings.nek.hosts.install.copyCommand": "Copy install command",
   "settings.nek.copy.title": "Copy from this computer to {host}",
@@ -7120,6 +7139,13 @@ const enUS: Record<string, string> = {
   "settings.nek.copy.preview": "Preview {count} items",
   "settings.nek.copy.confirm": "Copy {count} items",
   "settings.nek.copy.done": "Copied {count} items to {host}",
+  "settings.nek.copy.partial": "{failed} items failed; the rest were written to {host}",
+  "settings.nek.copy.resultLabel": "Copy results",
+  "settings.nek.copy.resultSummary": "Copied {copied}, skipped {skipped}, failed {failed}",
+  "settings.nek.copy.status.copied": "Copied",
+  "settings.nek.copy.status.skipped": "Skipped",
+  "settings.nek.copy.status.failed": "Failed",
+  "settings.nek.copy.retryFailed": "Retry copy",
   "settings.nek.appearance.pageDescription":
     "Display and input preferences of the nekcode app, stored on this computer.",
   "settings.nek.appearance.display": "Display",
@@ -7221,6 +7247,9 @@ const enUS: Record<string, string> = {
   "settings.nek.advanced.reloadRun": "Reload",
   "settings.nek.advanced.reloadResult":
     "Reloaded {reloaded} sessions; {deferred} will apply after the current turn",
+  "settings.nek.reload.failed": "{count} nek processes could not reload: {reason}",
+  "settings.nek.reload.retry": "Retry",
+  "settings.nek.reload.recovered": "All nek processes reloaded",
   "settings.nek.about.pageDescription": "Versions, updates and diagnostics.",
   "settings.nek.about.gui": "nekcode",
   "settings.nek.about.guiVersion": "GUI version",

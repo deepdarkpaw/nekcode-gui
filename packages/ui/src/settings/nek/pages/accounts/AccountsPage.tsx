@@ -1,6 +1,7 @@
 /**
  * 账号登录：Claude（provider `anthropic`）与 ChatGPT（Codex，provider `openai-codex`）两张卡片。
- * 状态：未登录 / 已登录（到期时间，nek 自动刷新）/ 令牌已过期需重新登录；退出登录需二次确认。
+ * 状态按 `auth_status` 的 `state` 显示：未登录 / 已登录（到期时间，nek 自动刷新）/
+ * 令牌已过期 / 刷新失败 —— 后两种都提示重新登录。
  */
 import { useState } from "react";
 import { LogInIcon } from "lucide-react";
@@ -38,8 +39,17 @@ const ACCOUNT_CARDS: readonly AccountCard[] = [
   },
 ];
 
-export type AccountState = "loggedOut" | "loggedIn" | "expired" | "otherCredential";
+export type AccountState =
+  | "loggedOut"
+  | "loggedIn"
+  | "expired"
+  | "refreshFailed"
+  | "otherCredential";
 
+/**
+ * 账号状态：以 nek 的 `state` 为准（`expired` / `refresh_failed` 都需要重新登录）。
+ * `expiresAt` 只做兜底：后端已经按到期时间推出 `expired`，这里再算一次是为了旧数据。
+ */
 export function accountStateOf(
   status: NekAuthProviderStatus | undefined,
   now = Date.now(),
@@ -49,6 +59,12 @@ export function accountStateOf(
   }
   if (status.kind !== "oauth") {
     return "otherCredential";
+  }
+  if (status.state === "refresh_failed") {
+    return "refreshFailed";
+  }
+  if (status.state === "expired") {
+    return "expired";
   }
   if (status.expiresAt && Date.parse(status.expiresAt) <= now) {
     return "expired";
@@ -60,6 +76,7 @@ const STATE_DOT: Record<AccountState, string> = {
   loggedOut: "bg-foreground-subtlest",
   loggedIn: "bg-success",
   expired: "bg-warning",
+  refreshFailed: "bg-destructive",
   otherCredential: "bg-icon-blue",
 };
 
@@ -105,6 +122,11 @@ function AccountCardView({
           {intl.formatMessage({ id: "settings.nek.accounts.autoRefresh" })}
         </p>
       ) : null}
+      {state === "expired" || state === "refreshFailed" ? (
+        <p role="alert" className="text-ui-sm text-warning">
+          {intl.formatMessage({ id: `settings.nek.accounts.hint.${state}` })}
+        </p>
+      ) : null}
       {card.noticeId ? (
         <p className="rounded-lg bg-surface px-3 py-2 text-ui-sm text-foreground-subtle">
           {intl.formatMessage({ id: card.noticeId })}
@@ -118,7 +140,10 @@ function AccountCardView({
           </Button>
         ) : (
           <>
-            <Button variant={state === "expired" ? "default" : "outline"} onClick={onLogin}>
+            <Button
+              variant={state === "loggedIn" ? "outline" : "default"}
+              onClick={onLogin}
+            >
               {intl.formatMessage({ id: "settings.nek.accounts.relogin" })}
             </Button>
             <Button variant="ghost" onClick={onLogout}>

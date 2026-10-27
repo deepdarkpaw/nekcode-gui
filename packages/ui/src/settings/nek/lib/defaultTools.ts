@@ -1,21 +1,10 @@
 /**
  * `defaultTools`：nek 支持上游的 `+name / -name` 写法（相对默认工具集增减）。
  * GUI 一律写成增减形式，关闭联网写 `-web_search`，不把默认工具列表冻结住。
+ *
+ * 工具清单不在这里硬编码：`listBuiltinTools` 从 host 取（nek 没有对应 RPC 时由 host 维护镜像），
+ * 见 `packages/services/src/nek-config-api/builtinTools.ts`。
  */
-
-/** nek 内置工具（`packages/coding-agent/src/core/tools/index.ts` 的 allToolNames）。 */
-export const NEK_BUILTIN_TOOLS = [
-  "read",
-  "bash",
-  "powershell",
-  "edit",
-  "write",
-  "grep",
-  "find",
-  "ls",
-  "ast_grep",
-  "web_search",
-] as const;
 
 export const WEB_SEARCH_TOOL = "web_search";
 
@@ -49,7 +38,7 @@ export function resolveEnabledTools(
 export function buildDefaultToolsSetting(
   enabled: ReadonlySet<string>,
   defaults: readonly string[],
-  knownTools: readonly string[] = NEK_BUILTIN_TOOLS,
+  knownTools: readonly string[],
 ): string[] | null {
   const order = [...new Set([...knownTools, ...defaults, ...enabled])];
   const defaultSet = new Set(defaults);

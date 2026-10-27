@@ -1,10 +1,14 @@
 /**
  * 工具与联网：内置工具勾选（写 `defaultTools` 的 `+name/-name`）；shell 路径与命令前缀；
  * 联网搜索开关（`-web_search`）、Exa API Key、自定义 endpoint（高级）、结果数、测试搜索。
+ *
+ * 工具清单来自 `listBuiltinTools()`（host 侧的 nek 镜像），不在界面里硬编码。
  */
 import { useState } from "react";
-import { SearchIcon } from "lucide-react";
+import { RefreshCwIcon, SearchIcon } from "lucide-react";
+import type { NekBuiltinTool } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
+import { Button } from "@/components/ui/button.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import {
   SaveStatusIndicator,
@@ -17,23 +21,23 @@ import { SettingNumberField, SettingTextField } from "@/components/ui/setting-te
 import { useAsyncAction } from "@/hooks/useAsyncAction.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useNekConfigApi, useNekTarget } from "../api/NekSettingsContext.js";
+import { useNekQuery } from "../api/useNekQuery.js";
 import { useNekSettingsDoc, type NekSettingsDocument } from "../api/settingsDocs.js";
 import {
   buildDefaultToolsSetting,
-  NEK_BUILTIN_TOOLS,
   resolveEnabledTools,
   WEB_SEARCH_TOOL,
 } from "../lib/defaultTools.js";
 import { nestedSettingsPatch } from "../lib/settingsPatch.js";
-import { DocumentGate } from "../components/DocumentStatus.js";
+import { DocumentGate, NekEmptyState } from "../components/DocumentStatus.js";
 import { NekPageFrame } from "../components/NekPageFrame.js";
 import { SecretSettingField } from "../components/SecretSettingField.js";
 
-function useToolsWriter(settings: NekSettingsDocument) {
+function useToolsWriter(settings: NekSettingsDocument, knownTools: readonly string[]) {
   const defaults = settings.data?.defaults.defaultTools ?? [];
   const enabled = resolveEnabledTools(settings.data?.values.defaultTools, defaults);
   const write = (next: ReadonlySet<string>) =>
-    settings.patch({ defaultTools: buildDefaultToolsSetting(next, defaults) });
+    settings.patch({ defaultTools: buildDefaultToolsSetting(next, defaults, knownTools) });
   const setTool = (name: string, on: boolean) => {
     const next = new Set(enabled);
     if (on) next.add(name);
@@ -43,9 +47,16 @@ function useToolsWriter(settings: NekSettingsDocument) {
   return { enabled, defaults, setTool };
 }
 
-function BuiltinTools({ settings }: { settings: NekSettingsDocument }) {
+function BuiltinTools({
+  settings,
+  tools,
+}: {
+  settings: NekSettingsDocument;
+  tools: readonly NekBuiltinTool[];
+}) {
   const { intl } = useZCodeIntl();
-  const { enabled, defaults, setTool } = useToolsWriter(settings);
+  const known = tools.map((tool) => tool.name);
+  const { enabled, defaults, setTool } = useToolsWriter(settings, known);
   const save = useAsyncAction((name: string, on: boolean) => setTool(name, on));
   const setting = settings.data?.values.defaultTools;
   return (
@@ -64,31 +75,33 @@ function BuiltinTools({ settings }: { settings: NekSettingsDocument }) {
         </p>
       ) : null}
       <div className="grid gap-1 sm:grid-cols-2">
-        {NEK_BUILTIN_TOOLS.filter((name) => name !== WEB_SEARCH_TOOL).map((name) => (
-          <label
-            key={name}
-            className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-hover"
-          >
-            <Checkbox
-              className="mt-0.5"
-              checked={enabled.has(name)}
-              onCheckedChange={(checked) => void save.run(name, checked === true)}
-            />
-            <span className="flex min-w-0 flex-col">
-              <span className="font-mono text-ui-sm text-foreground">
-                {name}
-                {defaults.includes(name) ? null : (
-                  <span className="ml-2 font-sans text-ui-xs text-foreground-subtlest">
-                    {intl.formatMessage({ id: "settings.nek.tools.optional" })}
-                  </span>
-                )}
+        {tools
+          .filter((tool) => tool.name !== WEB_SEARCH_TOOL)
+          .map((tool) => (
+            <label
+              key={tool.name}
+              className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-hover"
+            >
+              <Checkbox
+                className="mt-0.5"
+                checked={enabled.has(tool.name)}
+                onCheckedChange={(checked) => void save.run(tool.name, checked === true)}
+              />
+              <span className="flex min-w-0 flex-col">
+                <span className="font-mono text-ui-sm text-foreground">
+                  {tool.name}
+                  {defaults.includes(tool.name) ? null : (
+                    <span className="ml-2 font-sans text-ui-xs text-foreground-subtlest">
+                      {intl.formatMessage({ id: "settings.nek.tools.optional" })}
+                    </span>
+                  )}
+                </span>
+                <span className="text-ui-xs text-foreground-subtle">
+                  {intl.formatMessage({ id: `settings.nek.tools.desc.${tool.name}` })}
+                </span>
               </span>
-              <span className="text-ui-xs text-foreground-subtle">
-                {intl.formatMessage({ id: `settings.nek.tools.desc.${name}` })}
-              </span>
-            </span>
-          </label>
-        ))}
+            </label>
+          ))}
       </div>
       <p className="font-mono text-ui-xs text-foreground-subtlest">
         defaultTools:{" "}
@@ -126,11 +139,20 @@ function ShellSection({ settings }: { settings: NekSettingsDocument }) {
   );
 }
 
-function WebSearchSection({ settings }: { settings: NekSettingsDocument }) {
+function WebSearchSection({
+  settings,
+  tools,
+}: {
+  settings: NekSettingsDocument;
+  tools: readonly NekBuiltinTool[];
+}) {
   const { intl } = useZCodeIntl();
   const api = useNekConfigApi();
   const { target } = useNekTarget();
-  const { enabled, setTool } = useToolsWriter(settings);
+  const { enabled, setTool } = useToolsWriter(
+    settings,
+    tools.map((tool) => tool.name),
+  );
   const [result, setResult] = useState<string | null>(null);
   const web = settings.data?.values.webSearch ?? {};
   const defaults = settings.data?.defaults.webSearch ?? {};
@@ -217,21 +239,41 @@ function WebSearchSection({ settings }: { settings: NekSettingsDocument }) {
 
 export function ToolsPage() {
   const { intl } = useZCodeIntl();
+  const api = useNekConfigApi();
+  const { target } = useNekTarget();
   const settings = useNekSettingsDoc();
+  const tools = useNekQuery((config, current) => config.listBuiltinTools(current), []);
   return (
     <NekPageFrame
       usesTarget
       description={intl.formatMessage({ id: "settings.nek.tools.pageDescription" })}
       documents={[settings]}
     >
-      <DocumentGate documents={[settings]}>
-        {() => (
-          <div className="flex flex-col gap-8">
-            <BuiltinTools settings={settings} />
-            <ShellSection settings={settings} />
-            <WebSearchSection settings={settings} />
-          </div>
-        )}
+      <DocumentGate documents={[settings, tools]}>
+        {() => {
+          const list = tools.data ?? [];
+          return (
+            <div className="flex flex-col gap-8">
+              {list.length === 0 ? (
+                <NekEmptyState
+                  icon={<RefreshCwIcon className="size-5" aria-hidden="true" />}
+                  title={intl.formatMessage({ id: "settings.nek.tools.builtinEmpty" })}
+                  description={intl.formatMessage({ id: "settings.nek.tools.builtinEmptyHint" })}
+                  action={
+                    <Button variant="outline" onClick={() => void tools.reload()}>
+                      <RefreshCwIcon aria-hidden="true" />
+                      {intl.formatMessage({ id: "settings.nek.load.retry" })}
+                    </Button>
+                  }
+                />
+              ) : (
+                <BuiltinTools settings={settings} tools={list} />
+              )}
+              <ShellSection settings={settings} />
+              <WebSearchSection settings={settings} tools={list} />
+            </div>
+          );
+        }}
       </DocumentGate>
     </NekPageFrame>
   );

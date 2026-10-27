@@ -17,7 +17,7 @@ import { useUndoToast } from "@/components/ui/undo-toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getErrorMessage } from "@/lib/errorMessage.js";
 import type { NekAgentPresetsDocument } from "../../api/mcpDocs.js";
-import { DocumentGate } from "../../components/DocumentStatus.js";
+import { DiagnosticsList, DocumentGate } from "../../components/DocumentStatus.js";
 import { handleRowArrowNavigation } from "../../components/SortableList.js";
 import { AgentPresetDialog } from "./AgentPresetDialog.js";
 
@@ -83,12 +83,14 @@ export function AgentPresetsSection({
         </Button>
       </div>
       <DocumentGate documents={[doc]}>
-        {() =>
-          entries.length === 0 ? (
-            <p className="text-ui-sm text-foreground-subtle">
-              {t("settings.nek.agent.preset.empty")}
-            </p>
-          ) : (
+        {() => (
+          <>
+            <DiagnosticsList diagnostics={doc.data?.diagnostics} />
+            {entries.length === 0 ? (
+              <p className="text-ui-sm text-foreground-subtle">
+                {t("settings.nek.agent.preset.empty")}
+              </p>
+            ) : (
             <div
               data-nek-list=""
               className="flex flex-col rounded-xl border border-card-border bg-card"
@@ -147,8 +149,9 @@ export function AgentPresetsSection({
                 </div>
               ))}
             </div>
-          )
-        }
+            )}
+          </>
+        )}
       </DocumentGate>
       <AgentPresetDialog
         documents={[doc]}
