@@ -56,7 +56,7 @@ function BuiltinTools({
 }) {
   const { intl } = useZCodeIntl();
   const known = tools.map((tool) => tool.name);
-  const { enabled, defaults, setTool } = useToolsWriter(settings, known);
+  const { enabled, setTool } = useToolsWriter(settings, known);
   const save = useAsyncAction((name: string, on: boolean) => setTool(name, on));
   const setting = settings.data?.values.defaultTools;
   return (
@@ -90,7 +90,7 @@ function BuiltinTools({
               <span className="flex min-w-0 flex-col">
                 <span className="font-mono text-ui-sm text-foreground">
                   {tool.name}
-                  {defaults.includes(tool.name) ? null : (
+                  {tool.defaultActive ? null : (
                     <span className="ml-2 font-sans text-ui-xs text-foreground-subtlest">
                       {intl.formatMessage({ id: "settings.nek.tools.optional" })}
                     </span>

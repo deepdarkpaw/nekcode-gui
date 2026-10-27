@@ -166,7 +166,8 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
           const patch: Record<string, unknown> = {};
           if (item.kind === "defaults") {
             for (const setting of DEFAULT_SETTING_KEYS) {
-              if (sourceSettings.raw[setting] !== undefined) patch[setting] = sourceSettings.raw[setting];
+              if (sourceSettings.raw[setting] !== undefined)
+                patch[setting] = sourceSettings.raw[setting];
             }
           } else if (sourceSettings.raw.compaction !== undefined) {
             patch.compaction = sourceSettings.raw.compaction;

@@ -68,9 +68,14 @@ export function saveProvider(
     apiKey === undefined
       ? existing?.apiKey
       : typeof apiKey === "object"
-        ? ("remove" in apiKey ? undefined : existing?.apiKey)
+        ? "remove" in apiKey
+          ? undefined
+          : existing?.apiKey
         : apiKey;
-  const next: NekProviderConfig = { ...clone(rest), ...(resolvedKey ? { apiKey: resolvedKey } : {}) };
+  const next: NekProviderConfig = {
+    ...clone(rest),
+    ...(resolvedKey ? { apiKey: resolvedKey } : {}),
+  };
   machine.models.value = existing
     ? machine.models.value.map((item) => (item.id === write.id ? next : item))
     : [...machine.models.value, next];

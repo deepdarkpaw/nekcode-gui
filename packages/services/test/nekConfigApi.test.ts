@@ -1023,13 +1023,18 @@ test("fetching models and testing a provider accept {providerId} or {providerId,
       }),
     "validation",
   );
-  await expectNekError(async () => await harness.api.fetchProviderModels(LOCAL, { providerId: "" }), "validation");
+  await expectNekError(
+    async () => await harness.api.fetchProviderModels(LOCAL, { providerId: "" }),
+    "validation",
+  );
 });
 
 test("the local target reports the machine host name", async () => {
   const host = createLocalNekConfigTargetHost({
     executor: createMemoryNekConfigHostExecutor({ home: HOME, agentDir: AGENT_DIR, files: {} }),
-    locator: { locate: async () => Promise.reject(new NekLocatorError("not_found", "missing")) } as never,
+    locator: {
+      locate: async () => Promise.reject(new NekLocatorError("not_found", "missing")),
+    } as never,
   });
   const [local] = await host.listTargets();
   assert.equal(local?.hostname, os.hostname());

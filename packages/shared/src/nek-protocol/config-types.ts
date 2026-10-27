@@ -440,7 +440,10 @@ export interface INekSettingsHostApi {
   copyText(text: string): Promise<void>;
   getAppInfo(): Promise<NekAppInfo>;
   checkNekUpdate(target: NekConfigTarget): Promise<NekUpdateCheck>;
-  runNekUpdate(target: NekConfigTarget, onLog: (line: string) => void): Promise<{ version: string }>;
+  runNekUpdate(
+    target: NekConfigTarget,
+    onLog: (line: string) => void,
+  ): Promise<{ version: string }>;
   exportDiagnostics(): Promise<{ path: string; sizeBytes: number }>;
   openLogsDirectory(): Promise<void>;
 }

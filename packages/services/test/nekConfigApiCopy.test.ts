@@ -208,10 +208,15 @@ test("copy returns a per-item result instead of throwing midway", async () => {
   const harness = baseHarness();
   harness.useControl(control);
   setTimeout(() => control.failLogin("consent required on the target"), 0);
-  const result = await harness.api.copy(LOCAL, REMOTE, {
-    ...selection,
-    logins: ["anthropic"],
-  }, {});
+  const result = await harness.api.copy(
+    LOCAL,
+    REMOTE,
+    {
+      ...selection,
+      logins: ["anthropic"],
+    },
+    {},
+  );
   const byKey = new Map(result.items.map((item) => [item.key, item]));
   assert.equal(byKey.get("provider:local-proxy")?.status, "copied");
   assert.equal(byKey.get("provider:shared")?.status, "skipped");

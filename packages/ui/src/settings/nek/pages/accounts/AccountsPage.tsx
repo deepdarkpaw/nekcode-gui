@@ -140,10 +140,7 @@ function AccountCardView({
           </Button>
         ) : (
           <>
-            <Button
-              variant={state === "loggedIn" ? "outline" : "default"}
-              onClick={onLogin}
-            >
+            <Button variant={state === "loggedIn" ? "outline" : "default"} onClick={onLogin}>
               {intl.formatMessage({ id: "settings.nek.accounts.relogin" })}
             </Button>
             <Button variant="ghost" onClick={onLogout}>

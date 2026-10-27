@@ -114,7 +114,10 @@ function TestDraftConnection({
             );
             if (!outcome.ok) throw new Error(outcome.message);
             setResult(
-              intl.formatMessage({ id: "settings.nek.provider.test.ok" }, { ms: outcome.latencyMs }),
+              intl.formatMessage(
+                { id: "settings.nek.provider.test.ok" },
+                { ms: outcome.latencyMs },
+              ),
             );
           }}
         >

@@ -91,64 +91,64 @@ export function AgentPresetsSection({
                 {t("settings.nek.agent.preset.empty")}
               </p>
             ) : (
-            <div
-              data-nek-list=""
-              className="flex flex-col rounded-xl border border-card-border bg-card"
-            >
-              {entries.map((entry) => (
-                <div
-                  key={`${entry.source}:${entry.preset.name}`}
-                  data-nek-row=""
-                  tabIndex={0}
-                  onKeyDown={handleRowArrowNavigation}
-                  className="flex items-center gap-3 border-b border-border px-3 py-2 outline-none last:border-b-0 focus-visible:bg-hover"
-                >
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="flex items-center gap-2">
-                      <span className="font-mono text-ui-base text-foreground">
-                        {entry.preset.name}
-                      </span>
-                      <span className="rounded-sm bg-tag px-1 text-ui-xs text-foreground-subtle">
-                        {t(`settings.nek.agent.source.${entry.source}`)}
-                      </span>
-                      {entry.preset.model ? (
-                        <span className="truncate font-mono text-ui-xs text-foreground-subtlest">
-                          {entry.preset.model}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="truncate text-ui-sm text-foreground-subtle">
-                      {entry.preset.description}
-                    </span>
-                  </div>
-                  {entry.source !== "builtin" ? (
-                    <IconButton
-                      size="icon-sm"
-                      label={t("settings.nek.agent.preset.edit")}
-                      onClick={() => setDialog({ kind: "edit", entry })}
-                    >
-                      <PencilIcon />
-                    </IconButton>
-                  ) : null}
-                  <IconButton
-                    size="icon-sm"
-                    label={t("settings.nek.agent.preset.duplicate")}
-                    onClick={() => setDialog({ kind: "copy", entry })}
+              <div
+                data-nek-list=""
+                className="flex flex-col rounded-xl border border-card-border bg-card"
+              >
+                {entries.map((entry) => (
+                  <div
+                    key={`${entry.source}:${entry.preset.name}`}
+                    data-nek-row=""
+                    tabIndex={0}
+                    onKeyDown={handleRowArrowNavigation}
+                    className="flex items-center gap-3 border-b border-border px-3 py-2 outline-none last:border-b-0 focus-visible:bg-hover"
                   >
-                    <CopyPlusIcon />
-                  </IconButton>
-                  {entry.source !== "builtin" ? (
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-ui-base text-foreground">
+                          {entry.preset.name}
+                        </span>
+                        <span className="rounded-sm bg-tag px-1 text-ui-xs text-foreground-subtle">
+                          {t(`settings.nek.agent.source.${entry.source}`)}
+                        </span>
+                        {entry.preset.model ? (
+                          <span className="truncate font-mono text-ui-xs text-foreground-subtlest">
+                            {entry.preset.model}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="truncate text-ui-sm text-foreground-subtle">
+                        {entry.preset.description}
+                      </span>
+                    </div>
+                    {entry.source !== "builtin" ? (
+                      <IconButton
+                        size="icon-sm"
+                        label={t("settings.nek.agent.preset.edit")}
+                        onClick={() => setDialog({ kind: "edit", entry })}
+                      >
+                        <PencilIcon />
+                      </IconButton>
+                    ) : null}
                     <IconButton
                       size="icon-sm"
-                      label={t("settings.nek.agent.preset.delete")}
-                      onClick={() => remove(entry)}
+                      label={t("settings.nek.agent.preset.duplicate")}
+                      onClick={() => setDialog({ kind: "copy", entry })}
                     >
-                      <Trash2Icon />
+                      <CopyPlusIcon />
                     </IconButton>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+                    {entry.source !== "builtin" ? (
+                      <IconButton
+                        size="icon-sm"
+                        label={t("settings.nek.agent.preset.delete")}
+                        onClick={() => remove(entry)}
+                      >
+                        <Trash2Icon />
+                      </IconButton>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             )}
           </>
         )}

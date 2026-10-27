@@ -151,7 +151,11 @@ function isAgentsFile(file: string): boolean {
  * 预设是**多文件**文档：全局 `agents/*.md` 与项目 `.nek/agents/*.md` 文件名可以相同，
  * 所以按"作用域 + 文件名"匹配；没有 cwd 时项目级事件不属于本文档。
  */
-function presetChangeMatches(file: string, scope: NekConfigScope, cwd: string | undefined): boolean {
+function presetChangeMatches(
+  file: string,
+  scope: NekConfigScope,
+  cwd: string | undefined,
+): boolean {
   if (!isAgentsFile(file)) return false;
   return scope === "global" || Boolean(cwd);
 }

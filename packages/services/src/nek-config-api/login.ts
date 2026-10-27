@@ -38,9 +38,7 @@ export const LOGIN_CALLBACK_PORTS: Readonly<Record<string, number>> = {
  * - `oauth` 未过期 / 非 oauth → `ok`；
  * - `refresh_failed` 目前没有来源（nek 不暴露刷新结果），见报告里的 nek 侧缺项。
  */
-function normalizeAuthStatus(
-  status: NekAuthProviderStatusWire,
-): NekAuthProviderStatus {
+function normalizeAuthStatus(status: NekAuthProviderStatusWire): NekAuthProviderStatus {
   if (status.state) return { ...status, state: status.state };
   const expired =
     status.kind === "oauth" &&

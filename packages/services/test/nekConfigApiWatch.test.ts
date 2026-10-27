@@ -215,7 +215,10 @@ test("watch events carry the scope of the file that changed", async () => {
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   harness.local.setFile(MODELS_PATH, modelsText("http://global"));
-  harness.local.setFile(projectPreset, "---\nname: project-reviewer\ndescription: y\n---\n\nBody.\n");
+  harness.local.setFile(
+    projectPreset,
+    "---\nname: project-reviewer\ndescription: y\n---\n\nBody.\n",
+  );
   await new Promise((resolve) => setTimeout(resolve, 1400));
   unsubscribe();
 

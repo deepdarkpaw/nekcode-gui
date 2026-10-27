@@ -109,10 +109,7 @@ export class NekConfigRuntime {
   readonly login: NekLoginManager;
   private readonly watchHub: NekWatchHub;
   private readonly controls = new Map<string, Promise<NekControlClient>>();
-  private readonly reloadListeners = new Map<
-    string,
-    Set<(result: NekReloadOutcome) => void>
-  >();
+  private readonly reloadListeners = new Map<string, Set<(result: NekReloadOutcome) => void>>();
   private readonly autoReload: boolean;
 
   constructor(private readonly options: NekConfigApiOptions) {
@@ -224,12 +221,20 @@ export class NekConfigRuntime {
           reloaded: 0,
           deferred: 0,
           diagnostics: [],
-          failures: [{ sessionKey: "runtime", message: error instanceof Error ? error.message : String(error) }],
+          failures: [
+            {
+              sessionKey: "runtime",
+              message: error instanceof Error ? error.message : String(error),
+            },
+          ],
         });
       });
   }
 
-  onReloadResult(target: NekConfigTarget, listener: (result: NekReloadOutcome) => void): () => void {
+  onReloadResult(
+    target: NekConfigTarget,
+    listener: (result: NekReloadOutcome) => void,
+  ): () => void {
     const key = targetKeyOf(target);
     const listeners = this.reloadListeners.get(key) ?? new Set();
     listeners.add(listener);
