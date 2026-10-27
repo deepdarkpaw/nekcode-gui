@@ -180,7 +180,8 @@ export function providerWriteToValue(
   const value: Record<string, unknown> = {};
   const source = write as unknown as Record<string, unknown>;
   for (const [key, entry] of Object.entries(source)) {
-    if (key === "apiKey" || key === "extra" || key === "overridesBuiltin") continue;
+    // `id` 是键名（不是字段），`extra` 摊平到末尾，`overridesBuiltin` 是读取视图的派生标记。
+    if (key === "id" || key === "apiKey" || key === "extra" || key === "overridesBuiltin") continue;
     if (entry === undefined) continue;
     if (key === "models" && Array.isArray(entry)) {
       value.models = entry
@@ -196,6 +197,40 @@ export function providerWriteToValue(
   if (apiKey !== undefined) value.apiKey = apiKey;
   const extra = isPlainObject(write.extra) ? write.extra : {};
   return { ...value, ...extra };
+}
+
+export interface NekJsoncEdit {
+  pointer: Array<string | number>;
+  value: unknown;
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * 服务商的写入拆成"逐字段编辑"。
+ *
+ * 整对象替换会让 jsonc-parser 重建该节点：provider 内部的注释与键顺序都会丢
+ * （只有顶层与兄弟键的注释能活下来）。逐字段编辑把影响面压到真正改动的字段。
+ */
+export function providerEdits(
+  providerId: string,
+  existing: Record<string, unknown> | undefined,
+  value: Record<string, unknown>,
+): NekJsoncEdit[] {
+  if (!existing) return [{ pointer: ["providers", providerId], value }];
+  const edits: NekJsoncEdit[] = [];
+  for (const [key, next] of Object.entries(value)) {
+    if (sameJson(existing[key], next)) continue;
+    edits.push({ pointer: ["providers", providerId, key], value: next });
+  }
+  for (const key of Object.keys(existing)) {
+    if (key in value) continue;
+    edits.push({ pointer: ["providers", providerId, key], value: undefined });
+  }
+  return edits;
 }
 
 /** 用 zod 镜像校验单个服务商 / 模型，返回字段级错误。 */
@@ -266,7 +301,7 @@ export async function editModelsSnapshot(
   executor: NekConfigHostExecutor,
   snapshot: NekModelsSnapshot,
   expectedRevision: string,
-  edits: ReadonlyArray<{ pointer: Array<string | number>; value: unknown }>,
+  edits: readonly NekJsoncEdit[],
 ): Promise<string> {
   const current = await readTextDocument(executor, snapshot.path);
   if (!sameRevision(current.revision, expectedRevision)) throw conflict(snapshot.path);

@@ -5,6 +5,7 @@
  * 内置预设来自 nek 代码（只读、无文件），用户与项目预设是 `<agentDir>/agents/*.md`
  * 与 `<cwd>/.nek/agents/*.md`。保存时保留未知 frontmatter 键与正文原文。
  */
+import { join } from "node:path";
 import type { NekAgentPreset, NekAgentPresetEntry, NekConfigScope } from "@zcode/shared/nek-protocol";
 import {
   isPlainObject,
@@ -145,7 +146,7 @@ async function listPresetFiles(executor: NekConfigHostExecutor, dir: string): Pr
   const entries = await executor.listDir(dir);
   return entries
     .filter((entry) => !entry.isDirectory && entry.name.endsWith(".md"))
-    .map((entry) => `${dir}/${entry.name}`);
+    .map((entry) => join(dir, entry.name));
 }
 
 export interface ListAgentPresetsArgs {
@@ -271,9 +272,6 @@ export async function deleteAgentPreset(args: DeleteAgentPresetArgs): Promise<{ 
   const existing = await readAgentPresetFile(args.executor, path);
   if (!existing) throw validationError(`preset "${args.name}" not found`, { name: "not found" });
   if (!sameRevision(existing.revision, args.expectedRevision)) throw conflict(path);
-  if (existing.preset.readonly === true) {
-    throw validationError(`preset "${args.name}" is read-only`, { name: "read-only" });
-  }
   await args.executor.remove(path);
   return { path, revision: "absent" };
 }

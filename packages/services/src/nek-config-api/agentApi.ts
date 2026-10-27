@@ -11,6 +11,7 @@ import type {
   NekConfigScope,
   NekConfigTarget,
 } from "@zcode/shared/nek-protocol";
+import { join } from "node:path";
 import { parseFrontmatterDocument } from "../nek-agent/config/nekConfigDocuments.js";
 import { readTextDocument, writeTextDocument } from "./documents.js";
 import { conflict } from "./errors.js";
@@ -157,7 +158,7 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
       for (const dir of resourceDirs(context.layout, "skills", cwd)) {
         for (const entry of await context.executor.listDir(dir)) {
           if (!entry.isDirectory) continue;
-          const path = `${dir}/${entry.name}/SKILL.md`;
+          const path = join(dir, entry.name, "SKILL.md");
           const description = await descriptionOf((file) => context.executor.readFile(file), path);
           skills.set(entry.name, { name: entry.name, path, ...(description ? { description } : {}) });
         }
@@ -165,7 +166,7 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
       for (const dir of resourceDirs(context.layout, "prompts", cwd)) {
         for (const entry of await context.executor.listDir(dir)) {
           if (entry.isDirectory || !entry.name.endsWith(".md")) continue;
-          const path = `${dir}/${entry.name}`;
+          const path = join(dir, entry.name);
           const description = await descriptionOf((file) => context.executor.readFile(file), path);
           prompts.set(stripExtension(entry.name), {
             name: stripExtension(entry.name),
@@ -179,7 +180,7 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
           if (entry.isDirectory || !/\.(ts|js|mjs|cjs)$/u.test(entry.name)) continue;
           extensions.set(stripExtension(entry.name), {
             name: stripExtension(entry.name),
-            path: `${dir}/${entry.name}`,
+            path: join(dir, entry.name),
           });
         }
       }

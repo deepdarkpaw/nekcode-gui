@@ -20,13 +20,14 @@ import { NekConfigError, asNekConfigError, conflict, validationError } from "./e
 import {
   editModelsSnapshot,
   modelWriteToValue,
+  providerEdits,
   providerToView,
   providerWriteToValue,
   readModelsSnapshot,
   validateModelValue,
   validateProviderValue,
 } from "./modelsDocument.js";
-import type { NekModelsSnapshot } from "./modelsDocument.js";
+import type { NekJsoncEdit, NekModelsSnapshot } from "./modelsDocument.js";
 import { planReferenceRewrites, scanProviderReferences } from "./modelsReferences.js";
 import { modelsPath, settingsPath } from "./paths.js";
 import { listAgentPresets, writeAgentPreset } from "./presetsDocument.js";
@@ -159,7 +160,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
     target: NekConfigTarget,
     snapshot: NekModelsSnapshot,
     expectedRevision: string,
-    edits: ReadonlyArray<{ pointer: Array<string | number>; value: unknown }>,
+    edits: readonly NekJsoncEdit[],
   ): Promise<NekConfigRevision> => {
     const { executor } = runtime.target(target);
     const revision = await editModelsSnapshot(executor, snapshot, expectedRevision, edits);
@@ -188,9 +189,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       }
       const value = providerWriteToValue(provider, existing);
       validateProviderValue(provider.id, value);
-      return await save(target, snapshot, options.revision, [
-        { pointer: ["providers", provider.id], value },
-      ]);
+      return await save(target, snapshot, options.revision, providerEdits(provider.id, existing, value));
     },
 
     deleteProvider: async (target, providerId, options) => {

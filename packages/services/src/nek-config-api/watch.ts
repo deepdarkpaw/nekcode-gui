@@ -8,6 +8,7 @@
  */
 import { watch as fsWatch } from "node:fs";
 import type { FSWatcher } from "node:fs";
+import { join } from "node:path";
 import { baselineConfigFiles } from "./watchFiles.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { ABSENT_REVISION } from "./revision.js";
@@ -232,13 +233,16 @@ export class NekWatchHub {
     for (const entry of entries) {
       if (entry.isDirectory) {
         if (entry.name === "agents") {
-          for (const preset of await executor.listDir(`${dir}/agents`)) {
-            if (!preset.isDirectory && preset.name.endsWith(".md")) files.push(`${dir}/agents/${preset.name}`);
+          // 预设目录单独展开（只认 *.md）。
+          for (const preset of await executor.listDir(join(dir, "agents"))) {
+            if (!preset.isDirectory && preset.name.endsWith(".md")) {
+              files.push(join(dir, "agents", preset.name));
+            }
           }
         }
         continue;
       }
-      if (entry.name.endsWith(".md") && dirBelongsToInstructions(dir)) files.push(`${dir}/${entry.name}`);
+      if (entry.name.endsWith(".md") && dirBelongsToInstructions(dir)) files.push(join(dir, entry.name));
     }
     return files;
   }
