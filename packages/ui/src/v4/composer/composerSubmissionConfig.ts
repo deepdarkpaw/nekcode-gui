@@ -33,7 +33,7 @@ export function createComposerSubmissionConfig(
     return null;
   // 不读取 Session 或显示别名；复制所有选择叶子，防止 await 后用户切模改变本次请求。
   return Object.freeze({
-    mode: mode.data === "plan" ? "build" : mode.data,
+    mode: mode.data === "plan" ? "agent" : mode.data,
     planEnabled: resolveExecutionState(composer).planEnabled,
     modelSelection: Object.freeze({
       providerId: selection.providerId,

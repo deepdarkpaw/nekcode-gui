@@ -161,7 +161,7 @@ export function useDraftConfigControl(params: {
         ? initializeNewTaskDraft(draft, workspacePath, workspaceIdentity, modelSelectionView)
         : {
             ...draft,
-            mode: mode.success && mode.data !== "plan" ? mode.data : "build",
+            mode: mode.success ? mode.data : "agent",
             planEnabled: resolveExecutionState(sessionConfig ?? {}).planEnabled,
             modelSelection: sessionConfig?.modelSelection,
           };
@@ -240,7 +240,7 @@ export function useDraftConfigControl(params: {
         modelSelection: next.modelSelection,
         // 用户已经显式改选，不能再由导入时等待的默认初始化覆盖。
         ...(current.initializeFromNewTask
-          ? { mode: mode.success ? mode.data : "build", initializeFromNewTask: undefined }
+          ? { mode: mode.success ? mode.data : "agent", initializeFromNewTask: undefined }
           : {}),
       }));
     },
@@ -459,23 +459,16 @@ export function useDraftConfigControl(params: {
 
   const handleDraftSwitchMode = useCallback(
     (mode: string) => {
-      if (mode === "plan" || mode === "plan-off") {
-        updateComposerDraft((current) => ({
-          ...current,
-          mode: current.mode === "plan" ? "build" : (current.mode ?? "build"),
-          planEnabled: mode === "plan",
-          initializeFromNewTask: undefined,
-        }));
-        return;
-      }
+      // 模式只剩 agent / plan 两档：plan 既是 mode 也置 planEnabled，plan-off 回到 agent。
+      const parsed = submissionModeSchema.safeParse(mode === "plan-off" ? "agent" : mode);
+      if (!parsed.success) return;
       // 模式与模型同属当前 scope；不再写全局偏好，避免别的任务反向覆盖。
-      const parsed = submissionModeSchema.safeParse(mode);
-      if (parsed.success)
-        updateComposerDraft((current) => ({
-          ...current,
-          mode: parsed.data,
-          initializeFromNewTask: undefined,
-        }));
+      updateComposerDraft((current) => ({
+        ...current,
+        mode: parsed.data,
+        planEnabled: parsed.data === "plan",
+        initializeFromNewTask: undefined,
+      }));
     },
     [updateComposerDraft],
   );

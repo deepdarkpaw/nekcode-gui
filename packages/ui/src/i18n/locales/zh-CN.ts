@@ -4060,14 +4060,10 @@ const zhCN: Record<string, string> = {
 
   // 模式
   "mode.plan": "计划",
-  "mode.label.glm.build": "变更前确认",
-  "mode.label.glm.edit": "自动编辑",
-  "mode.label.glm.plan": "计划模式",
-  "mode.label.glm.yolo": "完全访问",
-  "mode.description.glm.build": "改文件前先问我。",
-  "mode.description.glm.edit": "自动编辑文件。",
-  "mode.description.glm.plan": "编辑前先出计划。",
-  "mode.description.glm.yolo": "减少确认次数。",
+  "mode.label.agent": "Agent",
+  "mode.label.plan": "计划",
+  "mode.description.agent": "直接改文件、跑命令把任务做完。",
+  "mode.description.plan": "编辑前先出计划。",
   "todo.panel.title": "待办",
   "todo.panel.currentTask": "当前任务",
   "todo.panel.completed": "todo 已完成",

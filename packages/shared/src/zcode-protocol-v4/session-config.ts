@@ -14,7 +14,7 @@ export const sessionConfigStateSchema = z.object({
   followupMode: z.enum(["queue", "guide"]),
   // additive（冻结面演进，同 meta 的裁决口径）：agent 协作模式（core CollaborationMode）。
   // 必须带 default 才不破坏旧快照/旧发送端的解析；投影经 SessionModeChanged 事件更新。
-  mode: z.string().default("build"),
+  mode: z.string().default("agent"),
   planEnabled: z.boolean().optional(),
   /** 明确审批结果；草稿按 interactionId 消费一次，普通 mode 更新不重置它。 */
   permissionGrant: z.object({ interactionId: z.string().min(1) }).optional(),

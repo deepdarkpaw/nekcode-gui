@@ -120,7 +120,7 @@ function readDraft(value: unknown): V4ComposerDraft | null {
       ? { editorStateJson: value.editorStateJson }
       : {}),
     ...(hasMention ? { mention: mention as unknown as ComposerMentionPrefill } : {}),
-    ...(mode.success ? { mode: mode.data === "plan" ? ("build" as const) : mode.data } : {}),
+    ...(mode.success ? { mode: mode.data === "plan" ? ("agent" as const) : mode.data } : {}),
     ...(typeof value.planEnabled === "boolean"
       ? { planEnabled: value.planEnabled }
       : mode.success

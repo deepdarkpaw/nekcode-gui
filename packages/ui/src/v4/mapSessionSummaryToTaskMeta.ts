@@ -62,7 +62,7 @@ export function mapSessionSummaryToTaskMeta(
       ...(options.workspaceIdentity ? { workspaceIdentity: options.workspaceIdentity } : {}),
       createdAt: summary.createdAt || previous?.createdAt || 0,
       updatedAt: summary.lastActivityAt || previous?.updatedAt || 0,
-      mode: previous?.mode ?? "build",
+      mode: previous?.mode ?? "agent",
       ...(previous?.model ? { model: previous.model } : {}),
       ...(summary.parentSessionId ? { forkedFromTaskId: summary.parentSessionId } : {}),
       ...(previous?.provider ? { provider: previous.provider as ZCodeProvider } : {}),

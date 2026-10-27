@@ -30,8 +30,8 @@ const createSessionRequestedConfigSchema = z.object({
   thought: z.string().optional(),
   followupMode: z.enum(["queue", "guide"]).optional(),
   // createSession.config 表达“请求覆盖字段”，不能复用 snapshot 的
-  // sessionConfigStateSchema.partial()；snapshot 为兼容旧快照给 mode 设了 default("build")，
-  // 会把“没传 mode”误变成“请求切回 build”，覆盖 workspace 默认 yolo。
+  // sessionConfigStateSchema.partial()；snapshot 为兼容旧快照给 mode 设了 default，
+  // 会把“没传 mode”误变成“请求切回默认档”，覆盖 workspace 默认模式。
   mode: z.string().optional(),
   planEnabled: z.boolean().optional(),
 });
@@ -190,9 +190,9 @@ export const commandPayloadSchemas = {
     thought: z.string(),
   }),
   // additive（冻结面按黄金测试背书演进）：agent 协作模式切换。
-  // 值域 = core CollaborationMode 的可切换子集（auto 非用户可切，不进 UI 命令面）。
+  // 值域 = nek 的 session 模式：agent（默认，直接干活）与 plan（只出方案）。
   switchCollaborationMode: z.object({
-    mode: z.enum(["build", "edit", "plan", "yolo"]),
+    mode: z.enum(["agent", "plan"]),
   }),
   setFollowupMode: z.object({ mode: z.enum(["queue", "guide"]) }),
   pauseGoal: z.object({}),

@@ -18,7 +18,7 @@ export function initializeNewTaskDraft(
   return {
     ...draft,
     initializeFromNewTask: undefined,
-    mode: recent?.mode === "plan" ? "build" : (recent?.mode ?? "build"),
+    mode: recent?.mode === "plan" ? "agent" : (recent?.mode ?? "agent"),
     planEnabled: false,
     modelSelection:
       recent?.modelSelection ??

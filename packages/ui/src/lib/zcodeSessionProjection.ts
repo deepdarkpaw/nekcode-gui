@@ -5,12 +5,14 @@ import {
   generateTraceId,
   parseModelPickerValue as parseSharedModelSelection,
   formatModelPickerValue as formatSharedModelSelection,
+  getZCodeAgentModeSelectOptions,
+  normalizeAvailableZCodeMode,
+  normalizeZCodeTaskMode,
   resolveZCodeVisibleSessionTitle,
   ZCODE_AGENT_PROVIDER,
   type ZCodeConfigOption,
   type ZCodeTaskGoal,
   type ZCodeTaskMode,
-  type ZCodeTaskModeInfo,
   type ZCodeTaskMeta,
   type ZCodeMessageWithParts,
   type ModelSelection,
@@ -22,29 +24,6 @@ import {
 const MODEL_CONFIG_ID = "model";
 const THOUGHT_LEVEL_CONFIG_ID = "thought_level";
 const MODE_CONFIG_ID = "mode";
-const ZCODE_AGENT_MODE_OPTIONS = [
-  {
-    id: "build",
-    name: "Ask before changes",
-    description: "Ask before each file changes.",
-  },
-  {
-    id: "edit",
-    name: "Edit automatically",
-    description: "Edit selected files or relevant workspace files automatically.",
-  },
-  {
-    id: "plan",
-    name: "Plan mode",
-    description: "Inspect the code and present a plan before editing.",
-  },
-  {
-    id: "yolo",
-    name: "Full access",
-    description: "Edit and run commands with fewer confirmations.",
-  },
-] as const satisfies readonly ZCodeTaskModeInfo[];
-const ZCODE_AGENT_MODE_ID_SET = new Set<string>(ZCODE_AGENT_MODE_OPTIONS.map((mode) => mode.id));
 
 export function formatModelPickerValue(ref: ModelSelection | undefined): string {
   return formatSharedModelSelection(ref);
@@ -212,19 +191,7 @@ function deriveTitleFromSnapshot(snapshot: ZCodeSessionStateSnapshot): string {
 }
 
 function fromZCodeMode(mode: ZCodeSessionMode): ZCodeTaskMode {
-  return mode === "build" ? "build" : mode;
-}
-
-function normalizeAvailableZCodeMode(mode: ZCodeSessionMode): string {
-  return ZCODE_AGENT_MODE_ID_SET.has(mode) ? mode : "build";
-}
-
-function getZCodeAgentModeSelectOptions(): NonNullable<ZCodeConfigOption["options"]> {
-  return ZCODE_AGENT_MODE_OPTIONS.map((mode) => ({
-    value: mode.id,
-    name: mode.name,
-    description: mode.description,
-  }));
+  return normalizeZCodeTaskMode(mode) ?? "agent";
 }
 
 function fromZCodeGoal(goal: unknown): ZCodeTaskGoal {

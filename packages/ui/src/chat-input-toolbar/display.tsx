@@ -32,14 +32,7 @@ import {
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import {
-  ChevronDownIcon,
-  HandIcon,
-  NotepadText,
-  ShieldAlertIcon,
-  ShieldCheckIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronDownIcon, NotepadText, ShieldCheckIcon, type LucideIcon } from "lucide-react";
 import { ZCODE_MODE_OPTION_DESCRIPTION_IDS, ZCODE_MODE_OPTION_LABEL_IDS } from "./display-help.js";
 import { RollingToolbarLabel } from "@/chat-input-toolbar/RollingToolbarLabel.js";
 
@@ -199,24 +192,10 @@ function getConfigOptionEntryDescription(
   return entry.description;
 }
 
-function isHighPermissionModeValue(value: unknown): boolean {
-  return value === "yolo";
-}
-
 export function resolveModeOptionIcon(value: unknown): LucideIcon {
-  if (isHighPermissionModeValue(value)) {
-    return ShieldAlertIcon;
-  }
-
-  // build 对应常规确认模式，使用确认图标。
-  if (typeof value === "string" && value.toLocaleLowerCase() === "build") return HandIcon;
+  // 计划模式只用 NotepadText；agent 沿用「已授权直接执行」的确认图标。
   if (typeof value === "string" && value.toLocaleLowerCase() === "plan") return NotepadText;
-
-  if (typeof value === "string" && /^(auto|agent|autoEdit|edit)$/i.test(value)) {
-    return ShieldCheckIcon;
-  }
-
-  return HandIcon;
+  return ShieldCheckIcon;
 }
 
 export function ConfigSelect({
@@ -291,21 +270,9 @@ export function ConfigSelect({
 
   const shouldUseToolbarFloatingSelect =
     option.category === "mode" || option.category === "thought_level";
-  const shouldShowHighPermissionModeIcon =
-    option.category === "mode" && isHighPermissionModeValue(option.currentValue);
   const ResolvedLeadingIcon =
     option.category === "mode" ? resolveModeOptionIcon(option.currentValue) : LeadingIcon;
-  const resolvedTriggerClassName = cn(
-    triggerClassName,
-    shouldShowHighPermissionModeIcon &&
-      // 高权限模式需要在工具栏中持续保持 warning 文字颜色，避免用户忽略当前风险级别。
-      // 图标只负责替换为 shield-alert，颜色状态仍由 trigger 统一承载，保证 hover/展开态不闪回默认色。
-      "text-warning hover:text-warning aria-expanded:text-warning",
-  );
-  const resolvedLeadingIconClassName = cn(
-    "pointer-events-none size-4 text-current",
-    shouldShowHighPermissionModeIcon && "text-warning",
-  );
+  const resolvedTriggerClassName = cn(triggerClassName);
 
   const selectContentProps = shouldUseToolbarFloatingSelect
     ? {
@@ -363,7 +330,7 @@ export function ConfigSelect({
           data-testid={triggerTestId}
         >
           {ResolvedLeadingIcon ? (
-            <ResolvedLeadingIcon className={resolvedLeadingIconClassName} />
+            <ResolvedLeadingIcon className="pointer-events-none size-4 text-current" />
           ) : null}
           <span className={labelVisibilityClassName}>
             {/* mode 菜单项现在是“图标 + 标题 + 描述”的复合内容。

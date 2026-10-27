@@ -346,7 +346,7 @@ export function createAgentConversationTransport(
         config?: { planEnabled?: boolean };
         firstInput?: { planEnabled?: boolean };
       };
-      // 旧 Host 会剥掉未知字段；不能把 yolo + Plan 错发成完全访问执行。
+      // 旧 Host 会剥掉未知字段；不能把任意模式 + Plan 错发成直接执行。
       if (
         hello.capabilities.independentPlanState !== true &&
         (payload.planEnabled || payload.config?.planEnabled || payload.firstInput?.planEnabled)

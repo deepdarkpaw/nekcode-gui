@@ -4177,14 +4177,10 @@ const enUS: Record<string, string> = {
 
   // Modes
   "mode.plan": "Plan",
-  "mode.label.glm.build": "Ask before changes",
-  "mode.label.glm.edit": "Edit automatically",
-  "mode.label.glm.plan": "Plan mode",
-  "mode.label.glm.yolo": "Full access",
-  "mode.description.glm.build": "Ask before file changes.",
-  "mode.description.glm.edit": "Edit files automatically.",
-  "mode.description.glm.plan": "Plan before editing.",
-  "mode.description.glm.yolo": "Run with fewer confirmations.",
+  "mode.label.agent": "Agent",
+  "mode.label.plan": "Plan",
+  "mode.description.agent": "Edit files and run commands to finish the task.",
+  "mode.description.plan": "Plan before editing.",
   "todo.panel.title": "Todo",
   "todo.panel.currentTask": "Current task",
   "todo.panel.completed": "Todo completed",

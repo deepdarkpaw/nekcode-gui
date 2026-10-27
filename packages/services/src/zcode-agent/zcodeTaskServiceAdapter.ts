@@ -28,6 +28,7 @@ import {
   forgetZCodeToolProjectionMetadata,
   generateTraceId,
   getZCodeGoalActiveIterationCount,
+  normalizeZCodeTaskMode,
   getZCodeGoalIterationByAssistantMessageId,
   getZCodeUserVisibleMessages,
   isMainAgentToolProjectionSource,
@@ -1162,25 +1163,11 @@ export function createZCodeTaskServiceAdapter(
     });
   }
 
-  /**
-   * session/setMode → v4 switchCollaborationMode。
-   * auto 例外保真：v4 命令值域刻意排除 auto（「auto 非用户可切，不进 UI 命令面」，
-   * command.ts 裁决），而旧协议 ZCodeSessionMode 含 auto 且旧 op 接受它——为 UI 行为
-   * 零变化，auto 继续走旧 op，其余值一律 v4 原生。过渡归宿 = auto 语义在 v4 侧裁决后收口。
-   */
+  /** session/setMode → v4 switchCollaborationMode（值域与 nek 同为 agent / plan）。 */
   async function switchCollaborationModeViaProtocol(
     target: TaskTarget,
     mode: ZCodeSessionMode,
   ): Promise<void> {
-    if (mode === "auto") {
-      await options.zcodeAgentService.setMode({
-        workspacePath: target.workspacePath,
-        workspaceIdentity: target.workspaceIdentity,
-        sessionId: target.taskId,
-        mode,
-      });
-      return;
-    }
     await sendConfigCasCommandV4(
       target,
       "switchCollaborationMode",
@@ -2682,7 +2669,7 @@ export function createZCodeTaskServiceAdapter(
       // sendHostCasCommandV4）。v4 handler 不发旧 state.updated，观察端一致性与桌面
       // v4 工具条切换同批（读路径 v4 store 收口）；发起端由下方 resumeSnapshot 保真。
       const target = getTaskTarget(params.taskId);
-      await switchCollaborationModeViaProtocol(target, toZCodeMode(params.mode) ?? "build");
+      await switchCollaborationModeViaProtocol(target, toZCodeMode(params.mode) ?? "agent");
       const snapshot = await resumeSnapshot(target);
       await syncTaskIndexSnapshot(snapshot);
     },
@@ -2722,7 +2709,7 @@ export function createZCodeTaskServiceAdapter(
       } else if (params.configId === MODE_CONFIG_ID) {
         await switchCollaborationModeViaProtocol(
           target,
-          toZCodeMode(params.value as ZCodeTaskMode) ?? "build",
+          toZCodeMode(params.value as ZCodeTaskMode) ?? "agent",
         );
       }
       const snapshot = await resumeSnapshot(target);
@@ -2781,7 +2768,7 @@ export function createZCodeTaskServiceAdapter(
         );
       }
       if (params.mode?.trim()) {
-        await switchCollaborationModeViaProtocol(target, toZCodeMode(params.mode) ?? "build");
+        await switchCollaborationModeViaProtocol(target, toZCodeMode(params.mode) ?? "agent");
       }
       const snapshot = await resumeSnapshot(target);
       await syncTaskIndexSnapshot(snapshot);
@@ -3236,28 +3223,13 @@ function parseModelPickerValue(value: string): ModelSelection {
   return parseSharedModelSelection(value);
 }
 
+/** 任务模式 → v4 session 模式。旧持久化值先按 agent / plan 归一，未知值交出 undefined。 */
 function toZCodeMode(mode: ZCodeTaskMode | undefined): ZCodeSessionMode | undefined {
-  switch (mode) {
-    case "plan":
-      return "plan";
-    case "edit":
-      // automation UI 保存的“自动编辑”使用 canonical edit。旧映射漏掉该值，
-      // 调用方的 ?? build 会把权限模式静默降级成“变更前确认”。
-      return "edit";
-    case "yolo":
-      return "yolo";
-    case "auto":
-      return "auto";
-    case "build":
-    case "autoEdit":
-      return "build";
-    default:
-      return undefined;
-  }
+  return normalizeZCodeTaskMode(mode);
 }
 
 function fromZCodeMode(mode: ZCodeSessionMode): ZCodeTaskMode {
-  return mode === "build" ? "build" : mode;
+  return normalizeZCodeTaskMode(mode) ?? "agent";
 }
 
 function addSessionForkSnapshotFallback(
