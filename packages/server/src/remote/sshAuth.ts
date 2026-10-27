@@ -1,10 +1,10 @@
-import type { ConnectConfig } from "ssh2";
+import { utils as ssh2Utils, type ConnectConfig } from "ssh2";
 
 export const SSH_READY_TIMEOUT_MS = 60_000;
 export const SSH_KEEPALIVE_INTERVAL_MS = 15_000;
 export const SSH_KEEPALIVE_COUNT_MAX = 3;
 
-interface SSHConnectConfigInput {
+export interface SSHConnectConfigInput {
   host: string;
   port?: number;
   username: string;
@@ -12,6 +12,7 @@ interface SSHConnectConfigInput {
   passphrase?: string;
   password?: string;
   agent?: string;
+  askPassword?: () => Promise<string | undefined> | string | undefined;
   /**
    * 主机密钥校验器（TOFU known_hosts，见 sshKnownHosts.ts）。
    * 不提供时 ssh2 接受任意主机密钥——中间人可冒充目标主机骗取凭据，\   * 因此正式连接链路必须注入；仅测试与明确无需校验的场景才留空。
@@ -36,11 +37,11 @@ function isHostKeyVerificationDeniedMessage(message: string): boolean {
 
 export function buildSSHConnectConfig(input: SSHConnectConfigInput): ConnectConfig {
   const hasPassword = typeof input.password === "string" && input.password.length > 0;
+  const hasPasswordCallback = typeof input.askPassword === "function";
 
-  // 密码登录场景里如果无条件带上 SSH_AUTH_SOCK，ssh2 会先走 agent 公钥尝试。
-  // 某些主机 MaxAuthTries 很小，公钥阶段就会把认证次数耗尽，导致正确密码也无法进入认证。
-  // 这里改成“显式传入 agent 才启用”；否则密码模式默认禁用隐式 agent。
-  const resolvedAgent = input.agent ?? (hasPassword ? undefined : process.env["SSH_AUTH_SOCK"]);
+  // 用户显式给了密码时从认证候选中移除 agent，避免公钥尝试耗尽 MaxAuthTries；
+  // 没有密码时仍优先把 agent 交给 ssh2，再回退到私钥和 keyboard-interactive。
+  const resolvedAgent = hasPassword ? undefined : (input.agent ?? process.env["SSH_AUTH_SOCK"]);
 
   return {
     host: input.host,
@@ -60,7 +61,7 @@ export function buildSSHConnectConfig(input: SSHConnectConfigInput): ConnectConf
     keepaliveCountMax: SSH_KEEPALIVE_COUNT_MAX,
     // 一些 SSH 服务端只开启 keyboard-interactive（challenge-response）而关闭 plain password。
     // 开启 tryKeyboard + 交互回调后，同一份密码可以覆盖这类主机，避免“命令行可登录、应用里认证失败”。
-    tryKeyboard: hasPassword,
+    tryKeyboard: hasPassword || hasPasswordCallback,
   };
 }
 
@@ -78,6 +79,69 @@ export function createKeyboardInteractiveResponder(password?: string) {
     }
 
     finish(prompts.map(() => password));
+  };
+}
+
+export function createAsyncKeyboardInteractiveResponder(
+  askPassword: () => Promise<string | undefined> | string | undefined,
+) {
+  return (
+    _name: string,
+    _instructions: string,
+    _lang: string,
+    prompts: Array<{ prompt: string; echo: boolean }>,
+    finish: (responses: string[]) => void,
+  ) => {
+    if (prompts.length === 0) {
+      finish([]);
+      return;
+    }
+    void Promise.resolve(askPassword()).then((password) => {
+      finish(password ? prompts.map(() => password) : []);
+    });
+  };
+}
+
+export interface SSHAuthResolutionInput {
+  privateKey?: string | Buffer;
+  privateKeyPassphrase?: string;
+  password?: string;
+  agent?: string;
+  askPassphrase?: (privateKeyPath?: string) => Promise<string | undefined> | string | undefined;
+  askPassword?: () => Promise<string | undefined> | string | undefined;
+  privateKeyPath?: string;
+}
+
+export interface SSHAuthResolution {
+  privateKeyPassphrase?: string;
+  password?: string;
+  agent?: string;
+}
+
+function isEncryptedPrivateKey(privateKey: string | Buffer | undefined): boolean {
+  if (!privateKey) return false;
+  const text = privateKey.toString("utf8");
+  if (/ENCRYPTED|Proc-Type:\s*4,ENCRYPTED/iu.test(text)) return true;
+  try {
+    const parsed = ssh2Utils.parseKey(privateKey);
+    return parsed instanceof Error && isMissingPrivateKeyPassphraseMessage(parsed.message);
+  } catch {
+    return false;
+  }
+}
+
+/** 解析认证候选；显式密码会关闭隐式 agent，私钥口令只在确认需要时询问。 */
+export async function resolveSSHAuthentication(
+  input: SSHAuthResolutionInput,
+): Promise<SSHAuthResolution> {
+  if (input.password) return { password: input.password };
+  let privateKeyPassphrase = input.privateKeyPassphrase;
+  if (!privateKeyPassphrase && isEncryptedPrivateKey(input.privateKey) && input.askPassphrase) {
+    privateKeyPassphrase = await input.askPassphrase(input.privateKeyPath);
+  }
+  return {
+    privateKeyPassphrase,
+    agent: input.agent ?? process.env["SSH_AUTH_SOCK"],
   };
 }
 

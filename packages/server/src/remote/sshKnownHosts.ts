@@ -46,7 +46,30 @@ export function getSSHKnownHostsPath(): string {
 
 /** 主机公钥指纹：sha256(原始主机公钥) 的 hex。稳定、可复算，不引入外部格式依赖。 */
 export function computeHostKeyFingerprint(key: Buffer): string {
-  return createHash(HOST_KEY_DIGEST_ALGORITHM).update(key).digest("hex");
+  return `SHA256:${createHash(HOST_KEY_DIGEST_ALGORITHM).update(key).digest("base64").replace(/=+$/u, "")}`;
+}
+
+function readHostKeyType(key: Buffer): string {
+  if (key.length < 4) return "unknown";
+  const length = key.readUInt32BE(0);
+  if (length <= 0 || length > key.length - 4) return "unknown";
+  return key.subarray(4, 4 + length).toString("ascii") || "unknown";
+}
+
+function parseKnownHostIdentity(
+  hostKey: string,
+): Pick<KnownHostEntry, "host" | "port" | "username"> {
+  try {
+    const parsed: unknown = JSON.parse(hostKey);
+    if (!Array.isArray(parsed)) return {};
+    return {
+      ...(typeof parsed[1] === "string" ? { host: parsed[1] } : {}),
+      ...(typeof parsed[2] === "number" ? { port: parsed[2] } : {}),
+      ...(typeof parsed[3] === "string" ? { username: parsed[3] } : {}),
+    };
+  } catch {
+    return {};
+  }
 }
 
 function readKnownHostsFile(value: unknown): KnownHostsFile | null {
@@ -105,6 +128,18 @@ export interface SSHHostKeyStoreOptions {
   now?: () => Date;
 }
 
+export interface KnownHostEntry extends KnownHostRecord {
+  hostKey: string;
+  host?: string;
+  port?: number;
+  username?: string;
+}
+
+export interface VerifyHostKeyOptions {
+  /** 首次见到密钥时只判定，不落盘；由确认回调决定是否调用 remember。 */
+  recordFirstUse?: boolean;
+}
+
 /**
  * 主机密钥存储。filePath 可注入以便测试落到临时目录；默认跟随应用配置根
  * （<数据根>/.zcodium-exp/v2/ssh/known-hosts.json），新目录首次使用自动创建，
@@ -160,7 +195,11 @@ export class SSHHostKeyStore {
   }
 
   /** 三方判定；首次连接与匹配都会刷新落库（lastSeenAt）。存储任何故障都 fail-closed。 */
-  async verify(target: SSHConnectOptions, fingerprint: string): Promise<HostKeyVerdict> {
+  async verify(
+    target: SSHConnectOptions,
+    fingerprint: string,
+    options: VerifyHostKeyOptions = {},
+  ): Promise<HostKeyVerdict> {
     const hostKey = buildSshRemoteHostKey(target);
 
     let hosts: Record<string, KnownHostRecord>;
@@ -192,6 +231,9 @@ export class SSHHostKeyStore {
         firstSeenAt: nowIso,
         lastSeenAt: nowIso,
       };
+      if (options.recordFirstUse === false) {
+        return { outcome: "first-use", record };
+      }
       try {
         await this.persist({ ...hosts, [hostKey]: record });
       } catch (error) {
@@ -226,12 +268,69 @@ export class SSHHostKeyStore {
     }
     return { outcome: "match", record: refreshed };
   }
+
+  /** 在用户确认后记录一个首次出现的指纹；密钥已经变更时仍然拒绝覆盖。 */
+  async remember(target: SSHConnectOptions, fingerprint: string): Promise<KnownHostRecord> {
+    const verdict = await this.verify(target, fingerprint);
+    if (verdict.outcome === "reject") {
+      throw new Error(
+        verdict.reason === "changed" ? "SSH 主机密钥已变更，不能覆盖已有记录" : verdict.detail,
+      );
+    }
+    return verdict.record;
+  }
+
+  async listKnownHosts(): Promise<KnownHostEntry[]> {
+    const file = await this.load();
+    if (!file) throw new Error(`known_hosts 无法解析：${this.filePath}`);
+    return Object.entries(file.hosts).map(([hostKey, record]) => ({
+      hostKey,
+      ...parseKnownHostIdentity(hostKey),
+      ...record,
+    }));
+  }
+
+  async removeKnownHost(targetOrHostKey: SSHConnectOptions | string): Promise<boolean> {
+    const file = await this.load();
+    if (!file) throw new Error(`known_hosts 无法解析：${this.filePath}`);
+    const hostKey =
+      typeof targetOrHostKey === "string"
+        ? targetOrHostKey
+        : buildSshRemoteHostKey(targetOrHostKey);
+    if (!(hostKey in file.hosts)) return false;
+    const hosts = { ...file.hosts };
+    delete hosts[hostKey];
+    await this.persist(hosts);
+    return true;
+  }
+}
+
+export async function listKnownHosts(
+  options: SSHHostKeyStoreOptions = {},
+): Promise<KnownHostEntry[]> {
+  return new SSHHostKeyStore(options).listKnownHosts();
+}
+
+export async function removeKnownHost(
+  targetOrHostKey: SSHConnectOptions | string,
+  options: SSHHostKeyStoreOptions = {},
+): Promise<boolean> {
+  return new SSHHostKeyStore(options).removeKnownHost(targetOrHostKey);
 }
 
 export interface SSHHostKeyRejection {
   hostKey: string;
-  reason: "changed" | "store-error";
+  reason: "changed" | "store-error" | "user-declined";
   detail: string;
+  expectedFingerprint?: string;
+  receivedFingerprint?: string;
+}
+
+export interface HostKeyConfirmation {
+  host: string;
+  port: number;
+  keyType: string;
+  fingerprint: string;
 }
 
 /**
@@ -243,10 +342,18 @@ export function formatHostKeyRejectionError(
   filePath: string,
 ): Error {
   if (rejection.reason === "changed") {
+    const fingerprints =
+      rejection.expectedFingerprint && rejection.receivedFingerprint
+        ? `旧指纹=${rejection.expectedFingerprint}，新指纹=${rejection.receivedFingerprint}。`
+        : "";
     return new Error(
-      `SSH 主机密钥校验失败：本次连接的主机密钥与首次连接时记录的不一致，已拒绝连接以防中间人攻击。` +
+      `SSH 主机密钥校验失败：${fingerprints}本次连接的主机密钥与记录不一致，已拒绝连接以防中间人攻击。` +
         `若该服务器确实更换了主机密钥，请删除 ${filePath} 中此主机的记录后重试。`,
     );
+  }
+
+  if (rejection.reason === "user-declined") {
+    return new Error(`SSH 主机密钥未获用户确认，已拒绝连接：${rejection.detail}`);
   }
 
   return new Error(`SSH 主机密钥记录不可用，已拒绝连接：${rejection.detail}`);
@@ -260,24 +367,62 @@ export function formatHostKeyRejectionError(
 export function createSSHHostVerifier(params: {
   store: SSHHostKeyStore;
   target: SSHConnectOptions;
+  requireHostKeyConfirmation?: boolean;
+  confirmHostKey?: (confirmation: HostKeyConfirmation) => Promise<boolean> | boolean;
   onRejection: (rejection: SSHHostKeyRejection) => void;
 }): (key: Buffer, verify: (valid: boolean) => void) => void {
   const { store, target, onRejection } = params;
   const hostKey = buildSshRemoteHostKey(target);
+  const requireConfirmation = params.requireHostKeyConfirmation ?? Boolean(params.confirmHostKey);
 
   return (key, verify) => {
     void (async () => {
-      const verdict = await store.verify(target, computeHostKeyFingerprint(key));
+      const fingerprint = computeHostKeyFingerprint(key);
+      const verdict = await store.verify(target, fingerprint, {
+        recordFirstUse: !requireConfirmation || !params.confirmHostKey,
+      });
       if (verdict.outcome === "reject") {
         const detail =
           verdict.reason === "changed"
-            ? `记录指纹 ${verdict.expected.slice(0, 16)}…，本次 ${verdict.received.slice(0, 16)}…`
+            ? `旧指纹=${verdict.expected}，新指纹=${verdict.received}`
             : verdict.detail;
-        onRejection({ hostKey, reason: verdict.reason, detail });
+        onRejection({
+          hostKey,
+          reason: verdict.reason,
+          detail,
+          expectedFingerprint: verdict.reason === "changed" ? verdict.expected : undefined,
+          receivedFingerprint: verdict.reason === "changed" ? verdict.received : undefined,
+        });
         verify(false);
         return;
       }
+      if (verdict.outcome === "first-use" && requireConfirmation && params.confirmHostKey) {
+        const accepted = await params.confirmHostKey({
+          host: target.host,
+          port: target.port ?? 22,
+          keyType: readHostKeyType(key),
+          fingerprint,
+        });
+        if (!accepted) {
+          onRejection({
+            hostKey,
+            reason: "user-declined",
+            detail: `用户拒绝记录主机密钥 ${fingerprint}`,
+            receivedFingerprint: fingerprint,
+          });
+          verify(false);
+          return;
+        }
+        await store.remember(target, fingerprint);
+      }
       verify(true);
-    })();
+    })().catch((error: unknown) => {
+      onRejection({
+        hostKey,
+        reason: "store-error",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      verify(false);
+    });
   };
 }
