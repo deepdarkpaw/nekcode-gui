@@ -253,11 +253,8 @@ export class NekConfigRuntime {
   ): Promise<NekReloadOutcome> {
     try {
       const result = await call();
-      return {
-        reloaded: result.deferred ? 0 : 1,
-        deferred: result.deferred || busy ? 1 : 0,
-        diagnostics: result.diagnostics,
-      };
+      const queued = result.deferred || busy;
+      return { reloaded: queued ? 0 : 1, deferred: queued ? 1 : 0, diagnostics: result.diagnostics };
     } catch (error) {
       return {
         reloaded: 0,
