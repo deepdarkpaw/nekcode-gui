@@ -1,7 +1,6 @@
 import type { NekSessionSummary } from "@zcode/shared/nek-protocol";
 import type {
   NekSessionIndexEntry,
-  NekSessionIndexItem,
   NekSessionIndexListSource,
   NekSessionIndexStorage,
   NekSessionIndexSyncOptions,
@@ -85,7 +84,10 @@ export class NekSessionIndexSyncer {
     this.foregroundSessionPath = sessionPath;
   }
 
-  async markTurnCompleted(sessionPath: string, foregroundSessionPath = this.foregroundSessionPath): Promise<void> {
+  async markTurnCompleted(
+    sessionPath: string,
+    foregroundSessionPath = this.foregroundSessionPath,
+  ): Promise<void> {
     if (sessionPath === foregroundSessionPath) return;
     await this.update(sessionPath, { unread: true });
   }
@@ -136,6 +138,8 @@ export class NekSessionIndexSyncer {
   }
 }
 
-export function sessionSummaryMap(summaries: readonly NekSessionSummary[]): Map<string, NekSessionSummary> {
+export function sessionSummaryMap(
+  summaries: readonly NekSessionSummary[],
+): Map<string, NekSessionSummary> {
   return new Map(summaries.map((summary) => [summary.path, summary]));
 }

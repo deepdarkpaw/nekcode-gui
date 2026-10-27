@@ -1,6 +1,10 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { NekSessionIndexDocument, NekSessionIndexEntry, NekSessionIndexStorage } from "./types.js";
+import type {
+  NekSessionIndexDocument,
+  NekSessionIndexEntry,
+  NekSessionIndexStorage,
+} from "./types.js";
 
 const EMPTY_DOCUMENT: NekSessionIndexDocument = { version: 1, entries: [] };
 
@@ -32,7 +36,10 @@ export function normalizeNekSessionIndex(
 export class MemoryNekSessionIndexStorage implements NekSessionIndexStorage {
   private document: NekSessionIndexDocument;
 
-  constructor(initial: NekSessionIndexDocument = EMPTY_DOCUMENT, private readonly maxEntries = 5_000) {
+  constructor(
+    initial: NekSessionIndexDocument = EMPTY_DOCUMENT,
+    private readonly maxEntries = 5_000,
+  ) {
     this.document = normalizeNekSessionIndex(initial, maxEntries);
   }
 
@@ -71,7 +78,8 @@ export class JsonNekSessionIndexStorage implements NekSessionIndexStorage {
       const text = await readFile(this.path, "utf8");
       return normalizeNekSessionIndex(JSON.parse(text), this.maxEntries);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { ...EMPTY_DOCUMENT, entries: [] };
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { ...EMPTY_DOCUMENT, entries: [] };
       throw error;
     }
   }

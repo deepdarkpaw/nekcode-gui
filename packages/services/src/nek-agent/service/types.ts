@@ -1,8 +1,5 @@
 import type { GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
-import type {
-  ConversationSnapshot,
-  ConversationTopicFrame,
-} from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationSnapshot, ConversationTopicFrame } from "@zcode/shared/zcode-protocol-v4";
 import type {
   NekAgentMessage,
   NekGuiInfo,
@@ -18,7 +15,6 @@ import type {
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekRpcProcessExit } from "../nekRpcClient.js";
-import type { NekRpcClientOptions } from "../nekRpcClient.js";
 import type { NekProcessPool } from "../nekProcessPool.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 
@@ -131,7 +127,8 @@ export interface NekSessionMetadata {
 
 export type NekModelSelection = { provider: string; modelId: string };
 export type NekMode = "agent" | "plan";
-export type NekThoughtLevel = NekThinkingLevel | (string & {});
+/** 思考等级按 nek 的取值收窄，避免把非法等级写上线。 */
+export type NekThoughtLevel = NekThinkingLevel;
 
 export function isNekState(value: unknown): value is NekState {
   if (typeof value !== "object" || value === null) return false;

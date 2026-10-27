@@ -1,29 +1,25 @@
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type {
   NekAgentMessage,
-  NekGuiInfo,
   NekRpcEvent,
-  NekRpcSessionState,
   NekSessionEntry,
   NekSessionSnapshot,
-  NekState,
 } from "@zcode/shared/nek-protocol";
-import type { GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import { NekConversationProjector } from "../nekConversationProjector.js";
-import type { NekProcessPool } from "../nekProcessPool.js";
-import { createNekRpcProcess, type NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js";
+import { NekProcessPool } from "../nekProcessPool.js";
+import { createNekRpcProcess, type NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
+import { isNekState } from "./types.js";
 import type {
   NekAgentServiceEvent,
   NekAgentServiceOptions,
   NekSession,
+  NekSessionPhase,
   NekSessionProcessCreateOptions,
   NekSessionRecord,
-  NekSessionPhase,
   NekSessionResult,
 } from "./types.js";
-import { isNekState, type NekMode } from "./types.js";
 
 const LONG_RUNNING_COMMANDS = [
   "compact",
@@ -40,53 +36,79 @@ const LONG_RUNNING_COMMANDS = [
   "mcp_test",
 ] as const;
 
-export interface NekAgentServiceRuntimeHost {
-  config: GuiRuntimeConfig;
-  logger: NekAgentServiceOptions["logger"];
-  extensionUi: NekExtensionUiHandler | undefined;
-  askProjectTrust: NekAgentServiceOptions["askProjectTrust"];
-  defaultCwd: string;
-  pool: NekProcessPool<NekRpcProcess>;
-  pendingCreates: Map<string, NekSessionProcessCreateOptions>;
-  sessions: Map<string, NekSessionRecord>;
-  byPath: Map<string, NekSessionRecord>;
-  disposed: boolean;
-  emit(event: NekAgentServiceEvent): void;
-  setPhase(record: NekSessionRecord, phase: NekSessionPhase): void;
-  publicSession(record: NekSessionRecord): NekSession;
-  clientOptions(): Omit<NekRpcClientOptions, "logger">;
-  attachProcess(record: NekSessionRecord, process: NekRpcProcess): void;
-  detachProcess(record: NekSessionRecord): void;
-  handleEvent(record: NekSessionRecord, event: NekRpcEvent): void;
-  handleProcessExit(record: NekSessionRecord, exit: NekRpcProcessExit): void;
-  createProjector(record: NekSessionRecord): NekConversationProjector;
-  removeRecord(record: NekSessionRecord): void;
-  createRecord(record: NekSessionRecord): NekSessionRecord;
-  result(record: NekSessionRecord): NekSessionResult;
-}
+/**
+ * 会话记录表、进程池接线、事件路由与投影器装载。
+ *
+ * 这一层只处理"一个会话记录如何挂上 nek 进程并保持状态"，不暴露对外的命令方法；
+ * 对外 API 见 `NekAgentService`，命令实现见 `nekAgentServiceCommands.ts`。
+ */
+export abstract class NekAgentServiceRuntimeBase {
+  protected readonly config: GuiRuntimeConfig;
+  protected readonly logger: NekAgentServiceOptions["logger"];
+  protected readonly extensionUi: NekExtensionUiHandler | undefined;
+  protected readonly askProjectTrust: NekAgentServiceOptions["askProjectTrust"];
+  protected readonly defaultCwd: string;
+  protected readonly pool: NekProcessPool<NekRpcProcess>;
+  protected readonly pendingCreates = new Map<string, NekSessionProcessCreateOptions>();
+  protected readonly sessions = new Map<string, NekSessionRecord>();
+  protected readonly byPath = new Map<string, NekSessionRecord>();
+  protected readonly listeners = new Set<(event: NekAgentServiceEvent) => void>();
+  protected disposed = false;
 
-export interface NekAgentServiceRuntimeMethods {
-  createSessionProcess(request: NekSessionProcessCreateOptions, options: NekAgentServiceOptions): Promise<NekRpcProcess>;
-  clientOptions(): Omit<NekRpcClientOptions, "logger">;
-  resolveProjectApproval(cwd: string): Promise<boolean>;
-  acquireProcess(record: NekSessionRecord, request: NekSessionProcessCreateOptions): Promise<NekRpcProcess>;
-  attachProcess(record: NekSessionRecord, process: NekRpcProcess): void;
-  detachProcess(record: NekSessionRecord): void;
-  initializeProcess(record: NekSessionRecord, process: NekRpcProcess): Promise<void>;
-  refreshProcessSnapshot(record: NekSessionRecord): Promise<void>;
-  createProjector(record: NekSessionRecord): NekConversationProjector;
-  openLockedSnapshot(snapshot: NekSessionSnapshot, cwd?: string): NekSessionResult;
-  handleEvent(record: NekSessionRecord, event: NekRpcEvent): void;
-  handleProcessExit(record: NekSessionRecord, exit: NekRpcProcessExit): void;
-  createRecord(record: NekSessionRecord): NekSessionRecord;
-  removeRecord(record: NekSessionRecord): void;
-  result(record: NekSessionRecord): NekSessionResult;
-  setPhase(record: NekSessionRecord, phase: NekSessionPhase): void;
-  publicSession(record: NekSessionRecord): NekSession;
-}
+  constructor(options: NekAgentServiceOptions) {
+    this.config = options.runtimeConfig ?? DEFAULT_GUI_RUNTIME_CONFIG;
+    this.logger = options.logger;
+    this.extensionUi = options.extensionUi;
+    this.askProjectTrust = options.askProjectTrust;
+    this.defaultCwd = options.cwd ?? process.cwd();
+    this.pool =
+      options.processPool ??
+      new NekProcessPool<NekRpcProcess>({
+        maxSessions: this.config.nek.maxSessionProcesses,
+        idleTimeoutMs: this.config.nek.idleMinutes * 60_000,
+        createSessionProcess: async (sessionKey) => {
+          const request = this.pendingCreates.get(sessionKey);
+          if (!request) throw new Error(`no create options for nek session ${sessionKey}`);
+          return await this.createSessionProcess(request, options);
+        },
+        createControlProcess: async () => {
+          if (options.createControlProcess) return await options.createControlProcess();
+          if (!options.guiInfo) throw new Error("nek guiInfo or createControlProcess is required");
+          return createNekRpcProcess({
+            guiInfo: options.guiInfo,
+            cwd: this.defaultCwd,
+            control: true,
+            client: this.clientOptions(),
+            logger: this.logger,
+          });
+        },
+        logger: this.logger,
+      });
+  }
 
-export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
-  async createSessionProcess(this: NekAgentServiceRuntimeHost, request, options) {
+  onEvent(listener: (event: NekAgentServiceEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  protected emit(event: NekAgentServiceEvent): void {
+    for (const listener of Array.from(this.listeners)) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger?.warn("nek service listener threw", error);
+      }
+    }
+  }
+
+  protected assertAlive(): void {
+    if (this.disposed) throw new Error("nek agent service has been disposed");
+  }
+
+  protected async createSessionProcess(
+    request: NekSessionProcessCreateOptions,
+    options: NekAgentServiceOptions,
+  ): Promise<NekRpcProcess> {
     if (options.createSessionProcess) return await options.createSessionProcess(request);
     if (!options.guiInfo) throw new Error("nek guiInfo or createSessionProcess is required");
     return createNekRpcProcess({
@@ -97,14 +119,15 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
       client: this.clientOptions(),
       logger: this.logger,
     });
-  },
+  }
 
-  clientOptions(this: NekAgentServiceRuntimeHost) {
+  protected clientOptions(): Omit<NekRpcClientOptions, "logger"> {
     const timeouts: Record<string, number> = {
       prompt: this.config.timeouts.promptPreflightMs,
       default: this.config.timeouts.commandMs,
     };
-    for (const command of LONG_RUNNING_COMMANDS) timeouts[command] = this.config.timeouts.longRunningMs;
+    for (const command of LONG_RUNNING_COMMANDS)
+      timeouts[command] = this.config.timeouts.longRunningMs;
     return {
       defaultTimeoutMs: this.config.timeouts.commandMs,
       timeouts,
@@ -113,9 +136,10 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
       stderrMaxBytes: this.config.nek.stderrBufferKb * 1024,
       extensionUi: this.extensionUi,
     };
-  },
+  }
 
-  async resolveProjectApproval(this: NekAgentServiceRuntimeHost, cwd) {
+  /** 启动前询问项目信任：已有记录直接采用，没有记录时按 defaultProjectTrust 或注入的回调决定。 */
+  protected async resolveProjectApproval(cwd: string): Promise<boolean> {
     const control = await this.pool.ensureControl();
     const trust = await control.client.call({ type: "get_project_trust", cwd });
     if (trust.trusted !== null) return trust.trusted;
@@ -123,9 +147,12 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
     if (trust.defaultProjectTrust === "never") return false;
     if (!this.askProjectTrust) throw new Error(`project trust decision required for ${cwd}`);
     return await this.askProjectTrust({ trust, cwd });
-  },
+  }
 
-  async acquireProcess(this: NekAgentServiceRuntimeHost, record, request) {
+  protected async acquireProcess(
+    record: NekSessionRecord,
+    request: NekSessionProcessCreateOptions,
+  ): Promise<NekRpcProcess> {
     this.pendingCreates.set(record.key, request);
     try {
       const process = await this.pool.acquireSession(record.key);
@@ -134,35 +161,39 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
     } finally {
       this.pendingCreates.delete(record.key);
     }
-  },
+  }
 
-  attachProcess(this: NekAgentServiceRuntimeHost, record, process) {
+  protected attachProcess(record: NekSessionRecord, process: NekRpcProcess): void {
     if (record.process === process) return;
     this.detachProcess(record);
     record.process = process;
     record.readonly = false;
     record.detachEvents = process.client.onAnyEvent((event) => this.handleEvent(record, event));
     record.detachExit = process.client.onExit((exit) => this.handleProcessExit(record, exit));
-  },
+  }
 
-  detachProcess(record) {
+  protected detachProcess(record: NekSessionRecord): void {
     record.detachEvents?.();
     record.detachEvents = undefined;
     record.detachExit?.();
     record.detachExit = undefined;
     record.process = undefined;
-  },
+  }
 
-  async initializeProcess(this: NekAgentServiceRuntimeHost, record, process) {
+  protected async initializeProcess(
+    record: NekSessionRecord,
+    process: NekRpcProcess,
+  ): Promise<void> {
     const state = await process.client.call({ type: "get_state" });
     record.state = state;
     record.sessionId = state.sessionId || record.sessionId;
     record.path = state.sessionFile ?? record.path;
     if (record.path) this.byPath.set(record.path, record);
     if (state.isStreaming) this.setPhase(record, "running");
-  },
+  }
 
-  async refreshProcessSnapshot(this: NekAgentServiceRuntimeHost, record) {
+  /** 用 get_entries / get_state / get_session_stats 重建投影器快照。 */
+  protected async refreshProcessSnapshot(record: NekSessionRecord): Promise<void> {
     const process = record.process;
     if (!process) throw new Error(`nek session ${record.key} has no live process`);
     const [state, entries, stats, extension] = await Promise.all([
@@ -187,18 +218,22 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
     });
     projector.flushNow();
     this.setPhase(record, state.isStreaming ? "running" : "idle");
-  },
+  }
 
-  createProjector(this: NekAgentServiceRuntimeHost, record) {
+  protected createProjector(record: NekSessionRecord): NekConversationProjector {
     return new NekConversationProjector({
       sessionId: record.sessionId,
-      streamFlushIntervalMs: Math.max(1, Math.floor(1000 / this.config.events.streamFlushPerSecond)),
+      streamFlushIntervalMs: Math.max(
+        1,
+        Math.floor(1000 / this.config.events.streamFlushPerSecond),
+      ),
       maxWindowRows: this.config.events.eventBufferEntries,
       logger: this.logger,
     });
-  },
+  }
 
-  openLockedSnapshot(this: NekAgentServiceRuntimeHost, snapshot, cwd) {
+  /** 会话被外部进程占用时只读打开：不启动进程，只把快照装进投影器。 */
+  protected openLockedSnapshot(snapshot: NekSessionSnapshot, cwd?: string): NekSessionResult {
     const existing = this.byPath.get(snapshot.session.path);
     if (existing) this.removeRecord(existing);
     const record = this.createRecord({
@@ -220,9 +255,9 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
       title: snapshot.session.name,
     });
     return this.result(record);
-  },
+  }
 
-  handleEvent(this: NekAgentServiceRuntimeHost, record, event) {
+  protected handleEvent(record: NekSessionRecord, event: NekRpcEvent): void {
     record.projector?.handleEvent(event);
     switch (event.type) {
       case "agent_start":
@@ -232,11 +267,15 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
         this.setPhase(record, "idle");
         break;
       case "extension_ui_request":
-        if (event.method === "structured" || ["select", "confirm", "input", "editor"].includes(event.method))
+        if (
+          event.method === "structured" ||
+          ["select", "confirm", "input", "editor"].includes(event.method)
+        )
           this.setPhase(record, "waiting_input");
         break;
       case "extension_ui_cancel":
-        if (record.phase === "waiting_input") this.setPhase(record, record.state?.isStreaming ? "running" : "idle");
+        if (record.phase === "waiting_input")
+          this.setPhase(record, record.state?.isStreaming ? "running" : "idle");
         break;
       case "extension_error":
         this.setPhase(record, "error");
@@ -244,23 +283,23 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
       default:
         break;
     }
-  },
+  }
 
-  handleProcessExit(this: NekAgentServiceRuntimeHost, record, exit) {
+  protected handleProcessExit(record: NekSessionRecord, exit: NekRpcProcessExit): void {
     if (record.closing || this.disposed) return;
     this.detachProcess(record);
     this.setPhase(record, "error");
     this.emit({ type: "process_exit", session: this.publicSession(record), exit });
-  },
+  }
 
-  setPhase(this: NekAgentServiceRuntimeHost, record, phase) {
+  protected setPhase(record: NekSessionRecord, phase: NekSessionPhase): void {
     if (record.phase === phase) return;
     const previous = record.phase;
     record.phase = phase;
     this.emit({ type: "state", session: this.publicSession(record), previous, state: phase });
-  },
+  }
 
-  publicSession(record) {
+  protected publicSession(record: NekSessionRecord): NekSession {
     return {
       sessionKey: record.key,
       sessionId: record.sessionId,
@@ -272,23 +311,23 @@ export const nekAgentServiceRuntimeMethods: NekAgentServiceRuntimeMethods = {
       ...(record.process?.pid ? { processId: record.process.pid } : {}),
       ...(record.snapshot ? { snapshot: record.snapshot } : {}),
     };
-  },
+  }
 
-  createRecord(this: NekAgentServiceRuntimeHost, record) {
+  protected createRecord(record: NekSessionRecord): NekSessionRecord {
     this.sessions.set(record.key, record);
     if (record.path) this.byPath.set(record.path, record);
     return record;
-  },
+  }
 
-  removeRecord(this: NekAgentServiceRuntimeHost, record) {
+  protected removeRecord(record: NekSessionRecord): void {
     this.sessions.delete(record.key);
     if (record.path && this.byPath.get(record.path) === record) this.byPath.delete(record.path);
     record.projector?.dispose();
     this.detachProcess(record);
-  },
+  }
 
-  result(this: NekAgentServiceRuntimeHost, record) {
+  protected result(record: NekSessionRecord): NekSessionResult {
     if (!record.projector) throw new Error(`conversation is not loaded for ${record.key}`);
     return { ...this.publicSession(record), conversation: record.projector.snapshot() };
-  },
-};
+  }
+}

@@ -199,7 +199,10 @@ test("creates a session after project trust approval and passes --approve", asyn
   assert.equal(result.sessionId, "s1");
   assert.equal(result.readonly, false);
   assert.deepEqual(harness.approvals, [true]);
-  assert.deepEqual(harness.control.commands.map((command) => command.type), ["get_project_trust"]);
+  assert.deepEqual(
+    harness.control.commands.map((command) => command.type),
+    ["get_project_trust"],
+  );
   await harness.service.dispose();
 });
 
@@ -220,11 +223,25 @@ test("chooses prompt while idle and steer/follow_up while running, then aborts",
   await harness.service.sendPrompt({ sessionKey: key, message: "hello" });
   harness.sessions[0]!.emit({ type: "agent_start" });
   await harness.service.sendPrompt({ sessionKey: key, message: "now", streamingBehavior: "steer" });
-  await harness.service.sendPrompt({ sessionKey: key, message: "later", streamingBehavior: "followUp" });
+  await harness.service.sendPrompt({
+    sessionKey: key,
+    message: "later",
+    streamingBehavior: "followUp",
+  });
   await harness.service.abort(key);
   assert.deepEqual(
     harness.sessions[0]!.commands.map((command) => command.type),
-    ["get_state", "get_state", "get_entries", "get_session_stats", "extension_call", "prompt", "steer", "follow_up", "abort"],
+    [
+      "get_state",
+      "get_state",
+      "get_entries",
+      "get_session_stats",
+      "extension_call",
+      "prompt",
+      "steer",
+      "follow_up",
+      "abort",
+    ],
   );
   await harness.service.dispose();
 });
@@ -238,7 +255,10 @@ test("shares one projector for subscribers and replays a snapshot on resubscribe
   await harness.service.subscribeConversation(result.sessionKey, (frame) => second.push(frame));
   assert.equal(first.length, 1);
   assert.equal(second.length, 1);
-  harness.sessions[0]!.emit({ type: "message_start", message: { role: "user", content: "hi", timestamp: 1 } });
+  harness.sessions[0]!.emit({
+    type: "message_start",
+    message: { role: "user", content: "hi", timestamp: 1 },
+  });
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.ok(first.length >= 2);
   assert.ok(second.length >= 2);
