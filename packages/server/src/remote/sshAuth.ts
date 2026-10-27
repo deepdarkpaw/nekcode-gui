@@ -1,4 +1,4 @@
-import type { ConnectConfig } from "ssh2";
+import { utils as ssh2Utils, type ConnectConfig } from "ssh2";
 
 export const SSH_READY_TIMEOUT_MS = 60_000;
 export const SSH_KEEPALIVE_INTERVAL_MS = 15_000;
@@ -121,7 +121,13 @@ export interface SSHAuthResolution {
 function isEncryptedPrivateKey(privateKey: string | Buffer | undefined): boolean {
   if (!privateKey) return false;
   const text = privateKey.toString("utf8");
-  return /ENCRYPTED|Proc-Type:\s*4,ENCRYPTED/iu.test(text);
+  if (/ENCRYPTED|Proc-Type:\s*4,ENCRYPTED/iu.test(text)) return true;
+  try {
+    const parsed = ssh2Utils.parseKey(privateKey);
+    return parsed instanceof Error && isMissingPrivateKeyPassphraseMessage(parsed.message);
+  } catch {
+    return false;
+  }
 }
 
 /** 解析认证候选；显式密码会关闭隐式 agent，私钥口令只在确认需要时询问。 */

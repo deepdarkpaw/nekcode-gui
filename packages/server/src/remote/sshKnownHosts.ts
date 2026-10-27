@@ -56,6 +56,22 @@ function readHostKeyType(key: Buffer): string {
   return key.subarray(4, 4 + length).toString("ascii") || "unknown";
 }
 
+function parseKnownHostIdentity(
+  hostKey: string,
+): Pick<KnownHostEntry, "host" | "port" | "username"> {
+  try {
+    const parsed: unknown = JSON.parse(hostKey);
+    if (!Array.isArray(parsed)) return {};
+    return {
+      ...(typeof parsed[1] === "string" ? { host: parsed[1] } : {}),
+      ...(typeof parsed[2] === "number" ? { port: parsed[2] } : {}),
+      ...(typeof parsed[3] === "string" ? { username: parsed[3] } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
 function readKnownHostsFile(value: unknown): KnownHostsFile | null {
   if (typeof value !== "object" || value === null) {
     return null;
@@ -114,6 +130,9 @@ export interface SSHHostKeyStoreOptions {
 
 export interface KnownHostEntry extends KnownHostRecord {
   hostKey: string;
+  host?: string;
+  port?: number;
+  username?: string;
 }
 
 export interface VerifyHostKeyOptions {
@@ -264,7 +283,11 @@ export class SSHHostKeyStore {
   async listKnownHosts(): Promise<KnownHostEntry[]> {
     const file = await this.load();
     if (!file) throw new Error(`known_hosts 无法解析：${this.filePath}`);
-    return Object.entries(file.hosts).map(([hostKey, record]) => ({ hostKey, ...record }));
+    return Object.entries(file.hosts).map(([hostKey, record]) => ({
+      hostKey,
+      ...parseKnownHostIdentity(hostKey),
+      ...record,
+    }));
   }
 
   async removeKnownHost(targetOrHostKey: SSHConnectOptions | string): Promise<boolean> {

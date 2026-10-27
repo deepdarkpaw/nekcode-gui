@@ -58,7 +58,7 @@ export function computeSshConfigHost(
     .flatMap((value) => value.split(","))
     .map((value) => value.trim())
     .filter((value) => value.length > 0 && value !== "none");
-  const identitiesOnly = /^yes|true|on$/iu.test(
+  const identitiesOnly = /^(?:yes|true|on)$/iu.test(
     String(getComputedValue(computed, "IdentitiesOnly") ?? "no"),
   );
 
