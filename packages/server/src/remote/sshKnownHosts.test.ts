@@ -11,7 +11,11 @@ import {
   SSHHostKeyStore,
   type SSHHostKeyRejection,
 } from "./sshKnownHosts.js";
-import { buildSSHConnectConfig, normalizeSSHConnectError } from "./sshAuth.js";
+import {
+  buildSSHConnectConfig,
+  normalizeSSHConnectError,
+  resolveSSHAuthentication,
+} from "./sshAuth.js";
 
 const target: SSHConnectOptions = {
   kind: "ssh",
@@ -217,6 +221,29 @@ describe("sshAuth 接线", () => {
   it("其余 SSH 错误文案不受影响", () => {
     const error = normalizeSSHConnectError({ level: "client-authentication" });
     expect(error.message).toContain("认证失败");
+  });
+
+  it("显式密码关闭 agent，私钥口令通过注入回调获取", async () => {
+    const passwordAuth = await resolveSSHAuthentication({
+      password: "secret",
+      agent: "/tmp/agent.sock",
+    });
+    expect(passwordAuth.agent).toBeUndefined();
+    expect(passwordAuth.password).toBe("secret");
+
+    let asked = "";
+    const keyAuth = await resolveSSHAuthentication({
+      privateKey: "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+      askPassphrase: async (path) => {
+        asked = path ?? "";
+        return "passphrase";
+      },
+      privateKeyPath: "~/.ssh/id_ed25519",
+      agent: "/tmp/agent.sock",
+    });
+    expect(asked).toBe("~/.ssh/id_ed25519");
+    expect(keyAuth.privateKeyPassphrase).toBe("passphrase");
+    expect(keyAuth.agent).toBe("/tmp/agent.sock");
   });
 });
 

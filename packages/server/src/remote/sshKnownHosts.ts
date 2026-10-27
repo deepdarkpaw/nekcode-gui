@@ -329,6 +329,10 @@ export function formatHostKeyRejectionError(
     );
   }
 
+  if (rejection.reason === "user-declined") {
+    return new Error(`SSH 主机密钥未获用户确认，已拒绝连接：${rejection.detail}`);
+  }
+
   return new Error(`SSH 主机密钥记录不可用，已拒绝连接：${rejection.detail}`);
 }
 
