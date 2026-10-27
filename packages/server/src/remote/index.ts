@@ -30,6 +30,12 @@ export {
   type SSHJumpClientFactory,
 } from "./sshConfig.js";
 export {
+  acquireRemoteDeployLock,
+  buildRemoteDeployLockScript,
+  REMOTE_DEPLOY_LOCK_DIR,
+  type RemoteDeployLockHandle,
+} from "./remoteDeployLock.js";
+export {
   detectRemoteNek,
   installRemoteNek,
   buildNekInstallCommand,
