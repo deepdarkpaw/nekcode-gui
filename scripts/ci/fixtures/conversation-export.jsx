@@ -3,9 +3,24 @@ import { createRoot } from "react-dom/client";
 import { ConversationShareConfirmationDock } from "../../../packages/ui/src/v4/ConversationShareConfirmationDock.js";
 import { ConversationShareSuccessDock } from "../../../packages/ui/src/v4/ConversationShareSuccessDock.js";
 import { saveConversationExport } from "../../../packages/ui/src/lib/saveConversationExport.js";
-import { saveBrowserFile } from "../../../packages/web/src/saveBrowserFile.js";
 import { ZCodeIntlProvider } from "../../../packages/ui/src/i18n/IntlProvider.js";
 import { PlatformProvider } from "../../../packages/ui/src/hooks/usePlatform.js";
+
+/** 浏览器下载：只确认下载请求已交给浏览器（原 Web 端实现，fixture 内联）。 */
+function saveBrowserFile(request) {
+  const objectUrl = URL.createObjectURL(
+    new Blob([request.data], { type: "application/octet-stream" }),
+  );
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = request.suggestedName;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  return { success: true, downloadStarted: true, name: request.suggestedName };
+}
 
 const params = new URLSearchParams(location.search);
 const locale = params.get("locale") || "en-US";

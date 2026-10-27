@@ -6,7 +6,7 @@ import { buildSkillMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { useSkills } from "@/hooks/useSkills.js";
 import { filterSkillsForProvider } from "@/lib/skillSourceFilter.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { resolveSkillDisplayDescription, resolveSkillSourceLabel } from "@/lib/builtinSkillI18n.js";
+import { resolveSkillSourceLabel } from "@/lib/skillSourceLabel.js";
 
 export function mapSkillsToMentionItemsForTest(
   skills: Array<{
@@ -15,22 +15,20 @@ export function mapSkillsToMentionItemsForTest(
     description: string;
     path: string;
     scope: SkillScope;
-    pluginName?: string;
   }>,
   locale?: Locale,
 ): MentionItem[] {
   const uniqueSkillsByName = new Map<string, (typeof skills)[number]>();
   const scopePriority: Record<SkillScope, number> = {
     workspace: 0,
-    plugin: 1,
-    user: 2,
+    user: 1,
   };
   for (const skill of skills) {
     const key = skill.name.trim().toLowerCase();
     const current = uniqueSkillsByName.get(key);
     // `$` 面板是执行入口，不是来源管理页。
-    // 同名技能如果来自 workspace/user/plugin 多个路径，继续全部展示会让用户看到“同一个 skill”重复刷屏。
-    // 这里按名称折叠，并优先选择 workspace，其次 plugin，最后 user；Settings 页仍保留完整来源列表用于管理。
+    // 同名技能如果来自 workspace/user 多个路径，继续全部展示会让用户看到“同一个 skill”重复刷屏。
+    // 这里按名称折叠，并优先选择 workspace，其次 user；Settings 页仍保留完整来源列表用于管理。
     if (!current || scopePriority[skill.scope] < scopePriority[current.scope]) {
       uniqueSkillsByName.set(key, skill);
     }
@@ -39,7 +37,7 @@ export function mapSkillsToMentionItemsForTest(
 
   return uniqueSkills.map((skill) => {
     const sourceLabel = resolveSkillSourceLabel(skill.scope, locale);
-    const description = resolveSkillDisplayDescription(skill, locale);
+    const description = skill.description;
     return {
       id: `skill:${skill.id}`,
       category: "skills",

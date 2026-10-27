@@ -1,19 +1,8 @@
 /* eslint-disable max-lines -- skill 发现 + 校验 + 状态 + 通用目录管理在同一服务里聚合，分层后跳转成本更高 */
-import {
-  access,
-  appendFile,
-  cp,
-  mkdir,
-  realpath,
-  rm,
-  readFile,
-  readdir,
-  writeFile,
-} from "node:fs/promises";
-import { existsSync, type Dirent } from "node:fs";
+import { access, appendFile, cp, mkdir, realpath, rm, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type {
   ZCodeProvider,
@@ -25,16 +14,10 @@ import type {
   SkillsListResult,
   SkillsCapability,
 } from "@zcode/shared";
-import {
-  DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS,
-  ZCODE_PLUGIN_MANIFEST_DIR_NAME,
-  ZCODE_USER_DATA_DIR_NAME,
-  ZCODE_WORKSPACE_CONFIG_DIR_NAME,
-} from "@zcode/shared";
+import { ZCODE_USER_DATA_DIR_NAME, ZCODE_WORKSPACE_CONFIG_DIR_NAME } from "@zcode/shared";
 import { withFileLock } from "@zcode/shared/node";
 import type { ISkillsService } from "./skills.js";
 import { SKILL_FILE_NAME, walkSkillMarkdownPaths } from "./skillDiscoveryWalk.js";
-import { readInstalledPluginRoots } from "#src/plugins/installedPluginRoots.js";
 
 interface DiscoverResult {
   skills: SkillSummary[];
@@ -57,14 +40,8 @@ const SKILL_SETTINGS_DIR = join(resolveUserHomeDir(), ZCODE_USER_DATA_DIR_NAME, 
 const SKILL_CLI_SETTINGS_DIR = join(resolveUserHomeDir(), ZCODE_USER_DATA_DIR_NAME, "cli");
 const SKILL_CLI_CONFIG_FILE = join(SKILL_CLI_SETTINGS_DIR, "config.json");
 const GIT_MARKER = ".git";
-const HOME_PREFIX = "~/";
-const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = "zcode-plugins-official";
-const ZCODE_INLINE_PLUGIN_MARKETPLACE = "inline";
-const ZCODE_PLUGIN_MANIFEST_PATH = join(ZCODE_PLUGIN_MANIFEST_DIR_NAME, "plugin.json");
-const CLAUDE_PLUGIN_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
-const CODEX_PLUGIN_MANIFEST_PATH = join(".codex-plugin", "plugin.json");
 
-/** 对齐 apps/zcode-cli/packages/adapters/src/skills/index.ts:19 */
+/** 技能描述的最大长度（字符）。 */
 const MAX_DESCRIPTION_LENGTH = 1024;
 function resolveUserHomeDir() {
   const envHome = process.env.HOME?.trim() || process.env.USERPROFILE?.trim();
@@ -140,7 +117,6 @@ async function isUserAgentsSkillCoveredByZcode(params: {
 /**
  * 从 workspacePath 向上走到 worktree 根（含 .git 标记），把每一层的
  * `.zcodium/skills` 与 `.agents/skills` 都收集起来。
- * 对齐 apps/zcode-cli/packages/adapters/src/skills/roots.ts:60-72。
  * 找不到 .git 时退回 workspacePath 自身。
  */
 async function resolveAncestorWorkspaceRoots(workspacePath: string): Promise<string[]> {
@@ -597,257 +573,6 @@ async function writeSkillEnabledMap(next: Record<string, boolean>): Promise<void
 interface SkillRootDescriptor {
   scope: SkillScope;
   rootPath: string;
-  pluginName?: string;
-  pluginId?: string;
-}
-
-interface PluginConfigSummary {
-  dirs: string[];
-  enabled: boolean;
-  enabledPlugins: Record<string, boolean>;
-  storageDir: string;
-  suppressedBuiltins: string[];
-}
-
-interface PluginRootCandidate {
-  defaultEnabled: boolean;
-  marketplace: string;
-  rootPath: string;
-}
-
-interface PluginManifestSummary {
-  name: string;
-  skills?: unknown;
-}
-
-function readPluginConfigFromConfig(config: Record<string, unknown>): PluginConfigSummary {
-  const plugins = isObjectRecord(config.plugins) ? config.plugins : {};
-  return {
-    dirs: readStringArray(plugins.dirs),
-    enabled: typeof plugins.enabled === "boolean" ? plugins.enabled : true,
-    enabledPlugins: readBooleanRecord(plugins.enabledPlugins),
-    storageDir: readStorageDirFromConfig(config),
-    suppressedBuiltins: readStringArray(plugins.suppressedBuiltins),
-  };
-}
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
-function readBooleanRecord(value: unknown): Record<string, boolean> {
-  const result: Record<string, boolean> = {};
-  if (!isObjectRecord(value)) {
-    return result;
-  }
-  for (const [key, enabled] of Object.entries(value)) {
-    if (typeof enabled === "boolean") {
-      result[key] = enabled;
-    }
-  }
-  return result;
-}
-
-function readStorageDirFromConfig(config: Record<string, unknown>): string {
-  const storage = isObjectRecord(config.storage) ? config.storage : {};
-  return typeof storage.dir === "string" && storage.dir.trim().length > 0
-    ? storage.dir
-    : "~/.zcodium";
-}
-
-function resolveConfigPath(path: string): string {
-  const expanded = path.startsWith(HOME_PREFIX)
-    ? join(resolveUserHomeDir(), path.slice(HOME_PREFIX.length))
-    : path;
-  return isAbsolute(expanded) ? expanded : resolve(expanded);
-}
-
-function resolveCliStorageRoot(storageDir: string): string {
-  const storageRoot = resolveConfigPath(storageDir);
-  return basename(storageRoot) === "cli" ? storageRoot : join(storageRoot, "cli");
-}
-
-function resolvePluginStorageRoot(storageDir: string): string {
-  return join(resolveCliStorageRoot(storageDir), "plugins");
-}
-
-function parsePathList(value: unknown): string[] {
-  if (typeof value === "string") {
-    return [value];
-  }
-  return readStringArray(value);
-}
-
-function resolveInside(rootPath: string, rawPath: string): string | null {
-  if (isAbsolute(rawPath)) {
-    return null;
-  }
-  const resolved = resolve(rootPath, rawPath);
-  const relativePath = relative(rootPath, resolved);
-  if (
-    relativePath === "" ||
-    (!relativePath.startsWith("..") && !relativePath.includes(`..${sep}`))
-  ) {
-    return resolved;
-  }
-  return null;
-}
-
-async function scanOfficialPluginCacheRoots(pluginStorageRoot: string): Promise<string[]> {
-  const cacheRoot = join(pluginStorageRoot, "cache", ZCODE_OFFICIAL_PLUGIN_MARKETPLACE);
-  let pluginEntries: Dirent[] = [];
-  try {
-    pluginEntries = await readdir(cacheRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const roots: string[] = [];
-  for (const pluginEntry of pluginEntries) {
-    if (!pluginEntry.isDirectory()) {
-      continue;
-    }
-    const pluginDir = join(cacheRoot, pluginEntry.name);
-    let versionEntries: Dirent[] = [];
-    try {
-      versionEntries = await readdir(pluginDir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const versionEntry of versionEntries) {
-      if (versionEntry.isDirectory()) {
-        roots.push(join(pluginDir, versionEntry.name));
-      }
-    }
-  }
-  return roots.sort((left, right) => left.localeCompare(right));
-}
-
-async function readPluginManifest(rootPath: string): Promise<PluginManifestSummary | null> {
-  const manifestPath = await findPluginManifestPath(rootPath);
-  if (!manifestPath) {
-    return null;
-  }
-  let raw: string;
-  try {
-    raw = await readFile(manifestPath, "utf-8");
-  } catch {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isObjectRecord(parsed)) {
-      return null;
-    }
-    const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
-    if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(name)) {
-      return null;
-    }
-    return { name, skills: parsed.skills };
-  } catch {
-    return null;
-  }
-}
-
-async function findPluginManifestPath(rootPath: string): Promise<string | null> {
-  for (const manifestPath of [
-    join(rootPath, ZCODE_PLUGIN_MANIFEST_PATH),
-    join(rootPath, CLAUDE_PLUGIN_MANIFEST_PATH),
-    join(rootPath, CODEX_PLUGIN_MANIFEST_PATH),
-  ]) {
-    if (await exists(manifestPath)) {
-      return manifestPath;
-    }
-  }
-  return null;
-}
-
-function resolvePluginSkillRoots(params: {
-  manifest: PluginManifestSummary;
-  rootPath: string;
-}): string[] {
-  const roots: string[] = [];
-  for (const rawPath of parsePathList(params.manifest.skills)) {
-    const rootPath = resolveInside(params.rootPath, rawPath);
-    if (rootPath) {
-      roots.push(rootPath);
-    }
-  }
-  if (roots.length === 0 && params.manifest.skills === undefined) {
-    const defaultRoot = join(params.rootPath, "skills");
-    if (existsSync(defaultRoot)) {
-      roots.push(defaultRoot);
-    }
-  }
-  return roots;
-}
-
-async function resolvePluginSkillRootDescriptors(): Promise<SkillRootDescriptor[]> {
-  const config = readPluginConfigFromConfig(await readCliConfigFile());
-  if (!config.enabled) {
-    return [];
-  }
-
-  const pluginStorageRoot = resolvePluginStorageRoot(config.storageDir);
-  const officialCacheRoots = await scanOfficialPluginCacheRoots(pluginStorageRoot);
-  const installedRoots = await readInstalledPluginRoots(pluginStorageRoot);
-  const candidates: PluginRootCandidate[] = [
-    ...config.dirs.map((dir) => ({
-      defaultEnabled: true,
-      marketplace: ZCODE_INLINE_PLUGIN_MARKETPLACE,
-      rootPath: resolveConfigPath(dir),
-    })),
-    ...officialCacheRoots.map((rootPath) => ({
-      defaultEnabled: false,
-      marketplace: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
-      rootPath,
-    })),
-    ...installedRoots,
-  ];
-  const descriptors: SkillRootDescriptor[] = [];
-  const seenPluginIds = new Set<string>();
-
-  for (const candidate of candidates) {
-    const manifest = await readPluginManifest(candidate.rootPath);
-    if (!manifest) {
-      continue;
-    }
-    const pluginId = `${manifest.name}@${candidate.marketplace}`;
-    // 内置官方插件被「卸载」后只在 CLI config 写入 suppressedBuiltins；desktop 直接扫
-    // 官方 cache 时不经过 CLI resolve 的过滤，需要在这里同样跳过，否则被卸载的内置插件
-    // 仍会从 cache 贡献技能。
-    if (
-      candidate.marketplace === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE &&
-      config.suppressedBuiltins.includes(pluginId)
-    ) {
-      continue;
-    }
-    if (seenPluginIds.has(pluginId)) {
-      continue;
-    }
-    seenPluginIds.add(pluginId);
-    const defaultEnabled =
-      candidate.defaultEnabled || DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS.has(pluginId);
-    const enabled = config.enabledPlugins[pluginId] ?? defaultEnabled;
-    if (!enabled) {
-      continue;
-    }
-    // agent runtime 已经从 plugin manifest 注入 skillRoots，但 UI 的 skillsService
-    // 之前只扫描内置官方 cache/手动目录，漏掉 marketplace installed_plugins.json 中的
-    // Claude 官方和自建市场插件，导致插件详情页只有技能数量、没有技能名。
-    for (const rootPath of resolvePluginSkillRoots({ manifest, rootPath: candidate.rootPath })) {
-      descriptors.push({
-        scope: "plugin",
-        rootPath,
-        pluginName: manifest.name,
-        pluginId,
-      });
-    }
-  }
-
-  return descriptors;
 }
 
 async function discoverSkills(params: {
@@ -873,7 +598,6 @@ async function discoverSkills(params: {
       rootPath: getUserAgentsSkillRoot(),
     });
   }
-  roots.push(...(await resolvePluginSkillRootDescriptors()));
 
   const diagnostics: SkillDiagnostic[] = [];
   const skills: SkillSummary[] = [];
@@ -976,8 +700,6 @@ async function discoverSkills(params: {
         sourcePath: skillPath,
         scope: root.scope,
         enabled: true,
-        ...(root.pluginName ? { pluginName: root.pluginName } : {}),
-        ...(root.pluginId ? { pluginId: root.pluginId } : {}),
         ...(metadata ? { metadata } : {}),
       });
     }
@@ -1197,11 +919,6 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
       if (!skill) {
         throw new Error(`Skill not found: ${params.skillId}`);
       }
-      // plugin 作用域的技能由其所属插件管理，应通过卸载插件移除，这里拒绝单独删除。
-      if (skill.scope === "plugin") {
-        throw new Error("插件提供的技能不可单独删除，请卸载对应插件");
-      }
-
       // 用发现阶段命中的原始路径（sourcePath，未 realpath）定位技能目录项。
       // 软链导入的技能 skill.path 是 realpath 后的目标文件，dirname 会指向目标目录；
       // sourcePath 才指向 `~/.zcodium/skills/<name>` 下的目录项本身。

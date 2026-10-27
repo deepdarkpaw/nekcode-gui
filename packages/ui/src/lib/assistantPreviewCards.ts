@@ -79,7 +79,6 @@ const MARKDOWN_LINK_RE = /\[([^\]\n]*)\]\(([^)\n]+)\)/g;
 interface AssistantPreviewCardOptions {
   changedFilePaths?: readonly string[];
   homePath?: string;
-  suppressWebRemoteCards?: boolean;
 }
 
 interface PositionedCard {
@@ -133,18 +132,6 @@ function cleanMarkdownLinkTitle(title: string): string | null {
     return null;
   }
   return normalizedTitle;
-}
-
-export function shouldOpenAssistantHtmlInBrowser(params: {
-  path: string;
-  workspaceIdentity?: string;
-  workspaceRemoteSessionId?: string;
-}): boolean {
-  return (
-    isAssistantPreviewHtmlPath(params.path) &&
-    !params.workspaceIdentity?.trim() &&
-    !params.workspaceRemoteSessionId
-  );
 }
 
 function normalizePathForCompare(path: string): string {
@@ -287,8 +274,6 @@ export function buildAssistantPreviewCardsFromReferences(
   for (const match of content.matchAll(LOCALHOST_URL_RE)) {
     const url = normalizeTrailingUrlText(match[0] ?? "");
     if (!isValidAssistantPreviewWebsiteUrl(url)) continue;
-    // Web 远控没有本地端口转发或 HTML 运行环境；在候选上限前过滤，避免隐藏卡片占位。
-    if (options.suppressWebRemoteCards) continue;
     const filePath = resolveLocalhostHtmlChangedPath(url, workspacePath, changedFilePaths, {
       homePath: options.homePath,
     });
@@ -311,7 +296,6 @@ export function buildAssistantPreviewCardsFromReferences(
 
   const fileReferences: AssistantFileReference[] = [];
   for (const reference of references) {
-    if (options.suppressWebRemoteCards && reference.kind === "html") continue;
     if (reference.kind === "html" && hasLocalHttpPreview) continue;
 
     let resolvedReference = reference;

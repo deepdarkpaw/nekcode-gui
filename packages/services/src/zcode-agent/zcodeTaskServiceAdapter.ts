@@ -52,7 +52,6 @@ import {
   type ZCodeBackgroundTaskControlItem,
   type ZCodeBackgroundTaskNotificationInfo,
   type ZCodeBackgroundTurnAttribution,
-  type ZCodeAutomationBotDeliveryTarget,
   type ZCodeCancelTaskCommandResult,
   type ZCodeConfigOption,
   type ZCodeContextCompactionTimelineMeta,
@@ -163,7 +162,6 @@ import {
   normalizeAvailableZCodeMode,
   settingsToConfigOptions,
 } from "./zcodeConfigOptions.js";
-import type { CuaProductMcpServerResolver } from "@zcode/zcode-cua/helper-transport";
 import { registerMemoryDiagnosticsProvider } from "#src/memoryDiagnostics.js";
 
 interface TaskOverlay {
@@ -181,7 +179,6 @@ interface CreateZCodeTaskServiceAdapterOptions {
   // 否则 desktop-continuous 路径和 task adapter 路径的事件订阅会分裂成两份，UI 收不全。
   taskIndexSyncer: ZCodeTaskIndexSyncer;
   settingService?: Pick<ISettingService, "get">;
-  cuaProductMcpServerResolver?: CuaProductMcpServerResolver;
 }
 
 interface TaskTarget {
@@ -316,14 +313,10 @@ export function createZCodeTaskServiceAdapter(
     return {};
   }
 
-  async function resolveProductMcpServers(
+  function configuredMcpServers(
     servers: ZCodeAgentMcpServer[] | undefined,
-  ): Promise<ZCodeAgentMcpServer[] | undefined> {
-    const configuredServers = (servers?.length ?? 0) > 0 ? servers : undefined;
-    if (!configuredServers || !options.cuaProductMcpServerResolver) {
-      return configuredServers;
-    }
-    return options.cuaProductMcpServerResolver.resolveMcpServers(configuredServers);
+  ): ZCodeAgentMcpServer[] | undefined {
+    return (servers?.length ?? 0) > 0 ? servers : undefined;
   }
 
   function workspaceKey(params: { workspacePath: string; workspaceIdentity?: string }): string {
@@ -368,7 +361,6 @@ export function createZCodeTaskServiceAdapter(
       content: string;
       attachments?: ZCodePromptAttachment[];
       toolDenylist?: string[];
-      botDeliveryTarget?: ZCodeAutomationBotDeliveryTarget;
       clientId?: string;
       clientMode?: ZCodeTaskClientMode;
       logReason?: string;
@@ -419,7 +411,6 @@ export function createZCodeTaskServiceAdapter(
           modelExecution: params.modelExecution,
           ...turnAttributionOf(params),
           toolDenylist: promptToolDenylist,
-          botDeliveryTarget: params.botDeliveryTarget,
           ...(params.clientMode ? { clientMode: params.clientMode } : {}),
         });
       } else {
@@ -441,7 +432,6 @@ export function createZCodeTaskServiceAdapter(
               ...(params.modelSelection ? { modelSelection: params.modelSelection } : {}),
               ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
               ...turnAttributionOf(params),
-              ...(params.botDeliveryTarget ? { botDeliveryTarget: params.botDeliveryTarget } : {}),
               ...(promptToolDenylist ? { toolDisallowlist: promptToolDenylist } : {}),
             },
             sessionId: target.taskId,
@@ -1132,7 +1122,7 @@ export function createZCodeTaskServiceAdapter(
   ): Promise<ZCodeSessionStateSnapshot> {
     rememberTaskTarget(params);
     const thoughtLevel = params.thoughtLevel?.trim();
-    const mcpServers = await resolveProductMcpServers(params.mcpServers);
+    const mcpServers = configuredMcpServers(params.mcpServers);
     return options.zcodeAgentService.resumeSession({
       workspacePath: params.workspacePath,
       workspaceIdentity: params.workspaceIdentity,
@@ -1239,7 +1229,7 @@ export function createZCodeTaskServiceAdapter(
       // 复用导入模块的严格来源校验，避免清理 ACP 时误删这条独立的数据迁移路径。
       const history = await readLegacyImportedClaudeHistory(params);
       if (!history) throw error;
-      const mcpServers = await resolveProductMcpServers(params.mcpServers);
+      const mcpServers = configuredMcpServers(params.mcpServers);
       const restored = await options.zcodeAgentService.createSession({
         workspacePath: params.workspacePath,
         workspaceIdentity: params.workspaceIdentity,
@@ -1770,7 +1760,7 @@ export function createZCodeTaskServiceAdapter(
             }
           : undefined);
       const draftSessionId = params.draftSessionId?.trim();
-      const mcpServers = await resolveProductMcpServers(params.mcpServers);
+      const mcpServers = configuredMcpServers(params.mcpServers);
       let snapshot: ZCodeSessionStateSnapshot | null = null;
       if (draftSessionId && !mcpServers) {
         try {
@@ -1917,7 +1907,6 @@ export function createZCodeTaskServiceAdapter(
         attachments: params.attachments,
         ...turnAttributionOf(params),
         toolDenylist: params.toolDenylist,
-        botDeliveryTarget: params.botDeliveryTarget,
         clientId: params.clientId,
         clientMode: params.clientMode,
         modelSelection: params.modelSelection,

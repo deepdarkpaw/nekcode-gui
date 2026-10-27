@@ -7,13 +7,10 @@ import {
   Bot,
   Palette,
   Sun,
-  BarChart3,
   Terminal,
   AlarmClock,
   Anchor,
   Brain,
-  Blocks,
-  Globe2,
   Cable,
   WandSparkles,
   Keyboard,
@@ -36,7 +33,7 @@ export const THEME_MODES: Array<{
   { mode: "zai-light", icon: Sun },
 ];
 
-type SettingsSectionGroupId = "basics" | "agentCapabilities" | "dataAndStats" | NekSettingsGroupId;
+type SettingsSectionGroupId = "basics" | "agentCapabilities" | NekSettingsGroupId;
 
 interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -57,7 +54,6 @@ const BASE_SETTINGS_SECTION_GROUPS: Array<{
     id: "agentCapabilities",
     titleId: "settings.sidebar.group.agentCapabilities",
   },
-  { id: "dataAndStats", titleId: "settings.sidebar.group.dataAndStats" },
 ];
 
 const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
@@ -93,12 +89,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     groupId: "agentCapabilities",
   },
   {
-    id: "plugin",
-    icon: Blocks,
-    titleId: "settings.plugins.title",
-    groupId: "agentCapabilities",
-  },
-  {
     id: "mcp",
     icon: Cable,
     titleId: "settings.mcpTitle",
@@ -129,21 +119,7 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     titleId: "settings.hooks.title",
     groupId: "agentCapabilities",
   },
-  {
-    id: "browser",
-    icon: Globe2,
-    titleId: "settings.browser.title",
-    groupId: "basics",
-  },
-  // 电脑控制紧跟「浏览器」：两者都是给 Agent 用的本机操控入口，
-  // 放在基础设置里让用户在同一处理解「控制浏览器 / 控制整台电脑」的关系。
-  {
-    id: "computerUse",
-    icon: Monitor,
-    titleId: "settings.computerUse.title",
-    groupId: "basics",
-  },
-  // 键盘快捷键紧跟「电脑控制」：同属本机操控/效率配置，收纳在基础设置尾部。
+  // 键盘快捷键：本机效率配置，收纳在基础设置尾部。
   {
     id: "shortcuts",
     icon: Keyboard,
@@ -157,36 +133,14 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     titleId: "settings.workspaceFileSearch.title",
     groupId: "basics",
   },
-  {
-    id: "usage",
-    icon: BarChart3,
-    titleId: "settings.usageTitle",
-    groupId: "dataAndStats",
-  },
 ];
 
-// 兼容既有只读消费者：默认配置代表不带桌面平台能力的 Web 视图；
-// macOS/Windows/Linux 必须继续通过 createSettingsPageConfig 动态加入 Computer Use。
-export const SETTINGS_SECTIONS = BASE_SETTINGS_SECTIONS.filter(
-  (section) => section.id !== "computerUse" && isSettingsSectionEnabled(section.id),
+export const SETTINGS_SECTIONS = BASE_SETTINGS_SECTIONS.filter((section) =>
+  isSettingsSectionEnabled(section.id),
 );
 
-interface SettingsPageConfigOptions {
-  isDesktop?: boolean;
-  isMacDesktop?: boolean;
-  isWindowsDesktop?: boolean;
-}
-
-export function createSettingsPageConfig({
-  isDesktop = false,
-  isMacDesktop = false,
-  isWindowsDesktop = false,
-}: SettingsPageConfigOptions = {}) {
-  const showComputerUse = isDesktop || isMacDesktop || isWindowsDesktop;
-  const settingsSections = BASE_SETTINGS_SECTIONS.filter((section) => {
-    if (section.id === "computerUse" && !showComputerUse) return false;
-    return isSettingsSectionEnabled(section.id);
-  });
+export function createSettingsPageConfig() {
+  const settingsSections = SETTINGS_SECTIONS;
   const settingsSectionGroups = BASE_SETTINGS_SECTION_GROUPS.map((group) => ({
     ...group,
     sections: settingsSections.filter((section) => section.groupId === group.id),

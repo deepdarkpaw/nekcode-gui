@@ -1,7 +1,7 @@
 // Command 相关类型定义
 import type { SettingsDirectoryLocation } from "./settings-source.js";
 
-export type CommandSource = "user" | "plugin";
+export type CommandSource = "user";
 export type CommandAgentSource = "zcodeAgent";
 
 export interface CommandInfo {
@@ -23,26 +23,7 @@ export interface UserCommand extends CommandInfo {
   projectPath?: string;
 }
 
-export interface PluginCommand extends Omit<CommandInfo, "filePath"> {
-  id: string;
-  source: "plugin";
-  enabled: boolean;
-  pluginName: string;
-  pluginMarketplace: string;
-  pluginEnabled: boolean;
-  scope: "global";
-  filePath: string;
-}
-
-export type ZCodeCommand = UserCommand | PluginCommand;
-
-export function isUserCommand(command: ZCodeCommand): command is UserCommand {
-  return command.source === "user";
-}
-
-export function isPluginCommand(command: ZCodeCommand): command is PluginCommand {
-  return command.source === "plugin";
-}
+export type ZCodeCommand = UserCommand;
 
 export interface CommandConfig {
   name: string;
@@ -62,7 +43,6 @@ export interface CommandsCapability {
 export interface CommandsListResult {
   commands: ZCodeCommand[];
   userCommands: UserCommand[];
-  pluginCommands: PluginCommand[];
   capability: CommandsCapability;
 }
 

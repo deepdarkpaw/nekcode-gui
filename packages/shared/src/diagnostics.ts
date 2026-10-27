@@ -258,7 +258,6 @@ export const DiagnosticRecordSchema = z.strictObject({
       "user_confirmation",
       "starting",
       "preparing_host_storage",
-      "preparing_session_storage",
       "starting_services",
       "checking",
       "waiting_for_lock",

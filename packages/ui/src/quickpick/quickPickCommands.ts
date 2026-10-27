@@ -1,9 +1,7 @@
 export type QuickPickCommandIcon =
   | "book"
-  | "browser"
   | "community"
   | "diff"
-  | "feedback"
   | "folder"
   | "message"
   | "mcp"
@@ -50,14 +48,11 @@ interface QuickPickCommandHandlers {
   openSkillsSettings: () => void;
   openMcpSettings: () => void;
   switchTheme: () => void;
-  openFeedback: () => void | Promise<void>;
   openCommunity: () => void | Promise<void>;
   openProductDocs: () => void | Promise<void>;
   toggleSidebar: () => void;
   toggleTerminal: () => void;
-  togglePreview: () => void;
   openTerminalTab: () => void;
-  openBrowserTab: () => void;
   openReviewTab: () => void;
 }
 
@@ -65,7 +60,6 @@ interface CreateQuickPickCommandsOptions {
   allowOpenWorkspace: boolean;
   canOpenCommunity: boolean;
   isSidebarVisible: boolean;
-  supportsEmbeddedBrowser?: boolean;
   supportsTerminal?: boolean;
   supportsReview?: boolean;
   themeTarget: "dark" | "light";
@@ -82,7 +76,6 @@ export function createQuickPickCommands({
   allowOpenWorkspace,
   canOpenCommunity,
   isSidebarVisible,
-  supportsEmbeddedBrowser = true,
   supportsTerminal = true,
   supportsReview = true,
   themeTarget,
@@ -135,29 +128,6 @@ export function createQuickPickCommands({
       keywords: ["terminal", "shell", "console", "终端"],
       run: handlers.toggleTerminal,
     },
-    ...(supportsEmbeddedBrowser
-      ? [
-          {
-            id: "toggle-preview",
-            sectionId: "panels",
-            titleId: "quickPick.command.togglePreview",
-            icon: "browser",
-            keywords: [
-              "preview",
-              "browser",
-              "web",
-              "show",
-              "hide",
-              "预览",
-              "浏览器",
-              "网页",
-              "显示",
-              "隐藏",
-            ],
-            run: handlers.togglePreview,
-          } satisfies QuickPickCommand,
-        ]
-      : []),
     {
       id: "add-terminal-tab",
       sectionId: "panels",
@@ -166,18 +136,6 @@ export function createQuickPickCommands({
       keywords: ["add", "terminal", "tab", "new terminal", "添加终端", "终端标签"],
       run: handlers.openTerminalTab,
     },
-    ...(supportsEmbeddedBrowser
-      ? [
-          {
-            id: "add-browser-tab",
-            sectionId: "panels",
-            titleId: "quickPick.command.addBrowserTab",
-            icon: "browser",
-            keywords: ["add", "browser", "tab", "preview", "添加浏览器", "浏览器标签"],
-            run: handlers.openBrowserTab,
-          } satisfies QuickPickCommand,
-        ]
-      : []),
     {
       id: "add-review-tab",
       sectionId: "panels",
@@ -222,15 +180,6 @@ export function createQuickPickCommands({
       run: handlers.openMcpSettings,
     },
   ];
-
-  commands.push({
-    id: "feedback",
-    sectionId: "app",
-    titleId: "quickPick.command.feedback",
-    icon: "feedback",
-    keywords: ["feedback", "issue", "support", "问题上报", "问题反馈", "反馈"],
-    run: handlers.openFeedback,
-  });
 
   if (canOpenCommunity) {
     commands.push({

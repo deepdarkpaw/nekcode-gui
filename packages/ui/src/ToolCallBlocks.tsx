@@ -1,4 +1,4 @@
-import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { TID_CHAT_TOOL_CALL_BLOCK, testId } from "@zcode/shared";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -11,16 +11,13 @@ import {
   isCompactToolCallRunningState,
 } from "@/lib/toolCallSummary.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import { CuaGroupToolCallBlock } from "@/ToolCallBlocks/renderers/cua-group.js";
 import { resolveToolCallRenderer } from "@/ToolCallBlocks/resolveRenderer.js";
-import * as PluginUi from "@/plugin-ui/index.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
 import {
   readRawToolCallFileSummaries,
   type ToolCallBlockRenderContext,
 } from "@/ToolCallBlocks/shared.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
-import type { ConversationCuaGroupEvent } from "@/v4/conversationCuaGroups.js";
 
 const NESTED_TOOLCALL_CONTAINER_CLASS =
   "ml-2 space-y-2 border-border border-l pl-3.5 border-border";
@@ -78,13 +75,11 @@ function ToolCallBlockComponent({
   theme,
   codePreviewSettings,
   showIcon = true,
-  cuaAppIconClassName,
   onOpenCodeViewer,
   onOpenFileLink,
   onOpenBrowserUrl,
   onOpenAutomationsMain,
   onOpenPlanDetail,
-  pluginUi: providedPluginUi,
   onOpenWorkflowRun,
   onResumeWorkflowRun,
   onOpenWorkflowActor,
@@ -101,9 +96,6 @@ function ToolCallBlockComponent({
   authoritativeAgentType,
   streamingEntranceActive = false,
   streamingEntranceKeyPrefix = "tool",
-  cuaGroupEvents,
-  renderCuaAssistantMessage,
-  renderCuaReasoning,
 }: {
   toolCallNode: TaskChatToolCallTreeNode;
   depth?: number;
@@ -113,13 +105,11 @@ function ToolCallBlockComponent({
   /** 代码预览设置（store 耦合剥离）：由宿主传入并保持引用稳定。 */
   codePreviewSettings?: ToolCallBlockRenderContext["codePreviewSettings"];
   showIcon?: boolean;
-  cuaAppIconClassName?: ToolCallBlockRenderContext["cuaAppIconClassName"];
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBrowserUrl?: (url: string) => void;
   onOpenAutomationsMain?: (automationId?: string) => void;
   onOpenPlanDetail?: ToolCallBlockRenderContext["onOpenPlanDetail"];
-  pluginUi?: ToolCallBlockRenderContext["pluginUi"];
   onOpenWorkflowRun?: ToolCallBlockRenderContext["onOpenWorkflowRun"];
   /** 工具卡页脚的 Resume；与 workflowRun 同样不向子工具卡透传。 */
   onResumeWorkflowRun?: ToolCallBlockRenderContext["onResumeWorkflowRun"];
@@ -146,16 +136,7 @@ function ToolCallBlockComponent({
   authoritativeAgentType?: ToolCallBlockRenderContext["authoritativeAgentType"];
   streamingEntranceActive?: boolean;
   streamingEntranceKeyPrefix?: string;
-  cuaGroupEvents?: readonly ConversationCuaGroupEvent[];
-  renderCuaAssistantMessage?: (
-    event: Extract<ConversationCuaGroupEvent, { kind: "assistantMessage" }>,
-  ) => ReactNode;
-  renderCuaReasoning?: (
-    event: Extract<ConversationCuaGroupEvent, { kind: "reasoning" }>,
-  ) => ReactNode;
 }) {
-  const inheritedPluginUi = PluginUi.usePluginUiToolBinding(toolCallNode.toolCall.toolId);
-  const pluginUi = providedPluginUi ?? inheritedPluginUi;
   const { toolCall, childToolCalls } = toolCallNode;
   const { intl } = useZCodeIntl();
   const isOfficeMode = useIsOfficeMode();
@@ -306,7 +287,6 @@ function ToolCallBlockComponent({
       errorText,
       childToolList,
       showIcon,
-      cuaAppIconClassName,
       showTodoToolCalls,
       disableSummaryContentAnimation,
       animateDiffCountOnMount,
@@ -317,7 +297,6 @@ function ToolCallBlockComponent({
       onOpenBrowserUrl,
       onOpenAutomationsMain,
       onOpenPlanDetail,
-      pluginUi,
       // onOpenWorkflowRun 之前只被透传给子工具卡，从未进过 renderContext，
       // 于是 CreateWorkflow renderer 永远收不到它——「打开详情页」的入口不是被埋深了，
       // 是根本没渲染过。run 态紧凑卡就挂在这个回调上，所以它必须在这里。
@@ -336,7 +315,6 @@ function ToolCallBlockComponent({
       authoritativeAgentType,
       childToolList,
       codePreviewSettings,
-      cuaAppIconClassName,
       displayModel,
       disableSummaryContentAnimation,
       animateDiffCountOnMount,
@@ -346,7 +324,6 @@ function ToolCallBlockComponent({
       onOpenAutomationsMain,
       onOpenBrowserUrl,
       onOpenPlanDetail,
-      pluginUi,
       onOpenWorkflowRun,
       onResumeWorkflowRun,
       onOpenWorkflowActor,
@@ -382,16 +359,7 @@ function ToolCallBlockComponent({
       data-status={toolCall.status}
       data-zcode-tool-stream-animate={shouldPlayEntranceAnimation ? "true" : undefined}
     >
-      {toolCall.kind === "cuaGroup" ? (
-        <CuaGroupToolCallBlock
-          {...renderContext}
-          events={cuaGroupEvents}
-          renderAssistantMessage={renderCuaAssistantMessage}
-          renderReasoning={renderCuaReasoning}
-        />
-      ) : (
-        <ToolCallRenderer {...renderContext} />
-      )}
+      <ToolCallRenderer {...renderContext} />
     </div>
   );
 }

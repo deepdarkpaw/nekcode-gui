@@ -119,9 +119,7 @@ export function buildSubagentSuggestions(
 }
 
 export function buildSkillSuggestions(
-  skills: Array<
-    Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope" | "pluginName">
-  >,
+  skills: Array<Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope">>,
   locale?: Locale,
 ): PromptInputSuggestionItem[] {
   return mapSkillsToMentionItemsForTest(skills, locale).map((item) => ({

@@ -5,12 +5,6 @@
  */
 export { acquireFileLock } from "./node/atomicFileLock.js";
 export {
-  GEN_UI_OUTPUT_ROOT_ENV,
-  GEN_UI_OUTPUT_DIRECTORY,
-  getGenUiOutputDirectory,
-} from "./node/genUiPaths.js";
-export { scanOfficialPluginCacheRoots } from "./node/officialPluginCache.js";
-export {
   migrateUserSubagentMarkdown,
   migrateSubagentStateFile,
 } from "./node/subagentMarkdownMigration.js";

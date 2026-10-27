@@ -1,30 +1,15 @@
 import type { ZCodeProvider } from "./zcode-task-types-core.js";
-import { modelSelectionSchema, type ModelSelection } from "./model-selection.js";
+import { type ModelSelection } from "./model-selection.js";
 
 export type AgentScope = "built-in" | "workspace" | "user";
 
-export type AgentSource = "built-in" | "user" | "plugin";
+export type AgentSource = "built-in" | "user";
 
 export type BuiltInSubagentName = "general-purpose" | "Explore";
 
 export type BuiltInSubagentModelSelectionOverrides = Partial<
   Record<BuiltInSubagentName, ModelSelection>
 >;
-
-export type PluginSubagentModelSelectionOverrides = Readonly<Record<string, ModelSelection>>;
-
-/** 正式 reader 只接受结构化覆盖，不在读取时解释旧双 map 或重新匹配 Provider。 */
-export function parsePluginSubagentModelSelectionOverrides(
-  value: unknown,
-): PluginSubagentModelSelectionOverrides {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([id, candidate]) => {
-      const selection = modelSelectionSchema.safeParse(candidate);
-      return id.startsWith("plugin:") && selection.success ? [[id, selection.data]] : [];
-    }),
-  );
-}
 
 export type AgentPermissionMode = "auto" | "plan";
 
@@ -63,8 +48,6 @@ export interface AgentSummary {
   enabled: boolean;
   readOnly?: boolean;
   projectPath?: string;
-  pluginId?: string;
-  pluginName?: string;
   diagnostics?: AgentDiagnostic[];
 }
 
@@ -82,7 +65,6 @@ export interface AgentsCapability {
 export interface AgentsListResult {
   agents: AgentSummary[];
   userAgents: AgentSummary[];
-  pluginAgents: AgentSummary[];
   capability: AgentsCapability;
   diagnostics?: AgentDiagnostic[];
 }
@@ -133,20 +115,6 @@ export interface AgentDeleteParams {
 export interface BuiltInSubagentModelOverrideParams {
   agentName: BuiltInSubagentName;
   modelSelection?: ModelSelection;
-}
-
-export interface PluginSubagentModelOverrideParams {
-  agentId: string;
-  modelSelection?: ModelSelection;
-}
-
-/**
- * 插件 subagent 的稳定 id：`plugin:<pluginId>:<裸名小写>`。
- * pluginId 为 `<name>@<marketplace>`，不含版本，插件升级后 id 不变，覆盖随之保留。
- * services 与 CLI bootstrap 都用它做 agents-state.json 的键，必须共用一处实现。
- */
-export function createPluginAgentStateId(pluginId: string, agentName: string): string {
-  return `plugin:${pluginId}:${agentName.trim().toLowerCase()}`;
 }
 
 export function createAgentStateId(input: {

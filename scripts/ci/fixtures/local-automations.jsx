@@ -103,7 +103,6 @@ let settings = { keepAwakeWhileRunning: false };
 const services = new Proxy(
   {
     zcodeAgentService: agent,
-    botsService: {},
     broadcastService: {},
     clientScenesService: {
       async list() {

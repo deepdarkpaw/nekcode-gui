@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -8,15 +8,11 @@ import { build } from "esbuild";
 import { createRemotePtyBuildPlugin } from "../remote-pty-build.mjs";
 import { verifyBundledRemoteAssets } from "../bundle-remote-assets.mjs";
 import { getBuildMetadata } from "../../packages/desktop/scripts/build-metadata.mjs";
-import { smokeCuaDriverRuntime } from "./cua-driver-smoke.mjs";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "../..");
 // 与 bundleRepositoryRemoteAssets / beforePack 同源：校验的版本串必须等于 manifest.appVersion。
 const { appVersion: version } = getBuildMetadata();
-const { version: agentVersion } = JSON.parse(
-  await readFile(join(root, "apps/zcode-cli/package.json"), "utf8"),
-);
 if (process.platform !== "linux" || process.arch !== "x64") {
   throw new Error("Remote runtime smoke tests require Linux x64");
 }
@@ -38,18 +34,11 @@ try {
   };
   assert.ok((await stat(node)).mode & 0o111, "archive must retain Node executable mode");
   assert.equal((await run(node, ["--version"], options)).stdout.trim(), "v22.16.0");
-  await smokeCuaDriverRuntime(join(staging, "glm/linux-x64/packages/node-repl-host"), node);
   assert.equal(
     (
       await run(node, [join(staging, "server/zcode-server.cjs"), "--version"], options)
     ).stdout.trim(),
     version,
-  );
-  assert.equal(
-    (
-      await run(node, [join(staging, "glm/linux-x64/zcode.cjs"), "--version"], options)
-    ).stdout.trim(),
-    agentVersion,
   );
 
   const fixture = join(staging, "needle.txt");
@@ -112,7 +101,7 @@ try {
   const terminal = await run(node, [ptySmoke], options);
   assert.match(terminal.stdout, /PTY input\/resize\/exit OK/);
   console.log(
-    "Remote bundle verified: Node, Server, Agent, PTY input/resize/exit, bfs, ripgrep, ugrep",
+    "Remote bundle verified: Node, Server, PTY input/resize/exit, bfs, ripgrep, ugrep",
   );
 } finally {
   await rm(staging, { recursive: true, force: true });

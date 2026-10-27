@@ -19,14 +19,8 @@ export const TID_TERMINAL_TOGGLE = "terminal-toggle";
 export const TID_SIDE_PANE_TOGGLE = "side-pane-toggle";
 /** 终端面板关闭按钮 */
 export const TID_TERMINAL_CLOSE_BUTTON = "terminal-close-button";
-/** 浏览器显隐切换按钮 */
-export const TID_BROWSER_TOGGLE = "browser-toggle";
 /** Git 显隐切换按钮 */
 export const TID_GIT_TOGGLE = "git-toggle";
-/** 浏览器面板容器 */
-export const TID_BROWSER_PANE = "browser-pane";
-/** 浏览器面板关闭按钮 */
-export const TID_BROWSER_CLOSE_BUTTON = "browser-close-button";
 /** Git 面板容器 */
 export const TID_GIT_PANE = "git-pane";
 /** Git 面板关闭按钮 */
@@ -45,63 +39,6 @@ export const TID_GIT_COMMIT_INCLUDE_UNSTAGED = "git-commit-include-unstaged";
 export const TID_GIT_COMMIT_ACTION_COMMAND = "git-commit-action-command";
 /** Git 提交弹窗底部动作项（动态后缀为动作 id） */
 export const TID_GIT_COMMIT_ACTION_ITEM = "git-commit-action-item";
-/** 浏览器地址栏输入框 */
-export const TID_BROWSER_ADDRESS_INPUT = "browser-address-input";
-/** 浏览器后退按钮 */
-export const TID_BROWSER_BACK_BUTTON = "browser-back-button";
-/** 浏览器前进按钮 */
-export const TID_BROWSER_FORWARD_BUTTON = "browser-forward-button";
-/** 浏览器刷新按钮 */
-export const TID_BROWSER_REFRESH_BUTTON = "browser-refresh-button";
-/** 浏览器自由尺寸模式按钮 */
-export const TID_BROWSER_RESPONSIVE_BUTTON = "browser-responsive-button";
-/** 浏览器自由尺寸视口 */
-export const TID_BROWSER_RESPONSIVE_VIEWPORT = "browser-responsive-viewport";
-/** 浏览器自由尺寸顶部控制条 */
-export const TID_BROWSER_RESPONSIVE_TOOLBAR = "browser-responsive-toolbar";
-/** 浏览器自由尺寸宽度输入框 */
-export const TID_BROWSER_RESPONSIVE_WIDTH_INPUT = "browser-responsive-width-input";
-/** 浏览器自由尺寸高度输入框 */
-export const TID_BROWSER_RESPONSIVE_HEIGHT_INPUT = "browser-responsive-height-input";
-/** 浏览器自由尺寸缩放选择器 */
-export const TID_BROWSER_RESPONSIVE_ZOOM_SELECT = "browser-responsive-zoom-select";
-/** 浏览器自由尺寸缩放选项（动态后缀为 zoom 值） */
-export const TID_BROWSER_RESPONSIVE_ZOOM_OPTION = "browser-responsive-zoom-option";
-/** 浏览器自由尺寸缩放后的画布占位 */
-export const TID_BROWSER_RESPONSIVE_SCALED_FRAME = "browser-responsive-scaled-frame";
-/** 浏览器自由尺寸左边拖拽条 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_LEFT = "browser-responsive-resize-left";
-/** 浏览器自由尺寸右边拖拽条 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_WIDTH = "browser-responsive-resize-width";
-/** 浏览器自由尺寸上边拖拽条 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_TOP = "browser-responsive-resize-top";
-/** 浏览器自由尺寸下边拖拽条 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_HEIGHT = "browser-responsive-resize-height";
-/** 浏览器自由尺寸左上角拖拽区 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_CORNER_TOP_LEFT =
-  "browser-responsive-resize-corner-top-left";
-/** 浏览器自由尺寸右上角拖拽区 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_CORNER_TOP_RIGHT =
-  "browser-responsive-resize-corner-top-right";
-/** 浏览器自由尺寸左下角拖拽区 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_CORNER_BOTTOM_LEFT =
-  "browser-responsive-resize-corner-bottom-left";
-/** 浏览器自由尺寸右下角拖拽区 */
-export const TID_BROWSER_RESPONSIVE_RESIZE_CORNER = "browser-responsive-resize-corner";
-/** 浏览器网页元素选择按钮 */
-export const TID_BROWSER_ELEMENT_PICKER_BUTTON = "browser-element-picker-button";
-/** 浏览器地址栏更多操作按钮 */
-export const TID_BROWSER_MORE_BUTTON = "browser-more-button";
-/** 浏览器在默认浏览器中打开菜单项 */
-export const TID_BROWSER_OPEN_EXTERNAL_ITEM = "browser-open-external-item";
-/** 浏览器打开调试工具按钮 */
-export const TID_BROWSER_DEVTOOLS_BUTTON = "browser-devtools-button";
-/** 浏览器网页视图 */
-export const TID_BROWSER_WEBVIEW = "browser-webview";
-/** 浏览器页面加载失败的可读错误态 */
-export const TID_BROWSER_LOAD_ERROR = "browser-load-error";
-/** 浏览器加载失败错误态里的证书放行指引 */
-export const TID_BROWSER_LOAD_ERROR_CERT_HINT = "browser-load-error-cert-hint";
 /** 预览面板容器 */
 export const TID_PREVIEW_PANE = "preview-pane";
 /** 预览面板关闭按钮 */
@@ -390,11 +327,6 @@ export const TID_MCP_OPEN_AUTHORIZATION_BUTTON = "mcp-open-authorization-button"
 export const TID_SUBAGENT_ROW = "subagent-row";
 /** 内置子智能体模型选择控件（动态后缀为子智能体名称） */
 export const TID_SUBAGENT_BUILT_IN_MODEL_TRIGGER = "subagent-built-in-model-trigger";
-/** 设置页使用统计顶层 tab（动态后缀为 usage tab id） */
-/** 侧边栏头像菜单剩余额度子菜单入口 */
-export const TID_SIDEBAR_USAGE_REMAINING_TRIGGER = "sidebar-usage-remaining-trigger";
-/** 侧边栏偏好菜单的本地使用统计入口 */
-export const TID_SIDEBAR_USAGE_BUTTON = "sidebar-usage-button";
 
 // Model Provider Settings
 /** 模型供应商顶部添加按钮 */
@@ -507,8 +439,6 @@ export const TID_V4_COMPOSER = "v4-composer";
 export const TID_V4_COMPOSER_INPUT = "v4-composer-input";
 /** v4 composer 当前会话后台任务入口 */
 export const TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER = "v4-composer-background-work-trigger";
-/** v4 composer 电脑操作（CUA）常驻入口按钮 */
-export const TID_V4_COMPOSER_CUA_ENTRY = "v4-composer-cua-entry";
 /** v4 composer 发送按钮 */
 export const TID_V4_COMPOSER_SEND = "v4-composer-send";
 /** v4 暂停队列发送确认：清空队列并发送 */
@@ -638,10 +568,6 @@ export const TID_V4_SUBAGENT_OPEN_SIDE_PANE = "v4-subagent-open-side-pane";
 /** v4 userInput 行附件列表（动态后缀为 rowId） */
 export const TID_V4_ROW_ATTACHMENTS = "v4-row-attachments";
 
-// Plugin 商店
-/** Plugin 设置页里进入插件商店的入口按钮（商店是 WorkspaceShell 主视图，不是设置页分区） */
-export const TID_PLUGIN_STORE_BROWSE = "plugin-store-browse";
-
 // Automations / 定时任务
 export const TID_AUTOMATIONS_OPEN = "automations-open";
 export const TID_AUTOMATIONS_LIST = "automations-list";
@@ -685,10 +611,6 @@ export function testId(base: string, suffix: string): string {
   return `${base}-${suffix}`;
 }
 
-/** 插件 UI 沙箱卡片容器与其中的 webview。 */
-export const TID_PLUGIN_UI_CARD = "plugin-ui-card";
-export const TID_PLUGIN_UI_OPEN_SIDE_PANE = "plugin-ui-open-side-pane";
-export const TID_PLUGIN_UI_WEBVIEW = "plugin-ui-webview";
 export const TID_START_PLAN_RECOMMENDATION_DIALOG = "start-plan-recommendation-dialog";
 
 /** 用户反馈的诊断日志授权开关 */

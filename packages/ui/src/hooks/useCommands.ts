@@ -24,7 +24,6 @@ export function useCommands(options: UseCommandsOptions) {
 
   const commands = useCommandsStore((state) => state.commands);
   const userCommands = useCommandsStore((state) => state.userCommands);
-  const pluginCommands = useCommandsStore((state) => state.pluginCommands);
   const capability = useCommandsStore((state) => state.capability);
   const loading = useCommandsStore((state) => state.loading);
   const error = useCommandsStore((state) => state.error);
@@ -81,7 +80,6 @@ export function useCommands(options: UseCommandsOptions) {
     () => ({
       commands,
       userCommands,
-      pluginCommands,
       capability,
       loading,
       error,
@@ -96,7 +94,6 @@ export function useCommands(options: UseCommandsOptions) {
     [
       commands,
       userCommands,
-      pluginCommands,
       capability,
       loading,
       error,

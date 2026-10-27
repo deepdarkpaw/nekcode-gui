@@ -22,7 +22,6 @@ import { ProviderStatusIndicator } from "./ProviderStatusIndicator.js";
 
 import {
   resolveModelProviderFamilySpecByProviderId,
-  isStartPlanModelProviderId,
   TID_MODEL_PROVIDER_NAV_ITEM,
   testId,
 } from "@zcode/shared";
@@ -75,9 +74,6 @@ function resolveModelProviderSideNavLabel(item: ModelProviderNavItem): string {
   if (item.type === "preset") {
     return resolveModelProviderFamilySpecByProviderId(item.presetId)?.label ?? item.label;
   }
-  if (item.type === "codingPlan" && isStartPlanModelProviderId(item.presetId)) {
-    return "Start Plan";
-  }
   return item.label;
 }
 
@@ -95,22 +91,17 @@ function ModelProviderNavigationButton({
   showIcon?: boolean;
 }) {
   const isSelected = item.key === selectedNodeKey;
-  const isLoadingItem = item.type === "codingPlanLoading";
   const inactiveItemClassName = "border-transparent text-foreground hover:border-border-hover/60";
 
   return (
     <ControlHintTooltip title={label} side="right">
       <button
         type="button"
-        disabled={isLoadingItem}
         aria-label={label}
         aria-selected={isSelected}
         data-state={isSelected ? "selected" : "idle"}
         data-testid={testId(TID_MODEL_PROVIDER_NAV_ITEM, item.key)}
         onClick={() => {
-          if (isLoadingItem) {
-            return;
-          }
           onSelectNavItem(item);
         }}
         className={`relative box-border flex h-8 w-full items-center gap-2 rounded-lg border px-2 py-1 text-left text-ui-base font-medium transition-colors max-md:size-8 max-md:justify-center max-md:gap-0 max-md:px-0 ${
@@ -119,9 +110,7 @@ function ModelProviderNavigationButton({
             : inactiveItemClassName
         } disabled:cursor-not-allowed disabled:opacity-60`}
       >
-        {isLoadingItem ? (
-          <Loader2Icon className="size-4 shrink-0 animate-spin text-foreground-subtlest" />
-        ) : showIcon ? (
+        {showIcon ? (
           <span className="shrink-0 text-current">{renderModelProviderNavIcon(item)}</span>
         ) : null}
         <span className="flex min-w-0 flex-1 items-center gap-1.5 max-md:sr-only">

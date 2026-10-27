@@ -152,8 +152,6 @@ interface StageOptions {
   appVersion: string;
   /** tsup 产物目录（server-cli.js / server-core.js） */
   distDir: string;
-  /** 既有 CLI/Agent bundle（zcode.cjs，自包含 CJS） */
-  agentBundlePath: string;
   /** 已准备好的目标平台 Node 二进制 */
   nodeBinaryPath: string;
   /** 构建入口从统一合规 owner 核验后传入；组件组装不能自行拼凑许可。 */
@@ -166,8 +164,6 @@ interface StageOptions {
   outputDir: string;
   /** 已准备好的 native search tools 根目录（tools/<id>/<binary>）。 */
   nativeToolsDir?: string;
-  /** 官方插件源码或已 seed 的 packages 目录。 */
-  officialPluginsDir?: string;
   /** 是否同时产出 tar.gz（默认 true） */
   archive?: boolean;
 }
@@ -267,29 +263,6 @@ async function hashPaths(
     }
   }
   return { sha256: hash.digest("hex"), sizeBytes };
-}
-
-async function copyDirectoryIfPresent(
-  sourceDir: string | undefined,
-  targetDir: string,
-): Promise<string[]> {
-  if (!sourceDir) return [];
-  try {
-    await access(sourceDir);
-  } catch {
-    return [];
-  }
-  const names = (
-    await (await import("node:fs/promises")).readdir(sourceDir, { withFileTypes: true })
-  )
-    .filter((entry) => entry.isDirectory() && entry.name.endsWith("-plugin"))
-    .map((entry) => entry.name)
-    .filter((name) => name !== "superpowers-plugin")
-    .sort();
-  for (const name of names) {
-    await copyPackageDir(join(sourceDir, name), join(targetDir, name));
-  }
-  return names.map((name) => name.replace(/-plugin$/u, ""));
 }
 
 async function copyNativeTools(
@@ -394,13 +367,6 @@ export async function stageRelease(options: StageOptions): Promise<StagedRelease
   await writeFile(join(runtimeDir, "THIRD-PARTY-NOTICES.md"), options.notices.thirdParty);
   await writeFile(join(runtimeDir, "LICENSE.node.txt"), options.notices.node);
   await writeFile(join(runtimeDir, "NODE-SOURCES.json"), options.notices.nodeSource);
-  for (const component of ["agent", "official-plugins"]) {
-    await mkdir(join(runtimeDir, "licenses", component), { recursive: true });
-    await writeFile(
-      join(runtimeDir, "licenses", component, "THIRD-PARTY-NOTICES.md"),
-      options.notices.thirdParty,
-    );
-  }
 
   // 入口 bundle 与 sourcemap 同名复制，文件名必须与 cli.ts 的相对路径解析保持一致。
   const bundleSources: string[] = [];
@@ -415,9 +381,6 @@ export async function stageRelease(options: StageOptions): Promise<StagedRelease
     `${JSON.stringify({ name: releaseName, private: true, type: "module" }, null, 2)}\n`,
     "utf8",
   );
-  await cp(options.agentBundlePath, join(runtimeDir, "zcode.cjs"), { dereference: true });
-  // Agent bundle 是第三个实际运行入口；只扫描 Server bundle 会漏掉外置的 TUI/Playwright。
-  bundleSources.push(await readFile(options.agentBundlePath, "utf8"));
 
   const nodeTargetPath = join(
     runtimeDir,
@@ -470,10 +433,6 @@ export async function stageRelease(options: StageOptions): Promise<StagedRelease
     join(runtimeDir, "tools"),
     options.target,
   );
-  const plugins = await copyDirectoryIfPresent(
-    options.officialPluginsDir,
-    join(runtimeDir, "packages"),
-  );
 
   const launcherPath = join(
     releaseDir,
@@ -506,15 +465,6 @@ export async function stageRelease(options: StageOptions): Promise<StagedRelease
         "runtime/THIRD-PARTY-NOTICES.md",
       ],
     },
-    { id: "agent-runtime", paths: ["runtime/zcode.cjs", "runtime/licenses/agent"] },
-    ...(plugins.length > 0
-      ? [
-          {
-            id: "official-plugins",
-            paths: ["runtime/packages", "runtime/licenses/official-plugins"],
-          },
-        ]
-      : []),
     ...(tools.length > 0 ? [{ id: "native-search-tools", paths: ["runtime/tools"] }] : []),
   ];
   const componentMeta: Array<{
@@ -531,7 +481,6 @@ export async function stageRelease(options: StageOptions): Promise<StagedRelease
   }
   const manifest = createRuntimeManifest(options.target, options.appVersion, {
     tools,
-    plugins,
     components: componentMeta,
   });
   await writeFile(

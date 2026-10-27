@@ -22,15 +22,6 @@ review. They are not a legal compliance certification.
 - `npm-overrides.json`, `upstream/`: version-specific npm publisher originals or
   explicitly marked incomplete evidence. No invented copyright or adjacent
   version substitute.
-- `cua-driver/`: CUA 0.28.2 / UBJS 0.31.0-3 publisher metadata, pinned upstream
-  MIT/MPL terms, original runtime NOTICE, corresponding-source/build references
-  and local packaging instructions. Refresh with
-  `node scripts/sync-cua-license-review.mjs`, then regenerate aggregate notices.
-  This review covers only the 15 exact name/version/license-expression tuples;
-  it is not a general MPL allowlist. Changes or missing evidence fail closed.
-- `rust-tui/`: locked crate archives, exact-revision upstream originals, selected
-  standard terms and source-correspondence evidence. Refresh with
-  `node scripts/sync-rust-tui-notices.mjs`, then regenerate aggregate notices.
 - `copied-components.json`, `embedded-components.json`, `native-search/`,
   `runtime/`: copied-source, embedded native/WASM and runtime provenance. Some
   linked-library build provenance and original publisher material remains

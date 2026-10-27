@@ -26,7 +26,6 @@ const { outputFiles } = await build({
         "onboarding/OnboardingDialog",
         "SSHDialog",
         "DirectoryBrowser",
-        "cua-permission/CuaPermissionObservationAttachment",
       ].map((name) => [
         `@/${name}.js`,
         resolve(import.meta.dirname, "fixtures/root-startup-leaves.jsx"),

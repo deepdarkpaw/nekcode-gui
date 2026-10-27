@@ -21,9 +21,6 @@ function getSubagentSourceLabel(agent: SubagentMentionInput): string {
   if (agent.scope === "workspace") {
     return "Workspace";
   }
-  if (agent.source === "plugin") {
-    return "Plugin";
-  }
   if (agent.source === "built-in") {
     return "Built-in";
   }

@@ -3,26 +3,8 @@ import type {
   DesktopZoomState,
   DesktopWindowChromeState,
   DesktopTitleBarTheme,
-  CuaAccessibilitySettingsResult,
-  OpenCuaPermissionOnboardingOptions,
-  PrepareCuaHelperPermissionDragResult,
   AppSettings,
-  BrowserViewOperationPayload,
-  BrowserGuestAttachResult,
-  BrowserViewScreenshotSurfacePreparePayload,
-  BrowserViewScreenshotSurfaceReadyPayload,
-  BrowserViewScreenshotSurfaceReleasePayload,
-  BrowserViewViewportChangedPayload,
-  BrowserViewCloseTabNotification,
-  BrowserViewCloseTabRequest,
-  BrowserViewResidencyReportPayload,
-  BrowserViewResidencyTransitionPayload,
-  BrowserViewRestoredTabShell,
-  BrowserViewRestoreTabsRequest,
-  BrowserViewportSize,
-  ChromeBrowserDataImportResult,
   DockerContainerInfo,
-  EmbeddedBrowserOpenUrlRequest,
   EditorInfo,
   ApplicationIconInfo,
   ApplicationIconRequest,
@@ -30,12 +12,10 @@ import type {
   PostUpdateReleaseNotesPayload,
   RemoteConnectionRuntimeLog,
   RemoteSessionClosedEvent,
-  BotRemoteWorkspaceReconnectedEvent,
   RemoteTarget,
   SSHConfigAliasOption,
   TaskNotificationPayload,
   WindowScreenshotResult,
-  EmbeddedBrowserDataClearResult,
   WSLDistro,
   UpdateCheckResultPayload,
   UpdateStatePayload,
@@ -49,16 +29,6 @@ import type {
  */
 declare global {
   interface Window {
-    /** 插件 UI 沙箱 preload 命名空间；旧 preload 下为 undefined。 */
-    zcodePluginSandbox?: {
-      supportsRetainedMove?: boolean;
-      copyImage?(
-        input: import("@zcode/shared/mcp-apps").PluginSandboxCaptureRequest,
-      ): Promise<void>;
-      getOwnerWebContentsId(): Promise<number>;
-      disposeSandbox(sandboxId: string, initId?: number): Promise<void>;
-      consumeUserGesture(sandboxId: string): Promise<boolean>;
-    };
     zcode: {
       connectRemote(
         options: RemoteTarget,
@@ -76,7 +46,7 @@ declare global {
         remoteSessionId: string;
         workspacePath: string;
         workspaceIdentity?: string;
-      }): Promise<BrowserGuestAttachResult>;
+      }): Promise<void>;
       /** 释放当前窗口里的远程 session */
       disposeRemoteSession(sessionId: string): Promise<void>;
       /** 检查本机 Docker daemon 是否可用 */
@@ -107,10 +77,6 @@ declare global {
       onRemoteConnectionLog(handler: (entry: RemoteConnectionRuntimeLog) => void): () => void;
       /** 订阅远程 workspace session 关闭事件，返回 disposer */
       onRemoteSessionClosed(handler: (event: RemoteSessionClosedEvent) => void): () => void;
-      /** 订阅 Bot 触发的远程 workspace 重连成功事件，返回 disposer */
-      onBotRemoteWorkspaceReconnected(
-        handler: (event: BotRemoteWorkspaceReconnectedEvent) => void,
-      ): () => void;
       /** 检查目录是否已在其他窗口打开 */
       activateOrSetWorkspace?(path: string): Promise<{ activated: boolean }>;
       /** 同步当前窗口所有 tab 的 workspace 路径到 main 进程 */
@@ -124,49 +90,6 @@ declare global {
       onFocusTab(handler: (path: string) => void): () => void;
       /** 注册 main 进程触发新建 tab 的回调，返回 disposer */
       onNewTab(handler: () => void): () => void;
-      /** 注册内置浏览器 webview 请求打开新页面的回调，返回 disposer */
-      onOpenBrowserUrl?(handler: (request: EmbeddedBrowserOpenUrlRequest) => void): () => void;
-      onBrowserViewReady?(
-        handler: (payload: {
-          workspaceKey: string;
-          remoteSessionId?: string;
-          sessionId: string;
-          tabId: string;
-          browserId: string;
-          browserGeneration: number;
-        }) => void,
-      ): () => void;
-      onBrowserViewOperation?(handler: (payload: BrowserViewOperationPayload) => void): () => void;
-      onBrowserViewVisibility?(
-        handler: (payload: {
-          visible: boolean;
-          workspaceKey: string;
-          remoteSessionId: string | undefined;
-          sessionId: string;
-          tabId?: string;
-          browserId: string;
-          browserGeneration: number;
-        }) => void,
-      ): () => void;
-      onBrowserViewViewportChanged?(
-        handler: (payload: BrowserViewViewportChangedPayload) => void,
-      ): () => void;
-      onBrowserViewScreenshotSurfacePrepare?(
-        handler: (payload: BrowserViewScreenshotSurfacePreparePayload) => void,
-      ): () => void;
-      onBrowserViewScreenshotSurfaceRelease?(
-        handler: (payload: BrowserViewScreenshotSurfaceReleasePayload) => void,
-      ): () => void;
-      browserViewScreenshotSurfaceReady?(payload: BrowserViewScreenshotSurfaceReadyPayload): void;
-      onBrowserViewCloseTab?(
-        handler: (payload: BrowserViewCloseTabNotification) => void,
-      ): () => void;
-      onBrowserViewSuspend?(
-        handler: (payload: BrowserViewResidencyTransitionPayload) => void,
-      ): () => void;
-      onBrowserViewRestore?(
-        handler: (payload: BrowserViewResidencyTransitionPayload) => void,
-      ): () => void;
       /** 注册 main 进程触发新建任务的回调，返回 disposer */
       onNewTask(handler: () => void): () => void;
       /** 注册 main 进程触发打开工作区的回调，返回 disposer */
@@ -196,16 +119,6 @@ declare global {
       /** 使用系统默认应用打开本地文件 */
       openExternalFile(path: string): Promise<{ success: boolean; error?: string }>;
       getBuiltinProviderConfigFile(): Promise<BuiltinProviderConfigFileInfo>;
-      /** 打开 ZCode Computer Use 完整权限引导 */
-      openCuaPermissionOnboarding?(
-        options?: OpenCuaPermissionOnboardingOptions,
-      ): Promise<CuaAccessibilitySettingsResult>;
-      /** 只取消当前 renderer 以 operationId 发起的 onboarding participant。 */
-      cancelCuaPermissionOnboarding?(operationId: string): void;
-      /** 预热并缓存已验证的 Helper 路径，使 dragstart 能同步 startDrag */
-      prepareCuaHelperPermissionDrag?(): Promise<PrepareCuaHelperPermissionDragResult>;
-      /** 从权限浮窗拖拽 Helper.app 到 macOS 权限列表 */
-      startCuaHelperPermissionDrag?(): void;
       /** 通知 main process renderer 已就绪 */
       notifyRendererReady(): void;
       /** 触发任务状态对应的系统通知 */
@@ -218,35 +131,6 @@ declare global {
       }>;
       /** 截取当前窗口，用于错误反馈携带现场画面 */
       captureWindowScreenshot?(): Promise<WindowScreenshotResult | null>;
-      browserViewAttachGuest?(payload: {
-        key: string;
-        webContentsId: number;
-        active?: boolean;
-        workspaceKey?: string;
-        remoteSessionId?: string;
-        sessionId?: string;
-        residencyGeneration?: number;
-      }): Promise<void>;
-      /** 重建 `<webview>` 前让 main 精确断开旧 guest 的 CDP。 */
-      browserViewDetachGuest?(payload: { key: string; webContentsId: number }): Promise<boolean>;
-      browserViewCloseTab?(payload: BrowserViewCloseTabRequest): Promise<void>;
-      browserViewReportResidency?(payload: BrowserViewResidencyReportPayload): Promise<void>;
-      browserViewSuspendReady?(payload: { tabId: string; generation: number }): Promise<void>;
-      browserViewEnsureResident?(payload: BrowserViewCloseTabRequest): Promise<void>;
-      browserViewRestoreTabs?(
-        payload: BrowserViewRestoreTabsRequest,
-      ): Promise<BrowserViewRestoredTabShell[]>;
-      /** renderer 自由尺寸回写 main。 */
-      browserViewUpdateViewport?(payload: {
-        tabId: string;
-        viewport: BrowserViewportSize | null;
-      }): Promise<void>;
-      /** 从自动发现的 Chrome Profile 一次性导入内置浏览器数据。 */
-      importChromeBrowserData?(
-        options?: import("@zcode/shared").ChromeBrowserDataImportOptions,
-      ): Promise<ChromeBrowserDataImportResult>;
-      /** 清理内置浏览器缓存或全部站点数据。 */
-      clearEmbeddedBrowserData?(mode: "cache" | "all"): Promise<EmbeddedBrowserDataClearResult>;
       /** 注册新版本已下载完毕的回调，返回 disposer */
       onUpdateReady(callback: (version: string) => void): () => void;
       /** 注册"手动检查更新"结果的回调，返回 disposer */

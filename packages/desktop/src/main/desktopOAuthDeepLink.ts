@@ -11,7 +11,7 @@ interface DeepLinkWorkspaceGateOptions {
   canOpenWorkspace?: (workspacePath: string) => boolean;
   confirmationCopy?: ExternalWorkspaceOpenDialogCopy;
   onWorkspaceOpenBlocked?: (workspacePath: string) => void;
-  /** 业务窗口解析器；必须排除 CUA indicator 等 Main 辅助窗口。 */
+  /** 业务窗口解析器；必须排除 Main 辅助窗口。 */
   resolveApplicationWindow?: () => BrowserWindow | null;
 }
 

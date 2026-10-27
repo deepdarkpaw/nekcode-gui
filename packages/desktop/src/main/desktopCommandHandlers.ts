@@ -1,6 +1,5 @@
-import { getPluginSandboxHost } from "./pluginSandbox/index.js";
 /* eslint-disable max-lines -- 桌面命令分发需要共享窗口与平台上下文，集中维护更便于一致性 */
-import { app, BrowserWindow, dialog, session, shell } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
 import type { MessageBoxOptions } from "electron";
 import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
 import {
@@ -20,7 +19,6 @@ import {
 import { readDesktopHelpConfig } from "./desktopHelpConfig.js";
 import { showAboutDialog } from "./about.js";
 import { checkForUpdateMenuClick } from "./autoUpdater.js";
-import { resolveCuaOsSupport } from "./cuaOsSupport.js";
 import { syncWindowControlsOverlayForZoomLevel } from "./desktopWindowButtonPosition.js";
 import {
   DEFAULT_DESKTOP_WINDOW_HEIGHT,
@@ -38,7 +36,6 @@ export const HELP_TOGGLE_DEV_TOOLS_MENU_ID = "help.toggle-dev-tools";
 export const HELP_TOGGLE_ZCODE_STDIO_TAP_MENU_ID = "help.toggle-zcode-stdio-tap";
 const ZCODE_ENDPOINT_PROMPT_WIDTH = 460;
 const ZCODE_ENDPOINT_PROMPT_HEIGHT = 210;
-const CODING_PLAN_WEBVIEW_PARTITION = "persist:zcode-coding-plan";
 
 function resolveTargetWindow(senderWindow?: BrowserWindow | null) {
   if (senderWindow && !senderWindow.isDestroyed()) {
@@ -96,7 +93,6 @@ async function clearAllDataAndRelaunch(options: {
     return;
   }
 
-  await getPluginSandboxHost()?.clearBrowserData();
   const { rm } = await import("node:fs/promises");
   try {
     await rm(options.credentialsDir, { recursive: true, force: true });
@@ -127,25 +123,6 @@ async function clearAllDataAndRelaunch(options: {
   app.exit(0);
 }
 
-export async function clearCodingPlanWebviewStorage(options: {
-  logger: {
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
-  };
-}) {
-  try {
-    // Coding Plan webview 使用独立持久 partition，默认窗口 session.clearStorageData()
-    // 不会覆盖它；退出登录/清理数据时必须显式清除，避免旧账号 token 被下一次官网首屏读到。
-    await session.fromPartition(CODING_PLAN_WEBVIEW_PARTITION).clearStorageData();
-    options.logger.info("[coding-plan-webview] cleared persistent partition storage");
-  } catch (error) {
-    options.logger.warn(
-      "[coding-plan-webview] failed to clear persistent partition storage:",
-      error,
-    );
-  }
-}
-
 async function readLocalHelpConfig(logger: { warn: (...args: unknown[]) => void }) {
   try {
     return await readDesktopHelpConfig({
@@ -164,14 +141,6 @@ export async function resolveCommunityUrl(options: {
   logger: { warn: (...args: unknown[]) => void };
 }): Promise<string | undefined> {
   return (await readLocalHelpConfig(options.logger))?.community_urls?.[options.locale];
-}
-
-async function openFeedback(logger: {
-  warn: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
-}) {
-  const config = await readLocalHelpConfig(logger);
-  if (config?.feedback_url) await shell.openExternal(config.feedback_url);
 }
 
 async function openCommunity(
@@ -496,9 +465,6 @@ export async function executeDesktopCommand(options: {
     case DesktopCommandIds.RelaunchApp:
       await options.onRelaunchApp();
       return;
-    case DesktopCommandIds.OpenFeedback:
-      await openFeedback(options.logger);
-      return;
     case DesktopCommandIds.OpenCommunity:
       await openCommunity(options.currentApplicationLocale, options.logger);
       return;
@@ -566,16 +532,10 @@ export async function executeDesktopCommand(options: {
       });
       return;
     case DesktopCommandIds.ClearAllData:
-      await clearCodingPlanWebviewStorage({ logger: options.logger });
       await clearAllDataAndRelaunch({
         credentialsDir: options.credentialsDir,
         logger: options.logger,
       });
       return;
-    case DesktopCommandIds.ClearCodingPlanWebviewStorage:
-      await clearCodingPlanWebviewStorage({ logger: options.logger });
-      return;
-    case DesktopCommandIds.GetCuaOsSupport:
-      return resolveCuaOsSupport();
   }
 }

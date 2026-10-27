@@ -2,7 +2,6 @@ import type { RemoteResourcePackageSelection } from "./remoteResourcePackages.js
 import type { ProviderFamilyDomain } from "./model-provider-family.js";
 import type { ProviderFamilyConnectionSelectionSettings } from "./provider-family-connection-selection.js";
 import type { WorkspacePurpose } from "./workspacePurpose.js";
-import type { EmbeddedBrowserViewportPreference } from "./browser-use/command-metadata.js";
 import type { AppToolSearchMode } from "./app-runtime-preferences.js";
 
 // ── Domain types ──
@@ -255,19 +254,6 @@ export interface AppSettings {
   httpProxyNoProxy?: string;
   /** 自定义 PEM 根证书路径；下次启动 app/agent 时用于 renderer 校验与 agent NODE_EXTRA_CA_CERTS。 */
   httpProxyCaCertPath?: string;
-  /**
-   * 内置浏览器忽略 HTTPS 证书校验错误（自签名、过期、域名不匹配等），用于访问内网测试站点。
-   * 只影响内置浏览器出口，不影响 ZCode 自身对后端与模型 API 的请求。默认关闭，重启后生效。
-   */
-  embeddedBrowserAllowInsecureCertificates?: boolean;
-  /** 人类用户主动打开 Browser tab 时的一次性显示偏好；Agent Browser Use 不读写。 */
-  embeddedBrowserViewportPreference?: EmbeddedBrowserViewportPreference;
-  /**
-   * 用户已在设置页关闭输入框的「电脑操作」按钮（内部 hidden 态）。
-   * 取 hidden 语义而非 visible：undefined 即默认显示，老用户无需数据迁移。
-   * 关闭后按钮不再渲染，且不因重启或版本更新自愈，仅能在设置页重新开启。
-   */
-  computerUseComposerEntryHidden?: boolean;
   /** 自动归档已完成旧任务的总开关 */
   taskAutoArchiveEnabled?: boolean;
   /** 自动归档阈值；当任务最后更新时间早于该天数时允许被归档 */
@@ -363,18 +349,4 @@ export interface AppSettings {
   settingsSyncFirstRunPromptHandled?: boolean;
   /** 设置页里的临时 endpoint override；正式/测试默认 base url 由 ZCODE_BASE_URL env 管理。 */
   zcodeEndpointOrigin?: string;
-  /** 手机远控：外部端点设备注册 Sid；passHash 存 credential store（web-remote-control:external-relay:pass_hash）。 */
-  webRemoteControlExternalRelayDevice?: { deviceSid: string };
-  /** 手机远控：上次开启时的工作区 / 初始任务，用于启动恢复。 */
-  webRemoteControlLastEnabledContext?: {
-    workspacePath: string;
-    workspaceIdentity?: string;
-    initialTaskId?: string;
-  };
-  /** 手机远控端点模式：lan = 仅同网直连（默认）；custom = 用户自备隧道 / relay。 */
-  webRemoteControlEndpointMode?: "lan" | "custom";
-  /** 手机远控：custom 模式的用户自备端点地址（如 wss://域名/ws）。 */
-  webRemoteControlCustomEndpointUrl?: string;
-  /** 手机远控：本机设备标识（首次开启时生成，写入 QR 的 mid 参数）。 */
-  webRemoteControlDeviceMid?: string;
 }

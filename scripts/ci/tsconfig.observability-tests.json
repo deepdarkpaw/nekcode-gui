@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["../../packages/ui/src/*"],
-      "@zcode/contracts": ["../../apps/zcode-cli/packages/contracts/src/index.ts"]
-    }
-  }
-}

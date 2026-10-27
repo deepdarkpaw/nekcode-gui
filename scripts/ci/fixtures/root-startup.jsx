@@ -73,7 +73,6 @@ const serviceValues = {
       fixture.calls.push("agent.preferences");
     },
   },
-  botsService: {},
   conversationShareService: {},
   credentialService: new Proxy(
     {},

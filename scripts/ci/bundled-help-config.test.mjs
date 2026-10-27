@@ -13,10 +13,6 @@ const { readDesktopHelpConfig } = await tsImport(
   "../../packages/desktop/src/main/desktopHelpConfig.ts",
   import.meta.url,
 );
-const { resolveWebHelpConfig, resolveWebCommunityUrl } = await tsImport(
-  "../../packages/web/src/communityUrl.ts",
-  import.meta.url,
-);
 const { resolveZCodeAgentPresentationSurface } = await tsImport(
   "../../packages/services/src/zcode-agent/zcodeAgentPresentationSurface.ts",
   import.meta.url,
@@ -28,14 +24,9 @@ const bundled = JSON.parse(
 test("help config is local, validates link protocols and preserves locale boundaries", () => {
   const local = resolveHelpAppConfig({
     community_urls: { "en-US": "https://example.com/community", "zh-CN": "javascript:alert(1)" },
-    feedback_url: "file:///tmp/feedback",
-    feedback_use_external_form: true,
   });
   assert.equal(local.community_urls["en-US"], "https://example.com/community");
   assert.equal(local.community_urls["zh-CN"], undefined);
-  assert.equal(local.feedback_url, undefined);
-  assert.equal(resolveHelpAppConfig({ feedback_url: "invalid url" }).feedback_url, undefined);
-  assert.equal(resolveHelpAppConfig(undefined).feedback_use_external_form, true);
 });
 
 test("Desktop packaged/development and Web help use the same bundled links without requests", async (t) => {
@@ -70,12 +61,7 @@ test("Desktop packaged/development and Web help use the same bundled links witho
     }),
     expected,
   );
-  assert.deepEqual(await resolveWebHelpConfig(), expected);
-  assert.equal(expected.feedback_url, "https://github.com/axiom-desu/ZCodium/issues/new");
-  assert.equal(expected.feedback_use_external_form, true);
-  for (const locale of ["en-US", "zh-CN"]) {
-    assert.equal(await resolveWebCommunityUrl(locale), "https://github.com/axiom-desu/ZCodium");
-  }
+  assert.equal(expected.community_urls["en-US"], "https://github.com/axiom-desu/ZCodium");
   await writeFile(join(resources, "config/default.json"), "malformed");
   await assert.rejects(
     readDesktopHelpConfig({ isPackaged: true, appPath: "unused", resourcesPath: resources }),

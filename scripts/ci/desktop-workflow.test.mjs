@@ -70,11 +70,9 @@ test("parallel packaging preserves coverage commands, full targets and current-r
     "pnpm gate:format",
     "pnpm gate:knip",
     "pnpm architecture:check",
-    "pnpm -r --filter './apps/zcode-cli/packages/*' test",
     "pnpm vitest run",
     "node --test --test-isolation=none scripts/ci/*.test.mjs",
     "node scripts/ci/remote-form-smoke.mjs",
-    "node scripts/ci/web-remote-control-dialog-smoke.mjs",
   ]) {
     assert.ok(commands.includes(command), `missing coverage command: ${command}`);
   }
@@ -183,44 +181,6 @@ test("actual event expressions expand to four daily or twelve dual-product jobs"
     if (expected === 4) assert.ok(combinations.every((item) => item.startsWith("production/")));
     else assert.equal(combinations.filter((item) => item.startsWith("preview/")).length, 6);
   }
-});
-
-test("preview toolchains precede preparation and Windows arm64 initializes matching MSVC", async () => {
-  const jobs = await loadJobs();
-  for (const id of ["build", "build-macos"]) {
-    const job = jobs[id];
-    const rust = job.steps.findIndex((step) =>
-      String(step.uses ?? "").startsWith("dtolnay/rust-toolchain@"),
-    );
-    const prepare = job.steps.findIndex((step) => step.name === "Prepare desktop runtime");
-    assert.ok(
-      rust >= 0 && prepare > rust,
-      `${id}: Rust toolchain must be installed before runtime preparation`,
-    );
-    assert.match(String(job.steps[rust].if), /matrix\.flavor == 'preview'/);
-  }
-  const windows = jobs.build.steps.findIndex((step) =>
-    String(step.uses ?? "").startsWith("ilammy/msvc-dev-cmd@"),
-  );
-  const prepare = jobs.build.steps.findIndex((step) => step.name === "Prepare desktop runtime");
-  assert.ok(windows >= 0 && prepare > windows);
-  assert.equal(
-    jobs.build.steps[windows].uses,
-    "ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756",
-  );
-  assert.match(
-    String(jobs.build.steps[windows].if),
-    /matrix\.flavor == 'preview'.*matrix\.target\.platform == 'win'/,
-  );
-  assert.match(
-    jobs.build.steps[windows].with.arch,
-    /matrix\.target\.arch == 'arm64'.*amd64_arm64.*amd64/,
-  );
-  const rustTarget = jobs.build.steps.findIndex((step) =>
-    String(step.run ?? "").includes("rustup target add aarch64-pc-windows-msvc"),
-  );
-  assert.ok(rustTarget >= 0 && rustTarget < prepare);
-  assert.match(String(jobs.build.steps[rustTarget].if), /matrix\.target\.arch == 'arm64'/);
 });
 
 test("release downloads exactly the twelve flavor/platform/arch artifacts", async () => {

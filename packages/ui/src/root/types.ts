@@ -30,8 +30,6 @@ export interface RootProps {
   allowOpenWorkspace?: boolean;
   /** 是否优先使用服务端目录浏览器，Web 普通模式不能依赖系统目录选择框 */
   preferDirectoryBrowser?: boolean;
-  /** 是否支持 Electron 内嵌浏览器 side pane，默认仅桌面端支持 */
-  supportsEmbeddedBrowser?: boolean;
   /** 是否启用远程工作区能力，Web 普通模式先只支持本地 server 工作区 */
   allowRemoteWorkspace?: boolean;
   /** 非桌面入口初始 workspace 注入前继续展示的 loading，桌面端不使用 */

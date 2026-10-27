@@ -137,24 +137,6 @@ async function ensureNodeBinary(repoRoot: string, target: ServerTarget): Promise
   }
 }
 
-async function ensureAgentBundle(repoRoot: string, skipBuild: boolean): Promise<string> {
-  const bundlePath = join(repoRoot, "apps/zcode-cli/packages/cli/dist/zcode.cjs");
-  if (await pathExists(bundlePath)) return bundlePath;
-  if (skipBuild) {
-    throw new Error(`Agent bundle missing: ${bundlePath} (remove --skip-agent-build to build it)`);
-  }
-  log("agent bundle missing, building via scripts/build-desktop-agent-cli.mjs");
-  await runCommand(
-    process.execPath,
-    [join(repoRoot, "scripts/build-desktop-agent-cli.mjs")],
-    repoRoot,
-  );
-  if (!(await pathExists(bundlePath))) {
-    throw new Error(`Agent bundle still missing after build: ${bundlePath}`);
-  }
-  return bundlePath;
-}
-
 export async function resolveNativeToolsDir(
   repoRoot: string,
   target: ServerTarget,
@@ -181,7 +163,7 @@ export async function resolveNativeToolsDir(
 
 async function resolveWorkspacePackageDirs(repoRoot: string): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  for (const root of [join(repoRoot, "apps/zcode-cli/packages"), join(repoRoot, "packages")]) {
+  for (const root of [join(repoRoot, "packages")]) {
     if (!(await pathExists(root))) continue;
     for (const entry of await readdir(root, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
@@ -236,13 +218,9 @@ async function main(): Promise<void> {
   const appVersion = (
     JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8")) as { version: string }
   ).version;
-  const [agentBundlePath, nodeBinaryPath] = await Promise.all([
-    ensureAgentBundle(repoRoot, argv.includes("--skip-agent-build")),
+  const [nodeBinaryPath, nativeToolsDir, workspacePackageDirs] = await Promise.all([
     ensureNodeBinary(repoRoot, target),
-  ]);
-  const [nativeToolsDir, officialPluginsDir, workspacePackageDirs] = await Promise.all([
     resolveNativeToolsDir(repoRoot, target),
-    Promise.resolve(join(repoRoot, "apps/zcode-cli/packages")),
     resolveWorkspacePackageDirs(repoRoot),
   ]);
 
@@ -250,7 +228,6 @@ async function main(): Promise<void> {
     target,
     appVersion,
     distDir,
-    agentBundlePath,
     nodeBinaryPath,
     notices: {
       thirdParty: thirdParty.toString("utf8"),
@@ -260,7 +237,6 @@ async function main(): Promise<void> {
     workspaceNodeModulesDir: join(repoRoot, "node_modules"),
     workspacePackageDirs,
     nativeToolsDir,
-    officialPluginsDir,
     outputDir: join(packageRoot, "dist-release"),
     archive: !argv.includes("--no-archive"),
   });

@@ -4,11 +4,7 @@ import {
   migrateLegacyOfficialGlmModelId,
 } from "./legacy-model-provider-identity.js";
 import { parseSubagentMarkdownSelection } from "./subagent-markdown-selection.js";
-import {
-  parsePluginSubagentModelSelectionOverrides,
-  type BuiltInSubagentModelSelectionOverrides,
-  type PluginSubagentModelSelectionOverrides,
-} from "./subagents-types.js";
+import type { BuiltInSubagentModelSelectionOverrides } from "./subagents-types.js";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -22,7 +18,6 @@ export function importSubagentStateSelections(input: Record<string, unknown>): R
   unknown
 > & {
   builtInModelSelectionOverrides: BuiltInSubagentModelSelectionOverrides;
-  pluginAgentModelSelectionOverrides: PluginSubagentModelSelectionOverrides;
 } {
   const current = Object.hasOwn(input, "builtInModelSelectionOverrides");
   const selections: BuiltInSubagentModelSelectionOverrides = {};
@@ -49,40 +44,8 @@ export function importSubagentStateSelections(input: Record<string, unknown>): R
         }
       : selection;
   }
-  // 插件双 map 与内置覆盖一样只在存储导入时解释；
-  // 正式 map 存在即为权威，空值/损坏值也不能复活旧 model 或档位。
-  const pluginSelections = Object.hasOwn(input, "pluginAgentModelSelectionOverrides")
-    ? parsePluginSubagentModelSelectionOverrides(input.pluginAgentModelSelectionOverrides)
-    : Object.fromEntries(
-        Object.entries(record(input.pluginAgentModelOverrides)).flatMap(([id, model]) => {
-          const selection = parseSubagentMarkdownSelection({
-            model,
-            thoughtLevel: record(input.pluginAgentThoughtLevelOverrides)[id],
-          });
-          if (!id.startsWith("plugin:") || !selection) return [];
-          const providerId = selection.providerId.startsWith("builtin:")
-            ? migrateLegacyModelProviderId(selection.providerId)
-            : selection.providerId;
-          return [
-            [
-              id,
-              providerId
-                ? {
-                    ...selection,
-                    providerId,
-                    modelId: migrateLegacyOfficialGlmModelId(
-                      selection.providerId,
-                      selection.modelId,
-                    ),
-                  }
-                : selection,
-            ],
-          ];
-        }),
-      );
   return {
     ...input,
     builtInModelSelectionOverrides: selections,
-    pluginAgentModelSelectionOverrides: pluginSelections,
   };
 }

@@ -19,8 +19,6 @@ import { normalizeSlashCommandValue } from "@/slashCommandHelpers.js";
 import type { LexicalChatInputHandle } from "@/LexicalChatInput.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { MentionPanel, type MentionPanelSection } from "@/mentions/components/MentionPanel.js";
-import { PluginMentionOptionContent } from "@/mentions/components/PluginMentionOptionContent.js";
-import { usePluginsMentionProvider } from "@/mentions/providers/pluginsMentionProvider.js";
 
 /**
  * 「添加」分区里紧随附件之后的命令快捷项，选中即插入与 `/` 面板相同的命令标签。
@@ -42,7 +40,7 @@ export function ChatPromptActionMenu({
   workspaceIdentity,
   sessionId,
   container,
-  showPlugins,
+  showMentions,
   excludedSlashCommandNames,
 }: {
   actionMenuTitle: string;
@@ -59,7 +57,7 @@ export function ChatPromptActionMenu({
   workspaceIdentity?: string;
   sessionId: string | null;
   container: HTMLElement | null;
-  showPlugins: boolean;
+  showMentions: boolean;
   excludedSlashCommandNames?: readonly string[];
 }) {
   const { intl } = useZCodeIntl();
@@ -77,22 +75,13 @@ export function ChatPromptActionMenu({
     }),
     [container],
   );
-  const plugins = usePluginsMentionProvider(
-    workspacePath,
-    workspaceIdentity,
-    sessionId,
-    "",
-    open && !disabled && showPlugins,
-    intl.formatMessage({ id: "chat.mention.plugins.empty" }),
-    intl.formatMessage({ id: "chat.mention.plugins.title" }),
-  );
   const provider = useChatViewActiveTaskProvider(sessionId, workspacePath, workspaceIdentity);
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
   const files = useFileMentionProvider(
     workspacePath,
     workspaceIdentity,
     "",
-    open && !disabled && showPlugins,
+    open && !disabled && showMentions,
     intl.formatMessage({ id: "chat.mention.files.empty" }),
     intl.formatMessage({ id: "chat.mention.files.title" }),
     MENTION_FILES_ONLY_DEFAULT_PREVIEW_LIMIT,
@@ -102,7 +91,7 @@ export function ChatPromptActionMenu({
     workspacePath,
     workspaceIdentity,
     "",
-    open && !disabled && showPlugins,
+    open && !disabled && showMentions,
     getSessionMentionWorkspaceScope("@"),
     intl.formatMessage({ id: "chat.mention.sessions.empty" }),
     intl.formatMessage({ id: "chat.mention.sessions.title" }),
@@ -116,7 +105,7 @@ export function ChatPromptActionMenu({
       errorText: group.error?.message ?? null,
     })),
   );
-  const mentionItems = [...plugins.items, ...contextGroups.flatMap((group) => group.items)];
+  const mentionItems = contextGroups.flatMap((group) => group.items);
   const attachmentCount = attachmentAction ? 1 : 0;
   const options = [
     ...(attachmentAction ? [{ disabled: false }] : []),
@@ -165,19 +154,6 @@ export function ChatPromptActionMenu({
           };
         }),
       ],
-    },
-    {
-      id: "plugins",
-      title: plugins.title,
-      emptyText: plugins.emptyText,
-      loading: plugins.loading,
-      loadingText: intl.formatMessage({ id: "chat.mention.category.loading" }),
-      errorText: plugins.error?.message,
-      options: plugins.items.map((item) => ({
-        ...item,
-        label: item.displayLabel ?? item.label,
-        content: <PluginMentionOptionContent item={item} />,
-      })),
     },
     ...contextGroups.map((group) => ({
       id: group.id,

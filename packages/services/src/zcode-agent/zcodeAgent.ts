@@ -3,7 +3,7 @@ import type { BackgroundBashOutputResult, SessionDebugSnapshot } from "@zcode/sh
 /* eslint-disable max-lines -- ZCode agent service 接口集中声明 protocol/session/workspace 方法，拆分会增加 service descriptor 迁移成本。 */
 import type { Event, IDisposable } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
-import type { AppUsageRange, AppUsageSnapshot, ZCodeTaskTokenUsageResult } from "@zcode/shared";
+import type { ZCodeTaskTokenUsageResult } from "@zcode/shared";
 import type { ZCodeAutomation, ZCodeAutomationRun } from "@zcode/shared";
 import type {
   ZCodeStorageStartupState,
@@ -24,36 +24,13 @@ import type {
   ZCodeToolExecResource,
   ZCodeProcessChildProcess,
   ZCodeMcpListResult,
-  ZCodePluginsListResult,
-  ZCodePluginsOverviewResult,
-  ZCodePluginsMarketplaceMutationResult,
-  ZCodePluginsInstallResult,
-  ZCodePluginsReferenceCatalogResult,
   ZCodeSkillsReferenceCatalogResult,
-  ZCodeMcpReadResourceResult,
-  ZCodeMcpUiCallToolResult,
-  ZCodeMcpUiCancelCallResult,
-  ZCodeMcpUiReadResourceResult,
-  ZCodeMcpUiListResourcesResult,
-  ZCodeMcpUiAppToolAcceptedResult,
-  ZCodeMcpUiRegisterAppToolsResult,
-  ZCodeMcpUiUnregisterAppToolsResult,
-  ZCodeMcpUiListResourceTemplatesResult,
-  ZCodePluginsListUiSurfacesResult,
   ZCodeWorkflowsDeleteResult,
   ZCodeWorkflowsGetResult,
   ZCodeWorkflowsListResult,
   ZCodeWorkflowsMoveResult,
   ZCodeWorkflowsRunsResult,
   ZCodeWorkflowsUpdateMetaResult,
-  ZCodePluginsUninstallResult,
-  ZCodePluginsRestoreBuiltinResult,
-  ZCodePluginsConfigureResult,
-  ZCodePluginsDescribeResult,
-  ZCodePluginsValidateResult,
-  ZCodePluginsSetEnabledResult,
-  ZCodePluginsCancelOperationResult,
-  ZCodePluginOperationProgressNotification,
   ZCodeProviderTestModelConnectivityParams,
   ZCodeProviderTestModelConnectivityResult,
   ZCodeUserInputRequestParams,
@@ -69,12 +46,10 @@ import type {
   ZCodeSessionSubagentsResult,
   ZCodeStateUpdatedNotification,
   ZCodeTaskClientMode,
-  ZCodeBrowserAmbientContext,
   ZCodeWorkspacePresentation,
   ZCodeWorkspaceGenerateTextResult,
   ZCodeWorkspaceGenerateTextParams,
   ZCodeWorkspaceHookTrustGrantResult,
-  ZCodeAutomationBotDeliveryTarget,
 } from "@zcode/shared";
 import type {
   ClientHello,
@@ -84,7 +59,6 @@ import type {
   CommandsQueryResult,
   ConversationTopicWireCandidate,
   ConversationTelemetryFact,
-  CuaPermissionObservation,
   ConversationRowTarget,
   HelloMessage,
   SessionsIndexTopicWireCandidate,
@@ -115,44 +89,18 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { createServiceDescriptor } from "../descriptors.js";
 
-export * from "./zcodeAgentPluginParams.js";
+export * from "./zcodeAgentWorkspaceParams.js";
 export * from "./zcodeAgentWorkflowParams.js";
 import type {
-  ZCodeAgentAddPluginMarketplaceParams,
   ZCodeAgentAutomationIdParams,
-  ZCodeAgentCancelPluginOperationParams,
-  ZCodeAgentConfigurePluginParams,
-  ZCodeAgentResetPluginConfigParams,
   ZCodeAgentCreateAutomationParams,
   ZCodeAgentDeleteAutomationRunParams,
-  ZCodeAgentDescribePluginParams,
-  ZCodeAgentInstallPluginParams,
   ZCodeAgentListMcpServerStatusesParams,
-  ZCodeAgentPluginViewParams,
-  ZCodeAgentPluginReferenceCatalogParams,
   ZCodeAgentSkillReferenceCatalogParams,
-  ZCodeAgentReadMcpResourceParams,
-  ZCodeAgentReadMcpResourceForUiParams,
-  ZCodeAgentListMcpResourcesForUiParams,
-  ZCodeAgentAppToolCallForUiParams,
-  ZCodeAgentAppToolInstanceForUiParams,
-  ZCodeAgentRegisterAppToolsForUiParams,
-  ZCodeAgentResolveAppToolCallForUiParams,
-  ZCodeAgentMcpResourceSubscriptionForUiParams,
-  ZCodeAgentCallMcpToolForUiParams,
-  ZCodeAgentCancelMcpToolCallForUiParams,
-  ZCodeAgentResolveSuggestedPluginReferenceParams,
-  ZCodeAgentRemovePluginMarketplaceParams,
-  ZCodeAgentRestoreBuiltinPluginParams,
-  ZCodeAgentSetPluginEnabledParams,
   ZCodeAgentSetAutomationEnabledParams,
-  ZCodeAgentUninstallPluginParams,
-  ZCodeAgentUpdatePluginMarketplaceParams,
-  ZCodeAgentUpdatePluginParams,
   ZCodeAgentUpdateAutomationParams,
-  ZCodeAgentValidatePluginParams,
   ZCodeAgentWorkspaceTarget,
-} from "./zcodeAgentPluginParams.js";
+} from "./zcodeAgentWorkspaceParams.js";
 import type {
   ZCodeAgentDeleteSavedWorkflowParams,
   ZCodeAgentGetSavedWorkflowParams,
@@ -170,8 +118,7 @@ export interface ZCodeAgentResumeSessionParams extends ZCodeAgentSessionTarget {
   model?: ModelSelection;
   thoughtLevel?: string;
   mcpServers?: ZCodeAgentMcpServer[];
-  // 冷恢复会重建 runtime，工具面隔离必须和 create 保持同一安全边界（CUA 只放行 zcode-cua 工具、
-  // 禁 Bash 等）。否则 resume 后模型可见工具面/执行权限会比创建时更宽。
+  // 冷恢复会重建 runtime，工具面隔离必须和 create 保持同一安全边界。否则 resume 后模型可见工具面/执行权限会比创建时更宽。
   toolAllowlist?: string[];
   toolDenylist?: string[];
 }
@@ -207,9 +154,6 @@ export interface ZCodeAgentRuntimeLifecycleEvent extends ZCodeAgentWorkspaceTarg
   state: "available" | "unavailable";
 }
 
-export type ZCodeAgentCuaPermissionObservation = CuaPermissionObservation &
-  ZCodeAgentWorkspaceTarget;
-
 export interface ZCodeAgentCreateSessionParams extends ZCodeAgentWorkspaceTarget {
   sessionId?: string;
   sessionTraceId?: TraceId;
@@ -239,11 +183,6 @@ export interface ZCodeAgentListSessionSubagentsParams extends ZCodeAgentSessionT
   endedLimit?: number;
   /** 远程 workspace 的宿主连接身份；只用于选择现有 Host，不进入 CLI wire query。 */
   remoteSessionId?: string;
-}
-
-export interface ZCodeAgentAppUsageParams {
-  range: AppUsageRange;
-  timeZone?: string;
 }
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
@@ -282,15 +221,11 @@ export interface ZCodeAgentSendPromptParamsBase extends ZCodeAgentSessionTarget 
   sessionTraceId?: TraceId;
   content: string;
   attachments?: Record<string, unknown>[];
-  /** provider-only 的当前 IAB 状态；UI/session persistence 仍使用 content 原文。 */
-  browserAmbientContext?: ZCodeBrowserAmbientContext;
   clientMode?: ZCodeTaskClientMode;
   expectedRevision?: number;
   expectedProviderRevision?: string;
   runtimeProviderHeaders?: Record<string, string>;
   toolDenylist?: string[];
-  /** Bot 来源 turn 的稳定回推地址；只在当前 turn 内供 CronCreate 读取。 */
-  botDeliveryTarget?: ZCodeAutomationBotDeliveryTarget;
 }
 
 export type ZCodeAgentSendPromptParams = ZCodeAgentSendPromptParamsBase &
@@ -610,7 +545,6 @@ export interface IZCodeAgentService {
   listSessionSubagents(
     params: ZCodeAgentListSessionSubagentsParams,
   ): Promise<ZCodeSessionSubagentsResult>;
-  getAppUsageStats(params: ZCodeAgentAppUsageParams): Promise<AppUsageSnapshot>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;
   readSessionMessages(
@@ -626,76 +560,10 @@ export interface IZCodeAgentService {
     params: ZCodeAgentGrantWorkspaceHookTrustParams,
   ): Promise<ZCodeWorkspaceHookTrustGrantResult>;
   listMcpServerStatuses(params: ZCodeAgentListMcpServerStatusesParams): Promise<ZCodeMcpListResult>;
-  listPlugins(params: ZCodeAgentPluginViewParams): Promise<ZCodePluginsListResult>;
-  /**
-   * Plugin 对话引用 catalog：session-scoped 只读投影。
-   * 走 workspace 级 agent client（session 记录只存在于该进程），不走独立插件管理进程。
-   */
-  getPluginReferenceCatalog(
-    params: ZCodeAgentPluginReferenceCatalogParams,
-  ): Promise<ZCodePluginsReferenceCatalogResult>;
   /** Composer Skill 引用 catalog；带 sessionId 时读取该 runtime 的冻结快照。 */
   getSkillReferenceCatalog(
     params: ZCodeAgentSkillReferenceCatalogParams,
   ): Promise<ZCodeSkillsReferenceCatalogResult>;
-  /** 插件 UI：读取插件 MCP 的 `ui://` 资源；走 session 所在 workspace agent 进程。 */
-  openMcpUiInstance(
-    params: import("../plugin-ui-bridge/contract.js").PluginUiPrepareSandboxParams & {
-      accountContext?: string;
-    },
-  ): Promise<import("@zcode/shared/mcp-apps").McpAppInstance>;
-  validateMcpUiInstance(
-    params: import("../plugin-ui-bridge/contract.js").PluginUiPluginScope,
-  ): Promise<void>;
-  recycleMcpUiInstance(
-    params: import("../plugin-ui-bridge/contract.js").PluginUiPluginScope,
-  ): Promise<boolean>;
-  closeMcpUiInstance(
-    params: import("../plugin-ui-bridge/contract.js").PluginUiPluginScope,
-  ): Promise<void>;
-  readMcpResource(params: ZCodeAgentReadMcpResourceParams): Promise<ZCodeMcpReadResourceResult>;
-  /** 插件 UI：UI 发起的工具调用；复用既有权限审批，不产生 transcript row。 */
-  sampleMcpApp(
-    params: import("../plugin-ui-bridge/samplingContract.js").PluginUiSamplingParams,
-  ): Promise<import("@zcode/shared/mcp-apps").McpAppsSamplingResult>;
-  cancelMcpAppSampling(
-    params: import("../plugin-ui-bridge/samplingContract.js").PluginUiCancelSamplingParams,
-  ): Promise<{ cancelled: boolean }>;
-  callMcpToolForUi(params: ZCodeAgentCallMcpToolForUiParams): Promise<ZCodeMcpUiCallToolResult>;
-  /** 插件 UI 取消带 callId 的进行中 UI 工具调用；agent 侧 abort 到 MCP client。 */
-  cancelMcpToolCallForUi(
-    params: ZCodeAgentCancelMcpToolCallForUiParams,
-  ): Promise<ZCodeMcpUiCancelCallResult>;
-  /** 插件 UI 页面发起的 `resources/read`，agent 侧限同插件服务器、8 MiB、mimeType 白名单。 */
-  readMcpResourceForUi(
-    params: ZCodeAgentReadMcpResourceForUiParams,
-  ): Promise<ZCodeMcpUiReadResourceResult>;
-  /** 插件 UI 页面发起的 resources/list、resources/templates/list、subscribe、unsubscribe 代理。 */
-  listMcpResourcesForUi(
-    params: ZCodeAgentListMcpResourcesForUiParams,
-  ): Promise<ZCodeMcpUiListResourcesResult>;
-  listMcpResourceTemplatesForUi(
-    params: ZCodeAgentListMcpResourcesForUiParams,
-  ): Promise<ZCodeMcpUiListResourceTemplatesResult>;
-  subscribeMcpResourceForUi(params: ZCodeAgentMcpResourceSubscriptionForUiParams): Promise<void>;
-  unsubscribeMcpResourceForUi(params: ZCodeAgentMcpResourceSubscriptionForUiParams): Promise<void>;
-  /** App-Provided Tools：页面工具登记 / 注销与模型调用的认领 / 回传（信箱投递走 v4 live 增量）。 */
-  registerAppToolsForUi(
-    params: ZCodeAgentRegisterAppToolsForUiParams,
-  ): Promise<ZCodeMcpUiRegisterAppToolsResult>;
-  unregisterAppToolsForUi(
-    params: ZCodeAgentAppToolInstanceForUiParams,
-  ): Promise<ZCodeMcpUiUnregisterAppToolsResult>;
-  claimAppToolCallForUi(
-    params: ZCodeAgentAppToolCallForUiParams,
-  ): Promise<ZCodeMcpUiAppToolAcceptedResult>;
-  resolveAppToolCallForUi(
-    params: ZCodeAgentResolveAppToolCallForUiParams,
-  ): Promise<ZCodeMcpUiAppToolAcceptedResult>;
-  /** 插件 UI 工作区级面板入口（已启用插件清单 `ui.surfaces[]`）。 */
-  listPluginUiSurfaces(
-    params: ZCodeAgentWorkspaceTarget,
-  ): Promise<ZCodePluginsListUiSurfacesResult>;
   // 已保存工作流的 GUI 中枢：workspace 级、无会话，每次调用现扫 `<cwd>/.zcode/workflows/`。
   // 全局档传 `scope: "global"`：带 workspace 就用它当载体，不带则由 services 层自选本机载体运行时。
   listSavedWorkflows(params: ZCodeAgentListSavedWorkflowsParams): Promise<ZCodeWorkflowsListResult>;
@@ -712,14 +580,6 @@ export interface IZCodeAgentService {
   // 在项目档 / 全局档之间移动同名文件：
   // `workspace` 是载体（移到项目传目标项目、移到全局传源项目），`to` 是落点档；不覆盖已存在的目标。
   moveSavedWorkflow(params: ZCodeAgentMoveSavedWorkflowParams): Promise<ZCodeWorkflowsMoveResult>;
-  resolveSuggestedPluginReference(
-    params: ZCodeAgentResolveSuggestedPluginReferenceParams,
-  ): Promise<import("@zcode/shared").ZCodePluginsResolveSuggestedReferenceResult>;
-  /** 推荐项 Plugin 首次本地检查缺失后的 operation-scoped 刷新进度。 */
-  onDynamicPluginOperationProgress(
-    operationId: string,
-  ): Event<ZCodePluginOperationProgressNotification>;
-  getPluginsOverview(params: ZCodeAgentPluginViewParams): Promise<ZCodePluginsOverviewResult>;
   /**
    * 资源管理器：枚举本 Host 内全部本地 Agent 进程（含 plugin / mcp-status 泳道），
    * 并向每个存活 runtime 请求 `process/childProcesses`；单个 runtime 失败只让它的 children 为空。
@@ -727,31 +587,6 @@ export interface IZCodeAgentService {
   collectLocalRuntimeChildProcesses(
     signal?: AbortSignal,
   ): Promise<ZCodeAgentLocalRuntimeChildProcesses[]>;
-  addPluginMarketplace(
-    params: ZCodeAgentAddPluginMarketplaceParams,
-  ): Promise<ZCodePluginsMarketplaceMutationResult>;
-  removePluginMarketplace(
-    params: ZCodeAgentRemovePluginMarketplaceParams,
-  ): Promise<ZCodePluginsMarketplaceMutationResult>;
-  updatePluginMarketplace(
-    params: ZCodeAgentUpdatePluginMarketplaceParams,
-  ): Promise<ZCodePluginsMarketplaceMutationResult>;
-  installPlugin(params: ZCodeAgentInstallPluginParams): Promise<ZCodePluginsInstallResult>;
-  cancelPluginOperation(
-    params: ZCodeAgentCancelPluginOperationParams,
-  ): Promise<ZCodePluginsCancelOperationResult>;
-  uninstallPlugin(params: ZCodeAgentUninstallPluginParams): Promise<ZCodePluginsUninstallResult>;
-  updatePlugin(params: ZCodeAgentUpdatePluginParams): Promise<ZCodePluginsInstallResult>;
-  restoreBuiltinPlugin(
-    params: ZCodeAgentRestoreBuiltinPluginParams,
-  ): Promise<ZCodePluginsRestoreBuiltinResult>;
-  configurePlugin(params: ZCodeAgentConfigurePluginParams): Promise<ZCodePluginsConfigureResult>;
-  resetPluginConfig(
-    params: ZCodeAgentResetPluginConfigParams,
-  ): Promise<ZCodePluginsConfigureResult>;
-  validatePlugin(params: ZCodeAgentValidatePluginParams): Promise<ZCodePluginsValidateResult>;
-  describePlugin(params: ZCodeAgentDescribePluginParams): Promise<ZCodePluginsDescribeResult>;
-  setPluginEnabled(params: ZCodeAgentSetPluginEnabledParams): Promise<ZCodePluginsSetEnabledResult>;
   // ---- 定时任务(automation)管理 ----
   listAutomations(params: ZCodeAgentWorkspaceTarget): Promise<ZCodeAutomation[]>;
   listAllAutomations(): Promise<ZCodeAutomation[]>;
@@ -898,8 +733,6 @@ export interface IZCodeAgentService {
   onDynamicConversationTelemetryFact(
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ConversationTelemetryFact>;
-  /** 当前窗口全部本地 live task 的 CUA 权限观察；历史、远程与 replayable 不在此事件面。 */
-  onDynamicCuaPermissionObservation(): Event<ZCodeAgentCuaPermissionObservation>;
   // ── sessions-index 通道（列表活性）──
   subscribeSessionsIndexV4(
     params: ZCodeAgentSessionsIndexSubscribeParams,
@@ -937,8 +770,6 @@ export interface IZCodeAgentService {
   onAgentRuntimeLifecycle?: (
     listener: (event: ZCodeAgentRuntimeLifecycleEvent) => void,
   ) => IDisposable;
-  /** 当前 desktop-local CUA turn 是否仍在执行，用于 Helper recovery 避免中途回收 Agent。 */
-  hasActiveCuaOperationTurn(): boolean;
   disposeWorkspace(params: ZCodeAgentWorkspaceTarget): Promise<void>;
   disposeAll(): void;
 }

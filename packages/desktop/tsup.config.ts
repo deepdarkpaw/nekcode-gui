@@ -5,9 +5,6 @@ import { pathToFileURL } from "node:url";
 import { defineConfig } from "tsup";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
-const { copyGenUiRuntimeAssets } = await import(
-  pathToFileURL(resolve(import.meta.dirname, "scripts/gen-ui-runtime-assets.mjs")).href
-);
 // tsup 会先打包配置文件；动态加载构建工具，避免其 import.meta.dirname 被重定位到 desktop。
 const { loadBuiltinProviderConfig } = await import(
   pathToFileURL(resolve(import.meta.dirname, "../../scripts/builtin-provider-config.mjs")).href
@@ -118,7 +115,6 @@ const desktopNodeRuntimeExternals = [
   "node-pty",
   "ssh2",
   "undici",
-  "@larksuiteoapi/node-sdk",
   "yaml",
   // node-forge 内部用动态 require("crypto")，内联进 ESM main/host bundle 后 Electron 会报
   // Dynamic require of "crypto" is not supported。和 undici 同样保留为运行时外部依赖。
@@ -138,9 +134,7 @@ export default defineConfig([
   {
     name: "main",
     entry: {
-      "main/index": "src/main/bootstrap.ts",
-      "main/gui": "src/main/gui.ts",
-      "main/browserWebmRecorder": "src/main/browserView/electronBrowserWebmRecorder.ts",
+      "main/index": "src/main/index.ts",
       // 资源管理器「存储」tab 的扫描 Worker：main 持有 StorageService，遍历放独立线程，供 new Worker(new URL()) 解析。
       "main/storageScanWorker": "src/main/storageScanWorker.ts",
     },
@@ -151,8 +145,7 @@ export default defineConfig([
     // undici 如果被 main ESM bundle 直接内联，运行时会落到它内部的 CommonJS require("assert")，
     // Electron 加载 main 产物时会报 Dynamic require of "assert" is not supported。
     // desktop 保持 undici 为外部依赖，remote 单文件 bundle 再单独内联。
-    // bootstrap 的 dynamic import 由入口名映射到同目录 gui.js，保留 specifier 供 tsup 输出入口映射。
-    external: [...desktopNodeRuntimeExternals, "./gui.js"],
+    external: desktopNodeRuntimeExternals,
     noExternal: [
       "@zcode/server",
       "@zcode/shared",
@@ -163,10 +156,6 @@ export default defineConfig([
       // TS loader，必须随 Desktop bundle 内联，不能留下指向 src/index.ts 的裸包引用。
       "@zcode/provider",
       "@zcode/provider-node",
-      // services 已内联进 main，但其 producer import 曾被保留为裸包引用；
-      // electron-builder 又会排除 node_modules/@zcode，导致安装包启动即 ERR_MODULE_NOT_FOUND。
-      // producer 的 JS broker 必须跟随 services 一起内联，原生 addon 仍只存在于独立 Helper。
-      "@zcode/zcode-cua",
     ],
     define: createSharedDefines(),
     // main/host 同时 watch 且共享 out 根目录时，默认 chunk 命名会互相覆盖，
@@ -182,12 +171,8 @@ export default defineConfig([
   {
     name: "preload",
     entry: {
-      "preload/embeddedBrowserJavaScriptDialog": "src/preload/embeddedBrowserJavaScriptDialog.ts",
-      "preload/browserVideoRecorder": "src/preload/browserVideoRecorder.ts",
       "preload/index": "src/preload/index.ts",
       "preload/resourceManager": "src/preload/resourceManager.ts",
-      "preload/cuaPermissionPanel": "src/preload/cuaPermissionPanel.ts",
-      "preload/pluginSandbox": "src/preload/pluginSandbox/index.ts",
     },
     outDir: "out",
     format: "cjs",
@@ -201,30 +186,6 @@ export default defineConfig([
       applyDesktopTsupEsbuildSecurityOptions(options);
     },
     onSuccess: createDevReadyMarkerHook("preload"),
-    ...desktopTsupBundleSecurityOptions,
-  },
-  {
-    // 插件 iframe 内的 window.zcode / window.openai 别名脚本（官方 ext-apps `App` 上的薄封装）：IIFE、浏览器平台，
-    // 由 zcode-sandbox:// protocol handler 同源服务。
-    name: "plugin-sandbox-alias",
-    loader: { ".css": "text" },
-    entry: {
-      "plugin-sandbox-alias": "src/renderer/src/plugin-sandbox/alias.ts",
-      "gen-ui": "src/renderer/src/plugin-sandbox/genUi.ts",
-    },
-    // 不能放 out/renderer：vite renderer 构建 emptyOutDir 会把先落盘的别名脚本清掉。
-    outDir: "out/plugin-sandbox",
-    onSuccess: () => copyGenUiRuntimeAssets(resolve("out/plugin-sandbox")),
-    format: "iife",
-    platform: "browser",
-    target: "es2022",
-    // 沙箱页面没有 node_modules：SDK（ext-apps / client / core / zod）必须全部打进 IIFE。
-    noExternal: [/.*/],
-    outExtension: () => ({ js: ".js" }),
-    define: createSharedDefines(),
-    esbuildOptions(options) {
-      applyDesktopTsupEsbuildSecurityOptions(options);
-    },
     ...desktopTsupBundleSecurityOptions,
   },
   {
@@ -248,7 +209,6 @@ export default defineConfig([
       "@zcode/client",
       "@zcode/provider",
       "@zcode/provider-node",
-      "@zcode/zcode-cua",
     ],
     define: createSharedDefines(),
     // 与 main 保持一致的 chunk 隔离策略，避免 host/main 产物相互覆盖。
@@ -277,7 +237,6 @@ export default defineConfig([
       "@zcode/client",
       "@zcode/provider",
       "@zcode/provider-node",
-      "@zcode/zcode-cua",
     ],
     define: createSharedDefines(),
     esbuildOptions(options) {

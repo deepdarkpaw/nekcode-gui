@@ -97,9 +97,6 @@ const requiredRuntimeModules = [
   "node-forge",
   // 与 tsup external 对齐，保留 ZIP 解包器的 CommonJS 运行时边界。
   "yauzl",
-  // Bugfix: 飞书 SDK 为了避开 Electron ESM 动态 require 崩溃会作为外部依赖保留，
-  // 生产包必须显式校验 app.asar 中存在该 scoped 包。
-  "@larksuiteoapi/node-sdk",
   // ssh2 的关键依赖链（asn1/bcrypt-pbkdf/tweetnacl）若缺失，
   // 连接远程 workspace 时会在 keyParser 阶段直接抛 MODULE_NOT_FOUND。
   // 这里把 ssh2 关键依赖链纳入机械校验，避免坏包流出。
@@ -720,7 +717,7 @@ async function main() {
   }
 
   // prepare:runtime-assets 与 build 脚本各自都会准备运行时资产，二者串联会让
-  // prepare:remote-assets（实测约 42s）与 prepare:agent-bundle（实测约 31s）整段重复执行。
+  // prepare:remote-assets（实测约 42s）等步骤整段重复执行。
   // 显式准备过就只能调 build:no-runtime-assets；--skip-prepare 才走完整 build，
   // 让它自己准备。见 .agents/specs/desktop-ci-release.md。
   const buildScript = skipPrepare ? "build" : "build:no-runtime-assets";
