@@ -1,0 +1,285 @@
+/**
+ * 设置中心后端的运行时：目标解析、控制进程缓存、配置监视、写后重载、登录管理。
+ *
+ * 每个功能模块（models / settings / mcp / …）都只拿这一个运行时，避免它们各自
+ * 去猜目标、进程与通知的细节。
+ */
+import type {
+  NekConfigDiagnostic,
+  NekConfigTarget,
+  NekConfigTargetInfo,
+  NekRpcCommandOfType,
+  NekRpcCommandType,
+  NekRpcResponseDataFor,
+} from "@zcode/shared/nek-protocol";
+import type { NekControlClient } from "./control.js";
+import { createNekControlClient } from "./control.js";
+import { notConnected } from "./errors.js";
+import type { NekConfigHostExecutor } from "./hostExecutor.js";
+import { NekLoginManager } from "./login.js";
+import { NekWatchHub } from "./watch.js";
+import type { NekWatchChange } from "./watch.js";
+import { agentsDir, projectConfigDir } from "./paths.js";
+
+/** 目标机器上一个正在运行的 nek 会话进程。 */
+export interface NekConfigSessionHandle {
+  sessionKey: string;
+  cwd?: string;
+  /** 回合正在运行：reload 会被推迟到回合结束后。 */
+  busy: boolean;
+  call: <C extends NekRpcCommandType>(
+    command: NekRpcCommandOfType<C>,
+  ) => Promise<NekRpcResponseDataFor<C>>;
+}
+
+/** 会话进程登记表（由会话服务实现并注入）。 */
+export interface NekConfigSessionRegistry {
+  sessions: (target: NekConfigTarget) => NekConfigSessionHandle[];
+}
+
+/** 目标机器集合：本机 + 已连接的远程主机。 */
+export interface NekConfigTargetHost {
+  listTargets: () => Promise<NekConfigTargetInfo[]>;
+  /** 取执行器；目标未连接（或不存在）时返回 undefined。 */
+  executor: (target: NekConfigTarget) => NekConfigHostExecutor | undefined;
+}
+
+export interface NekConfigApiConfig {
+  /** 远程目标的配置轮询间隔（秒），来自 GUI 的 `config/config.yaml` `remote.configPollSeconds`。 */
+  remoteConfigPollSeconds?: number;
+  /** 本机 watch 防抖（毫秒）。 */
+  watchDebounceMs?: number;
+  /** 每次写盘后自动重载 nek 进程；默认 true。 */
+  autoReload?: boolean;
+}
+
+export interface NekConfigApiLogger {
+  warn: (...args: unknown[]) => void;
+  debug?: (...args: unknown[]) => void;
+}
+
+export interface NekConfigApiOptions {
+  hosts: NekConfigTargetHost;
+  sessions?: NekConfigSessionRegistry;
+  /** 控制进程工厂（测试注入假实现）。 */
+  control?: (args: {
+    target: NekConfigTarget;
+    executor: NekConfigHostExecutor;
+    logger?: NekConfigApiLogger;
+  }) => Promise<NekControlClient>;
+  /** 远程登录的端口转发（host 侧 SSH 实现）；返回实际建立的本机端口。 */
+  forwardLoginPorts?: (target: NekConfigTarget, ports: number[]) => Promise<number[]>;
+  config?: NekConfigApiConfig;
+  logger?: NekConfigApiLogger;
+}
+
+export interface NekTargetContext {
+  target: NekConfigTarget;
+  key: string;
+  executor: NekConfigHostExecutor;
+  layout: { agentDir: string };
+}
+
+export interface NekReloadOutcome {
+  reloaded: number;
+  deferred: number;
+  diagnostics: NekConfigDiagnostic[];
+}
+
+export function targetKeyOf(target: NekConfigTarget): string {
+  return target.kind === "local" ? "local" : `remote:${target.connectionId}`;
+}
+
+export class NekConfigRuntime {
+  readonly login: NekLoginManager;
+  private readonly watchHub: NekWatchHub;
+  private readonly controls = new Map<string, Promise<NekControlClient>>();
+  private readonly cwdHints = new Map<string, string>();
+  private readonly autoReload: boolean;
+
+  constructor(private readonly options: NekConfigApiOptions) {
+    const config = options.config ?? {};
+    this.autoReload = config.autoReload ?? true;
+    this.watchHub = new NekWatchHub({
+      debounceMs: config.watchDebounceMs,
+      pollSeconds: config.remoteConfigPollSeconds,
+      logger: options.logger,
+    });
+    this.login = new NekLoginManager({
+      control: (target) => this.control(target),
+      abort: (target) => this.abortControl(target),
+      forwardPorts: options.forwardLoginPorts,
+      logger: options.logger,
+    });
+  }
+
+  /** 解析目标；未连接时抛 `not_connected`。 */
+  target(target: NekConfigTarget): NekTargetContext {
+    const executor = this.options.hosts.executor(target);
+    if (!executor) throw notConnected(target);
+    return {
+      target,
+      key: targetKeyOf(target),
+      executor,
+      layout: { agentDir: executor.agentDir() },
+    };
+  }
+
+  /** 控制进程（每个目标一个，懒启动）。 */
+  async control(target: NekConfigTarget): Promise<NekControlClient> {
+    const context = this.target(target);
+    const existing = this.controls.get(context.key);
+    if (existing) return await existing;
+    const factory = this.options.control ?? defaultControlFactory;
+    const created = factory({ target, executor: context.executor, logger: this.options.logger });
+    this.controls.set(context.key, created);
+    try {
+      return await created;
+    } catch (error) {
+      this.controls.delete(context.key);
+      throw error;
+    }
+  }
+
+  /** 中断控制进程（取消登录时使用）：下次调用会重新懒启动。 */
+  async abortControl(target: NekConfigTarget): Promise<void> {
+    const key = targetKeyOf(target);
+    const existing = this.controls.get(key);
+    this.controls.delete(key);
+    if (existing) await (await existing.catch(() => undefined))?.close();
+  }
+
+  /** 有没有已经启动的控制进程（`reload` 不该为了重载而新建进程）。 */
+  hasControl(target: NekConfigTarget): boolean {
+    return this.controls.has(targetKeyOf(target));
+  }
+
+  /** 记住最近一次出现的项目目录：models 相关方法在契约里没有 cwd 参数，靠它定位项目预设。 */
+  rememberCwd(target: NekConfigTarget, cwd?: string): void {
+    if (!cwd) return;
+    this.cwdHints.set(targetKeyOf(target), cwd);
+  }
+
+  cwdHint(target: NekConfigTarget): string | undefined {
+    return this.cwdHints.get(targetKeyOf(target));
+  }
+
+  /** 监视配置目录；`fs.watch`（本机）或轮询（远程）。 */
+  watch(target: NekConfigTarget, listener: (change: NekWatchChange) => void): () => void {
+    let context: NekTargetContext;
+    try {
+      context = this.target(target);
+    } catch (error) {
+      this.options.logger?.warn("cannot watch a disconnected target", error);
+      return () => undefined;
+    }
+    return this.watchHub.subscribe(
+      {
+        key: context.key,
+        executor: context.executor,
+        local: target.kind === "local",
+        dirs: this.watchDirs(context),
+      },
+      listener,
+    );
+  }
+
+  /** 写盘后的通知：先推 watch 事件，再触发一次重载。 */
+  publishWrite(target: NekConfigTarget, files: ReadonlyArray<{ path: string; revision: string }>): void {
+    const key = targetKeyOf(target);
+    this.watchHub.publish(
+      key,
+      files.map((file) => ({ file: file.path, revision: file.revision })),
+    );
+    if (!this.autoReload) return;
+    void this.reload(target).catch((error: unknown) => {
+      this.options.logger?.warn("automatic reload after a config write failed", error);
+    });
+  }
+
+  /** 对目标机器上所有 nek 进程发 reload。回合正在跑的计入 deferred。 */
+  async reload(target: NekConfigTarget): Promise<NekReloadOutcome> {
+    this.target(target);
+    const diagnostics: NekConfigDiagnostic[] = [];
+    let reloaded = 0;
+    let deferred = 0;
+    const sessions = this.options.sessions?.sessions(target) ?? [];
+    for (const session of sessions) {
+      const outcome = await this.reloadOne(session.sessionKey, session.busy, () =>
+        session.call({ type: "reload" }),
+      );
+      reloaded += outcome.reloaded;
+      deferred += outcome.deferred;
+      diagnostics.push(...outcome.diagnostics);
+    }
+    if (this.hasControl(target)) {
+      const outcome = await this.reloadOne("control", false, async () => {
+        const control = await this.control(target);
+        return await control.call({ type: "reload" });
+      });
+      reloaded += outcome.reloaded;
+      deferred += outcome.deferred;
+      diagnostics.push(...outcome.diagnostics);
+    }
+    return { reloaded, deferred, diagnostics };
+  }
+
+  dispose(): void {
+    this.watchHub.dispose();
+    this.login.dispose();
+    for (const pending of this.controls.values()) {
+      void pending.then((client) => client.close()).catch(() => undefined);
+    }
+    this.controls.clear();
+  }
+
+  // --------------------------------------------------------------------------
+  // 内部
+  // --------------------------------------------------------------------------
+
+  private async reloadOne(
+    label: string,
+    busy: boolean,
+    call: () => Promise<{ deferred: boolean; diagnostics: NekConfigDiagnostic[] }>,
+  ): Promise<NekReloadOutcome> {
+    try {
+      const result = await call();
+      return {
+        reloaded: result.deferred ? 0 : 1,
+        deferred: result.deferred || busy ? 1 : 0,
+        diagnostics: result.diagnostics,
+      };
+    } catch (error) {
+      return {
+        reloaded: 0,
+        deferred: 0,
+        diagnostics: [
+          {
+            file: `nek process ${label}`,
+            severity: "error",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
+  }
+
+  private watchDirs(context: NekTargetContext): string[] {
+    const dirs = [context.layout.agentDir, agentsDir(context.layout, "global")];
+    const cwd = this.cwdHint(context.target);
+    if (cwd) {
+      const projectDir = projectConfigDir(cwd);
+      dirs.push(projectDir, agentsDir(context.layout, "project", cwd), cwd);
+    }
+    return dirs;
+  }
+}
+
+/** 默认控制进程工厂（真机）；测试通过 `options.control` 注入假实现。 */
+async function defaultControlFactory(args: {
+  target: NekConfigTarget;
+  executor: NekConfigHostExecutor;
+  logger?: NekConfigApiLogger;
+}): Promise<NekControlClient> {
+  return await createNekControlClient(args);
+}
