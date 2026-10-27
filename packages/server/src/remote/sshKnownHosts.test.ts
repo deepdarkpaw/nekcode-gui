@@ -147,6 +147,34 @@ describe("createSSHHostVerifier", () => {
     expect(ok).toBe(false);
     expect(rejections).toHaveLength(1);
     expect(rejections[0]?.reason).toBe("changed");
+    expect(rejections[0]?.detail).toContain("旧指纹=SHA256:");
+    expect(rejections[0]?.detail).toContain("新指纹=SHA256:");
+  });
+
+  it("未知主机密钥由注入回调决定是否记录", async () => {
+    const store = new SSHHostKeyStore({ filePath: storePath() });
+    const denied = createSSHHostVerifier({
+      store,
+      target,
+      requireHostKeyConfirmation: true,
+      confirmHostKey: async () => false,
+      onRejection: () => undefined,
+    });
+    await new Promise<void>((resolve) => denied(Buffer.from("unknown"), () => resolve()));
+    expect(await store.listKnownHosts()).toHaveLength(0);
+
+    const accepted = createSSHHostVerifier({
+      store,
+      target,
+      requireHostKeyConfirmation: true,
+      confirmHostKey: async (confirmation) => confirmation.fingerprint.startsWith("SHA256:"),
+      onRejection: () => undefined,
+    });
+    const result = await new Promise<boolean>((resolve) =>
+      accepted(Buffer.from("unknown"), resolve),
+    );
+    expect(result).toBe(true);
+    expect(await store.listKnownHosts()).toHaveLength(1);
   });
 });
 

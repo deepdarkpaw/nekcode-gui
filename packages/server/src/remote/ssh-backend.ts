@@ -26,6 +26,7 @@ import {
 } from "@zcode/server/remote/posixShell.js";
 import {
   buildSSHConnectConfig,
+  createAsyncKeyboardInteractiveResponder,
   createKeyboardInteractiveResponder,
   normalizeSSHConnectError,
 } from "@zcode/server/remote/sshAuth.js";
@@ -34,6 +35,7 @@ import {
   formatHostKeyRejectionError,
   getSSHKnownHostsPath,
   SSHHostKeyStore,
+  type HostKeyConfirmation,
   type SSHHostKeyRejection,
 } from "@zcode/server/remote/sshKnownHosts.js";
 import {
@@ -52,6 +54,10 @@ export interface SSHBackendOptions {
   privateKeyPassphrase?: string;
   password?: string;
   agent?: string;
+  askPassphrase?: (privateKeyPath?: string) => Promise<string | undefined> | string | undefined;
+  askPassword?: () => Promise<string | undefined> | string | undefined;
+  requireHostKeyConfirmation?: boolean;
+  confirmHostKey?: (confirmation: HostKeyConfirmation) => Promise<boolean> | boolean;
 }
 
 type SSHUploadFailureKind = "sftp-session" | "sftp-write" | "local-read" | "aborted";
@@ -155,6 +161,8 @@ export class SSHBackend implements IRemoteBackend {
         privateKeyPath: options.privateKeyPath,
         password: options.password,
       } satisfies SSHConnectOptions,
+      requireHostKeyConfirmation: options.requireHostKeyConfirmation,
+      confirmHostKey: options.confirmHostKey,
       onRejection: (rejection) => {
         this.hostKeyRejection = rejection;
       },
@@ -167,6 +175,7 @@ export class SSHBackend implements IRemoteBackend {
       passphrase: options.privateKeyPassphrase,
       password: options.password,
       agent: options.agent,
+      askPassword: options.askPassword,
       hostVerifier,
     });
     if (resolveZCodeRuntimeEnv(process.env) === "development") {
@@ -180,19 +189,20 @@ export class SSHBackend implements IRemoteBackend {
         console.debug(...safeLogArgs([`[ssh2] ${message}`]));
       };
     }
-    if (typeof options.password === "string" && options.password.length > 0) {
+    if (
+      (typeof options.password === "string" && options.password.length > 0) ||
+      options.askPassword
+    ) {
       // `ssh2` 类型定义遗漏了 keyboard-interactive 事件，但运行时确实支持。
       // 这里局部转成 EventEmitter 接口，避免为了一个事件把整段代码降级到 any。
+      const responder = options.password
+        ? createKeyboardInteractiveResponder(options.password)
+        : createAsyncKeyboardInteractiveResponder(options.askPassword!);
       (
         this.client as unknown as {
           on(event: string, listener: (...args: unknown[]) => void): void;
         }
-      ).on(
-        "keyboard-interactive",
-        createKeyboardInteractiveResponder(options.password) as unknown as (
-          ...args: unknown[]
-        ) => void,
-      );
+      ).on("keyboard-interactive", responder as unknown as (...args: unknown[]) => void);
     }
   }
 

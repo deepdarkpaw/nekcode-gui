@@ -18,6 +18,28 @@ export {
 export { deployServer, type DeployLockMode, type DeployOptions } from "./deploy.js";
 export { wrapStdioStream } from "./stdio-socket.js";
 export { performHandshake, type HandshakeResult } from "./handshake.js";
+export {
+  computeSshConfigHost,
+  computeSshConfigHostFromFile,
+  listSshConfigHosts,
+  listSshConfigHostsFromFile,
+  readSshConfig,
+  connectSshProxyJump,
+  type SSHConfigConnectionOptions,
+  type SSHJumpClient,
+  type SSHJumpClientFactory,
+} from "./sshConfig.js";
+export {
+  computeHostKeyFingerprint,
+  createSSHHostVerifier,
+  formatHostKeyRejectionError,
+  getSSHKnownHostsPath,
+  listKnownHosts,
+  removeKnownHost,
+  SSHHostKeyStore,
+  type HostKeyConfirmation,
+  type KnownHostEntry,
+} from "./sshKnownHosts.js";
 export { DockerBackend } from "./docker-backend.js";
 export {
   isDockerAvailable,
