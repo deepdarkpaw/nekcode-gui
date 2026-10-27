@@ -8,7 +8,6 @@ import {
   Palette,
   Sun,
   Terminal,
-  AlarmClock,
   Anchor,
   Brain,
   Cable,
@@ -104,13 +103,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "commands",
     icon: Terminal,
     titleId: "settings.commands.title",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "automations",
-    icon: AlarmClock,
-    titleId: "settings.automations.title",
-    titleBadgeId: "settings.automations.betaBadge",
     groupId: "agentCapabilities",
   },
   {

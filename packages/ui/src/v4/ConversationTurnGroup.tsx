@@ -16,7 +16,6 @@ import type {
   AttachmentRef,
   CommandAck,
   ConversationRowTarget,
-  WorkflowNotificationMeta,
 } from "@zcode/shared/zcode-protocol-v4";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
@@ -29,18 +28,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
-import {
-  CronCreateAutomationCard,
-  isCronAutomationCardToolCall,
-  readCronCreateAutomationSummary,
-  type CronCreateAutomationSummary,
-} from "@/ToolCallBlocks/renderers/cron-create.js";
-import {
-  isOffPeakCreateToolCall,
-  OffPeakCreateTaskCard,
-  readOffPeakCreateTaskSummary,
-  type OffPeakCreateTaskSummary,
-} from "@/ToolCallBlocks/renderers/offpeak-create.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { AssistantPreviewCard } from "@/lib/assistantPreviewCards.js";
 import { useAssistantCodeCommentFeatureEnabled } from "@/AssistantCodeCommentFeatureProvider.js";
@@ -60,15 +47,6 @@ import {
 } from "@/v4/conversationAssistantWorkItems.js";
 import { ConversationAgentToolCallRow } from "@/v4/ConversationAgentToolCallRow.js";
 import { ConversationFileSummaryPanel } from "@/v4/ConversationFileSummaryPanel.js";
-import { WorkflowNotificationToolRow } from "@/v4/WorkflowNotificationToolRow.js";
-import {
-  workflowNotificationOf,
-  workflowNotificationOpenRequest,
-} from "@/v4/workflowHoleNotification.js";
-import { ConversationWorkflowDigests } from "@/v4/ConversationWorkflowDigests.js";
-import { ConversationWorkflowCompletion } from "@/v4/ConversationWorkflowCompletion.js";
-import { resolveWorkflowTurnDigests } from "@/v4/workflowTurnDigests.js";
-import { resolveWorkflowTurnCompletion } from "@/v4/workflowTurnCompletion.js";
 import { ConversationAssistantTextActions } from "@/v4/ConversationRowView.js";
 import { readAssistantFeedback } from "@/v4/ConversationRowView.js";
 import type {
@@ -84,7 +62,6 @@ import type {
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
-import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
 
 interface ConversationTurnGroupProps {
   unit: ConversationTurnRenderUnit;
@@ -106,18 +83,6 @@ interface ConversationTurnGroupProps {
     selectedRowIds: ReadonlySet<number>;
     onToggle: (rowId: number) => void;
   };
-}
-
-interface CronAutomationTurnCard {
-  rowId: number;
-  toolCallId: string;
-  automation: CronCreateAutomationSummary;
-}
-
-interface OffPeakTurnCard {
-  rowId: number;
-  toolCallId: string;
-  task: OffPeakCreateTaskSummary;
 }
 
 const MIN_VISIBLE_API_RETRY_ATTEMPT = 3;
@@ -189,7 +154,6 @@ function ConversationExploreGroupRow({
         onOpenCodeViewer={context.onOpenCodeViewer}
         onOpenFileLink={context.onOpenFileLink}
         onOpenBrowserUrl={context.onOpenBrowserUrl}
-        onOpenAutomationsMain={context.onOpenAutomationsMain}
       />
     </div>
   );
@@ -217,7 +181,6 @@ function ConversationToolGroupRow({
         onOpenCodeViewer={context.onOpenCodeViewer}
         onOpenFileLink={context.onOpenFileLink}
         onOpenBrowserUrl={context.onOpenBrowserUrl}
-        onOpenAutomationsMain={context.onOpenAutomationsMain}
       />
     </div>
   );
@@ -314,145 +277,6 @@ function ConversationAssistantWorkItems({
     >
       <div className="pt-5">{content}</div>
     </CollapsibleContent>
-  );
-}
-
-function resolveCronAutomationTurnCards(
-  rows: readonly AssistantWorkRow[],
-): CronAutomationTurnCard[] {
-  let cards: CronAutomationTurnCard[] = [];
-
-  for (const row of rows) {
-    if (row.kind !== "toolCall" || row.status !== "success") {
-      continue;
-    }
-
-    const normalizedToolName = row.toolName.toLowerCase().replace(/[^a-z0-9]/gu, "");
-    if (normalizedToolName === "crondelete") {
-      const deletedAutomationId = readCronDeleteAutomationId(row);
-      if (deletedAutomationId) {
-        // 只累计本轮成功的 Create/Update 会忽略后续 CronDelete，导致已经
-        // 撤销的中间结果仍被提升成轮尾成功卡片。
-        cards = cards.filter((card) => card.automation.automationId !== deletedAutomationId);
-      }
-      continue;
-    }
-
-    const node = toolCallRowToLegacyNode(row);
-    if (!isCronAutomationCardToolCall(node.toolCall)) {
-      continue;
-    }
-
-    const automation = readCronCreateAutomationSummary(node.toolCall);
-    if (!automation) {
-      continue;
-    }
-
-    if (automation.automationId) {
-      cards = cards.filter((card) => card.automation.automationId !== automation.automationId);
-    }
-    cards.push({
-      rowId: row.rowId,
-      toolCallId: row.toolCallId,
-      automation,
-    });
-  }
-
-  return cards;
-}
-
-// 只收本轮 status==="success" 的 OffPeakCreate；同 id 重复输出保留最新一次。
-// 刻意不复用 resolveCronAutomationTurnCards——那套带 CronDelete 撤销过滤语义，闲时无对应工具。
-function resolveOffPeakTurnCards(rows: readonly AssistantWorkRow[]): OffPeakTurnCard[] {
-  let cards: OffPeakTurnCard[] = [];
-
-  for (const row of rows) {
-    if (row.kind !== "toolCall" || row.status !== "success") {
-      continue;
-    }
-    const node = toolCallRowToLegacyNode(row);
-    if (!isOffPeakCreateToolCall(node.toolCall)) {
-      continue;
-    }
-    const task = readOffPeakCreateTaskSummary(node.toolCall);
-    if (!task) {
-      continue;
-    }
-    if (task.offPeakTaskId) {
-      cards = cards.filter((card) => card.task.offPeakTaskId !== task.offPeakTaskId);
-    }
-    cards.push({
-      rowId: row.rowId,
-      toolCallId: row.toolCallId,
-      task,
-    });
-  }
-
-  return cards;
-}
-
-function parseJsonRecord(value: unknown): Record<string, unknown> | null {
-  let candidate = value;
-  if (typeof candidate === "string") {
-    try {
-      candidate = JSON.parse(candidate) as unknown;
-    } catch {
-      return null;
-    }
-  }
-  return typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)
-    ? (candidate as Record<string, unknown>)
-    : null;
-}
-
-function readCronDeleteAutomationId(
-  row: Extract<AssistantWorkRow, { kind: "toolCall" }>,
-): string | undefined {
-  for (const candidate of [row.output?.text, row.input, row.inputText]) {
-    const record = parseJsonRecord(candidate);
-    const id = record?.id;
-    if (typeof id === "string" && id.trim()) {
-      return id.trim();
-    }
-  }
-  return undefined;
-}
-
-function CronAutomationTurnCards({
-  cards,
-  context,
-}: {
-  cards: readonly CronAutomationTurnCard[];
-  context: ConversationRowRenderContext;
-}) {
-  if (cards.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {cards.map((card) => (
-        <CronCreateAutomationCard
-          key={`${card.rowId}:${card.toolCallId}`}
-          automation={card.automation}
-          onOpenAutomationsMain={context.onOpenAutomationsMain}
-        />
-      ))}
-    </div>
-  );
-}
-
-function OffPeakTurnCards({ cards }: { cards: readonly OffPeakTurnCard[] }) {
-  if (cards.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {cards.map((card) => (
-        <OffPeakCreateTaskCard key={`${card.rowId}:${card.toolCallId}`} task={card.task} />
-      ))}
-    </div>
   );
 }
 
@@ -778,19 +602,9 @@ function ConversationTurnFlow({
  *
  * 这里刻意仍是白名单而不是直接信任 schema：`originMeta` 在 userInputRow 上是 optional，
  * 跨版本仍可能出现第四个取值，而没见过的来源拿不到合适的标题语义，退回普通 assistant
- * 分支比谎报一个标题好。
- *
- * workflow run 的 `backgroundSource` 是 `"workflow"`（CLI 侧
- * `background-tasks.ts` 在 CreateWorkflow 终态上报，title 由 `workflowTaskSubject` 铸造），
- * 原本落在白名单外，于是一条 run 跑完之后那一轮**既没有标题、也退化成按工时折叠的普通
- * assistant 段落**——后台结果分组整个消失。标题不需要本地化：它由 CLI 权威给出，
- * bash / subagent 同样直接透传。
+ * 分支比谎报一个标题好。标题不需要本地化：它由 agent 权威给出，直接透传。
  */
-const BACKGROUND_RESULT_TITLE_SOURCES: ReadonlySet<string> = new Set([
-  "bash",
-  "subagent",
-  "workflow",
-]);
+const BACKGROUND_RESULT_TITLE_SOURCES: ReadonlySet<string> = new Set(["bash", "subagent"]);
 
 function resolveBackgroundResultTitle(unit: ConversationTurnRenderUnit): string | undefined {
   if (unit.header?.origin !== "backgroundResult") return undefined;
@@ -800,19 +614,6 @@ function resolveBackgroundResultTitle(unit: ConversationTurnRenderUnit): string 
     return undefined;
   }
   return originMeta.title.trim();
-}
-
-/**
- * 该轮是否以 workflow 通知卡（ToolLayout 行）开头。
- *
- * 用于两处：`ConversationBackgroundResultWork` 决定渲染通知行还是裸标题行；轮容器决定是否
- * 去掉轮顶 `pt-14`。后台结果轮没有可见的 user 行，通知卡就是轮内第一个节点——若照常保留
- * 轮顶 padding，卡片上方会叠出 56px + 上一轮 pb-5 共约 76px 的空白，用户判为多余。
- */
-function resolveWorkflowNotification(
-  unit: ConversationTurnRenderUnit,
-): WorkflowNotificationMeta | undefined {
-  return workflowNotificationOf(unit.header);
 }
 
 function ConversationBackgroundResultWork({
@@ -863,87 +664,16 @@ function ConversationBackgroundResultWork({
 
   // 后台结果已经由独立唤醒轮总结过；复用普通 assistant 的工时折叠
   // 会显示不准确的分段耗时，并让一段短总结产生没有意义的收起状态。
-  //
-  // workflow run 的 workflow 通知带结构化载荷时改渲染既有工具卡语法的通知行（替换裸标题行）；
-  // 载荷缺席（批量轮、旧 transcript、bash/subagent）→ 原样退回标题行。
-  const workflowNotification = resolveWorkflowNotification(unit);
-  const workflowRunId = unit.header?.originMeta?.workId;
-  // 打开 run 详情：宿主注入 onOpenWorkflowRun + 联查到 toolCallId 才可点；冷恢复查不到时
-  // 展开体内不渲染链接。toolCallId 走投影/journal 联查表，与 CreateWorkflow 工具卡同一条打开路径。
-  const workflowRunSummary =
-    workflowNotification && workflowRunId
-      ? context.workflowRunByRunId?.get(workflowRunId)
-      : undefined;
-  const openRequest = workflowNotificationOpenRequest({
-    ...(context.sessionId == null ? {} : { parentSessionId: context.sessionId }),
-    ...(workflowRunId === undefined ? {} : { runId: workflowRunId }),
-    ...(workflowRunSummary?.toolCallId === undefined
-      ? {}
-      : { toolCallId: workflowRunSummary.toolCallId }),
-    workflowName: title,
-  });
-  const openWorkflowRun =
-    context.onOpenWorkflowRun && openRequest
-      ? () => context.onOpenWorkflowRun?.(openRequest)
-      : undefined;
-  // 复用现有 focusPhaseId→展开/scrollIntoView 路径，siteId 不可只显示在 toast 中。
-  const locateWorkflowHole =
-    context.onOpenWorkflowRun && openRequest
-      ? (siteId: string) => context.onOpenWorkflowRun?.({ ...openRequest, phaseId: siteId })
-      : undefined;
-  const workflowPendingQids =
-    workflowNotification && workflowRunId
-      ? context.workflowRunPendingQuestionsByRunId?.get(workflowRunId)
-      : undefined;
-  // 产物 chip → 全尺寸查看 tab。门比 `openWorkflowRun` 松一格：产物 tab 只需要
-  // (parentSessionId, runId, artifactId)，**不需要** toolCallId——它不画因果图，也就不必
-  // 回到那条 CreateWorkflow 工具行。冷恢复后联查不到 toolCallId 的通知行因此仍能开产物。
-  const openWorkflowArtifact =
-    workflowNotification && workflowRunId && context.onOpenWorkflowArtifact && context.sessionId
-      ? (artifactId: string) => {
-          // 载荷里那一枚的 `contentType`（终态通知才有产物清单）：宿主据它决定 html 产物
-          // 直接开浏览器 tab 还是开产物 tab，所以这里带得到就带上。载荷刻意不带 `sourcePath`
-          // （状态帧体积），宿主缺席时自己查 journal 补。
-          const contentType =
-            workflowNotification.kind === "terminal"
-              ? workflowNotification.artifacts?.find((candidate) => candidate.id === artifactId)
-                  ?.contentType
-              : undefined;
-          context.onOpenWorkflowArtifact?.({
-            parentSessionId: context.sessionId!,
-            runId: workflowRunId,
-            artifactId,
-            ...(contentType === undefined ? {} : { contentType }),
-          });
-        }
-      : undefined;
-
   return (
     <div className="flex flex-col gap-5">
-      {workflowNotification ? (
-        <WorkflowNotificationToolRow
-          notification={workflowNotification}
-          runName={title}
-          testIdKey={unit.key}
-          theme={context.theme}
-          onOpenRun={openWorkflowRun}
-          onOpenArtifact={openWorkflowArtifact}
-          pendingQids={workflowPendingQids}
-          {...(workflowRunSummary?.run === undefined
-            ? {}
-            : { holes: workflowRunSummary.run.holes ?? [] })}
-          {...(locateWorkflowHole === undefined ? {} : { onLocateHole: locateWorkflowHole })}
-        />
-      ) : (
-        <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
-          <div
-            data-testid={testId(TID_CHAT_BACKGROUND_RESULT_TITLE, unit.key)}
-            className="min-w-0 whitespace-pre-wrap break-words text-left text-ui-base text-[var(--color-foreground-subtle)]"
-          >
-            {title}
-          </div>
+      <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
+        <div
+          data-testid={testId(TID_CHAT_BACKGROUND_RESULT_TITLE, unit.key)}
+          className="min-w-0 whitespace-pre-wrap break-words text-left text-ui-base text-[var(--color-foreground-subtle)]"
+        >
+          {title}
         </div>
-      )}
+      </div>
       {hasHistory ? (
         <div className="flex flex-col gap-2">
           <ConversationAssistantWorkItems
@@ -1047,38 +777,6 @@ function ConversationTurnGroupImpl({
       latestAssistantTextRow?.state,
     ],
   );
-  const cronAutomationTurnCards = useMemo(
-    () => (unit.isRunning ? [] : resolveCronAutomationTurnCards(unit.assistantWorkRows)),
-    [unit.assistantWorkRows, unit.isRunning],
-  );
-  // 上方已是工具摘要；下方运行卡在联接到 run 后立即显示，不能再等主代理回复结束。
-  // 依赖联接表保持实时更新，并由解析器按 runId 去重。直接启动轮
-  // 的 run 卡也从这里出：那一轮没有用户气泡、没有助手内容，run 卡就是它的全部呈现。
-  const workflowRunByToolCallId = context.workflowRunByToolCallId;
-  const workflowRunByRunId = context.workflowRunByRunId;
-  const workflowGraphByToolCallId = context.workflowGraphByToolCallId;
-  const workflowTurnDigests = useMemo(
-    () =>
-      resolveWorkflowTurnDigests(unit, {
-        byToolCallId: workflowRunByToolCallId,
-        byRunId: workflowRunByRunId,
-        graphByToolCallId: workflowGraphByToolCallId,
-      }),
-    [unit, workflowGraphByToolCallId, workflowRunByRunId, workflowRunByToolCallId],
-  );
-  // 完成卡：主代理消化 completed 通知的那一轮，轮尾落卡。
-  // 同一条门（轮结束）；联接只认 byRunId——通知轮里没有 CreateWorkflow 行可按 toolCallId 联。
-  const workflowTurnCompletion = useMemo(
-    () =>
-      unit.isRunning
-        ? undefined
-        : resolveWorkflowTurnCompletion(unit.header, { byRunId: workflowRunByRunId }),
-    [unit.header, unit.isRunning, workflowRunByRunId],
-  );
-  const offPeakTurnCards = useMemo(
-    () => (unit.isRunning ? [] : resolveOffPeakTurnCards(unit.assistantWorkRows)),
-    [unit.assistantWorkRows, unit.isRunning],
-  );
   const canRenderAssistantActions =
     !unit.timelineOnly &&
     latestAssistantTextRow?.state === "complete" &&
@@ -1103,8 +801,7 @@ function ConversationTurnGroupImpl({
     hasAssistantWorkContent ||
     Boolean(unit.header?.fileChanges) ||
     canRenderAssistantActions ||
-    hasHookActions ||
-    workflowTurnDigests.length > 0;
+    hasHookActions;
   const editWorkspaceRewindAvailability = useMemo<EditWorkspaceRewindAvailability>(() => {
     const fileChanges = unit.header?.fileChanges;
     if (!fileChanges || fileChanges.files <= 0) return { enabled: false, reason: "noFiles" };
@@ -1115,10 +812,6 @@ function ConversationTurnGroupImpl({
     }
     return { enabled: true, reason: "available" };
   }, [unit.header?.actions?.canRewindFiles, unit.header?.fileChanges, unit.isRunning]);
-
-  // workflow 通知卡开头的轮去掉轮顶 padding：卡片只贴上一轮 pb-5 的常规流内间距。
-  const startsWithWorkflowNotificationCard =
-    backgroundResultTitle !== undefined && resolveWorkflowNotification(unit) !== undefined;
 
   const shareSelectionRows = shareSelection
     ? unit.visibleUserInputs.filter(
@@ -1185,10 +878,7 @@ function ConversationTurnGroupImpl({
     <section
       data-turn-id={unit.turnId}
       data-turn-key={unit.key}
-      className={cn(
-        "relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5",
-        startsWithWorkflowNotificationCard ? "pt-0" : "pt-14",
-      )}
+      className="relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5 pt-14"
     >
       {unit.leadingBoundaryRows.map((row) => (
         <ConversationTurnRow
@@ -1263,24 +953,6 @@ function ConversationTurnGroupImpl({
               }
             />
           )}
-          {/* 完成卡：这一轮消化的那条 run 做了什么、花了多少，紧跟最后一段正文。 */}
-          {workflowTurnCompletion === undefined ? null : (
-            <ConversationWorkflowCompletion
-              completion={workflowTurnCompletion}
-              context={context}
-              turnKey={unit.key}
-            />
-          )}
-          {/* 轮尾摘要：这一轮留下在跑的 run，排在完成卡之后、其余轮尾块之前。 */}
-          <ConversationWorkflowDigests
-            context={context}
-            digests={workflowTurnDigests}
-            turnKey={unit.key}
-          />
-          {/* CronCreate/CronUpdate 工具本身仍按普通工具行展示；成功卡片属于整轮
-              完成后的结果摘要，必须等回复结束再跟随最终 assistant 正文收尾。 */}
-          <CronAutomationTurnCards cards={cronAutomationTurnCards} context={context} />
-          <OffPeakTurnCards cards={offPeakTurnCards} />
           {!isOfficeMode && unit.header?.fileChanges ? (
             <ConversationFileSummaryPanel header={unit.header} context={context} />
           ) : null}

@@ -6,6 +6,7 @@
 // zcode-task-types.ts / task-realtime.ts 仍保留旧协议兼容面，共用本文件中的核心类型。
 
 import type { ZCodeBackgroundTaskControlItem } from "./background-task-controls.js";
+import type { NekMode } from "./nek-protocol/gui-extension-api.js";
 import type { ToolCallDisplay } from "./zcode-protocol-v4/toolDisplay.js";
 import type {
   ZCodeContextUsageBreakdownItem,
@@ -146,7 +147,45 @@ export interface ZCodeTaskGoalChangedPatch {
 }
 // ---- ZCode task 模式 ----
 
-export type ZCodeTaskMode = "yolo" | "plan" | "edit" | "auto" | "autoEdit" | "build";
+/** 任务模式与 nek 的 session 模式同源：只有 agent 与 plan 两档。 */
+export type ZCodeTaskMode = NekMode;
+
+const ZCODE_TASK_MODES: readonly ZCodeTaskMode[] = ["agent", "plan"];
+
+function isZCodeTaskMode(value: string): value is ZCodeTaskMode {
+  return (ZCODE_TASK_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * 持久化旧值迁移：yolo / edit / auto / autoEdit / build 都是「直接干活」，
+ * 统一落到 agent；plan 保持 plan。未知值给 undefined，由调用方决定默认档。
+ */
+export function normalizeZCodeTaskMode(
+  value: string | null | undefined,
+): ZCodeTaskMode | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (isZCodeTaskMode(trimmed)) {
+    return trimmed;
+  }
+  switch (trimmed) {
+    case "yolo":
+    case "edit":
+    case "auto":
+    case "autoEdit":
+    case "build":
+    case "full-auto":
+    case "full_auto":
+      return "agent";
+    case "read-only":
+    case "read_only":
+      return "plan";
+    default:
+      return undefined;
+  }
+}
 
 /** 本轮定时任务归因，不改变历史会话所属关系。 */
 export type ZCodeBackgroundTurnAttribution = { automationId?: string };
@@ -961,7 +1000,6 @@ export interface ZCodeSessionFile {
   turnCheckpoints?: ZCodePersistedTurnCheckpoint[];
 }
 export interface ZCodeSessionRuntimeSnapshot {
-  pendingPermissions?: ZCodePermissionRequest[];
   pendingElicitations?: ZCodeElicitationRequest[];
   /** 当前 session 的 active turn 类型；用于 UI 区分普通 streaming 与 compact 维护态。 */
   activeTurnKind?: ZCodeSessionActiveTurnKind;

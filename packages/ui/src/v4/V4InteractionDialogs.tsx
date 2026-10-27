@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ZCodeElicitationRequest, ZCodePermissionOption, ZCodeProvider } from "@zcode/shared";
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import { useCallback, useEffect, useRef } from "react";
+import type { ZCodeElicitationRequest } from "@zcode/shared";
+import type {
+  ConversationSnapshot,
+  PendingInteraction,
+  UserInputRequestPayload,
+} from "@zcode/shared/zcode-protocol-v4";
 import { ElicitationDialog } from "@/ElicitationDialog.js";
-import { PermissionDialog } from "@/PermissionDialog.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { usePendingInteractionTaskNotifications } from "@/hooks/useTaskNotifications.js";
@@ -19,7 +22,6 @@ import { createCommandEnvelope } from "@/v4/commandFactory.js";
 import { pendingCommandRegistry } from "@/v4/pendingCommandRegistry.js";
 import { sendInteractionAutoResolutionSnooze } from "@/v4/interactionAutoResolutionCommand.js";
 import {
-  pendingPermissionToLegacyRequest,
   pendingUserInputToElicitationRequest,
   pendingUserInputToViewModel,
 } from "@/v4/pendingInteractionAdapter.js";
@@ -31,10 +33,16 @@ interface V4InteractionDialogsProps {
   workspacePath: string;
   workspaceIdentity?: string;
   remoteSessionId?: string;
-  provider?: ZCodeProvider;
   snapshot: ConversationSnapshot | null;
   onCommandSettled?: (commandId: string) => void;
   onPlanInteractionAccepted?: (interactionId: string) => void;
+}
+
+/** 通用 Dialog 只渲染 userInput：workspaceHookReview 由 Settings/Hooks 行内处理。 */
+function isPendingUserInput(
+  interaction: PendingInteraction,
+): interaction is PendingInteraction & { payload: UserInputRequestPayload } {
+  return interaction.payload.kind === "userInput";
 }
 
 function getCurrentSessionInteractionSnapshot(
@@ -85,16 +93,12 @@ function createInteractionAutoResolutionIntentTracker(): InteractionAutoResoluti
   };
 }
 
-/**
- * 竖切：把 projection.pendingInteractions 接到 PermissionDialog / userInput 弹窗。
- * ChatView 删除后若无此组件，带 tool 权限的会话会永久阻塞。
- */
+/** 竖切：把 projection.pendingInteractions 接到 userInput 弹窗（问答 / 计划确认）。 */
 export function V4InteractionDialogs({
   sessionId,
   workspacePath,
   workspaceIdentity,
   remoteSessionId,
-  provider,
   snapshot,
   onCommandSettled,
   onPlanInteractionAccepted,
@@ -110,13 +114,9 @@ export function V4InteractionDialogs({
   // 若直接使用旧 snapshot，会把当前 task 的 renderer-local 问答草稿误判为过期并清理。
   const currentSnapshot = getCurrentSessionInteractionSnapshot(sessionId, snapshot);
   // workspaceHookReview 是 Settings/Hooks 处理的特殊交互，不能由通用 Dialog 渲染；
-  // 但它可以和 permission/userInput 共存，固定读取 [0] 会遮挡后续真正需要弹窗的交互。
-  // 这里只选择本组件可渲染的首个交互，同时保留 permission/userInput 的队列顺序。
-  const pending =
-    currentSnapshot?.pendingInteractions.find(
-      (interaction) =>
-        interaction.payload.kind === "permission" || interaction.payload.kind === "userInput",
-    ) ?? null;
+  // 但它可以和 userInput 共存，固定读取 [0] 会遮挡后续真正需要弹窗的交互。
+  // 这里只选择本组件可渲染的首个交互。
+  const pending = currentSnapshot?.pendingInteractions.find(isPendingUserInput) ?? null;
   const workspaceHookReview = currentSnapshot?.pendingInteractions.find(
     (interaction) => interaction.payload.kind === "workspaceHookReview",
   );
@@ -181,13 +181,6 @@ export function V4InteractionDialogs({
   ]);
   const autoResolutionIntentRef = useRef(createInteractionAutoResolutionIntentTracker());
   const loggedSnoozeSourceIdsRef = useRef(new Set<string>());
-  const [permissionResponse, setPermissionResponse] = useState<{
-    interactionId: string;
-    pending: boolean;
-    failed: boolean;
-  } | null>(null);
-  const permissionResponseFlight = useRef<string | null>(null);
-
   const resolveInteraction = useCallback(
     async (
       interactionId: string,
@@ -300,7 +293,7 @@ export function V4InteractionDialogs({
   );
 
   useEffect(() => {
-    // PermissionRequested 可能先投出 userInput，紧接着 autoResolution durable event 才到。
+    // userInput 可能先投出，紧接着 autoResolution durable event 才到。
     // 用户若在这两帧之间完成首个分题操作，先记本地意图，registry 就绪后立即补发一次。
     if (pending) {
       void sendSnoozeOnce(pending.interactionId, Boolean(pending.autoResolution));
@@ -309,49 +302,6 @@ export function V4InteractionDialogs({
 
   if (!pending) {
     return null;
-  }
-
-  // workspaceHookReview 只能由 Settings/Hooks 行内 Trust 处理；绝不降级成通用 Dialog。
-  if (pending.payload.kind === "workspaceHookReview") {
-    return null;
-  }
-
-  if (pending.payload.kind === "permission") {
-    const request = pendingPermissionToLegacyRequest(sessionId, {
-      ...pending,
-      payload: pending.payload,
-    });
-    return (
-      // 连续 permission 会复用输入框焦点状态，按 interaction 重建。
-      <PermissionDialog
-        key={pending.interactionId}
-        request={request}
-        workspacePath={workspacePath}
-        provider={provider}
-        responding={
-          permissionResponse?.interactionId === pending.interactionId && permissionResponse.pending
-        }
-        responseError={
-          permissionResponse?.interactionId === pending.interactionId && permissionResponse.failed
-            ? intl.formatMessage({ id: "chat.permission.responseFailed" })
-            : undefined
-        }
-        onRespond={(_requestId, option: ZCodePermissionOption, feedback?: string) => {
-          if (permissionResponseFlight.current === pending.interactionId) return;
-          const interactionId = pending.interactionId;
-          permissionResponseFlight.current = interactionId;
-          setPermissionResponse({ interactionId, pending: true, failed: false });
-          void resolveInteraction(interactionId, {
-            optionId: option.optionId,
-            ...(feedback ? { freeText: feedback } : {}),
-          }).then((accepted) => {
-            if (permissionResponseFlight.current !== interactionId) return;
-            permissionResponseFlight.current = null;
-            setPermissionResponse({ interactionId, pending: false, failed: !accepted });
-          });
-        }}
-      />
-    );
   }
 
   const projectedElicitationRequest = pendingUserInputToElicitationRequest(sessionId, {

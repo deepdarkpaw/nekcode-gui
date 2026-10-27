@@ -14,14 +14,7 @@ import { workspaceHookReviewDecisionSchema } from "./zcode-protocol-v4/workspace
 import { errorAttributionSchema } from "./zcode-protocol-v4/snapshot.js";
 
 const nonEmptyString = z.string().trim().min(1);
-const zcodeTaskModeRealtimeValues = [
-  "yolo",
-  "plan",
-  "edit",
-  "auto",
-  "autoEdit",
-  "build",
-] as const satisfies readonly ZCodeTaskMode[];
+const zcodeTaskModeRealtimeValues = ["agent", "plan"] as const satisfies readonly ZCodeTaskMode[];
 const zcodeTaskMigrationSourceRealtimeValues = [
   "claudeCode",
 ] as const satisfies readonly ZCodeTaskMigrationSource[];

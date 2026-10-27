@@ -8,10 +8,8 @@ import { normalizeWrappedErrorText } from "@/lib/toolError.js";
 
 // v4 status → 旧 ChatToolCall.status（mapToolStatus 的输入词表：
 // pending/in_progress/completed/failed/stopped）。
-// pendingApproval 视为 pending：审批中输入已定，展示为待执行。
 const STATUS_MAP: Record<ToolCallRow["status"], string> = {
   inputStreaming: "pending",
-  pendingApproval: "pending",
   running: "in_progress",
   success: "completed",
   error: "failed",

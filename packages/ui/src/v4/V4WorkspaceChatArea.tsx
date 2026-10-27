@@ -8,7 +8,6 @@ import type {
 } from "@zcode/shared";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
-import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type {
   OpenScopedSubagentSideTabRequest,
@@ -16,11 +15,6 @@ import type {
   OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
-  OpenScopedWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowRunSideTabRequest,
-  OpenScopedWorkflowActorSessionSideTabRequest,
-  OpenScopedWorkflowRunDirectorySideTabRequest,
-  OpenScopedWorkflowWorkspaceSideTabRequest,
   SyncSubagentSessionTabsRequest,
 } from "@/lib/workspaceSidePane.js";
 import { logger } from "@/logger.js";
@@ -101,7 +95,6 @@ interface V4WorkspaceChatAreaProps {
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onPaneActiveSessionChange?: (scope: PaneWorkspaceScope, sessionId: string) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  onOpenAutomationsMain?: OpenAutomationsMain;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
@@ -111,11 +104,6 @@ interface V4WorkspaceChatAreaProps {
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
-  onOpenWorkflowRun?: (request: OpenScopedWorkflowRunSideTabRequest) => void;
-  onOpenWorkflowArtifact?: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
-  onOpenWorkflowRunDirectory?: (request: OpenScopedWorkflowRunDirectorySideTabRequest) => void;
-  onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -162,7 +150,6 @@ export function V4WorkspaceChatArea({
   onOpenGitReview,
   onPaneActiveSessionChange,
   onOpenBrowserUrl,
-  onOpenAutomationsMain,
   onOpenCodeViewer,
   onAutoOpenAssistantPptx,
   onOpenFileLink,
@@ -172,11 +159,6 @@ export function V4WorkspaceChatArea({
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
   onOpenPlanDetail,
-  onOpenWorkflowRun,
-  onOpenWorkflowArtifact,
-  onOpenWorkflowRunDirectory,
-  onOpenWorkflowActorSession,
-  onOpenWorkflowWorkspace,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
@@ -287,7 +269,6 @@ export function V4WorkspaceChatArea({
       onRefreshGit,
       onOpenGitReview,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
       onOpenCodeViewer,
       onAutoOpenAssistantPptx,
       onOpenFileLink,
@@ -297,11 +278,6 @@ export function V4WorkspaceChatArea({
       onSyncSubagentSessionTabs,
       onOpenSelectionSideChat,
       onOpenPlanDetail,
-      onOpenWorkflowRun,
-      onOpenWorkflowArtifact,
-      onOpenWorkflowRunDirectory,
-      onOpenWorkflowActorSession,
-      onOpenWorkflowWorkspace,
       conversationFindQuery,
       conversationFindActiveIndex,
       conversationFindNavigationRequestId,
@@ -332,7 +308,6 @@ export function V4WorkspaceChatArea({
       onRefreshGit,
       onOpenGitReview,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
       onOpenCodeViewer,
       onAutoOpenAssistantPptx,
       onOpenFileLink,
@@ -342,11 +317,6 @@ export function V4WorkspaceChatArea({
       onSyncSubagentSessionTabs,
       onOpenSelectionSideChat,
       onOpenPlanDetail,
-      onOpenWorkflowRun,
-      onOpenWorkflowArtifact,
-      onOpenWorkflowRunDirectory,
-      onOpenWorkflowActorSession,
-      onOpenWorkflowWorkspace,
       conversationFindQuery,
       conversationFindActiveIndex,
       conversationFindNavigationRequestId,

@@ -5,7 +5,6 @@ import type {
   ZCodeDeliveryKind,
   ZCodeMessageWithParts,
   ModelSelection,
-  ZCodePermissionRequestParams,
   ZCodeUserInputRequestParams,
   ZCodeUserInputResponse,
   ZCodeSessionInfo,
@@ -109,7 +108,6 @@ export interface ZCodeSessionSubscribeParams extends ZCodeTaskTarget {
 export type ZCodeSessionServiceEvent =
   | { type: "session.event"; event: ZCodeSessionEvent }
   | { type: "state.updated"; notification: ZCodeStateUpdatedNotification }
-  | { type: "permission.request"; request: ZCodePermissionRequestParams }
   | { type: "userInput.request"; request: ZCodeUserInputRequestParams }
   | {
       type: "userInput.response";

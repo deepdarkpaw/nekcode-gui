@@ -25,12 +25,6 @@ import {
   openSubagentDirectorySidePane,
   openSelectionSideChatPane,
   openPlanDetailSidePane,
-  openWorkflowRunSidePane,
-  replaceWorkflowRunSidePane,
-  openWorkflowRunDirectorySidePane,
-  openWorkflowActorSessionSidePane,
-  openWorkflowWorkspaceSidePane,
-  openWorkflowArtifactSidePane,
   activateDeveloperToolsSidePane,
   openCodeViewerSidePane,
   openCodeViewerSidePanes,
@@ -50,11 +44,6 @@ import {
   type OpenScopedSubagentDirectorySideTabRequest,
   type OpenSelectionSideChatRequest,
   type OpenScopedPlanDetailSideTabRequest,
-  type OpenScopedWorkflowRunSideTabRequest,
-  type OpenScopedWorkflowRunDirectorySideTabRequest,
-  type OpenScopedWorkflowActorSessionSideTabRequest,
-  type OpenScopedWorkflowArtifactSideTabRequest,
-  type OpenScopedWorkflowWorkspaceSideTabRequest,
   type WorkspaceSidePaneState,
   type WorkspaceSidePaneTab,
 } from "@/lib/workspaceSidePane.js";
@@ -528,109 +517,6 @@ export function useAppPanels(options: {
     [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
   );
 
-  const handleOpenWorkflowRun = useCallback(
-    (request: OpenScopedWorkflowRunSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      // 「配置」之后的原地替换不是一次打开：收起的侧栏保持收起。
-      const replaceRunId = request.replaceRunId;
-      if (replaceRunId === undefined) setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        replaceRunId === undefined
-          ? openWorkflowRunSidePane(current, { ...request, workspaceKey })
-          : replaceWorkflowRunSidePane(current, { ...request, workspaceKey, replaceRunId }),
-      );
-      logger.debug("[App] 打开工作流运行详情右侧 tab", {
-        parentSessionId: request.parentSessionId,
-        runId: request.runId,
-        toolCallId: request.toolCallId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowRunDirectory = useCallback(
-    (request: OpenScopedWorkflowRunDirectorySideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openWorkflowRunDirectorySidePane(current, {
-          ...request,
-          workspaceKey,
-        }),
-      );
-      logger.debug("[App] 打开工作流运行目录右侧 tab", {
-        parentSessionId: request.parentSessionId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowActorSession = useCallback(
-    (request: OpenScopedWorkflowActorSessionSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openWorkflowActorSessionSidePane(current, {
-          ...request,
-          workspaceKey,
-        }),
-      );
-      logger.debug("[App] 打开工作流 actor 会话右侧 tab", {
-        actorSessionId: request.actorSessionId,
-        parentSessionId: request.parentSessionId,
-        runId: request.runId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowWorkspace = useCallback(
-    (request: OpenScopedWorkflowWorkspaceSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openWorkflowWorkspaceSidePane(current, {
-          ...request,
-          workspaceKey,
-        }),
-      );
-      logger.debug("[App] 打开工作流工作区右侧 tab", {
-        parentSessionId: request.parentSessionId,
-        phaseId: request.phaseId,
-        runId: request.runId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowArtifact = useCallback(
-    (request: OpenScopedWorkflowArtifactSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      const openArtifactTab = () => {
-        setIsSidePaneCollapsed(false);
-        commitOpenedSidePaneState((current) =>
-          openWorkflowArtifactSidePane(current, {
-            ...request,
-            workspaceKey,
-          }),
-        );
-        logger.debug("[App] 打开工作流产物右侧 tab", {
-          artifactId: request.artifactId,
-          parentSessionId: request.parentSessionId,
-          runId: request.runId,
-          workspaceKey,
-        });
-      };
-
-      openArtifactTab();
-    },
-    [commitOpenedSidePaneState],
-  );
-
   const closeSelectionSideChatRuntime = useCallback(
     (tab: Extract<WorkspaceSidePaneTab, { type: "selection-side-chat" }>) => {
       clearSelectionSideChat(tab.childSessionId);
@@ -957,11 +843,6 @@ export function useAppPanels(options: {
     handleSyncSubagentSessionTabs,
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,
-    handleOpenWorkflowRun,
-    handleOpenWorkflowRunDirectory,
-    handleOpenWorkflowActorSession,
-    handleOpenWorkflowWorkspace,
-    handleOpenWorkflowArtifact,
     handleToggleTerminal,
     handleToggleSidebar,
     handleToggleSidePaneCollapse,

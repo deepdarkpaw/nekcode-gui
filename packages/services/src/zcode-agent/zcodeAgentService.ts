@@ -31,7 +31,6 @@ import {
   ZCODE_PROTOCOL_NAME,
   ZCODE_PROTOCOL_VERSION,
   zcodeMcpListResultSchema,
-  zcodePermissionRequestParamsSchema,
   zcodeProcessChildProcessesResultSchema,
   type ZCodeProcessChildProcess,
   zcodeSkillsReferenceCatalogResultSchema,
@@ -659,10 +658,6 @@ function rememberBoundedEventId(ids: Set<string>, order: string[], eventId: stri
   return true;
 }
 
-function permissionRequestKey(params: ZCodeAgentSessionTarget & { requestId: string }): string {
-  return `${sessionEventKey(params)}\u0000${params.requestId}`;
-}
-
 function userInputRequestKey(params: ZCodeAgentSessionTarget & { requestId: string }): string {
   return `${sessionEventKey(params)}\u0000${params.requestId}`;
 }
@@ -856,13 +851,11 @@ export function createZCodeAgentService(
   const sessionEventSequenceStates = new Map<string, SessionEventSequenceState>();
   const wiredClients = new WeakSet<ZCodeProtocolClient>();
   const clientDisposables = new WeakMap<ZCodeProtocolClient, IDisposable[]>();
-  const pendingPermissions = new Map<string, PendingPermissionRequest>();
   const pendingUserInputs = new Map<string, PendingPermissionRequest>();
   // 内存诊断计数器：只读各 per-session 镜像表的 size。
   const memoryDiagnostics = registerMemoryDiagnosticsProvider("agent", () => ({
     sessionEmitters: sessionEmitters.size,
     seqStates: sessionEventSequenceStates.size,
-    pendingPermissions: pendingPermissions.size,
     pendingUserInputs: pendingUserInputs.size,
   }));
   const pendingSessionRuntimePreferences = new Map<
@@ -894,11 +887,6 @@ export function createZCodeAgentService(
   const resolveSessionRuntimePreferences = options?.resolveSessionRuntimePreferences;
 
   function invalidateWorkspaceClient(workspaceKey: string, client: ZCodeProtocolClient): void {
-    for (const [key, pending] of pendingPermissions) {
-      if (pending.client === client) {
-        pendingPermissions.delete(key);
-      }
-    }
     for (const [key, pending] of pendingUserInputs) {
       if (pending.client === client) {
         pendingUserInputs.delete(key);
@@ -1631,35 +1619,6 @@ export function createZCodeAgentService(
           return;
         }
 
-        if (request.method === zcodeProtocolMethods.interactionRequestPermission) {
-          const parsed = zcodePermissionRequestParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid permission request params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          const key = permissionRequestKey({
-            ...workspace,
-            sessionId: parsed.data.sessionId,
-            requestId: parsed.data.requestId,
-          });
-          const wasPending = pendingPermissions.has(key);
-          pendingPermissions.set(key, {
-            client,
-            protocolRequestId: request.id,
-          });
-          if (!wasPending) {
-            emitSessionEvent(workspace, parsed.data.sessionId, {
-              type: "permission.request",
-              request: parsed.data,
-            });
-          }
-          return;
-        }
-
         if (request.method === zcodeProtocolMethods.interactionRequestUserInput) {
           const parsed = zcodeUserInputRequestParamsSchema.safeParse(request.params);
           if (!parsed.success) {
@@ -2249,7 +2208,6 @@ export function createZCodeAgentService(
     }
     sessionsIndexFrameEmitters.clear();
     sessionEventSequenceStates.clear();
-    pendingPermissions.clear();
     pendingUserInputs.clear();
     for (const pending of pendingSessionRuntimePreferences.values()) {
       clearTimeout(pending.timeout);

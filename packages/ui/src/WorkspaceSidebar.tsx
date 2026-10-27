@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   Archive,
-  CalendarClock,
   Clock3,
   Cloud,
   Folder,
@@ -51,7 +50,6 @@ import type { Locale, RemoteTarget, ZCodeTaskMeta } from "@zcode/shared";
 import {
   TID_CONVERSATION_NEW_TASK,
   TID_CONVERSATION_SECTION,
-  TID_AUTOMATIONS_OPEN,
   TID_PROJECT_ADD,
   TID_PROJECT_SECTION,
   TID_SIDEBAR,
@@ -252,8 +250,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goBackShortcutLabel: _goBackShortcutLabel,
   goForwardShortcutLabel: _goForwardShortcutLabel,
   onOpenCommandCenter,
-  onOpenAutomations,
-  automationsActive = false,
   onFileTreeOpenChange,
 }: {
   workspacePath: string;
@@ -298,8 +294,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goBackShortcutLabel?: string;
   goForwardShortcutLabel?: string;
   onOpenCommandCenter: () => void;
-  onOpenAutomations?: () => void;
-  automationsActive?: boolean;
   onFileTreeOpenChange?: (open: boolean) => void;
 }) {
   const { intl, localePreference, setLocalePreference } = useZCodeIntl();
@@ -734,9 +728,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     [setLocalePreference],
   );
 
-  const handleOpenAutomationsMain = useCallback(() => {
-    onOpenAutomations?.();
-  }, [onOpenAutomations]);
   const activeTaskId = useZCodeSessionStore(
     (state) =>
       // Web 远程控制从全局 task 入口进入远端 workspace 时，会先按
@@ -1286,21 +1277,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                 }
               />
             ) : null} */}
-            <Button
-              variant="ghost"
-              onClick={handleOpenAutomationsMain}
-              data-icon="inline-start"
-              data-testid={TID_AUTOMATIONS_OPEN}
-              size="lg"
-              aria-pressed={automationsActive}
-              className={cn(
-                "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
-                automationsActive && "bg-selected text-foreground",
-              )}
-            >
-              <CalendarClock className="size-4" />
-              {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
-            </Button>
           </div>
 
           <div className="relative flex min-h-0 flex-1 flex-col">
@@ -1359,7 +1335,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     onGroupedTaskGroupIdsChange={handleGroupedTaskGroupIdsChange}
                     onCollapsedGroupIdsChange={handleCollapsedGroupedTaskGroupIdsChange}
                     onStickyGroupHeaderChange={setGroupedStickyHeader}
-                    onOpenAutomations={handleOpenAutomationsMain}
                   />
                 ) : taskViewMode === "timeline" ? (
                   <WorkspaceTimelineTasksSection
@@ -1495,9 +1470,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                                             taskListLoading={taskLoading}
                                             taskListHasMore={taskGroup?.hasMore ?? false}
                                             taskListHasUnread={taskGroup?.hasUnread ?? false}
-                                            taskListLiveWorkflowCount={
-                                              taskGroup?.liveWorkflowCount ?? 0
-                                            }
                                             workspaceKey={workspaceKey}
                                             onShowMoreWorkspaceTasks={handleShowMoreWorkspaceTasks}
                                             reconnectingRemoteWorkspaceKeys={

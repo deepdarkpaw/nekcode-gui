@@ -28,7 +28,7 @@ const meta = {
   workspacePath: "/example/workspace",
   createdAt: 1,
   updatedAt: 2,
-  mode: "build" as const,
+  mode: "agent" as const,
   provider: "glm" as const,
 };
 
@@ -149,7 +149,7 @@ test("current session recovery preserves Desktop and replayable projections", as
       workspace: { workspacePath: meta.workspacePath, workspaceKey: meta.workspacePath },
       sessionKind: "interactive",
       title: meta.title,
-      mode: "build",
+      mode: "agent",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -157,12 +157,12 @@ test("current session recovery preserves Desktop and replayable projections", as
     settings: {
       model: { available: [] },
       thoughtLevel: { enabled: false, available: [] },
-      mode: { current: "build" },
+      mode: { current: "agent" },
     },
     projection: {
       sessionId: meta.taskId,
       status: "idle",
-      mode: "build",
+      mode: "agent",
       turnCount: 0,
       totalTokenCount: 0,
       contextUsed: 0,

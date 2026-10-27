@@ -35,7 +35,6 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import type { ConversationTransport } from "@/v4/transport.js";
 import { ensureAgentV4ConnectionHandshake } from "@/v4/agentV4ConnectionHandshake.js";
-import { createWorkflowRunTransportMethods } from "@/v4/agentConversationTransportWorkflowRuns.js";
 import { createAckActivationBarrier } from "@/v4/ackActivationBarrier.js";
 import { createTopicWireDecoder } from "@/v4/topicWireDecoder.js";
 import { logger } from "@/logger.js";
@@ -62,13 +61,6 @@ type ConversationV4AgentService = Pick<
   | "queryConversationCommandsV4"
   | "conversationRowsRangeV4"
   | "conversationPlansV4"
-  | "conversationWorkflowRunEventsV4"
-  | "conversationWorkflowRunsV4"
-  | "conversationWorkflowRunArtifactsV4"
-  | "conversationWorkflowRunArtifactDataV4"
-  | "conversationWorkflowRunArtifactReadV4"
-  | "conversationWorkflowRunWorkspaceV4"
-  | "conversationWorkflowRunNodeResultV4"
   | "conversationFileChangesV4"
   | "conversationFileRewindPreviewV4"
   | "attachmentBeginV4"
@@ -354,7 +346,7 @@ export function createAgentConversationTransport(
         config?: { planEnabled?: boolean };
         firstInput?: { planEnabled?: boolean };
       };
-      // 旧 Host 会剥掉未知字段；不能把 yolo + Plan 错发成完全访问执行。
+      // 旧 Host 会剥掉未知字段；不能把任意模式 + Plan 错发成直接执行。
       if (
         hello.capabilities.independentPlanState !== true &&
         (payload.planEnabled || payload.config?.planEnabled || payload.firstInput?.planEnabled)
@@ -388,8 +380,6 @@ export function createAgentConversationTransport(
         sessionId: params.sessionId,
       });
     },
-    // dwf journal 的两个只读查询拆在 agentConversationTransportWorkflowRuns.ts（max-lines 边界）。
-    ...createWorkflowRunTransportMethods({ agentService, ensureHandshake, workspace }),
     async fileChanges(
       params: V4ConversationFileChangesParams,
     ): Promise<V4ConversationFileChangesResult> {

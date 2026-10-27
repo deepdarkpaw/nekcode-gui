@@ -300,7 +300,7 @@ function resolveToolStatusLabel(
   formatMessage: (descriptor: { id: string }) => string,
 ) {
   const compactState =
-    status === "inputStreaming" || status === "pendingApproval"
+    status === "inputStreaming"
       ? "input-streaming"
       : status === "running"
         ? "input-available"
@@ -395,8 +395,7 @@ const ToolCallPresentation = memo(function ToolCallPresentation({
   ) : (
     <span className="text-ui-sm text-foreground-subtle">{statusLabel}</span>
   );
-  const isRunning =
-    row.status === "inputStreaming" || row.status === "pendingApproval" || row.status === "running";
+  const isRunning = row.status === "inputStreaming" || row.status === "running";
   return (
     <div data-conversation-share-row-kind="toolCall" data-conversation-selectable="true">
       <ToolLayout
@@ -625,10 +624,7 @@ function GroupedToolPresentation({
       <SearchIcon className="size-4 shrink-0" aria-hidden="true" />
     );
   const hasRunningRow = rows.some(
-    (row) =>
-      row.status === "inputStreaming" ||
-      row.status === "pendingApproval" ||
-      row.status === "running",
+    (row) => row.status === "inputStreaming" || row.status === "running",
   );
   const hasFailedRow = rows.some((row) => row.status === "error" || row.status === "cancelled");
   const groupStatus: ToolCallRow["status"] = hasRunningRow

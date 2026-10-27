@@ -104,21 +104,9 @@ function pendingInteractionPayload(params: {
   const taskTitle = snapshot.meta.title;
 
   // workspace Hook review 的唯一入口是 Settings；不得把它伪装成
-  // permission/elicitation 系统通知。
+  // elicitation 系统通知。
   if (interaction.payload.kind === "workspaceHookReview") {
     return null;
-  }
-
-  if (interaction.payload.kind === "permission") {
-    return {
-      taskId,
-      status: "permission_request",
-      requestId,
-      title: formatMessage({ id: "notification.permissionRequired" }),
-      body:
-        interaction.payload.summary.trim() ||
-        taskTitleBody(taskTitle, "notification.permissionRequired", formatMessage),
-    };
   }
 
   if (isPlanApprovalInteraction(interaction.payload)) {

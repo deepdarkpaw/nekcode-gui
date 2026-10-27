@@ -20,10 +20,6 @@ import type {
   OpenBackgroundBashSideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
-  OpenScopedWorkflowRunSideTabRequest,
-  OpenScopedWorkflowActorSessionSideTabRequest,
-  OpenScopedWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowWorkspaceSideTabRequest,
   WorkspaceSidePaneState,
 } from "@/lib/workspaceSidePane.js";
 import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStore.js";
@@ -39,8 +35,6 @@ import type {
   GroupedDraftTaskPlacement,
 } from "@/store/zcodeSessionStoreTypes.js";
 import type { TaskFindDialogProps } from "@/quickpick/TaskFindDialog.js";
-import type { AutomationsNavigationTab, OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
-
 export interface WorkspaceShellZCodeState {
   activeTaskId: WorkspaceZCodeUIState["activeTaskId"];
   draftFocusVersion: WorkspaceZCodeUIState["draftFocusVersion"];
@@ -109,16 +103,8 @@ export interface GitChangeSummary {
   removed: number;
 }
 
-export type WorkspaceMainView = "chat" | "automations";
-
 export interface WorkspaceShellLayoutProps extends AppProps {
   workspaceReadOnlyReason?: string;
-  workspaceMainView: WorkspaceMainView;
-  openAutomationId: string | null;
-  openAutomationTab: AutomationsNavigationTab | null;
-  onWorkspaceMainViewChange: (view: WorkspaceMainView) => void;
-  onOpenAutomationConsumed: () => void;
-  handleOpenAutomations: OpenAutomationsMain;
   workspaceShellZCodeState: WorkspaceShellZCodeState;
   theme: Theme;
   isMacFullscreen: boolean;
@@ -233,13 +219,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   ) => void;
   handleOpenSelectionSideChat: (request: OpenSelectionSideChatRequest) => void;
   handleOpenPlanDetail: (request: OpenScopedPlanDetailSideTabRequest) => void;
-  handleOpenWorkflowRun: (request: OpenScopedWorkflowRunSideTabRequest) => void;
-  handleOpenWorkflowRunDirectory: (
-    request: import("@/lib/workspaceSidePane.js").OpenScopedWorkflowRunDirectorySideTabRequest,
-  ) => void;
-  handleOpenWorkflowActorSession: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  handleOpenWorkflowWorkspace: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
-  handleOpenWorkflowArtifact: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
   handleCloseCodeViewer: () => void;
   handleCloseGit: () => void;
   handleActivateSidePaneTab: (tabId: string) => void;

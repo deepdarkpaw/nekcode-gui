@@ -24,7 +24,7 @@ interface PublicIdMaps {
   artifactKeys: Map<string, string>;
 }
 
-const ACTIVE_TOOL_STATUSES = new Set(["inputStreaming", "pendingApproval", "running"]);
+const ACTIVE_TOOL_STATUSES = new Set(["inputStreaming", "running"]);
 const PUBLIC_PRODUCT_TURN_ID = /^share-product-turn-[1-9]\d*$/u;
 const PUBLIC_TURN_ID = /^share-turn-[1-9]\d*$/u;
 const PUBLIC_ENTITY_ID = /^share-entity-[1-9]\d*$/u;
@@ -526,11 +526,7 @@ function assertConversationSharePublicProjection(input: {
         );
       }
       toolCallIds.push(row.toolCallId);
-      if (
-        row.progress !== undefined ||
-        row.approvalInteractionId !== undefined ||
-        row.workId !== undefined
-      ) {
+      if (row.progress !== undefined || row.workId !== undefined) {
         throwProjectionError(
           "invalid_conversation",
           "Conversation public tool call contains local runtime identity",

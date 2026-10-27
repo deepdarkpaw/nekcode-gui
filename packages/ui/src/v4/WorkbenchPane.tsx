@@ -22,7 +22,6 @@ import { cn } from "@/components/lib/utils.js";
 import { useServices } from "@/hooks/useServices.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
-import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type {
   OpenScopedSubagentSideTabRequest,
@@ -30,11 +29,6 @@ import type {
   OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
-  OpenScopedWorkflowActorSessionSideTabRequest,
-  OpenScopedWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowRunSideTabRequest,
-  OpenScopedWorkflowRunDirectorySideTabRequest,
-  OpenScopedWorkflowWorkspaceSideTabRequest,
   SyncSubagentSessionTabsRequest,
 } from "@/lib/workspaceSidePane.js";
 import { SessionPane } from "@/v4/SessionPane.js";
@@ -278,7 +272,6 @@ export interface WorkbenchShellBinding {
   onRefreshGit?: () => void;
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  onOpenAutomationsMain?: OpenAutomationsMain;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
@@ -288,12 +281,6 @@ export interface WorkbenchShellBinding {
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
-  /** 插件 UI 侧栏：与 onOpenPlanDetail 同路径经 shell binding 下发到 SessionPane。 */
-  onOpenWorkflowRun?: (request: OpenScopedWorkflowRunSideTabRequest) => void;
-  onOpenWorkflowArtifact?: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
-  onOpenWorkflowRunDirectory?: (request: OpenScopedWorkflowRunDirectorySideTabRequest) => void;
-  onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -589,7 +576,6 @@ export function WorkbenchLeafPane({
           onRefreshGit={shouldUseShellStatusPanel ? shell.onRefreshGit : undefined}
           onOpenGitReview={shouldUseShellStatusPanel ? shell.onOpenGitReview : undefined}
           onOpenBrowserUrl={shell.onOpenBrowserUrl}
-          onOpenAutomationsMain={shell.onOpenAutomationsMain}
           onOpenCodeViewer={shell.onOpenCodeViewer}
           onAutoOpenAssistantPptx={shell.onAutoOpenAssistantPptx}
           onOpenFileLink={shell.onOpenFileLink}
@@ -599,11 +585,6 @@ export function WorkbenchLeafPane({
           onSyncSubagentSessionTabs={shell.onSyncSubagentSessionTabs}
           onOpenSelectionSideChat={shell.onOpenSelectionSideChat}
           onOpenPlanDetail={shell.onOpenPlanDetail}
-          onOpenWorkflowRun={shell.onOpenWorkflowRun}
-          onOpenWorkflowArtifact={shell.onOpenWorkflowArtifact}
-          onOpenWorkflowRunDirectory={shell.onOpenWorkflowRunDirectory}
-          onOpenWorkflowActorSession={shell.onOpenWorkflowActorSession}
-          onOpenWorkflowWorkspace={shell.onOpenWorkflowWorkspace}
           conversationFindQuery={focused ? shell.conversationFindQuery : ""}
           conversationFindActiveIndex={focused ? (shell.conversationFindActiveIndex ?? -1) : -1}
           conversationFindNavigationRequestId={

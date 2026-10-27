@@ -10,7 +10,7 @@ const EXECUTE_GROUP_ICON = (
   <SquareTerminalIcon className="size-4 shrink-0 text-foreground-subtle" />
 );
 
-// V4 row 进入共享 renderer 前会把 inputStreaming/pendingApproval 统一适配为 pending。
+// V4 row 进入共享 renderer 前会把 inputStreaming 适配为 pending。
 const ACTIVE_STATUSES = new Set(["pending", "in_progress"]);
 
 function formatCompletedSummary(
@@ -88,7 +88,6 @@ export function ExecuteGroupToolCallBlock(context: ToolCallBlockRenderContext) {
             onOpenCodeViewer={context.onOpenCodeViewer}
             onOpenFileLink={context.onOpenFileLink}
             onOpenBrowserUrl={context.onOpenBrowserUrl}
-            onOpenAutomationsMain={context.onOpenAutomationsMain}
             onLoadFullToolCallFields={context.onLoadFullToolCallFields}
           />
         ))}
@@ -97,7 +96,6 @@ export function ExecuteGroupToolCallBlock(context: ToolCallBlockRenderContext) {
     [
       childToolCalls,
       context.onLoadFullToolCallFields,
-      context.onOpenAutomationsMain,
       context.onOpenBrowserUrl,
       context.onOpenCodeViewer,
       context.onOpenFileLink,

@@ -8,10 +8,8 @@ import {
   createTaskNavigationHistory,
   goBack as navGoBack,
   goForward as navGoForward,
-  pushAutomationsNavEntry,
   removeTaskFromHistory,
-  type AutomationsNavigationTab,
-  type WorkspaceNavEntry,
+  type TaskNavEntry,
 } from "@/lib/taskNavigationHistory.js";
 import type { ZCodeSessionStoreState } from "./zcodeSessionStoreTypes.js";
 
@@ -31,24 +29,7 @@ export function createNavigationSlice(set: SetFn, get: GetFn) {
   return {
     taskNavHistory: createTaskNavigationHistory(),
 
-    taskNavPushAutomations: (
-      workspacePath: string,
-      workspaceIdentity?: string,
-      automationId?: string,
-      automationTab?: AutomationsNavigationTab,
-    ) => {
-      set((state) => ({
-        taskNavHistory: pushAutomationsNavEntry(
-          state.taskNavHistory,
-          workspacePath,
-          workspaceIdentity,
-          automationId,
-          automationTab,
-        ),
-      }));
-    },
-
-    taskNavGoBack: (): WorkspaceNavEntry | null => {
+    taskNavGoBack: (): TaskNavEntry | null => {
       const state = get();
       const result = navGoBack(state.taskNavHistory);
       if (!result) {
@@ -59,7 +40,7 @@ export function createNavigationSlice(set: SetFn, get: GetFn) {
       return result.entry;
     },
 
-    taskNavGoForward: (): WorkspaceNavEntry | null => {
+    taskNavGoForward: (): TaskNavEntry | null => {
       const state = get();
       const result = navGoForward(state.taskNavHistory);
       if (!result) {

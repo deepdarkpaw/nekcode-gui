@@ -14,9 +14,8 @@ export function hasChatLoadingBlockingInteraction(
 ): boolean {
   return interactions.some(
     (interaction) =>
-      interaction.payload.kind === "permission" ||
-      (interaction.payload.kind === "userInput" &&
-        interaction.payload.toolName === "AskUserQuestion"),
+      interaction.payload.kind === "userInput" &&
+      interaction.payload.toolName === "AskUserQuestion",
   );
 }
 
@@ -53,10 +52,7 @@ export function shouldShowTurnChatLoading({
   }
 
   // pendingInteractions / activeWorks 是权威事实源，但恢复或乱序窗口
-  // 可能先只有行状态；行级 fallback 避免权限、compact、goal verifier 已出现时
+  // 可能先只有行状态；行级 fallback 避免 compact、goal verifier 已出现时
   // 底部 loading 短暂闪回。
-  return (
-    !rows.some((row) => row.kind === "toolCall" && row.status === "pendingApproval") &&
-    !hasChatLoadingBlockingMaintenanceRow(rows)
-  );
+  return !hasChatLoadingBlockingMaintenanceRow(rows);
 }

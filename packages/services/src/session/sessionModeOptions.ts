@@ -1,13 +1,5 @@
+import { normalizeZCodeTaskMode } from "@zcode/shared";
 import type { ZCodeConfigOption, ZCodeProvider, ZCodeTaskMode } from "@zcode/shared";
-
-const CANONICAL_SESSION_MODES = new Set<ZCodeTaskMode>([
-  "yolo",
-  "plan",
-  "edit",
-  "auto",
-  "autoEdit",
-  "build",
-]);
 
 function readTrimmedString(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -31,22 +23,8 @@ function normalizePersistedSessionMode(
     return undefined;
   }
 
-  if (CANONICAL_SESSION_MODES.has(trimmedModeId as ZCodeTaskMode)) {
-    return trimmedModeId as ZCodeTaskMode;
-  }
-
-  switch (trimmedModeId) {
-    // Bugfix: provider 原生 modeId 和本地持久化的 session mode 不是一套枚举。
-    // 下发前需要把本地语义映射回 provider options 中真实存在的值。
-    case "read-only":
-    case "read_only":
-      return "plan";
-    case "full-auto":
-    case "full_auto":
-      return "yolo";
-    default:
-      return undefined;
-  }
+  // provider 原生 modeId 与本地持久化值都可能是旧枚举；统一按 agent / plan 归一。
+  return normalizeZCodeTaskMode(trimmedModeId);
 }
 
 export function resolveProviderModeIdFromConfigOptions(params: {

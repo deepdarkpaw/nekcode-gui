@@ -78,7 +78,6 @@ function ToolCallBlockComponent({
   onOpenCodeViewer,
   onOpenFileLink,
   onOpenBrowserUrl,
-  onOpenAutomationsMain,
   onOpenPlanDetail,
   onOpenWorkflowRun,
   onResumeWorkflowRun,
@@ -108,7 +107,6 @@ function ToolCallBlockComponent({
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  onOpenAutomationsMain?: (automationId?: string) => void;
   onOpenPlanDetail?: ToolCallBlockRenderContext["onOpenPlanDetail"];
   onOpenWorkflowRun?: ToolCallBlockRenderContext["onOpenWorkflowRun"];
   /** 工具卡页脚的 Resume；与 workflowRun 同样不向子工具卡透传。 */
@@ -237,7 +235,6 @@ function ToolCallBlockComponent({
               onOpenCodeViewer={toolPreviewCodeViewer}
               onOpenFileLink={onOpenFileLink}
               onOpenBrowserUrl={onOpenBrowserUrl}
-              onOpenAutomationsMain={onOpenAutomationsMain}
               onOpenPlanDetail={onOpenPlanDetail}
               onOpenWorkflowRun={onOpenWorkflowRun}
               onLoadFullToolCallFields={onLoadFullToolCallFields}
@@ -255,7 +252,6 @@ function ToolCallBlockComponent({
       childToolCalls,
       depth,
       onLoadFullToolCallFields,
-      onOpenAutomationsMain,
       onOpenBrowserUrl,
       onOpenPlanDetail,
       onOpenFileLink,
@@ -295,7 +291,6 @@ function ToolCallBlockComponent({
       onOpenCodeViewer: toolPreviewCodeViewer,
       onOpenFileLink,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
       onOpenPlanDetail,
       // onOpenWorkflowRun 之前只被透传给子工具卡，从未进过 renderContext，
       // 于是 CreateWorkflow renderer 永远收不到它——「打开详情页」的入口不是被埋深了，
@@ -321,7 +316,6 @@ function ToolCallBlockComponent({
       errorText,
       isRunning,
       onLoadFullToolCallFields,
-      onOpenAutomationsMain,
       onOpenBrowserUrl,
       onOpenPlanDetail,
       onOpenWorkflowRun,

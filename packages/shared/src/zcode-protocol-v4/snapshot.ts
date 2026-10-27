@@ -8,12 +8,10 @@ import { conversationInputDispatchSchema, conversationInputIntentSchema } from "
 import {
   zcodeContextUsageBreakdownSchema,
   zcodeInteractionRequestOriginSchema,
-  zcodePermissionResponseSchema,
   zcodeSessionContextCacheUsageSchema,
 } from "../zcode-protocol-legacy-types.js";
 import { timestampSchema } from "./core.js";
 import { conversationRowSchema } from "./rows.js";
-import { toolCallDisplaySchema } from "./toolDisplay.js";
 
 import { workspaceHookReviewRequestPayloadSchema } from "./workspace-hook-review.js";
 import { workflowRunsStateSchema } from "./workflow-runs.js";
@@ -224,39 +222,6 @@ export const queueStateSchema = z.object({
 export type QueueState = z.infer<typeof queueStateSchema>;
 
 // ── pendingInteractions（阻塞交互 → 状态）──
-export const MAX_PERMISSION_FEEDBACK_CHARS = 4_096;
-
-export const PERMISSION_FULL_ACCESS_OPTION_ID = "fullAccess";
-const permissionOptionSchema = z.object({
-  optionId: z.string(),
-  label: z.string(),
-  kind: z.enum(["allowOnce", "allowAlways", "deny", "custom"]),
-  response: zcodePermissionResponseSchema.optional(),
-});
-
-export const permissionRequestPayloadSchema = z.object({
-  kind: z.literal("permission"),
-  toolCallId: z.string(),
-  toolName: z.string(),
-  summary: z.string(),
-  detail: z.unknown(),
-  // additive：旧 snapshot 缺省时 UI 不显示反馈输入；V4 新投影可显式开启。
-  freeText: z.boolean().optional(),
-  origin: zcodeInteractionRequestOriginSchema.optional(),
-  // 工具自报的确认预览，复用 row 的 display 投影（同一有界形状）。缺省 = 纯文本 ask。
-  // 同样不设门：预览解析失败退化成纯文本 ask，不拒整份 snapshot（见 toolDisplay.ts 注释）。
-  display: toolCallDisplaySchema.optional().catch(undefined),
-  // 独立 additive 能力：旧 UI 忽略此字段，仍只显示原 options，不出现半实现授权入口。
-  fullAccessOption: permissionOptionSchema
-    .extend({
-      optionId: z.literal(PERMISSION_FULL_ACCESS_OPTION_ID),
-      kind: z.literal("custom"),
-    })
-    .optional(),
-  options: z.array(permissionOptionSchema),
-});
-export type PermissionRequestPayload = z.infer<typeof permissionRequestPayloadSchema>;
-
 export const userInputOptionPayloadSchema = z.object({
   value: z.string(),
   label: z.string(),
@@ -310,13 +275,12 @@ export type InteractionAutoResolution = z.infer<typeof interactionAutoResolution
 export const pendingInteractionSchema = z
   .object({
     interactionId: z.string(),
-    kind: z.enum(["permission", "userInput", "workspaceHookReview"]),
+    kind: z.enum(["userInput", "workspaceHookReview"]),
     // null = 会话级（如 provider 交互和 workspace Hook review）。
     anchorRowId: z.number().nullable(),
     createdAt: timestampSchema,
     autoResolution: interactionAutoResolutionSchema.optional(),
     payload: z.discriminatedUnion("kind", [
-      permissionRequestPayloadSchema,
       userInputRequestPayloadSchema,
       workspaceHookReviewRequestPayloadSchema,
     ]),

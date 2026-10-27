@@ -22,7 +22,7 @@ import { useStorageUsage } from "./useStorageUsage.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { formatBytes } from "@/resource-manager/resourceUsageView.js";
-import { formatDateTime } from "@/settings/automationFormat.js";
+import { formatDateTime } from "@/lib/displayFormat.js";
 import { StorageCategoryDetail } from "./StorageCategoryDetail.js";
 import { StorageCategoryList } from "./StorageCategoryList.js";
 import {

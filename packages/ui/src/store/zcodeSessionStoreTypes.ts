@@ -17,7 +17,6 @@ import {
   type ZCodeContextCacheUsage,
   type ZCodeConfigOption,
   type ZCodeSlashCommand,
-  type ZCodePermissionRequest,
   type ZCodeElicitationRequest,
   type ZCodeBackgroundTaskControlItem,
   type ZCodeSessionActiveTurnKind,
@@ -26,11 +25,7 @@ import {
   type SessionCreateSource,
 } from "@zcode/shared";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
-import type {
-  AutomationsNavigationTab,
-  TaskNavigationHistory,
-  WorkspaceNavEntry,
-} from "@/lib/taskNavigationHistory.js";
+import type { TaskNavigationHistory, TaskNavEntry } from "@/lib/taskNavigationHistory.js";
 import type { MentionCategory, MentionItemData } from "@/mentions/mentionTypes.js";
 
 // ────────────────────────────────────────────
@@ -100,12 +95,10 @@ export interface ElicitationFormDraft {
 
 /**
  * store 收尾：TaskUiState 收敛为「远端广播仍需回放的人工介入面」——
- * 权限/问答弹窗 pending 队列、renderer-local 问答草稿 + 错误横幅。plan/goal/token debug 等旧 ChatView
+ * 问答弹窗 pending 队列、renderer-local 问答草稿 + 错误横幅。plan/goal/token debug 等旧 ChatView
  * 展示态的写入方已随旧协议链路删除，读侧由 v4 conversation 投影承接。
  */
 export interface TaskUiState {
-  permissionRequest: ZCodePermissionRequest | null;
-  pendingPermissionRequests: ZCodePermissionRequest[];
   elicitationRequest: ZCodeElicitationRequest | null;
   pendingElicitationRequests: ZCodeElicitationRequest[];
   elicitationFormDraftsByRequestId: Record<string, ElicitationFormDraft>;
@@ -326,18 +319,6 @@ export interface ZCodeSessionStoreState {
     apiRetry: ZCodeApiRetryStatus | null,
     workspaceIdentity?: string,
   ) => void;
-  setTaskPermissionRequest: (
-    workspacePath: string,
-    taskId: string,
-    request: ZCodePermissionRequest | null,
-    workspaceIdentity?: string,
-  ) => void;
-  removeTaskPermissionRequest: (
-    workspacePath: string,
-    taskId: string,
-    requestId: string,
-    workspaceIdentity?: string,
-  ) => void;
   setTaskElicitationRequest: (
     workspacePath: string,
     taskId: string,
@@ -453,19 +434,12 @@ export interface ZCodeSessionStoreState {
     workspaceIdentity?: string,
   ) => void;
 
-  /** workspace 导航历史（全局、跨 workspace，包含 task 与 Automations） */
+  /** workspace 导航历史（全局、跨 workspace） */
   taskNavHistory: TaskNavigationHistory;
-  /** 记录 Automations 主视图或详情导航。 */
-  taskNavPushAutomations: (
-    workspacePath: string,
-    workspaceIdentity?: string,
-    automationId?: string,
-    automationTab?: AutomationsNavigationTab,
-  ) => void;
   /** 后退，返回目标 entry；到头了返回 null */
-  taskNavGoBack: () => WorkspaceNavEntry | null;
+  taskNavGoBack: () => TaskNavEntry | null;
   /** 前进，返回目标 entry；到头了返回 null */
-  taskNavGoForward: () => WorkspaceNavEntry | null;
+  taskNavGoForward: () => TaskNavEntry | null;
   /** task 被删除时清理导航历史中的对应 task 条目 */
   removeTaskFromNavHistory: (taskId: string) => void;
 }
@@ -483,8 +457,6 @@ export const DEFAULT_WORKSPACE_INIT_STATE: WorkspaceInitState = {
 const FALLBACK_PROVIDER: ZCodeProvider = ZCODE_AGENT_PROVIDER;
 
 export const DEFAULT_TASK_UI_STATE: TaskUiState = {
-  permissionRequest: null,
-  pendingPermissionRequests: [],
   elicitationRequest: null,
   pendingElicitationRequests: [],
   elicitationFormDraftsByRequestId: {},

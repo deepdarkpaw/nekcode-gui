@@ -188,7 +188,7 @@ export const toolCallRowSchema = z.object({
   assistantResponseId: z.string().min(1).optional(),
   toolCallId: z.string(),
   toolName: z.string(),
-  status: z.enum(["inputStreaming", "pendingApproval", "running", "success", "error", "cancelled"]),
+  status: z.enum(["inputStreaming", "running", "success", "error", "cancelled"]),
   inputText: z.string(),
   input: z.unknown().optional(),
   output: toolOutputSchema.optional(),
@@ -202,8 +202,6 @@ export const toolCallRowSchema = z.object({
   progress: toolProgressSchema.optional(),
   // continuous/replayable 共用的有界 Bash 内容，终态或后台移交时清除。
   outputPreview: executionOutputPreviewSchema.optional(),
-  // status=pendingApproval 时指向 pendingInteractions 项。
-  approvalInteractionId: z.string().optional(),
   backgrounded: z.literal(true).optional(),
   workId: z.string().optional(),
   startedAt: timestampSchema.optional(),

@@ -6,6 +6,7 @@ import {
   getZCodeUserVisibleMessages,
   isZCodeGoalContinuationReminderText,
   isZCodeModelOnlySyntheticUserMessage,
+  normalizeZCodeTaskMode,
   resolveWorkspaceKey,
   resolveZCodeVisibleSessionTitle,
   ZCODE_AGENT_PROVIDER_NOT_READY_CODE,
@@ -225,7 +226,7 @@ function buildBaselineMetaFromSummary(
     workspaceIdentity: target.workspaceIdentity,
     createdAt: summary.createdAt,
     updatedAt: summary.lastActivityAt,
-    mode: "build",
+    mode: "agent",
     provider: ZCODE_AGENT_PROVIDER,
     ...(summary.parentSessionId ? { forkedFromTaskId: summary.parentSessionId } : {}),
     ...(status ? { status } : {}),
@@ -1933,7 +1934,7 @@ function buildSearchableTextFromSnapshot(snapshot: ZCodeSessionStateSnapshot): s
 }
 
 function fromZCodeMode(mode: ZCodeSessionMode): ZCodeTaskMode {
-  return mode === "build" ? "build" : mode;
+  return normalizeZCodeTaskMode(mode) ?? "agent";
 }
 
 function fromZCodeGoal(

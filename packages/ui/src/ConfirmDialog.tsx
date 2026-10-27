@@ -15,10 +15,6 @@ import {
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useConfirmDialogStore } from "@/store/confirmDialogStore.js";
 import { cn } from "@/components/lib/utils.js";
-import {
-  AUTOMATION_CONFIRM_DIALOG_CONTENT_CLASS,
-  AUTOMATION_CONFIRM_DIALOG_DESCRIPTION_CLASS,
-} from "@/settings/automationConfirmDialogPresentation.js";
 
 export function ConfirmDialogHost() {
   const { intl } = useZCodeIntl();
@@ -40,7 +36,6 @@ export function ConfirmDialogHost() {
     checked: boolean;
   }>({ request: undefined, checked: false });
   const open = Boolean(pendingRequest);
-  const isAutomationConfirmation = displayedRequest?.presentation === "automation-confirmation";
   const confirmLabel =
     displayedRequest?.confirmLabel ?? intl.formatMessage({ id: "common.confirm" });
   const cancelLabel = displayedRequest?.cancelLabel ?? intl.formatMessage({ id: "common.cancel" });
@@ -101,9 +96,7 @@ export function ConfirmDialogHost() {
         }
         className={cn(
           "gap-5 rounded-2xl border-none bg-popover/98 p-5 ring-border shadow-2xl",
-          // 仅依赖共享弹框的响应式 max-width 时，不同入口所在 viewport 会让
-          // 同一删除确认框看起来尺寸不一致。定时任务删除按设计固定同一 presentation。
-          isAutomationConfirmation ? AUTOMATION_CONFIRM_DIALOG_CONTENT_CLASS : "sm:max-w-md",
+          "sm:max-w-md",
           displayedRequest?.compact && "top-[44%] min-h-[161px] gap-4 sm:max-w-[400px]",
         )}
       >
@@ -115,7 +108,6 @@ export function ConfirmDialogHost() {
             <DialogDescription
               className={cn(
                 "whitespace-pre-line pt-0.5 text-ui-base leading-6 text-foreground-subtle",
-                isAutomationConfirmation && AUTOMATION_CONFIRM_DIALOG_DESCRIPTION_CLASS,
               )}
             >
               {displayedRequest.description}
@@ -126,8 +118,6 @@ export function ConfirmDialogHost() {
           className={cn(
             "gap-2 sm:justify-end",
             displayedRequest?.checkbox && "flex-row flex-wrap items-center",
-            // Automation 弹窗的最小高度会拉伸 Grid footer 行，按钮停在行顶导致视觉底距超过 20px。
-            isAutomationConfirmation && "mt-auto",
           )}
         >
           {displayedRequest?.checkbox ? (

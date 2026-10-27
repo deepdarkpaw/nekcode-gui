@@ -206,7 +206,7 @@ export interface ToolCallBlockRenderContext {
   workspacePath: string;
   /**
    * 应用主题（store 耦合剥离）：由构建 render context 的宿主
-   * （ToolCallBlock / PermissionDialog 等）从上层状态传入，供
+   * （ToolCallBlock 等）从上层状态传入，供
    * MessageResponse / EditInlineDiffContent 等展示组件做 light/dark 分流。
    * 缺省时展示组件按 "system" 兜底。
    */
@@ -294,8 +294,6 @@ export interface ToolCallBlockRenderContext {
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  /** 定时任务工具卡片跳转到管理页；automationId 存在时直接打开详情。 */
-  onOpenAutomationsMain?: (automationId?: string) => void;
   onLoadFullToolCallFields?: (toolId: string) => Promise<boolean | void> | boolean | void;
 }
 

@@ -322,7 +322,7 @@ export function createWorkspaceSlice(set: SetFn) {
               // updatedAt 用最低哨兵值，保证任何 sessions-index 权威 meta 都会在
               // mergeTaskWithOptimisticMeta 中获胜，避免本地时钟压住 mode/provider/status 等字段。
               updatedAt: 0,
-              mode: "build",
+              mode: "agent",
               provider: current.selectedProvider,
             };
             // task 导航和 draft session 创建是不同状态转换。只有创建成功边界

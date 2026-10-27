@@ -58,21 +58,12 @@ import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import { buildChatSessionScrollMemoryKey } from "@/lib/chatSessionScrollMemory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { saveConversationExport } from "@/lib/saveConversationExport.js";
-
-import { useDynamicWorkflowAvailability } from "@/hooks/useDynamicWorkflowAvailability.js";
-import { resolveWorkflowResumeHandler } from "@/v4/workflowResumeGate.js";
-import {
-  workflowSessionModelOf,
-  type WorkflowRunSettingsChange,
-} from "@/components/workflow-timeline/workflowRunSettings.js";
-import { useWorkflowRunJournalSummaries } from "@/hooks/useWorkflowRunJournalSummaries.js";
 
 import { useWorkspaceHomePath } from "@/hooks/useWorkspaceHomePath.js";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
@@ -156,23 +147,7 @@ import {
   resolveConversationStatusPanelVariant,
   shouldUseConversationStatusPanelInlineLayout,
 } from "@/v4/conversationLayout.js";
-import {
-  buildConversationStatusPanelModel,
-  resolveSoleRunningWorkflowRunTarget,
-} from "@/v4/conversationStatusPanelModel.js";
-import type { ConversationStatusPanelWorkflowRunTarget } from "@/v4/conversationStatusPanelModel.js";
-import {
-  buildWorkflowRunByRunId,
-  buildWorkflowRunByToolCallId,
-  buildWorkflowRunPendingQuestionsByRunId,
-  buildWorkflowGraphByToolCallId,
-} from "@/v4/workflowRunCardJoin.js";
-import { buildWorkflowDraftByToolCallId } from "@/v4/workflowDraftJoin.js";
-import {
-  WORKFLOW_RUN_DIRECTORY_LIMIT,
-  countEndedWorkflowRuns,
-  workflowRunDirectoryRefreshKey,
-} from "@/v4/workflowRunDirectoryModel.js";
+import { buildConversationStatusPanelModel } from "@/v4/conversationStatusPanelModel.js";
 import {
   hasOlderRows,
   shouldAutoLoadIncompleteLeadingTurn,
@@ -223,16 +198,6 @@ import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import type {
   OpenPlanDetailSideTabRequest,
   OpenScopedPlanDetailSideTabRequest,
-  OpenWorkflowRunSideTabRequest,
-  OpenWorkflowRunDirectorySideTabRequest,
-  OpenScopedWorkflowActorSessionSideTabRequest,
-  OpenScopedWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowRunSideTabRequest,
-  OpenWorkflowActorSessionSideTabRequest,
-  OpenWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowRunDirectorySideTabRequest,
-  OpenScopedWorkflowWorkspaceSideTabRequest,
-  OpenWorkflowWorkspaceSideTabRequest,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
   OpenScopedSubagentDirectorySideTabRequest,
@@ -314,7 +279,6 @@ export interface SessionPaneProps {
   onRefreshGit?: () => void;
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onOpenBrowserUrl?: (url: string) => void;
-  onOpenAutomationsMain?: OpenAutomationsMain;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
@@ -324,14 +288,6 @@ export interface SessionPaneProps {
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
-  onOpenWorkflowRun?: (request: OpenScopedWorkflowRunSideTabRequest) => void;
-  /** 通知行的产物 chip → 全尺寸查看 tab。 */
-  onOpenWorkflowArtifact?: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
-  onOpenWorkflowRunDirectory?: (request: OpenScopedWorkflowRunDirectorySideTabRequest) => void;
-  /** 工具卡上的子代理药丸 → transcript tab；与详情页子代理行同一个宿主处理器。 */
-  onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  /** 工具卡上的脚本药丸 → 脚本 transcript tab；与详情页脚本行同一个宿主处理器。 */
-  onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -489,8 +445,7 @@ export function SessionPane({
   onRefreshGit,
   onOpenGitReview,
   onOpenBrowserUrl,
-  onOpenAutomationsMain,
-  onOpenCodeViewer,
+    onOpenCodeViewer,
   onAutoOpenAssistantPptx,
   onOpenFileLink,
   onOpenSubagentSession,
@@ -499,11 +454,6 @@ export function SessionPane({
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
   onOpenPlanDetail,
-  onOpenWorkflowRun,
-  onOpenWorkflowArtifact,
-  onOpenWorkflowRunDirectory,
-  onOpenWorkflowActorSession,
-  onOpenWorkflowWorkspace,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
@@ -959,7 +909,6 @@ export function SessionPane({
     useState<ChatViewSummaryPanelVariant | null>(null);
   const [terminalSectionOpen, setTerminalSectionOpen] = useState(false);
   const [agentSectionOpen, setAgentSectionOpen] = useState(false);
-  const [workflowSectionOpen, setWorkflowSectionOpen] = useState(false);
   const [dropTargetController, setDropTargetController] =
     useState<ConversationDropTargetController | null>(null);
   const handleDropTargetControllerChange = useCallback(
@@ -1262,7 +1211,7 @@ export function SessionPane({
   const snapshotFollowupMode = snapshot?.config.followupMode ?? null;
   const snapshotRevision = snapshot?.revision ?? null;
 
-  // 注入模式对齐 PermissionDialog：theme/codePreviewSettings 在宿主取 store，
+  // 注入模式：theme/codePreviewSettings 在宿主取 store，
   // 经稳定引用的 rowContext 下发给 memo 行组件（MessageResponse/ToolCallBlocks）。
   const theme = useZCodeStoreWithDefault((state) => state.theme, "system");
   const codePreviewSettings = useZCodeStoreWithDefault(
@@ -1571,131 +1520,6 @@ export function SessionPane({
     },
     [onOpenPlanDetail, remoteSessionId, workspaceIdentity, workspacePath],
   );
-  // 与 plan-detail 完全同构：卡片只发意图（runId + toolCallId + 展示名），
-  // 会话与 workspace 身份一律由宿主（这里）补齐，卡片不感知 scope。
-  const handleOpenWorkflowRun = useCallback(
-    (request: OpenWorkflowRunSideTabRequest) => {
-      onOpenWorkflowRun?.({
-        ...request,
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        ...(remoteSessionId ? { remoteSessionId } : {}),
-      });
-    },
-    [onOpenWorkflowRun, remoteSessionId, workspaceIdentity, workspacePath],
-  );
-  // 药丸 → 子代理 transcript：与 plan-detail / workflow-run 同构，卡片只交出实例身份，scope 在这里补。
-  const handleOpenWorkflowActorSession = useCallback(
-    (request: OpenWorkflowActorSessionSideTabRequest) => {
-      onOpenWorkflowActorSession?.({
-        ...request,
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        ...(remoteSessionId ? { remoteSessionId } : {}),
-      });
-    },
-    [onOpenWorkflowActorSession, remoteSessionId, workspaceIdentity, workspacePath],
-  );
-  // 脚本药丸同构：卡片交出 run + 发起行 + 阶段，scope 在这里补。
-  const handleOpenWorkflowWorkspace = useCallback(
-    (request: OpenWorkflowWorkspaceSideTabRequest) => {
-      onOpenWorkflowWorkspace?.({
-        ...request,
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        ...(remoteSessionId ? { remoteSessionId } : {}),
-      });
-    },
-    [onOpenWorkflowWorkspace, remoteSessionId, workspaceIdentity, workspacePath],
-  );
-  // 产物 chip 与 run 详情同构：卡片/通知行只发意图，scope 由这里补齐。
-  const handleOpenWorkflowArtifact = useCallback(
-    (request: OpenWorkflowArtifactSideTabRequest) => {
-      onOpenWorkflowArtifact?.({
-        ...request,
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        ...(remoteSessionId ? { remoteSessionId } : {}),
-      });
-    },
-    [onOpenWorkflowArtifact, remoteSessionId, workspaceIdentity, workspacePath],
-  );
-  // 工具卡 → workflow run 的关联表。权威来源是 workflowRuns 投影里每条 run 的 toolCallId
-  // （schema 注释就写着它是「工具卡 → 详情页的关联键」）；工具行自己的 output 在 v4 下
-  // 只剩 formatCreateWorkflowModelContent 挑出的那句散文，结构化字段拿不到。
-  //
-  // 值不只是 runId：run 态的卡片本身要渲染状态词与步数，所以联接一次就把摘要算完
-  // （计数规则见 buildWorkflowRunByToolCallId，它的单测穷举 settled / observed 语义）。
-  // 重启后投影不再为空：CLI 冷物化把 journal 回放进同一个 reducer，
-  // 卡片 join 只读投影，不再合并发现查询。发现查询在这里只剩一个用途——
-  //
-  // `limit` 与 `refreshKey` 服务的是任务列表那条「已结束的工作流 · N」页脚行：
-  // - 深度取 run 目录页的同一个常量，否则页脚行的计数与页面上的行会是两套口径；
-  // - 触发器取**同一个派生函数**（run 数 + 已结算数），所以页脚行与它开出来的目录页新鲜度一致；
-  //   接投影的 `revision` 则会把一次分页读变成一条跟着节点事件走的流。
-  const workflowRunJournalSummaries = useWorkflowRunJournalSummaries({
-    sessionId,
-    // Bug 根因（2026-08-24 实测）：嵌套只读 transcript（dwf actor / subagent）也是 SessionPane，
-    // 无差别发这条查询等于拿子会话 id 去问一条按**父会话**建键的 journal；CLI 的冷会话前置
-    // 随即为正在运行的 detached actor 会话物化第二个 runtime（幽灵），双写事件日志，
-    // 直播冻结在「已工作 xx 秒」。只读 pane 也不消费 join 回退与任务列表页脚，直接关掉。
-    enabled: !readOnly,
-    live: state.status === "live",
-    limit: WORKFLOW_RUN_DIRECTORY_LIMIT,
-    refreshKey: workflowRunDirectoryRefreshKey(snapshot?.workflowRuns?.runs),
-  });
-  const endedWorkflowRunCount = useMemo(
-    () => countEndedWorkflowRuns(workflowRunJournalSummaries),
-    [workflowRunJournalSummaries],
-  );
-  const workflowRunByToolCallId = useMemo(
-    () => buildWorkflowRunByToolCallId(snapshot?.workflowRuns?.runs),
-    [snapshot?.workflowRuns],
-  );
-  // runId 键的同源表：ResumeWorkflowRun 工具行的联接入口（display 带 runId，投影的
-  // toolCallId 跨 resume 沿用原始 CreateWorkflow 行，resume 行按 toolCallId 查不到）。
-  const workflowRunByRunId = useMemo(
-    () => buildWorkflowRunByRunId(snapshot?.workflowRuns?.runs),
-    [snapshot?.workflowRuns],
-  );
-  // 发起 toolCallId → 静态图：图是 run 的属性，
-  // 三种来源的轮尾 run 卡都到这一张表取图。行窗口一遍建成，随窗口重建。
-  const workflowGraphByToolCallId = useMemo(
-    () => buildWorkflowGraphByToolCallId(snapshot?.rows.window, snapshot?.workflowRuns?.runs),
-    [snapshot?.rows.window, snapshot?.workflowRuns],
-  );
-  // 工作流工具行 → 草稿位置：稿号与
-  // 「后面还有更新的一稿」都只能从行序读出，行窗口一遍建成，随窗口重建。
-  const workflowDraftByToolCallId = useMemo(
-    () => buildWorkflowDraftByToolCallId(snapshot?.rows.window),
-    [snapshot?.rows.window],
-  );
-  // Workflow 通知 manifest 的升级条目 Waiting→Answered 联查表（runId → 停驻 qid 集合）。
-  const workflowRunPendingQuestionsByRunId = useMemo(
-    () => buildWorkflowRunPendingQuestionsByRunId(snapshot?.workflowRuns?.runs),
-    [snapshot?.workflowRuns],
-  );
-  // 详情页入口（面板 Workflows 分区的行）。行只把「打开哪个 run」交出来（runId + toolCallId），
-  // 会话与 workspace 身份照旧由这里补齐——与工具卡走的是同一个 handler，不存在第二条打开路径。
-  const handleOpenWorkflowRunFromPanel = useCallback(
-    (target: ConversationStatusPanelWorkflowRunTarget) => {
-      if (!sessionId) return;
-      handleOpenWorkflowRun({ ...target, parentSessionId: sessionId });
-    },
-    [handleOpenWorkflowRun, sessionId],
-  );
-  // run 目录页的入口（同一条页脚行）。同样只补 scope，不在这里多造一条打开路径。
-  const handleOpenWorkflowRunDirectoryFromPanel = useCallback(
-    (request: OpenWorkflowRunDirectorySideTabRequest) => {
-      onOpenWorkflowRunDirectory?.({
-        ...request,
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        ...(remoteSessionId ? { remoteSessionId } : {}),
-      });
-    },
-    [onOpenWorkflowRunDirectory, remoteSessionId, workspaceIdentity, workspacePath],
-  );
   const handleAddSelectionToCurrentTask = useCallback(
     (reference: ConversationSelectionReference) => {
       if (!sessionId) return;
@@ -1935,7 +1759,7 @@ export function SessionPane({
   // 子智能体详情的会话内容仍只读；文件撤销恢复的是 workspace，必须作为独立能力判断。
   const workspaceFileRewindEnabled = !readOnly || allowWorkspaceFileRewind;
   // cancelBackgroundWork：启动卡 / 后台任务卡的「取消」入口。定义在 rowContext memo 之前，
-  // 供其绑定（onOpenWorkflowRun 同样在 memo 前定义）；只读模式下不下发（与 4213 处一致）。
+  // 供其绑定；只读模式下不下发（与 composer 处一致）。
   const handleCancelBackgroundWork = useCallback(
     (workId: string) => {
       if (!sessionId) return;
@@ -1948,39 +1772,6 @@ export function SessionPane({
       });
     },
     [dispatchCommand, sessionId],
-  );
-
-  // 动态工作流灰度快照：只读 store，
-  // 取数在 Root 里做一次。未就绪时 enabled 为 false，按未命中处理。
-  const { enabled: dynamicWorkflowEnabled } = useDynamicWorkflowAvailability();
-
-  // resumeWorkflowRun：工具卡页脚的 Resume。与详情页
-  // 同一条 v4 命令，不携 baseRevision；`name` 喂恢复后完成通知的主题。
-  const handleResumeWorkflowRun = useCallback(
-    (workId: string, name?: string) => {
-      if (!sessionId) return;
-      void dispatchCommand(
-        "resumeWorkflowRun",
-        { workId, ...(name ? { name } : {}) },
-        sessionId,
-      ).then((ack) => {
-        if (ack.status !== "accepted" && ack.status !== "noop") {
-          logger.warn(`[v4-pane] resumeWorkflowRun 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-        }
-      });
-    },
-    [dispatchCommand, sessionId],
-  );
-
-  // amendWorkflowRunSettings：run 卡的「配置」。回 ACK 给弹层——拒绝理由画在弹层里，不是控制台的一行 warn。门与 Resume 相同。
-  const handleAmendWorkflowRunSettings = useCallback(
-    (workId: string, change: WorkflowRunSettingsChange): Promise<CommandAck> =>
-      dispatchCommand("amendWorkflowRunSettings", { workId, ...change }, sessionId),
-    [dispatchCommand, sessionId],
-  );
-  const workflowSessionModel = useMemo(
-    () => workflowSessionModelOf(snapshot?.sessionId === sessionId ? snapshot?.config : undefined),
-    [sessionId, snapshot?.config, snapshot?.sessionId],
   );
 
   const rowContext = useMemo<ConversationRowRenderContext>(
@@ -2004,38 +1795,13 @@ export function SessionPane({
       toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
-      onOpenCodeViewer,
+            onOpenCodeViewer,
       onAutoOpenAssistantPptx: handleAutoOpenAssistantPptx,
       assistantPreviewPptxAutoOpenTarget,
       onOpenFileLink,
       onOpenSubagentSession: onOpenSubagentSession ? handleOpenSubagentSession : undefined,
       onOpenPlanDetail: onOpenPlanDetail ? handleOpenPlanDetail : undefined,
-      onOpenWorkflowRun: onOpenWorkflowRun ? handleOpenWorkflowRun : undefined,
-      onOpenWorkflowActor: onOpenWorkflowActorSession ? handleOpenWorkflowActorSession : undefined,
-      onOpenWorkflowWorkspace: onOpenWorkflowWorkspace ? handleOpenWorkflowWorkspace : undefined,
-      onOpenWorkflowArtifact: onOpenWorkflowArtifact ? handleOpenWorkflowArtifact : undefined,
       onCancelBackgroundWork: readOnly ? undefined : handleCancelBackgroundWork,
-      // Resume 进入会话上下文的唯一供给点；灰度与只读两道门都在 resolveWorkflowResumeHandler 里，
-      // 断在这里等于工具卡页脚与摘要卡的按钮一起消失。
-      onResumeWorkflowRun: resolveWorkflowResumeHandler({
-        readOnly,
-        dynamicWorkflowEnabled,
-        handler: handleResumeWorkflowRun,
-      }),
-      onAmendWorkflowRunSettings: sessionId
-        ? resolveWorkflowResumeHandler({
-            readOnly,
-            dynamicWorkflowEnabled,
-            handler: handleAmendWorkflowRunSettings,
-          })
-        : undefined,
-      ...(workflowSessionModel === undefined ? {} : { workflowSessionModel }),
-      workflowRunByToolCallId,
-      workflowRunByRunId,
-      workflowRunPendingQuestionsByRunId,
-      workflowGraphByToolCallId,
-      workflowDraftByToolCallId,
       fetchFileChanges: handleFetchFileChanges,
       previewFileRewind: workspaceFileRewindEnabled ? handlePreviewFileRewind : undefined,
       applyFileRewind: workspaceFileRewindEnabled ? handleApplyFileRewind : undefined,
@@ -2062,8 +1828,7 @@ export function SessionPane({
       toolGroupingChangesEnabled,
       handleNavigateToRow,
       onOpenBrowserUrl,
-      onOpenAutomationsMain,
-      onOpenCodeViewer,
+            onOpenCodeViewer,
       handleAutoOpenAssistantPptx,
       assistantPreviewPptxAutoOpenTarget,
       onOpenFileLink,
@@ -2071,25 +1836,8 @@ export function SessionPane({
       handleOpenSubagentSession,
       onOpenPlanDetail,
       handleOpenPlanDetail,
-      onOpenWorkflowRun,
-      handleOpenWorkflowRun,
-      onOpenWorkflowActorSession,
-      handleOpenWorkflowActorSession,
-      onOpenWorkflowWorkspace,
-      handleOpenWorkflowWorkspace,
-      onOpenWorkflowArtifact,
-      handleOpenWorkflowArtifact,
       readOnly,
       handleCancelBackgroundWork,
-      dynamicWorkflowEnabled,
-      handleResumeWorkflowRun,
-      handleAmendWorkflowRunSettings,
-      workflowSessionModel,
-      workflowRunByToolCallId,
-      workflowRunByRunId,
-      workflowRunPendingQuestionsByRunId,
-      workflowGraphByToolCallId,
-      workflowDraftByToolCallId,
       workspaceFileRewindEnabled,
       handleFetchFileChanges,
       handlePreviewFileRewind,
@@ -3612,7 +3360,6 @@ export function SessionPane({
         plan: snapshot?.plan ?? null,
         backgroundWorks: snapshot?.backgroundWorks ?? [],
         runningSubagents: subagents.running,
-        workflowRuns: snapshot?.workflowRuns?.runs ?? [],
       }),
     [
       isOfficeMode,
@@ -3622,7 +3369,6 @@ export function SessionPane({
       snapshot?.backgroundWorks,
       snapshot?.goal,
       snapshot?.plan,
-      snapshot?.workflowRuns,
       state.sessionPlans,
       selectionSideChat,
       subagents.running,
@@ -3630,16 +3376,12 @@ export function SessionPane({
     ],
   );
   const runningBackgroundWorkCount =
-    statusPanelModel.runningBashWorks.length +
-    statusPanelModel.runningSubagentWorks.length +
-    statusPanelModel.runningWorkflowRuns.length;
+    statusPanelModel.runningBashWorks.length + statusPanelModel.runningSubagentWorks.length;
   const runningTerminalCount = statusPanelModel.runningBashWorks.length;
   const runningAgentCount = statusPanelModel.runningSubagentWorks.length;
-  const runningWorkflowCount = statusPanelModel.runningWorkflowRuns.length;
   useEffect(() => {
     setTerminalSectionOpen(false);
     setAgentSectionOpen(false);
-    setWorkflowSectionOpen(false);
   }, [sessionId]);
   useEffect(() => {
     if (runningTerminalCount === 0) {
@@ -3647,43 +3389,22 @@ export function SessionPane({
     }
   }, [runningTerminalCount]);
   useEffect(() => {
-    if (runningWorkflowCount === 0) {
-      setWorkflowSectionOpen(false);
-    }
-  }, [runningWorkflowCount]);
-  useEffect(() => {
     if (runningAgentCount === 0) {
       setAgentSectionOpen(false);
     }
   }, [runningAgentCount]);
-  // composer 徽标直达：唯一在跑的是一条可开
-  // 详情页的 workflow run 时，徽标点击直接开它的 side tab，胶囊不动。判定吃胶囊的同一份模型；
-  // 宿主没给 onOpenWorkflowRun（面板行同样不可点）时不直达。
-  const soleRunningWorkflowRunTarget = useMemo(
-    () => (onOpenWorkflowRun ? resolveSoleRunningWorkflowRunTarget(statusPanelModel) : null),
-    [onOpenWorkflowRun, statusPanelModel],
-  );
   const handleOpenRunningBackgroundWorks = useCallback(() => {
     if (runningBackgroundWorkCount === 0) return;
-    if (soleRunningWorkflowRunTarget) {
-      // 与面板行同一个 handler：不存在第二条打开路径。
-      handleOpenWorkflowRunFromPanel(soleRunningWorkflowRunTarget);
-      return;
-    }
     // 产品规则：Composer 是全部实时活动的入口；分区拆开后一次点击仍要展开所有非空类型，
-    // 但三个区块后续保持独立折叠状态，不能再共享一个 open 布尔值。
+    // 但两个区块后续保持独立折叠状态，不能再共享一个 open 布尔值。
     setTerminalSectionOpen(runningTerminalCount > 0);
     setAgentSectionOpen(runningAgentCount > 0);
-    setWorkflowSectionOpen(runningWorkflowCount > 0);
     handleSummaryPanelVariantChange("panel");
   }, [
-    handleOpenWorkflowRunFromPanel,
     handleSummaryPanelVariantChange,
     runningAgentCount,
     runningBackgroundWorkCount,
     runningTerminalCount,
-    runningWorkflowCount,
-    soleRunningWorkflowRunTarget,
   ]);
   const statusPanelVariant = resolveConversationStatusPanelVariant({
     variantOverride: effectiveSummaryPanelVariantOverride,
@@ -4097,7 +3818,6 @@ export function SessionPane({
       onOpenRunningBackgroundWorks={
         sessionId && runningBackgroundWorkCount > 0 ? handleOpenRunningBackgroundWorks : undefined
       }
-      backgroundWorkOpenTarget={soleRunningWorkflowRunTarget ? "workflow-run" : "panel"}
       // 父轮结束后 subagents.running 的目录投影可能短暂落后于仍为 running 的
       // backgroundWorks；Composer 若直接读目录会提前隐藏 Agent 入口。这里复用状态面板按
       // childSessionId 精确回退后的计数，让两个入口共享同一份运行态真值。
@@ -4206,7 +3926,6 @@ export function SessionPane({
           workspacePath={workspacePath}
           workspaceIdentity={workspaceIdentity}
           remoteSessionId={remoteSessionId ?? undefined}
-          provider={provider}
           snapshot={snapshot}
         />
       ) : null}
@@ -4295,7 +4014,6 @@ export function SessionPane({
             plan={snapshot?.plan ?? null}
             backgroundWorks={snapshot?.backgroundWorks ?? []}
             runningSubagents={subagents.running}
-            workflowRuns={snapshot?.workflowRuns?.runs ?? []}
             endedSubagentCount={subagents.endedTotal}
             rootSessionId={rootSessionId ?? sessionId ?? undefined}
             parentSessionId={sessionId ?? undefined}
@@ -4306,8 +4024,6 @@ export function SessionPane({
             onTerminalSectionOpenChange={setTerminalSectionOpen}
             agentSectionOpen={agentSectionOpen}
             onAgentSectionOpenChange={setAgentSectionOpen}
-            workflowSectionOpen={workflowSectionOpen}
-            onWorkflowSectionOpenChange={setWorkflowSectionOpen}
             onRefreshGit={onRefreshGit}
             onOpenGitReview={onOpenGitReview}
             onPauseGoal={
@@ -4339,13 +4055,6 @@ export function SessionPane({
             onOpenSubagentSession={onOpenSubagentSession ? handleOpenSubagentSession : undefined}
             onOpenSubagentDirectory={
               onOpenSubagentDirectory ? handleOpenSubagentDirectory : undefined
-            }
-            onOpenWorkflowRun={
-              onOpenWorkflowRun && sessionId ? handleOpenWorkflowRunFromPanel : undefined
-            }
-            endedWorkflowRunCount={endedWorkflowRunCount}
-            onOpenWorkflowRunDirectory={
-              onOpenWorkflowRunDirectory ? handleOpenWorkflowRunDirectoryFromPanel : undefined
             }
           />
         ) : null}

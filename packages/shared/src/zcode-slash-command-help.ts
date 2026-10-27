@@ -105,14 +105,14 @@ export const BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES: readonly BuiltinZCodeSlas
     },
     {
       details: [
-        "Shows the current permission mode when submitted without arguments.",
+        "Shows the current mode when submitted without arguments.",
         "Interactive TUI composer input opens a local picker before submit.",
-        "Switchable modes are plan, build, edit, and yolo.",
+        "Switchable modes are agent and plan.",
         "Picker rows and explicit input submit /mode <mode> commands.",
       ],
       name: "mode",
-      summary: "Show or switch the current permission mode.",
-      usage: "/mode [plan|build|edit|yolo]",
+      summary: "Show or switch the current mode.",
+      usage: "/mode [agent|plan]",
     },
     {
       details: [
