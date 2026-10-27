@@ -3,8 +3,14 @@
  * 可选的 MCP / 默认模型 / 压缩设置；预览后同名项逐个选择覆盖或跳过。
  */
 import { useEffect, useState } from "react";
-import { AlertTriangleIcon, LoaderIcon } from "lucide-react";
-import type { NekConfigTarget, NekCopyPreview, NekCopySelection } from "@zcode/shared/nek-protocol";
+import { AlertTriangleIcon, LoaderIcon, RefreshCwIcon } from "lucide-react";
+import type {
+  NekConfigTarget,
+  NekCopyPreview,
+  NekCopyResolution,
+  NekCopyResult,
+  NekCopySelection,
+} from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
@@ -22,6 +28,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { LOCAL_TARGET, useNekConfigApi } from "../../api/NekSettingsContext.js";
 import { toNekConfigApiError } from "../../api/nekErrors.js";
 import { Segmented } from "../../components/inputs.js";
+import { CopyResults } from "./CopyResults.js";
 
 interface Sources {
   providers: Array<{ id: string; name: string }>;
@@ -117,6 +124,21 @@ export function CopyToHostDialog({
   });
   const [preview, setPreview] = useState<NekCopyPreview | null>(null);
   const [resolution, setResolution] = useState<Record<string, "overwrite" | "skip">>({});
+  const [result, setResult] = useState<NekCopyResult | null>(null);
+
+  const runCopy = async (full: NekCopyResolution) => {
+    const outcome = await api.copy(LOCAL_TARGET, target, selection, full);
+    setResult(outcome);
+    const failed = outcome.items.filter((item) => item.status === "failed").length;
+    const copied = outcome.items.filter((item) => item.status === "copied").length;
+    if (failed > 0) {
+      toast(t("settings.nek.copy.partial", { failed, host: hostLabel }), { variant: "warning" });
+      return;
+    }
+    toast(t("settings.nek.copy.done", { count: copied, host: hostLabel }));
+    onOpenChange(false);
+  };
+
   useEffect(() => {
     if (sources) {
       // 服务商默认全选；OAuth 登录默认不勾选；MCP / 默认模型 / 压缩可选。
@@ -129,6 +151,7 @@ export function CopyToHostDialog({
       });
       setPreview(null);
       setResolution({});
+      setResult(null);
     }
   }, [sources]);
   const update = (patch: Partial<NekCopySelection>) => {
@@ -146,6 +169,13 @@ export function CopyToHostDialog({
         (item) => !item.conflict || resolution[copyItemKey(item)] === "overwrite",
       ).length
     : 0;
+  /** 本次复制用到的决议（失败重试沿用同一份）。 */
+  const resolutionOf = (): NekCopyResolution =>
+    Object.fromEntries(
+      (preview?.items ?? [])
+        .filter((item) => item.conflict)
+        .map((item) => [copyItemKey(item), resolution[copyItemKey(item)] ?? "skip"]),
+    );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,7 +199,7 @@ export function CopyToHostDialog({
               {t("settings.nek.load.loading")}
             </p>
           ) : null}
-          {sources && !preview ? (
+          {sources && !preview && !result ? (
             <>
               <fieldset className="flex flex-col gap-1">
                 <legend className="mb-1 text-ui-sm font-medium">
@@ -269,45 +299,59 @@ export function CopyToHostDialog({
               ))}
             </ul>
           ) : null}
+          {result ? <CopyResults result={result} /> : null}
         </div>
         <DialogFooter>
-          {preview ? (
+          {preview && !result ? (
             <Button variant="ghost" className="sm:mr-auto" onClick={() => setPreview(null)}>
               {t("settings.nek.copy.back")}
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          {preview ? (
-            <AsyncButton
-              disabled={copyCount === 0}
-              disabledReason={t("settings.nek.copy.nothing")}
-              successFeedback="none"
-              onClick={async () => {
-                const full = Object.fromEntries(
-                  preview.items
-                    .filter((item) => item.conflict)
-                    .map((item) => [copyItemKey(item), resolution[copyItemKey(item)] ?? "skip"]),
-                );
-                await api.copy(LOCAL_TARGET, target, selection, full);
-                toast(t("settings.nek.copy.done", { count: copyCount, host: hostLabel }));
-                onOpenChange(false);
-              }}
-            >
-              {t("settings.nek.copy.confirm", { count: copyCount })}
-            </AsyncButton>
+          {result ? (
+            <>
+              <Button variant="ghost" className="sm:mr-auto" onClick={() => setResult(null)}>
+                {t("settings.nek.copy.back")}
+              </Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                {t("common.close")}
+              </Button>
+              {result.items.some((item) => item.status === "failed") ? (
+                <AsyncButton
+                  successFeedback="none"
+                  icon={<RefreshCwIcon />}
+                  onClick={() => runCopy(resolutionOf())}
+                >
+                  {t("settings.nek.copy.retryFailed")}
+                </AsyncButton>
+              ) : null}
+            </>
           ) : (
-            <AsyncButton
-              disabled={count === 0}
-              disabledReason={t("settings.nek.copy.nothing")}
-              successFeedback="none"
-              onClick={async () =>
-                setPreview(await api.previewCopy(LOCAL_TARGET, target, selection))
-              }
-            >
-              {t("settings.nek.copy.preview", { count })}
-            </AsyncButton>
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                {t("common.cancel")}
+              </Button>
+              {preview ? (
+                <AsyncButton
+                  disabled={copyCount === 0}
+                  disabledReason={t("settings.nek.copy.nothing")}
+                  successFeedback="none"
+                  onClick={() => runCopy(resolutionOf())}
+                >
+                  {t("settings.nek.copy.confirm", { count: copyCount })}
+                </AsyncButton>
+              ) : (
+                <AsyncButton
+                  disabled={count === 0}
+                  disabledReason={t("settings.nek.copy.nothing")}
+                  successFeedback="none"
+                  onClick={async () =>
+                    setPreview(await api.previewCopy(LOCAL_TARGET, target, selection))
+                  }
+                >
+                  {t("settings.nek.copy.preview", { count })}
+                </AsyncButton>
+              )}
+            </>
           )}
         </DialogFooter>
       </DialogContent>

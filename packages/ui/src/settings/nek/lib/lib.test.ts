@@ -4,6 +4,7 @@ import { formatTokenCountDraft, parseTokenCount } from "./tokenCount.js";
 import { slugifyProviderId, validateProviderId } from "./providerId.js";
 import {
   apiKeyDraftFromView,
+  apiKeyForDraftRequest,
   apiKeyWriteFromDraft,
   normalizeEnvName,
   sanitizePastedApiKey,
@@ -106,12 +107,33 @@ describe("apiKey", () => {
 
   it("writes env variables as $NAME and validates names", () => {
     expect(normalizeEnvName("${OPENAI_KEY}")).toBe("OPENAI_KEY");
-    expect(apiKeyWriteFromDraft({ mode: "env", value: "$OPENAI_KEY", keepExisting: false })).toBe(
-      "$OPENAI_KEY",
-    );
-    expect(validateApiKeyDraft({ mode: "env", value: "1BAD", keepExisting: false })).toBe(
-      "envName",
-    );
+    expect(
+      apiKeyWriteFromDraft({
+        mode: "env",
+        value: "$OPENAI_KEY",
+        keepExisting: false,
+        remove: false,
+      }),
+    ).toBe("$OPENAI_KEY");
+    expect(
+      validateApiKeyDraft({ mode: "env", value: "1BAD", keepExisting: false, remove: false }),
+    ).toBe("envName");
+  });
+
+  it("never writes an empty string and removes only on an explicit remove", () => {
+    const existing = apiKeyDraftFromView({ kind: "literal", masked: "••••1234" });
+    // 显式"清除密钥"
+    expect(apiKeyWriteFromDraft({ ...existing, remove: true })).toEqual({ remove: true });
+    // 清空输入框 = 删除（不是"保持"），更不是空串
+    expect(apiKeyWriteFromDraft({ ...existing, keepExisting: false })).toEqual({ remove: true });
+    expect(
+      apiKeyWriteFromDraft({ mode: "env", value: "", keepExisting: false, remove: false }),
+    ).toEqual({ remove: true });
+    expect(
+      apiKeyWriteFromDraft({ mode: "command", value: "  ", keepExisting: false, remove: false }),
+    ).toEqual({ remove: true });
+    // 草稿请求里 keep / remove 都退回已保存的密钥
+    expect(apiKeyForDraftRequest({ ...existing, remove: true })).toBeUndefined();
   });
 });
 
@@ -129,8 +151,14 @@ describe("defaultTools", () => {
   });
 
   it("writes deltas and null when equal to defaults", () => {
-    expect(buildDefaultToolsSetting(new Set(["read", "bash"]), defaults)).toEqual(["-web_search"]);
-    expect(buildDefaultToolsSetting(new Set(defaults), defaults)).toBeNull();
+    const known = ["read", "bash", "grep", "web_search"];
+    expect(buildDefaultToolsSetting(new Set(["read", "bash"]), defaults, known)).toEqual([
+      "-web_search",
+    ]);
+    expect(buildDefaultToolsSetting(new Set(defaults), defaults, known)).toBeNull();
+    expect(buildDefaultToolsSetting(new Set([...defaults, "grep"]), defaults, known)).toEqual([
+      "+grep",
+    ]);
   });
 });
 

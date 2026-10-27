@@ -10,7 +10,6 @@ export type SettingsSectionId =
   | "memory"
   | "mcp"
   | "skill"
-  | "usage"
   | "subagents"
   | "commands"
   | "hooks"
@@ -18,8 +17,7 @@ export type SettingsSectionId =
   | "shortcuts"
   | NekSettingsSectionId;
 
-const SETTINGS_SECTION_INTENT_KEY = "zcode-settings-section-intent",
-  SETTINGS_USAGE_TAB_INTENT_KEY = "zcode-settings-usage-tab-intent";
+const SETTINGS_SECTION_INTENT_KEY = "zcode-settings-section-intent";
 const SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY = "zcode-settings-model-provider-id-intent";
 const SETTINGS_SECTION_INTENT_EVENT = "zcode:settings-section-intent",
   SETTINGS_LAST_SECTION_STORAGE_KEY = "zcode-settings-last-section";
@@ -62,7 +60,6 @@ function isSettingsSectionId(value: string): value is SettingsSectionId {
     value === "memory" ||
     value === "mcp" ||
     value === "skill" ||
-    value === "usage" ||
     value === "subagents" ||
     value === "commands" ||
     value === "hooks" ||
@@ -165,11 +162,6 @@ export function setPendingSettingsSection(section: SettingsSectionId): void {
   setPendingSettingsSectionIntent(section);
 }
 
-export function setPendingSettingsUsageIntent(): void {
-  // 使用统计直接打开本地 Agent 用量，不依赖账号或套餐来源。
-  setPendingSettingsSectionIntent("usage");
-}
-
 export function setPendingSettingsSectionIntent(
   section: SettingsSectionId,
   options: {
@@ -182,8 +174,6 @@ export function setPendingSettingsSectionIntent(
 
   try {
     window.sessionStorage.setItem(SETTINGS_SECTION_INTENT_KEY, section);
-    // 旧版本遗留的套餐页签意图已无对应页面，清掉后仍正常进入 Usage。
-    window.sessionStorage.removeItem(SETTINGS_USAGE_TAB_INTENT_KEY);
     if (options.modelProviderId) {
       window.sessionStorage.setItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY, options.modelProviderId);
     } else {
@@ -212,7 +202,6 @@ function clearPendingSettingsSectionIntent(): void {
 
   try {
     window.sessionStorage.removeItem(SETTINGS_SECTION_INTENT_KEY);
-    window.sessionStorage.removeItem(SETTINGS_USAGE_TAB_INTENT_KEY);
     window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
   } catch {
     // 忽略浏览器存储异常，不影响主流程。
@@ -227,7 +216,6 @@ function consumePendingSettingsSection(
   }
 
   try {
-    window.sessionStorage.removeItem(SETTINGS_USAGE_TAB_INTENT_KEY);
     const raw = window.sessionStorage.getItem(SETTINGS_SECTION_INTENT_KEY);
     if (raw !== null) {
       window.sessionStorage.removeItem(SETTINGS_SECTION_INTENT_KEY);

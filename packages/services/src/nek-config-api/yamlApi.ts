@@ -112,7 +112,6 @@ export function createYamlGroup(runtime: NekConfigRuntime): NekYamlGroup {
   return {
     readNekYaml: async (target, scope, cwd) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, cwd);
       const path = nekYamlPath(context.layout, scope, cwd);
       const document = await readTextDocument(context.executor, path);
       if (document.content === null || document.content.trim() === "") {
@@ -150,7 +149,6 @@ export function createYamlGroup(runtime: NekConfigRuntime): NekYamlGroup {
 
     patchNekYaml: async (target, scope, patch, options) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, options.cwd);
       const path = nekYamlPath(context.layout, scope, options.cwd);
       const document = await readTextDocument(context.executor, path);
       if (document.revision !== options.revision) throw conflict(path);

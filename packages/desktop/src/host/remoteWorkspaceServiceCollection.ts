@@ -16,7 +16,6 @@ import {
   IFileWatcherService,
   IModelSelectionService,
   IProviderSettingsService,
-  IUsageStatsService,
   ICodingPlanSubscriptionService,
   IClientScenesService,
   ISkillsService,
@@ -39,7 +38,6 @@ import {
   createHostApiNetworkTransport,
   registerHostApiNetworkTransportForDispose,
   createSettingsSyncService,
-  createUsageStatsService,
   createCodingPlanSubscriptionService,
   createClientScenesService,
   createServiceLogger,
@@ -232,12 +230,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
     // 必须直接读取远端 Registry，不能继续显示 Desktop 本地 Provider。
     .register(IModelSelectionService, params.connectionServices.modelSelectionService)
     .register(IProviderSettingsService, params.connectionServices.providerSettingsService)
-    .register(
-      IUsageStatsService,
-      createUsageStatsService({
-        zcodeAgentService: params.connectionServices.zcodeAgentService,
-      }),
-    )
     .register(ICodingPlanSubscriptionService, localCodingPlanSubscriptionService)
     .register(IClientScenesService, createClientScenesService())
     // 远端 workspace 的项目级 skills/plugins/commands 位于 SSH/Docker 文件系统。

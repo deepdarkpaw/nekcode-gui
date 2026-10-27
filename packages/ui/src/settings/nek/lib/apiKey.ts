@@ -13,6 +13,8 @@ export interface ApiKeyDraft {
   value: string;
   /** 原值存在且用户没有改动字面量时为 true。 */
   keepExisting: boolean;
+  /** 用户显式点了"清除密钥"：写入 `{ remove: true }`，不是空串。 */
+  remove: boolean;
 }
 
 export type ApiKeyDraftError = "envName" | null;
@@ -26,13 +28,13 @@ export function sanitizePastedApiKey(text: string): string {
 export function apiKeyDraftFromView(view: NekProviderView["apiKey"] | undefined): ApiKeyDraft {
   switch (view?.kind) {
     case "literal":
-      return { mode: "literal", value: "", keepExisting: true };
+      return { mode: "literal", value: "", keepExisting: true, remove: false };
     case "env":
-      return { mode: "env", value: view.name, keepExisting: false };
+      return { mode: "env", value: view.name, keepExisting: false, remove: false };
     case "command":
-      return { mode: "command", value: view.command, keepExisting: false };
+      return { mode: "command", value: view.command, keepExisting: false, remove: false };
     default:
-      return { mode: "literal", value: "", keepExisting: false };
+      return { mode: "literal", value: "", keepExisting: false, remove: false };
   }
 }
 
@@ -54,23 +56,33 @@ export function validateApiKeyDraft(draft: ApiKeyDraft): ApiKeyDraftError {
   return name === "" || ENV_NAME_PATTERN.test(name) ? null : "envName";
 }
 
-/** 写入值：undefined = 删除密钥；`{ keep: true }` = 保持原值。 */
-export function apiKeyWriteFromDraft(draft: ApiKeyDraft): string | { keep: true } | undefined {
+/**
+ * 写入值：`{ keep: true }` 保持原值，`{ remove: true }` 删除密钥。
+ *
+ * 契约不接受空串（那既不是"删除"也不是"保持"），所以这里永远不发 `""`：
+ * 清空输入框等同于删除，显式的"清除密钥"按钮同样发 `{ remove: true }`。
+ */
+export function apiKeyWriteFromDraft(
+  draft: ApiKeyDraft,
+): string | { keep: true } | { remove: true } {
+  if (draft.remove) {
+    return { remove: true };
+  }
   if (draft.mode === "env") {
     const name = normalizeEnvName(draft.value);
-    return name === "" ? undefined : `$${name}`;
+    return name === "" ? { remove: true } : `$${name}`;
   }
   if (draft.mode === "command") {
     const command = draft.value.trim();
     if (command === "") {
-      return undefined;
+      return { remove: true };
     }
     return command.startsWith("!") ? command : `!${command}`;
   }
   if (draft.value === "" && draft.keepExisting) {
     return { keep: true };
   }
-  return draft.value === "" ? undefined : draft.value;
+  return draft.value === "" ? { remove: true } : draft.value;
 }
 
 /** 草稿形式（`$NAME`、字面量）用于测试连接 / 拉取模型；保持原值时返回 undefined，由后端使用已存的值。 */

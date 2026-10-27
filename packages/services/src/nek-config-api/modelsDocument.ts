@@ -155,14 +155,15 @@ export function modelWriteToValue(model: NekModelConfig): Record<string, unknown
   return { ...value, ...extra };
 }
 
-/** API Key 的写入解析：`{keep:true}` / `undefined` 保留原值，空串表示删除。 */
+/** API Key 的写入解析：`{keep:true}` / `undefined` 保留原值，`{remove:true}` 删除。 */
 function resolveApiKey(
   input: NekProviderWrite["apiKey"],
   existing: Record<string, unknown> | undefined,
 ): unknown {
   if (input === undefined) return existing?.apiKey;
-  if (typeof input === "object" && input !== null) return existing?.apiKey;
-  if (input === "") return undefined;
+  if (typeof input === "object" && input !== null) {
+    return "remove" in input ? undefined : existing?.apiKey;
+  }
   return input;
 }
 

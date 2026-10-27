@@ -11,12 +11,14 @@
  */
 import type {
   NekAgentPreset,
-  NekAgentPresetEntry,
+  NekAgentPresetsView,
+  NekBuiltinTool,
   NekConfigRevision,
   NekConfigScope,
   NekConfigTarget,
   NekConfigTargetInfo,
   NekCopyPreview,
+  NekCopyResult,
   NekCopyResolution,
   NekCopySelection,
   NekLoginEvent,
@@ -28,11 +30,13 @@ import type {
   NekProviderReferences,
   NekProviderRenamePreview,
   NekProviderWrite,
+  NekSessionReloadOutcome,
   NekSettingsPatch,
   NekSettingsReadResult,
   NekYamlPatch,
   NekYamlReadResult,
 } from "./config-types.js";
+export type { INekSettingsHostApi } from "./config-types.js";
 import type {
   NekAuthProviderStatus,
   NekCatalogModel,
@@ -60,7 +64,7 @@ export interface INekConfigApi {
   listTargets(): Promise<NekConfigTargetInfo[]>;
 
   // ---- 服务商与模型 ----
-  readModelsConfig(target: NekConfigTarget): Promise<NekModelsConfigView>;
+  readModelsConfig(target: NekConfigTarget, cwd?: string): Promise<NekModelsConfigView>;
   saveProvider(
     target: NekConfigTarget,
     provider: NekProviderWrite,
@@ -74,17 +78,19 @@ export interface INekConfigApi {
   getProviderReferences(
     target: NekConfigTarget,
     providerId: string,
+    cwd?: string,
   ): Promise<NekProviderReferences>;
   previewProviderRename(
     target: NekConfigTarget,
     from: string,
     to: string,
+    cwd?: string,
   ): Promise<NekProviderRenamePreview>;
   renameProvider(
     target: NekConfigTarget,
     from: string,
     to: string,
-    options: { revision: string },
+    options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   saveModel(
     target: NekConfigTarget,
@@ -112,16 +118,18 @@ export interface INekConfigApi {
   ): Promise<NekConfigRevision>;
   fetchProviderModels(
     target: NekConfigTarget,
-    source: { providerId: string } | { draft: NekProviderDraft },
+    source: { providerId: string; draft?: NekProviderDraft },
   ): Promise<NekFetchModelsResult>;
   testProvider(
     target: NekConfigTarget,
-    source: { providerId: string } | { draft: NekProviderDraft },
+    source: { providerId: string; draft?: NekProviderDraft },
     modelId: string,
   ): Promise<NekTestProviderResult>;
   getModelCatalog(target: NekConfigTarget, ids?: string[]): Promise<NekCatalogModel[]>;
   /** 当前目标上可用的模型（`provider/id`），用于默认模型、压缩模型、子代理模型选择。 */
   listAvailableModels(target: NekConfigTarget): Promise<NekCatalogModel[]>;
+  /** nek 当前版本没有 builtin-tools RPC 时，由 host 提供精确版本镜像。 */
+  listBuiltinTools(target: NekConfigTarget): Promise<NekBuiltinTool[]>;
 
   // ---- settings.json ----
   readSettings(
@@ -205,7 +213,7 @@ export interface INekConfigApi {
     patch: NekYamlPatch,
     options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
-  listAgentPresets(target: NekConfigTarget, cwd?: string): Promise<NekAgentPresetEntry[]>;
+  listAgentPresets(target: NekConfigTarget, cwd?: string): Promise<NekAgentPresetsView>;
   saveAgentPreset(
     target: NekConfigTarget,
     scope: NekConfigScope,
@@ -246,15 +254,19 @@ export interface INekConfigApi {
   // ---- 校验与重载 ----
   validate(target: NekConfigTarget, cwd?: string): Promise<NekConfigDiagnostic[]>;
   /** 写入后由实现自动调用；也供"重新载入"按钮使用。返回仍需等待本轮结束的会话数。 */
-  reloadRunningSessions(
+  reloadRunningSessions(target: NekConfigTarget): Promise<NekSessionReloadOutcome>;
+  /** 写入后的自动 reload 结果（含进程级失败）；返回取消订阅函数。 */
+  onReloadResult(
     target: NekConfigTarget,
-  ): Promise<{ reloaded: number; deferred: number; diagnostics: NekConfigDiagnostic[] }>;
+    listener: (result: NekSessionReloadOutcome) => void,
+  ): () => void;
 
   // ---- 外部修改 ----
   /** 监视目标机器的配置文件（本机 fs.watch，远程每 5 s stat），变化时回调。 */
   watch(
     target: NekConfigTarget,
-    listener: (change: { file: string; revision: string }) => void,
+    listener: (change: { file: string; revision: string; scope: NekConfigScope }) => void,
+    cwd?: string,
   ): () => void;
 
   // ---- 复制到远程 ----
@@ -268,5 +280,5 @@ export interface INekConfigApi {
     to: NekConfigTarget,
     selection: NekCopySelection,
     resolution: NekCopyResolution,
-  ): Promise<void>;
+  ): Promise<NekCopyResult>;
 }

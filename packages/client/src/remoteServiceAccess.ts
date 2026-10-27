@@ -18,7 +18,6 @@ import {
   IModelSelectionService,
   IProviderSettingsService,
   IProviderProvisioningTargetService,
-  IUsageStatsService,
   ICodingPlanSubscriptionService,
   IClientScenesService,
   ISkillsService,
@@ -60,7 +59,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly modelSelectionService: IModelSelectionService;
   /** Host-only target proxy；不属于 IServiceAccessor，避免向 Renderer 暴露 Secret 写入接口。 */
   readonly providerProvisioningTargetService!: IProviderProvisioningTargetService;
-  readonly usageStatsService: IUsageStatsService;
   readonly codingPlanSubscriptionService: ICodingPlanSubscriptionService;
   readonly clientScenesService: IClientScenesService;
   readonly skillsService: ISkillsService;
@@ -136,9 +134,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
       ),
       enumerable: false,
     });
-    this.usageStatsService = ProxyChannel.toService<IUsageStatsService>(
-      channelClient.getChannel(IUsageStatsService.channelName),
-    );
     this.codingPlanSubscriptionService = ProxyChannel.toService<ICodingPlanSubscriptionService>(
       channelClient.getChannel(ICodingPlanSubscriptionService.channelName),
     );

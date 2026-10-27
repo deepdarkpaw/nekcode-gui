@@ -9,6 +9,7 @@ import type { NekConfigRevision } from "@zcode/shared/nek-protocol";
 import { FlaskConicalIcon } from "lucide-react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useNekSettingsContext } from "../api/NekSettingsContext.js";
+import { useNekReloadNotifications } from "../api/useNekReloadNotifications.js";
 import type { NekDocument } from "../api/useNekDocument.js";
 import { DocumentBanners } from "./DocumentStatus.js";
 import { TargetSwitcher } from "./TargetSwitcher.js";
@@ -33,6 +34,8 @@ export function NekPageFrame({
 }) {
   const { intl } = useZCodeIntl();
   const { isMock, targetInfo } = useNekSettingsContext();
+  // 写盘后的自动 reload 失败：所有页面都要提示（进程级失败与页面无关）。
+  useNekReloadNotifications();
   return (
     <div data-slot="nek-settings-page" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">

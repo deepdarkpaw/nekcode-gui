@@ -82,6 +82,17 @@ export function TargetSwitcher() {
         >
           <TargetIcon info={targetInfo} className="size-4" />
           <span className="truncate font-medium">{label}</span>
+          {targetInfo?.hostname ? (
+            <span
+              title={intl.formatMessage(
+                { id: "settings.nek.target.hostname" },
+                { hostname: targetInfo.hostname },
+              )}
+              className="truncate font-mono text-ui-sm text-foreground-subtle"
+            >
+              {targetInfo.hostname}
+            </span>
+          ) : null}
           {targetInfo?.detail ? (
             <span className="truncate font-mono text-ui-sm text-foreground-subtle">
               {targetInfo.detail}
@@ -117,11 +128,10 @@ export function TargetSwitcher() {
               <TargetIcon info={info} className="size-4" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{info.label}</span>
-                {info.detail ? (
-                  <span className="truncate font-mono text-ui-xs text-foreground-subtlest">
-                    {info.detail}
-                  </span>
-                ) : null}
+                <span className="truncate font-mono text-ui-xs text-foreground-subtlest">
+                  {info.hostname}
+                  {info.detail ? ` · ${info.detail}` : ""}
+                </span>
               </span>
               {isConnecting ? (
                 <LoaderIcon className="size-3.5 animate-spin" aria-hidden="true" />

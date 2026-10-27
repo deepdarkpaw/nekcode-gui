@@ -37,7 +37,6 @@ import {
   type SettingsModelProviderTarget,
 } from "@/lib/settingsNavigation.js";
 import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
-import { UsageStatsSection } from "@/settings/UsageStatsSection.js";
 import { CapabilitySection } from "@/settings/CapabilitySection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
@@ -183,11 +182,6 @@ export function SettingsPage({
     },
     [activeSection],
   );
-  const handleOpenUsageSettings = useCallback(() => {
-    // 设置页 sidebar footer 里的齿轮/返回按钮复用 onBack，
-    // 但头像菜单的“使用统计”应该停留在设置页并切到 Usage，不能跟着返回工作区。
-    setActiveSettingsSection("usage");
-  }, [setActiveSettingsSection]);
   const activeWorkspacePath = useTabStore((state) => state.activeWorkspacePath);
   const tabs = useTabStore((state) => state.tabs);
   const workspaceTabs = useMemo(() => tabs.filter(isWorkspaceTab), [tabs]);
@@ -748,7 +742,6 @@ export function SettingsPage({
                   onLocaleChange={handleFooterLocaleChange}
                   onThemeChange={handleFooterThemeChange}
                   onSettingsButtonClick={onBack}
-                  onUsageClick={handleOpenUsageSettings}
                   settingsButtonMode="back"
                   // 偏好菜单在工作区和设置页共享；透传桌面能力，保留设置页里的界面缩放入口。
                   isDesktop={isDesktop}
@@ -997,8 +990,6 @@ export function SettingsPage({
                             workspaceIdentity={activeWorkspaceIdentity}
                             isDesktop={isDesktop}
                           />
-                        ) : activeSection === "usage" ? (
-                          <UsageStatsSection />
                         ) : activeSection === "commands" ? (
                           <CapabilitySection
                             mode="command"

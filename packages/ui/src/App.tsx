@@ -601,10 +601,6 @@ export function App({
   const handleOpenQuickPick = useCallback(() => {
     setIsQuickPickOpen((open) => !open);
   }, []);
-  const handleOpenFeedback = useCallback(() => {
-    void platform.openFeedback();
-  }, [platform]);
-
   const handleOpenCommunity = useCallback(() => platform.openCommunity(), [platform]);
   const handleOpenProductDocs = useCallback(() => {
     platform.openExternal(ZCODE_PRODUCT_DOCS_URL);
@@ -871,7 +867,6 @@ export function App({
             openSettingsTab();
           },
           switchTheme: handleSwitchTheme,
-          openFeedback: handleOpenFeedback,
           openCommunity: handleOpenCommunity,
           openProductDocs: handleOpenProductDocs,
           toggleSidebar: () => runVisibleWorkspaceCommand(handleToggleSidebar),
@@ -885,7 +880,6 @@ export function App({
       isOfficeMode,
       canOpenCommunityFromQuickPick,
       handleOpenCommunity,
-      handleOpenFeedback,
       handleOpenProductDocs,
       handleOpenSettingsSection,
       handleSwitchTheme,

@@ -327,11 +327,6 @@ export const TID_MCP_OPEN_AUTHORIZATION_BUTTON = "mcp-open-authorization-button"
 export const TID_SUBAGENT_ROW = "subagent-row";
 /** 内置子智能体模型选择控件（动态后缀为子智能体名称） */
 export const TID_SUBAGENT_BUILT_IN_MODEL_TRIGGER = "subagent-built-in-model-trigger";
-/** 设置页使用统计顶层 tab（动态后缀为 usage tab id） */
-/** 侧边栏头像菜单剩余额度子菜单入口 */
-export const TID_SIDEBAR_USAGE_REMAINING_TRIGGER = "sidebar-usage-remaining-trigger";
-/** 侧边栏偏好菜单的本地使用统计入口 */
-export const TID_SIDEBAR_USAGE_BUTTON = "sidebar-usage-button";
 
 // Model Provider Settings
 /** 模型供应商顶部添加按钮 */

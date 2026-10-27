@@ -15,8 +15,6 @@ const helpConfigSchema = z.object({
     })
     .optional()
     .catch(undefined),
-  feedback_url: helpUrlSchema,
-  feedback_use_external_form: z.boolean().optional().catch(undefined),
 });
 export type HelpAppConfig = z.infer<typeof helpConfigSchema>;
 
@@ -28,8 +26,5 @@ export function resolveHelpAppConfig(local: unknown): HelpAppConfig {
       "zh-CN": config?.community_urls?.["zh-CN"],
       "en-US": config?.community_urls?.["en-US"],
     },
-    feedback_url: config?.feedback_url,
-    // 配置缺失不能意外打开旧官方反馈表单。
-    feedback_use_external_form: config?.feedback_use_external_form ?? true,
   };
 }

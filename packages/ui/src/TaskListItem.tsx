@@ -26,7 +26,6 @@ import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowAc
 import { TaskListItemContextMenu } from "@/TaskListItemContextMenu.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
-import { usePlatform } from "@/hooks/usePlatform.js";
 import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { useV4SplitPaneEntry } from "@/v4/splitPaneEntryContext.js";
@@ -789,7 +788,6 @@ export function TaskListItemContextMenuContent({
   );
   // 当前 focused session、已有 group 与 pane 上限统一由 shell owner 裁决；row 不再直接写 layout store。
   const canOpenInSplitPane = splitPaneEntry.canOpenSession(splitPaneTarget);
-  const platform = usePlatform();
   const {
     taskSessionFile,
     taskNativeSessionLogFile,
@@ -812,8 +810,6 @@ export function TaskListItemContextMenuContent({
     intl.formatMessage({
       id: task.forkedFromTaskId ? "taskList.forkedUntitled" : "taskList.untitled",
     });
-
-  const handleOpenTaskFeedback = useCallback(() => platform.openFeedback(), [platform]);
 
   return (
     <TaskListItemContextMenu
@@ -847,9 +843,6 @@ export function TaskListItemContextMenuContent({
           : undefined
       }
       openInSplitPaneDisabled={workspaceActionsDisabled || !canOpenInSplitPane}
-      onOpenTaskFeedback={() => {
-        void handleOpenTaskFeedback();
-      }}
       onOpenTaskPathInFileManager={() => {
         void handleOpenTaskPathInFileManager();
       }}

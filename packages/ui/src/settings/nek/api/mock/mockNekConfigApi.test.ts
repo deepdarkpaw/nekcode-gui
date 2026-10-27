@@ -55,7 +55,8 @@ describe("MockNekConfigApi", () => {
       status: 404,
     });
     const result = await api.fetchProviderModels(LOCAL, {
-      draft: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "sk-ok" },
+      providerId: "anthropic-proxy",
+      draft: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com" },
     });
     expect(result.ok && result.models.some((model) => model.contextWindow === undefined)).toBe(
       true,
@@ -77,7 +78,7 @@ describe("MockNekConfigApi", () => {
     const { revision } = await api.readModelsConfig(LOCAL);
     await api.renameProvider(LOCAL, "anthropic-proxy", "claude", { revision });
     const presets = await api.listAgentPresets(LOCAL);
-    expect(presets.find((entry) => entry.preset.name === "reviewer")?.preset.model).toBe(
+    expect(presets.entries.find((entry) => entry.preset.name === "reviewer")?.preset.model).toBe(
       "claude/claude-sonnet-4-5",
     );
   });
@@ -132,5 +133,114 @@ describe("MockNekConfigApi", () => {
     const remote = api.machines.get(`remote:${MOCK_REMOTE_CONNECTED}`)!;
     expect(remote.models.value.map((provider) => provider.id)).toContain("deepseek");
     expect(remote.mcp.value.filesystem).not.toHaveProperty("description");
+  });
+});
+
+describe("MockNekConfigApi v2 contract", () => {
+  it("returns builtin tools with the nek default-active flags", async () => {
+    const api = new MockNekConfigApi();
+    const tools = await api.listBuiltinTools(LOCAL);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "read",
+      "bash",
+      "powershell",
+      "edit",
+      "write",
+      "grep",
+      "find",
+      "ls",
+      "ast_grep",
+      "web_search",
+    ]);
+    expect(tools.find((tool) => tool.name === "powershell")?.defaultActive).toBe(false);
+  });
+
+  it("returns preset entries, diagnostics and a directory revision", async () => {
+    const api = new MockNekConfigApi();
+    const view = await api.listAgentPresets(LOCAL, MOCK_PROJECT_CWD);
+    expect(view.entries.map((entry) => entry.preset.name)).toContain("docs-writer");
+    expect(view.diagnostics).toMatchObject([
+      { file: expect.stringContaining("broken-preset.md"), severity: "error" },
+    ]);
+    expect(view.revision.length).toBeGreaterThan(0);
+    // 不带 cwd 时看不到项目预设，也看不到项目级诊断
+    const global = await api.listAgentPresets(LOCAL);
+    expect(global.entries.map((entry) => entry.preset.name)).not.toContain("docs-writer");
+  });
+
+  it("deletes a provider key only for { remove: true }", async () => {
+    const api = new MockNekConfigApi();
+    const view = await api.readModelsConfig(LOCAL);
+    const deepseek = view.providers.find((provider) => provider.id === "deepseek")!;
+    const { apiKey: _apiKey, overridesBuiltin: _builtin, ...rest } = deepseek;
+    await expect(
+      api.saveProvider(LOCAL, { ...rest, apiKey: "" }, { revision: view.revision, isNew: false }),
+    ).rejects.toMatchObject({ code: "validation" });
+    await api.saveProvider(
+      LOCAL,
+      { ...rest, apiKey: { remove: true } },
+      { revision: view.revision, isNew: false },
+    );
+    const after = await api.readModelsConfig(LOCAL);
+    expect(after.providers.find((provider) => provider.id === "deepseek")?.apiKey).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("reports per-item copy results, including forced failures", async () => {
+    const api = new MockNekConfigApi();
+    api.failCopyItem("provider:deepseek", "disk full");
+    const result = await api.copy(
+      LOCAL,
+      REMOTE,
+      {
+        providers: ["deepseek"],
+        logins: [],
+        mcpServers: ["filesystem"],
+        defaults: false,
+        compaction: false,
+      },
+      {},
+    );
+    expect(result.items).toEqual([
+      { key: "provider:deepseek", status: "failed", error: "disk full" },
+      { key: "mcpServer:filesystem", status: "skipped" },
+    ]);
+  });
+
+  it("publishes watch changes with the scope of the written file", async () => {
+    const api = new MockNekConfigApi();
+    const changes: Array<{ file: string; scope: string }> = [];
+    const unsubscribe = api.watch(LOCAL, (change) => changes.push(change), MOCK_PROJECT_CWD);
+    const project = await api.readMcpConfig(LOCAL, "project", MOCK_PROJECT_CWD);
+    await api.setMcpServerOverride(
+      LOCAL,
+      "github",
+      { enabled: true },
+      { revision: project.revision, scope: "project", cwd: MOCK_PROJECT_CWD },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    unsubscribe();
+    expect(changes).toMatchObject([
+      { file: `${MOCK_PROJECT_CWD}/.nek/mcp.json`, scope: "project" },
+    ]);
+  });
+
+  it("emits reload results with process failures", async () => {
+    const api = new MockNekConfigApi();
+    const results: Array<{ failures: Array<{ sessionKey: string; message: string }> }> = [];
+    const unsubscribe = api.onReloadResult(LOCAL, (result) => results.push(result));
+    api.simulateReloadResult(LOCAL, {
+      failures: [{ sessionKey: "s1", message: "stdin closed" }],
+    });
+    unsubscribe();
+    expect(results).toEqual([
+      {
+        reloaded: 1,
+        deferred: 0,
+        diagnostics: [],
+        failures: [{ sessionKey: "s1", message: "stdin closed" }],
+      },
+    ]);
   });
 });

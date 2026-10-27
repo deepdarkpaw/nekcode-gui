@@ -146,9 +146,41 @@ test("auth status and logout go through the control process", async () => {
   const harness = createHarness({ control });
   const statuses = await harness.api.getAuthStatus(LOCAL);
   assert.equal(statuses[0]?.kind, "oauth");
+  assert.equal(statuses[0]?.state, "expired", "a past expiresAt becomes expired");
   await harness.api.logout(LOCAL, "anthropic");
   assert.deepEqual(
     control.commands.map((command) => command.type),
     ["auth_status", "auth_logout"],
+  );
+});
+
+test("auth status maps the fields nek actually returns", async () => {
+  const control = new FakeControlClient({
+    authStatus: [
+      {
+        provider: "anthropic",
+        name: "Anthropic",
+        kind: "oauth",
+        loginMethods: ["oauth"],
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      },
+      { provider: "openai-codex", name: "Codex", kind: "api_key", loginMethods: ["api_key"] },
+      { provider: "other", name: "Other", kind: "none", loginMethods: [] },
+    ],
+  });
+  const harness = createHarness({ control });
+  const statuses = await harness.api.getAuthStatus(LOCAL);
+  assert.deepEqual(
+    statuses.map((status) => [status.provider, status.state]),
+    [
+      ["anthropic", "ok"],
+      ["openai-codex", "ok"],
+      ["other", "ok"],
+    ],
+  );
+  // nek 目前不返回 state：host 不会凭空造出 refresh_failed。
+  assert.equal(
+    statuses.some((status) => status.state === "refresh_failed"),
+    false,
   );
 });

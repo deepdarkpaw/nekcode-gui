@@ -102,6 +102,7 @@ export class MockLoginSimulator {
       current.machine.auth.set(current.provider, {
         ...status,
         kind: "oauth",
+        state: "ok",
         expiresAt: new Date(Date.now() + 8 * 3600_000).toISOString(),
       });
     }

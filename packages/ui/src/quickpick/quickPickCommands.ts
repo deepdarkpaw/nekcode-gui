@@ -2,7 +2,6 @@ export type QuickPickCommandIcon =
   | "book"
   | "community"
   | "diff"
-  | "feedback"
   | "folder"
   | "message"
   | "mcp"
@@ -49,7 +48,6 @@ interface QuickPickCommandHandlers {
   openSkillsSettings: () => void;
   openMcpSettings: () => void;
   switchTheme: () => void;
-  openFeedback: () => void | Promise<void>;
   openCommunity: () => void | Promise<void>;
   openProductDocs: () => void | Promise<void>;
   toggleSidebar: () => void;
@@ -182,15 +180,6 @@ export function createQuickPickCommands({
       run: handlers.openMcpSettings,
     },
   ];
-
-  commands.push({
-    id: "feedback",
-    sectionId: "app",
-    titleId: "quickPick.command.feedback",
-    icon: "feedback",
-    keywords: ["feedback", "issue", "support", "问题上报", "问题反馈", "反馈"],
-    run: handlers.openFeedback,
-  });
 
   if (canOpenCommunity) {
     commands.push({

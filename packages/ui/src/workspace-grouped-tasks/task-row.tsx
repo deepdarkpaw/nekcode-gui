@@ -22,7 +22,6 @@ import {
 import { getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
-import { usePlatform } from "@/hooks/usePlatform.js";
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { GroupedTaskContextMenuContent } from "@/workspace-grouped-tasks/task-context-menu-content.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
@@ -227,7 +226,6 @@ function GroupedTaskRowComponent({
       typeof window.matchMedia === "function" &&
       window.matchMedia("(hover: none)").matches,
   );
-  const platform = usePlatform();
   const {
     taskSessionFile,
     taskNativeSessionLogFile,
@@ -270,7 +268,6 @@ function GroupedTaskRowComponent({
     }
     onMoveTaskToTop(task);
   };
-  const handleOpenTaskFeedback = () => platform.openFeedback();
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) {
       return;
@@ -472,7 +469,6 @@ function GroupedTaskRowComponent({
           onMarkTaskAsUnread={onMarkTaskAsUnread}
           onOpenTaskPathInFileManager={() => void handleOpenTaskPathInFileManager()}
           onCopyText={(label, text) => void handleCopyText(label, text)}
-          onOpenTaskFeedback={() => void handleOpenTaskFeedback()}
           disabledReason={workspaceActionsDisabledReason}
         />
       ) : null}

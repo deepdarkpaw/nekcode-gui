@@ -11,7 +11,11 @@ import type { NekProviderReferences, NekProviderView } from "@zcode/shared/nek-p
 import { Input } from "@/components/ui/input.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
-import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
+import {
+  useNekConfigApi,
+  useNekSettingsContext,
+  useNekTarget,
+} from "../../api/NekSettingsContext.js";
 import { toNekConfigApiError } from "../../api/nekErrors.js";
 import { validateProviderId } from "../../lib/providerId.js";
 import { Field, invalidProps } from "../../components/Field.js";
@@ -76,6 +80,7 @@ export function ReferenceList({ references }: { references: NekProviderReference
 function useReferences(open: boolean, providerId: string) {
   const api = useNekConfigApi();
   const { target } = useNekTarget();
+  const { projectCwd } = useNekSettingsContext();
   const [references, setReferences] = useState<NekProviderReferences | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -83,14 +88,14 @@ function useReferences(open: boolean, providerId: string) {
     let cancelled = false;
     setReferences(null);
     setError(null);
-    api.getProviderReferences(target, providerId).then(
+    api.getProviderReferences(target, providerId, projectCwd).then(
       (result) => !cancelled && setReferences(result),
       (cause: unknown) => !cancelled && setError(toNekConfigApiError(cause).message),
     );
     return () => {
       cancelled = true;
     };
-  }, [open, api, target, providerId]);
+  }, [open, api, target, providerId, projectCwd]);
   return { references, error };
 }
 

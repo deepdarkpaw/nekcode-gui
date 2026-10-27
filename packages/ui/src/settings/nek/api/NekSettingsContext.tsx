@@ -18,6 +18,7 @@ import {
 import { create } from "zustand";
 import type {
   INekConfigApi,
+  NekConfigScope,
   NekConfigTarget,
   NekConfigTargetInfo,
 } from "@zcode/shared/nek-protocol";
@@ -31,7 +32,7 @@ export interface NekSettingsApis {
   isMock: boolean;
 }
 
-export type NekConfigChange = { file: string; revision: string };
+export type NekConfigChange = { file: string; revision: string; scope: NekConfigScope };
 type ChangeListener = (change: NekConfigChange) => void;
 
 export interface NekTargetsState {
@@ -92,7 +93,12 @@ function useTargetsLoader(config: INekConfigApi) {
   return { targets, refreshTargets };
 }
 
-function useWatchHub(config: INekConfigApi, target: NekConfigTarget, connected: boolean) {
+function useWatchHub(
+  config: INekConfigApi,
+  target: NekConfigTarget,
+  connected: boolean,
+  projectCwd: string | undefined,
+) {
   const listenersRef = useRef(new Set<ChangeListener>());
   // target 以 key 为准，避免每次渲染的新对象重复订阅。
   const targetRef = useRef(target);
@@ -102,12 +108,17 @@ function useWatchHub(config: INekConfigApi, target: NekConfigTarget, connected: 
     if (!connected) {
       return undefined;
     }
-    return config.watch(targetRef.current, (change) => {
-      for (const listener of listenersRef.current) {
-        listener(change);
-      }
-    });
-  }, [config, targetKey, connected]);
+    // 带上 cwd：项目级 `agents/*.md` 与 `<cwd>/.nek/*` 由 nek 侧单独监视。
+    return config.watch(
+      targetRef.current,
+      (change) => {
+        for (const listener of listenersRef.current) {
+          listener(change);
+        }
+      },
+      projectCwd,
+    );
+  }, [config, targetKey, connected, projectCwd]);
   return useCallback((listener: ChangeListener) => {
     listenersRef.current.add(listener);
     return () => {
@@ -131,7 +142,7 @@ export function NekSettingsProvider({
   const setTarget = useNekTargetSelection((state) => state.setTarget);
   const targetKey = targetKeyOf(target);
   const targetInfo = targets.list.find((info) => targetKeyOf(info.target) === targetKey);
-  const subscribeChanges = useWatchHub(config, target, targetInfo?.connected === true);
+  const subscribeChanges = useWatchHub(config, target, targetInfo?.connected === true, projectCwd);
   const [writeVersion, setWriteVersion] = useState(0);
   const notifyWrite = useCallback(() => setWriteVersion((version) => version + 1), []);
 

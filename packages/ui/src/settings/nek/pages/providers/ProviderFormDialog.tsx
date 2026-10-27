@@ -7,10 +7,11 @@ import { useDialogDraft } from "../../components/useDialogDraft.js";
  * Base URL 占位示例 + 最终请求地址 + 常见错误一键修正；API Key 掩码 / 显示 / 环境变量；
  * 高级（默认折叠）：自定义请求头、authHeader、compat。
  */
-import { useId, useMemo } from "react";
-import { WandSparklesIcon } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { WandSparklesIcon, ZapIcon } from "lucide-react";
 import type { NekEndpointApi, NekProviderView } from "@zcode/shared/nek-protocol";
 import { NEK_ENDPOINT_APIS } from "@zcode/shared/nek-protocol";
+import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { SettingAdvancedGroup } from "@/components/ui/setting-fields.js";
@@ -18,6 +19,7 @@ import { Switch } from "@/components/ui/switch.js";
 import { Textarea } from "@/components/ui/textarea.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
+import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
 import { analyzeBaseUrl, BASE_URL_PLACEHOLDERS, type BaseUrlIssue } from "../../lib/baseUrl.js";
 import { ApiKeyField } from "../../components/ApiKeyField.js";
 import { Field, invalidProps } from "../../components/Field.js";
@@ -27,6 +29,7 @@ import {
   emptyProviderDraft,
   isProviderDraftDirty,
   providerDraftFromView,
+  requestDraftFromDraft,
   THINKING_FORMATS,
   validateProviderDraft,
   withName,
@@ -70,6 +73,64 @@ function BaseUrlPreview({
             {intl.formatMessage({ id: "settings.nek.provider.applyFix" }, { url: issue.fixed })}
           </Button>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 用当前草稿测一次连接：`{providerId, draft}` —— 已保存的密钥 + 草稿里的其他字段，
+ * 所以改完 baseUrl / headers 不必先保存也能知道能不能通。
+ */
+function TestDraftConnection({
+  provider,
+  draft,
+}: {
+  provider: NekProviderView;
+  draft: ProviderDraft;
+}) {
+  const { intl } = useZCodeIntl();
+  const api = useNekConfigApi();
+  const { target } = useNekTarget();
+  const [result, setResult] = useState<string | null>(null);
+  const modelId = provider.models[0]?.id;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <AsyncButton
+          type="button"
+          variant="outline"
+          icon={<ZapIcon />}
+          disabled={!modelId}
+          disabledReason={intl.formatMessage({ id: "settings.nek.provider.test.needModel" })}
+          successFeedback="none"
+          onClick={async () => {
+            if (!modelId) return;
+            setResult(null);
+            const outcome = await api.testProvider(
+              target,
+              { providerId: provider.id, draft: requestDraftFromDraft(draft) },
+              modelId,
+            );
+            if (!outcome.ok) throw new Error(outcome.message);
+            setResult(
+              intl.formatMessage(
+                { id: "settings.nek.provider.test.ok" },
+                { ms: outcome.latencyMs },
+              ),
+            );
+          }}
+        >
+          {intl.formatMessage({ id: "settings.nek.provider.test.draftRun" })}
+        </AsyncButton>
+        {modelId ? (
+          <span className="font-mono text-ui-xs text-foreground-subtle">{modelId}</span>
+        ) : null}
+      </div>
+      {result ? (
+        <p role="status" className="text-ui-sm text-success">
+          {result}
+        </p>
       ) : null}
     </div>
   );
@@ -228,11 +289,20 @@ export function ProviderFormDialog({
                 maskedExisting={
                   provider?.apiKey.kind === "literal" ? provider.apiKey.masked : undefined
                 }
+                canRemove={(provider?.apiKey.kind ?? "none") !== "none"}
                 invalid={Boolean(errors.apiKey)}
                 placeholder="sk-..."
                 onChange={(apiKey) => update({ apiKey })}
               />
             </Field>
+            {provider ? (
+              <Field
+                label={t("settings.nek.provider.field.test")}
+                hint={t("settings.nek.provider.field.testHint")}
+              >
+                <TestDraftConnection provider={provider} draft={draft} />
+              </Field>
+            ) : null}
             <SettingAdvancedGroup>
               <div className="flex flex-col gap-4 pt-1">
                 <Field label={t("settings.nek.provider.field.headers")} error={errors.headers}>

@@ -40,7 +40,7 @@ const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 type RawModel = Record<string, unknown>;
 
 export interface NekModelsGroup {
-  readModelsConfig: (target: NekConfigTarget) => Promise<NekModelsConfigView>;
+  readModelsConfig: (target: NekConfigTarget, cwd?: string) => Promise<NekModelsConfigView>;
   saveProvider: (
     target: NekConfigTarget,
     provider: NekProviderWrite,
@@ -54,17 +54,19 @@ export interface NekModelsGroup {
   getProviderReferences: (
     target: NekConfigTarget,
     providerId: string,
+    cwd?: string,
   ) => Promise<NekProviderReferences>;
   previewProviderRename: (
     target: NekConfigTarget,
     from: string,
     to: string,
+    cwd?: string,
   ) => Promise<NekProviderRenamePreview>;
   renameProvider: (
     target: NekConfigTarget,
     from: string,
     to: string,
-    options: { revision: string },
+    options: { revision: string; cwd?: string },
   ) => Promise<NekConfigRevision>;
   saveModel: (
     target: NekConfigTarget,
@@ -149,14 +151,18 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
     return { raw: document.raw, revision: document.revision };
   };
 
-  const presetsOf = async (target: NekConfigTarget): Promise<NekAgentPresetEntry[]> => {
+  const presetsOf = async (
+    target: NekConfigTarget,
+    cwd?: string,
+  ): Promise<NekAgentPresetEntry[]> => {
     const context = runtime.target(target);
-    return await listAgentPresets({
+    const result = await listAgentPresets({
       executor: context.executor,
       agentDir: context.layout.agentDir,
-      cwd: runtime.cwdHint(target),
+      cwd,
       logger: runtime.logger,
     });
+    return result.entries;
   };
 
   const readSnapshot = async (target: NekConfigTarget): Promise<NekModelsSnapshot> => {
@@ -177,7 +183,11 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
   };
 
   return {
-    readModelsConfig: async (target) => {
+    /**
+     * models.json 只有全局一份（`<agentDir>/models.json`），所以 `cwd` 不影响结果；
+     * 参数与其它 models 方法保持一致，界面一律传当前工作区目录。
+     */
+    readModelsConfig: async (target, _cwd) => {
       const snapshot = await readSnapshot(target);
       return {
         path: snapshot.path,
@@ -189,6 +199,11 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
 
     saveProvider: async (target, provider, options) => {
       requireProviderId(provider.id, "id");
+      if (provider.apiKey === "") {
+        throw validationError("apiKey must be omitted, kept, replaced, or removed explicitly", {
+          apiKey: "empty string is not a valid deletion instruction",
+        });
+      }
       const snapshot = await readSnapshot(target);
       if (!sameRevision(snapshot.revision, options.revision)) throw conflict(snapshot.path);
       const existing = snapshot.providers[provider.id];
@@ -213,14 +228,14 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       ]);
     },
 
-    getProviderReferences: async (target, providerId) =>
+    getProviderReferences: async (target, providerId, cwd) =>
       scanProviderReferences({
         providerId,
         settings: (await settingsOf(target)).raw,
-        presets: await presetsOf(target),
+        presets: await presetsOf(target, cwd),
       }),
 
-    previewProviderRename: async (target, from, to) => {
+    previewProviderRename: async (target, from, to, cwd) => {
       const snapshot = await readSnapshot(target);
       requireProvider(snapshot, from);
       requireProviderId(to, "to");
@@ -234,7 +249,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
         references: scanProviderReferences({
           providerId: from,
           settings: settings.raw,
-          presets: await presetsOf(target),
+          presets: await presetsOf(target, cwd),
         }),
       };
     },
@@ -250,7 +265,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       }
       const settingsFile = settingsPath(context.layout, "global");
       const settingsDocument = await readSettingsDocument(context.executor, settingsFile);
-      const presets = await presetsOf(target);
+      const presets = await presetsOf(target, options.cwd);
       const plan = planReferenceRewrites({
         providerId: from,
         to,
@@ -286,7 +301,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
             scope: rewrite.scope,
             preset: { ...entry.preset, model: rewrite.to },
             expectedRevision: entry.revision,
-            cwd: runtime.cwdHint(target),
+            cwd: options.cwd,
           });
           written.push({ path: result.path, revision: result.revision });
           if (result.removedPath) written.push({ path: result.removedPath, revision: "absent" });

@@ -974,10 +974,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000createLocalNekConfigTargetHost",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000createNekControlClient",
       "count": 1
     },
@@ -1015,10 +1011,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000targetKeyOf",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/localTargetHost.ts\u0000createLocalNekConfigTargetHost",
       "count": 1
     },
     {
@@ -1506,31 +1498,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000buildCodingPlanQuotaHeaders",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000normalizeQuotaLimits",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000pickPrimaryQuotaLimit",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000resolveCodingPlanQuotaUrl",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/zcode-agent/zcodeStdioTapDevConfig.ts\u0000getZCodeStdioTapDevLogDir",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/zcode-agent/zcodeV4HostCommand.ts\u0000uuidv7",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/test/nekConfigApiHarness.ts\u0000HOME",
       "count": 1
     },
     {
@@ -1914,10 +1886,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4UsageStatsParamsSchema",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000workspaceConfigTopicWireFrameSchema",
       "count": 1
     },
@@ -2199,14 +2167,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/hooks/useBuiltinProviderConfigFile.ts\u0000resolveBuiltinProviderConfigDisabledReason",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/hooks/useCodingPlanQuota.ts\u0000hasPendingCodingPlanConnection",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/hooks/useCodingPlanQuota.ts\u0000resolveCodingPlanQuotaCandidates",
       "count": 1
     },
     {
@@ -2602,10 +2562,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/pages/providers/providerDraft.ts\u0000requestDraftFromDraft",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/sections.ts\u0000NEK_SETTINGS_SECTION_IDS",
       "count": 1
     },
@@ -2619,14 +2575,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/settingsPageConfig.ts\u0000SETTINGS_SECTIONS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/usage-stats/AppUsagePanel.tsx\u0000formatAppUsageDuration",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/usage-stats/usageStatsUiParts.tsx\u0000RANGE_OPTIONS",
       "count": 1
     },
     {
@@ -3094,6 +3042,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/api/mock/mockHostApi.test.ts\u0000packages/ui/src/settings/nek/api/mock/mockHostApi.test.ts",
+      "count": 1
+    },
+    {
       "key": "knip\u0000files\u0000packages/ui/src/settings/nek/api/mock/mockNekConfigApi.test.ts\u0000packages/ui/src/settings/nek/api/mock/mockNekConfigApi.test.ts",
       "count": 1
     },
@@ -3107,6 +3059,10 @@
     },
     {
       "key": "knip\u0000files\u0000packages/ui/src/settings/nek/lib/lib.test.ts\u0000packages/ui/src/settings/nek/lib/lib.test.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/pages/hosts/copyToHostDialog.test.tsx\u0000packages/ui/src/settings/nek/pages/hosts/copyToHostDialog.test.tsx",
       "count": 1
     },
     {
@@ -3162,10 +3118,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000scripts/ci/fixtures/coding-plan-quota.jsx\u0000scripts/ci/fixtures/coding-plan-quota.jsx",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000scripts/ci/fixtures/conversation-export.jsx\u0000scripts/ci/fixtures/conversation-export.jsx",
       "count": 1
     },
@@ -3186,10 +3138,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000scripts/ci/fixtures/local-feedback.jsx\u0000scripts/ci/fixtures/local-feedback.jsx",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000scripts/ci/fixtures/local-onboarding.jsx\u0000scripts/ci/fixtures/local-onboarding.jsx",
       "count": 1
     },
@@ -3203,10 +3151,6 @@
     },
     {
       "key": "knip\u0000files\u0000scripts/ci/fixtures/local-share-context.jsx\u0000scripts/ci/fixtures/local-share-context.jsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000scripts/ci/fixtures/local-usage.jsx\u0000scripts/ci/fixtures/local-usage.jsx",
       "count": 1
     },
     {
@@ -3846,10 +3790,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/services/src/nek-config-api/index.ts\u0000NekReloadOutcome",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/services/src/nek-config-api/index.ts\u0000NekRevisionParts",
       "count": 1
     },
@@ -3903,10 +3843,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/nek-config-api/revision.ts\u0000NekRevisionParts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/nek-config-api/runtime.ts\u0000NekReloadOutcome",
       "count": 1
     },
     {
@@ -4143,18 +4079,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/storage/contract.ts\u0000StorageVolumeGroup",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000CodingPlanQuotaErrorCode",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000CodingPlanQuotaFailure",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/usage-stats/codingPlanQuota.ts\u0000CodingPlanQuotaResult",
       "count": 1
     },
     {
@@ -4670,14 +4594,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4UsageStatsParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4UsageStatsResult",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000WorkspaceConfigTopicWireFrame",
       "count": 1
     },
@@ -4894,14 +4810,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/hooks/useCodingPlanQuota.ts\u0000CodingPlanQuotaCandidate",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/hooks/useCodingPlanQuota.ts\u0000UsageQuotaLimit",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/hooks/useConversationImport.tsx\u0000ConversationImportAction",
       "count": 1
     },
@@ -4971,10 +4879,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/settings/nek/NekSettingsSection.tsx\u0000NekSettingsSectionEnv",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/settings/nek/api/NekSettingsContext.tsx\u0000NekConfigChange",
       "count": 1
     },
     {
@@ -5194,14 +5098,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000unlisted\u0000scripts/ci/coding-plan-quota-smoke.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/coding-plan-quota-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
       "key": "knip\u0000unlisted\u0000scripts/ci/conversation-archive.test.mjs\u0000yazl",
       "count": 1
     },
@@ -5254,14 +5150,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-feedback-smoke.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-feedback-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
       "key": "knip\u0000unlisted\u0000scripts/ci/local-onboarding-smoke.mjs\u0000esbuild",
       "count": 1
     },
@@ -5287,18 +5175,6 @@
     },
     {
       "key": "knip\u0000unlisted\u0000scripts/ci/local-share-context-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-usage-smoke.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-usage-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-usage.test.mjs\u0000esbuild",
       "count": 1
     },
     {

@@ -63,7 +63,6 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
   return {
     readSettings: async (target, scope, cwd) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, cwd);
       if (scope === "project" && !cwd) {
         throw validationError("project scope requires cwd", { cwd: "required" });
       }
@@ -100,7 +99,6 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
 
     patchSettings: async (target, scope, patch, options) => {
       const context = runtime.target(target);
-      runtime.rememberCwd(target, options.cwd);
       if (scope === "project" && !options.cwd) {
         throw validationError("project scope requires cwd", { cwd: "required" });
       }

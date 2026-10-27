@@ -7,8 +7,8 @@
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { parse as parseJsonc } from "jsonc-parser";
+import type { NekAuthProviderStatusWire } from "@zcode/shared/nek-protocol";
 import type {
-  NekAuthProviderStatus,
   NekConfigTarget,
   NekConfigTargetInfo,
   NekControlClient,
@@ -39,7 +39,7 @@ export const REMOTE: NekConfigTarget = { kind: "remote", connectionId: "ssh-1" }
 /** 记录命令、可编排登录流程的假控制进程。 */
 export class FakeControlClient implements NekControlClient {
   readonly commands: Array<{ type: string } & Record<string, unknown>> = [];
-  readonly authStatus: NekAuthProviderStatus[];
+  readonly authStatus: NekAuthProviderStatusWire[];
   private authListeners = new Set<(record: never) => void>();
   private handler: NekStructuredHandler | undefined;
   private loginResolve: ((value: { provider: string }) => void) | undefined;
@@ -47,7 +47,7 @@ export class FakeControlClient implements NekControlClient {
   private reloadDeferred = false;
   readonly respondCalls: NekStructuredUiResponse[] = [];
 
-  constructor(options: { authStatus?: NekAuthProviderStatus[]; loginDeferred?: boolean } = {}) {
+  constructor(options: { authStatus?: NekAuthProviderStatusWire[]; loginDeferred?: boolean } = {}) {
     this.authStatus = options.authStatus ?? [];
     this.reloadDeferred = options.loginDeferred ?? false;
   }
@@ -143,6 +143,16 @@ export class FakeControlClient implements NekControlClient {
     if (type === "get_model_catalog") {
       return { models: [] } as NekRpcResponseDataFor<C>;
     }
+    if (type === "fetch_provider_models") {
+      return {
+        ok: true,
+        endpoint: "https://draft.example.com/models",
+        models: [{ id: "draft-model" }],
+      } as NekRpcResponseDataFor<C>;
+    }
+    if (type === "test_provider") {
+      return { ok: true, latencyMs: 7 } as NekRpcResponseDataFor<C>;
+    }
     if (type === "get_project_trust") {
       return {
         cwd: PROJECT,
@@ -208,12 +218,14 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     listTargets: async (): Promise<NekConfigTargetInfo[]> => [
       {
         target: LOCAL,
+        hostname: "memory-local",
         label: "Local",
         connected,
         nek: { state: "ready", version: "0.3.2", agentDir: AGENT_DIR },
       },
       {
         target: REMOTE,
+        hostname: "memory-remote",
         label: "remote",
         connected,
         nek: { state: "ready", version: "0.3.2", agentDir: REMOTE_AGENT_DIR },

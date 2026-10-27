@@ -1,19 +1,33 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useNekSettingsDoc } from "./settingsDocs.js";
 import { useNekModelsDoc } from "./modelsDoc.js";
 import { useNekDirtyRegistration } from "./useNekDocument.js";
 import { useNekTarget } from "./NekSettingsContext.js";
 import { useNekLogin } from "./useNekLogin.js";
 import { useNekQuery } from "./useNekQuery.js";
+import { useNekAgentPresetsDoc } from "./mcpDocs.js";
+import { useNekReloadNotifications } from "./useNekReloadNotifications.js";
 import {
   createNekTestEnv,
   flushNek,
   installDomPolyfills,
   type NekTestEnv,
 } from "../test/nekTestUtils.js";
-import { MOCK_REMOTE_CONNECTED, MOCK_REMOTE_DISCONNECTED } from "./mock/mockSeed.js";
+import {
+  MOCK_PROJECT_CWD,
+  MOCK_REMOTE_CONNECTED,
+  MOCK_REMOTE_DISCONNECTED,
+} from "./mock/mockSeed.js";
 import { NekConfigApiError } from "./nekErrors.js";
 
 const LOCAL = { kind: "local" } as const;
@@ -258,5 +272,63 @@ describe("useNekLogin", () => {
     await act(() => result.current.start("anthropic"));
     await act(() => result.current.cancel());
     expect(result.current.state.phase).toBe("idle");
+  });
+});
+
+describe("v2 contract wiring", () => {
+  it("passes the project cwd to readModelsConfig and renameProvider", async () => {
+    const calls: Array<string | undefined> = [];
+    const read = env.config.readModelsConfig.bind(env.config);
+    env.config.readModelsConfig = (target, cwd) => {
+      calls.push(cwd);
+      return read(target, cwd);
+    };
+    const renames: Array<string | undefined> = [];
+    const rename = env.config.renameProvider.bind(env.config);
+    env.config.renameProvider = (target, from, to, options) => {
+      renames.push(options.cwd);
+      return rename(target, from, to, options);
+    };
+    const { result } = renderHook(() => useNekModelsDoc(), { wrapper: env.wrapper });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(calls).toEqual([MOCK_PROJECT_CWD]);
+    await act(() => result.current.renameProvider("deepseek", "ds"));
+    expect(renames).toEqual([MOCK_PROJECT_CWD]);
+  });
+
+  it("exposes preset diagnostics and reloads on a project preset change", async () => {
+    const { result } = renderHook(() => useNekAgentPresetsDoc(MOCK_PROJECT_CWD), {
+      wrapper: env.wrapper,
+    });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.data?.entries.map((entry) => entry.preset.name)).toContain("reviewer");
+    expect(result.current.data?.diagnostics).toMatchObject([
+      { severity: "error", message: expect.stringContaining("unknown thinking level") },
+    ]);
+    const before = result.current.data?.revision;
+
+    // 项目级 agents/*.md 变化：按 scope + 文件名匹配，文档重新读取。
+    act(() => env.config.simulatePresetEdit(LOCAL, "docs-writer"));
+    await flushNek();
+    expect(result.current.data?.revision).not.toBe(before);
+  });
+
+  it("toasts a reload failure after a write and offers a retry", async () => {
+    function Notifier() {
+      useNekReloadNotifications();
+      return null;
+    }
+    render(<Notifier />, { wrapper: env.wrapper });
+    await act(async () => {
+      env.config.simulateReloadResult(LOCAL, {
+        failures: [{ sessionKey: "session-7", message: "stdin closed" }],
+      });
+    });
+    expect(await screen.findByText(/stdin closed/)).toBeDefined();
+    const retry = await screen.findByRole("button", { name: "重试" });
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(await screen.findByText("所有 nek 进程已重新载入")).toBeDefined();
   });
 });

@@ -130,7 +130,6 @@ export * from "./remoteAppConfig.js";
 export * from "./helpAppConfig.js";
 export * from "./onboardingRecord.js";
 export * from "./remoteResourcePackages.js";
-export * from "./plan-identity.js";
 export {
   LOCAL_MEDIA_PREVIEW_SCHEME,
   DesktopCommandIds,
@@ -217,7 +216,6 @@ export * from "./streaming-tool-input-preview.js";
 export * from "./tool-plan-adapter.js";
 export * from "./settings-sync.js";
 export * from "./uuid.js";
-export * from "./usage-stats.js";
 export * from "./forceUpdate.js";
 export * from "./intranetProbe.js";
 export * from "./intranetDefaults.js";
@@ -225,8 +223,6 @@ export * from "./hooks.js";
 export * from "./openrouter-attribution.js";
 export * from "./workspaceSessionRestore.js";
 export * from "./skill-scan-policy.js";
-
-export * from "./coding-plan-reset.js";
 export {
   parseSubagentMarkdownSelection,
   formatSubagentMarkdownModel,

@@ -277,7 +277,6 @@ export const DesktopCommandIds = {
   OpenChangelog: "openChangelog",
   CheckForUpdates: "checkForUpdates",
   RelaunchApp: "relaunchApp",
-  OpenFeedback: "openFeedback",
   OpenCommunity: "openCommunity",
   ExportLogs: "exportLogs",
   ToggleDevTools: "toggleDevTools",
@@ -409,9 +408,6 @@ export interface IPlatformService {
   getApplicationIcon?(
     request: string | ApplicationIconRequest,
   ): Promise<ApplicationIconInfo | null>;
-
-  /** 打开反馈入口，由平台自行解析最终地址 */
-  openFeedback(): Promise<void>;
 
   /** 打开用户社群入口，由平台自行解析当前语言对应渠道 */
   openCommunity(): Promise<void>;

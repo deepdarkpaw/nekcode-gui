@@ -55,6 +55,15 @@ describe("settings center i18n", () => {
         "disabled",
         "notRunning",
       ],
+      "settings.nek.accounts.state.": [
+        "loggedOut",
+        "loggedIn",
+        "expired",
+        "refreshFailed",
+        "otherCredential",
+      ],
+      "settings.nek.accounts.hint.": ["expired", "refreshFailed"],
+      "settings.nek.copy.status.": ["copied", "skipped", "failed"],
       "settings.nek.provider.api.": [
         "openai-completions",
         "openai-responses",
