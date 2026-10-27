@@ -48,16 +48,12 @@ import { useAppChromeState } from "@/app-shell/useAppChromeState.js";
 import { useWorkspaceSessionReload } from "@/app-shell/useWorkspaceSessionReload.js";
 import { useWorkspaceShellLifecycle } from "@/app-shell/useWorkspaceShellLifecycle.js";
 import { useWorkspaceShellZCodeState } from "@/app-shell/useWorkspaceShellZCodeState.js";
-import { useWorkspaceMainViewSettingsExit } from "@/app-shell/useWorkspaceMainViewSettingsExit.js";
-import {
-  useWorkspaceTaskNavigation,
-  type AutomationsNavigationTarget,
-} from "@/app-shell/useWorkspaceTaskNavigation.js";
+import { useWorkspaceTaskNavigation } from "@/app-shell/useWorkspaceTaskNavigation.js";
 import { useTaskSidePaneMemoryBridge } from "@/app-shell/useTaskSidePaneMemoryBridge.js";
 import { resolveAppWorkspaceRpcTarget } from "@/app-shell/workspaceRpcTarget.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { useWorkspaceTerminalTaskNotifications } from "@/hooks/useTaskNotifications.js";
-import type { AppProps, WorkspaceMainView } from "@/app-shell/types.js";
+import type { AppProps } from "@/app-shell/types.js";
 import type {
   ChatSearchResultHighlightRequest,
   ChatViewSummaryPanelVariant,
@@ -744,31 +740,8 @@ export function App({
     [locale, setLocale, theme, setTheme, testMessages],
   );
   useTestActions(testActions);
-  const [workspaceMainView, setWorkspaceMainView] = useState<WorkspaceMainView>("chat");
-  const [openAutomationId, setOpenAutomationId] = useState<string | null>(null);
-  const [openAutomationTab, setOpenAutomationTab] = useState<NonNullable<
-    AutomationsNavigationTarget["automationTab"]
-  > | null>(null);
-  const handleNavigateToTaskMain = useCallback(() => {
-    setWorkspaceMainView("chat");
-  }, []);
-  useWorkspaceMainViewSettingsExit({
-    isWorkspaceVisible,
-    workspaceMainView,
-    onExitSettings: handleNavigateToTaskMain,
-  });
-  const handleNavigateToAutomationsMain = useCallback((target: AutomationsNavigationTarget) => {
-    setOpenAutomationId(target.automationId ?? null);
-    setOpenAutomationTab(target.automationTab ?? null);
-    setWorkspaceMainView("automations");
-  }, []);
-  const handleOpenAutomationConsumed = useCallback(() => {
-    setOpenAutomationId(null);
-    setOpenAutomationTab(null);
-  }, []);
   const {
     handleSelectTask,
-    handleOpenAutomations,
     handleTaskNavBack,
     handleTaskNavForward,
     canGoBack,
@@ -778,10 +751,7 @@ export function App({
   } = useWorkspaceTaskNavigation({
     intl,
     workspaceAbsPath,
-    workspaceIdentity,
     activateTabByPath,
-    onNavigateToTask: handleNavigateToTaskMain,
-    onNavigateToAutomations: handleNavigateToAutomationsMain,
   });
   const handleSelectAdjacentConversation = useCallback(
     (direction: "previous" | "next") => {
@@ -992,12 +962,6 @@ export function App({
       <WorkspaceShellLayout
         services={services}
         workspaceReadOnlyReason={workspaceReadOnlyReason}
-        workspaceMainView={workspaceMainView}
-        openAutomationId={openAutomationId}
-        openAutomationTab={openAutomationTab}
-        onWorkspaceMainViewChange={setWorkspaceMainView}
-        onOpenAutomationConsumed={handleOpenAutomationConsumed}
-        handleOpenAutomations={handleOpenAutomations}
         onConnectRemote={onConnectRemote}
         onSelectRemoteProject={onSelectRemoteProject}
         onCancelRemoteProject={onCancelRemoteProject}

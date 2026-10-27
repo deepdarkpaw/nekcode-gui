@@ -167,8 +167,6 @@ function persistWorkspaceSidebarWidthPx(widthPx: number) {
 export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent({
   services,
   workspaceReadOnlyReason,
-  workspaceMainView,
-  onWorkspaceMainViewChange,
   onConnectRemote,
   onSelectRemoteProject,
   onCancelRemoteProject,
@@ -362,7 +360,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     panelElementRef: sidePanePanelElementRef,
     isVisible: isSidePaneVisible,
   } = useAnimatedResizablePanel({
-    open: workspaceMainView === "chat" && isSidePaneOpen,
+    open: isSidePaneOpen,
     expandedSize: SIDE_PANE_DEFAULT_EXPANDED_SIZE,
     rememberExpandedSize: true,
     resizeOnInitialVisibleMount: false,
@@ -387,10 +385,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   }, [handleToggleSidebar, handleToggleSidePane, isSidebarVisible, isSidePaneOpen, workspaceKey]);
 
   useEffect(() => {
-    if (workspaceMainView !== "chat") {
-      return;
-    }
-
     if (typeof window === "undefined") {
       return;
     }
@@ -472,7 +466,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       }
       window.removeEventListener("resize", handleWindowResize);
     };
-  }, [workspaceMainView]);
+  }, []);
 
   useEffect(() => {
     workspaceSidebarPanelWidthPxRef.current = workspaceSidebarPanelWidthPx;
@@ -758,25 +752,21 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       ...request,
     });
   }, []);
-  const showChatMainView = useCallback(() => {
-    onWorkspaceMainViewChange("chat");
-  }, [onWorkspaceMainViewChange]);
   const primaryNavigationBack = handleTaskNavBack;
   const canPrimaryNavigationBack = canTaskNavBack;
   const handleCreateTaskInChat = useCallback(
     (request?: Parameters<typeof onCreateTask>[0]) => {
       // workspaceReadOnlyReason 判定的是活动 workspace；当 request 显式带 targetWorkspace 时
-      // 目标另属他项目（跨项目发起已保存工作流），
-      // 活动 workspace 的只读性不适用，真正的守卫是 root 动作对 target 的 isWorkspaceReadOnly。
+      // 目标另属他项目，活动 workspace 的只读性不适用，
+      // 真正的守卫是 root 动作对 target 的 isWorkspaceReadOnly。
       const hasTargetWorkspace =
         typeof request === "object" && request !== null && Boolean(request.targetWorkspace);
       if (!hasTargetWorkspace && workspaceReadOnlyReason) {
         return;
       }
-      showChatMainView();
       onCreateTask(request);
     },
-    [onCreateTask, showChatMainView, workspaceReadOnlyReason],
+    [onCreateTask, workspaceReadOnlyReason],
   );
   const shellWorkbenchBinding = useMemo<WorkbenchSessionBinding | null>(
     () =>
@@ -843,15 +833,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
         };
         selectWorkbenchSession(shellWorkbenchBinding, target);
       }
-      // 只有目标 workspace 已经激活或补开成功后才关闭 Automations，避免失败时看起来像跳转成功。
-      showChatMainView();
       if (typeof expectedUnreadAt === "number") {
         handleSelectTask(targetWorkspacePath, taskId, targetWorkspaceIdentity, expectedUnreadAt);
       } else {
         handleSelectTask(targetWorkspacePath, taskId, targetWorkspaceIdentity);
       }
     },
-    [handleSelectTask, intl, shellWorkbenchBinding, showChatMainView, tabStoreApi, workspaceTabs],
+    [handleSelectTask, intl, shellWorkbenchBinding, tabStoreApi, workspaceTabs],
   );
   const handlePaneActiveSessionChange = useCallback(
     (
@@ -883,7 +871,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   );
   const handleOpenSessionInSplitPane = useCallback(
     (target: V4SplitPaneSessionTarget) => {
-      showChatMainView();
       const shouldSelectTarget = placeWorkbenchSessionInSplit(shellWorkbenchBinding, target, {
         mode: "context-menu",
         side: "right",
@@ -892,7 +879,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
         handleSelectTask(target.workspacePath, target.sessionId, target.workspaceIdentity);
       }
     },
-    [handleSelectTask, shellWorkbenchBinding, showChatMainView],
+    [handleSelectTask, shellWorkbenchBinding],
   );
   const handleStartDraftInWorkspaceInChat = useCallback(
     (
@@ -901,7 +888,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       targetWorkspacePurpose?: import("@zcode/shared").WorkspacePurpose,
       createSource?: import("@zcode/shared").SessionCreateSource,
     ) => {
-      showChatMainView();
       handleStartDraftInWorkspace(
         targetWorkspacePath,
         targetWorkspaceIdentity,
@@ -909,7 +895,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
         createSource,
       );
     },
-    [handleStartDraftInWorkspace, showChatMainView],
+    [handleStartDraftInWorkspace],
   );
   const handleCreateProjectDraft = useCallback(
     (path: string, identity?: string) =>

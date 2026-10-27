@@ -26,11 +26,7 @@ import {
   type SessionCreateSource,
 } from "@zcode/shared";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
-import type {
-  AutomationsNavigationTab,
-  TaskNavigationHistory,
-  WorkspaceNavEntry,
-} from "@/lib/taskNavigationHistory.js";
+import type { TaskNavigationHistory, TaskNavEntry } from "@/lib/taskNavigationHistory.js";
 import type { MentionCategory, MentionItemData } from "@/mentions/mentionTypes.js";
 
 // ────────────────────────────────────────────
@@ -453,19 +449,12 @@ export interface ZCodeSessionStoreState {
     workspaceIdentity?: string,
   ) => void;
 
-  /** workspace 导航历史（全局、跨 workspace，包含 task 与 Automations） */
+  /** workspace 导航历史（全局、跨 workspace） */
   taskNavHistory: TaskNavigationHistory;
-  /** 记录 Automations 主视图或详情导航。 */
-  taskNavPushAutomations: (
-    workspacePath: string,
-    workspaceIdentity?: string,
-    automationId?: string,
-    automationTab?: AutomationsNavigationTab,
-  ) => void;
   /** 后退，返回目标 entry；到头了返回 null */
-  taskNavGoBack: () => WorkspaceNavEntry | null;
+  taskNavGoBack: () => TaskNavEntry | null;
   /** 前进，返回目标 entry；到头了返回 null */
-  taskNavGoForward: () => WorkspaceNavEntry | null;
+  taskNavGoForward: () => TaskNavEntry | null;
   /** task 被删除时清理导航历史中的对应 task 条目 */
   removeTaskFromNavHistory: (taskId: string) => void;
 }

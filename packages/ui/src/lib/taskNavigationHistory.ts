@@ -15,25 +15,8 @@ export interface TaskNavEntry extends WorkspaceNavEntryBase {
   taskId: string;
 }
 
-// "workflow" 是自动化页的顶级「工作流」标签；
-// scheduled / idle 仍是「自动化」标签内部的胶囊。
-export type AutomationsNavigationTab = "scheduled" | "idle" | "workflow";
-
-export type OpenAutomationsMain = (
-  automationId?: string,
-  automationTab?: AutomationsNavigationTab,
-) => void;
-
-export interface AutomationsNavEntry extends WorkspaceNavEntryBase {
-  kind: "automations";
-  automationId?: string;
-  automationTab?: AutomationsNavigationTab;
-}
-
-export type WorkspaceNavEntry = TaskNavEntry | AutomationsNavEntry;
-
 export interface TaskNavigationHistory {
-  entries: WorkspaceNavEntry[];
+  entries: TaskNavEntry[];
   /** 当前指针，指向 entries 中的索引；-1 表示空 */
   cursor: number;
 }
@@ -44,38 +27,15 @@ export function createTaskNavigationHistory(): TaskNavigationHistory {
   return { entries: [], cursor: -1 };
 }
 
-function isTaskNavEntry(entry: WorkspaceNavEntry): entry is TaskNavEntry {
-  return entry.kind === "task";
+function isSameNavEntry(left: TaskNavEntry, right: TaskNavEntry): boolean {
+  return (
+    left.workspacePath === right.workspacePath &&
+    left.workspaceIdentity === right.workspaceIdentity &&
+    left.taskId === right.taskId
+  );
 }
 
-export function isAutomationsNavEntry(entry: WorkspaceNavEntry): entry is AutomationsNavEntry {
-  return entry.kind === "automations";
-}
-
-function isSameNavEntry(left: WorkspaceNavEntry, right: WorkspaceNavEntry): boolean {
-  if (
-    left.kind !== right.kind ||
-    left.workspacePath !== right.workspacePath ||
-    left.workspaceIdentity !== right.workspaceIdentity
-  ) {
-    return false;
-  }
-
-  if (left.kind === "task") return left.taskId === (right as TaskNavEntry).taskId;
-  if (left.kind === "automations") {
-    const rightAutomations = right as AutomationsNavEntry;
-    return (
-      left.automationId === rightAutomations.automationId &&
-      left.automationTab === rightAutomations.automationTab
-    );
-  }
-  return true;
-}
-
-function pushEntry(
-  history: TaskNavigationHistory,
-  entry: WorkspaceNavEntry,
-): TaskNavigationHistory {
+function pushEntry(history: TaskNavigationHistory, entry: TaskNavEntry): TaskNavigationHistory {
   const current = history.cursor >= 0 ? history.entries[history.cursor] : null;
 
   // 相邻去重：历史回放或连续打开同一目标时不重复入栈。
@@ -113,23 +73,6 @@ export function pushNavEntry(
   });
 }
 
-/** 用户主动打开 Automations 主视图或指定详情时调用。 */
-export function pushAutomationsNavEntry(
-  history: TaskNavigationHistory,
-  workspacePath: string,
-  workspaceIdentity?: string,
-  automationId?: string,
-  automationTab?: AutomationsNavigationTab,
-): TaskNavigationHistory {
-  return pushEntry(history, {
-    kind: "automations",
-    workspacePath,
-    ...(workspaceIdentity ? { workspaceIdentity } : {}),
-    ...(automationId ? { automationId } : {}),
-    ...(automationTab ? { automationTab } : {}),
-  });
-}
-
 export function canGoBack(history: TaskNavigationHistory): boolean {
   return history.cursor > 0;
 }
@@ -141,7 +84,7 @@ export function canGoForward(history: TaskNavigationHistory): boolean {
 /** 后退一步，返回新的 history 和目标 entry。 */
 export function goBack(
   history: TaskNavigationHistory,
-): { history: TaskNavigationHistory; entry: WorkspaceNavEntry } | null {
+): { history: TaskNavigationHistory; entry: TaskNavEntry } | null {
   if (!canGoBack(history)) {
     return null;
   }
@@ -161,7 +104,7 @@ export function goBack(
 /** 前进一步，返回新的 history 和目标 entry。 */
 export function goForward(
   history: TaskNavigationHistory,
-): { history: TaskNavigationHistory; entry: WorkspaceNavEntry } | null {
+): { history: TaskNavigationHistory; entry: TaskNavEntry } | null {
   if (!canGoForward(history)) {
     return null;
   }
@@ -178,18 +121,13 @@ export function goForward(
   };
 }
 
-/**
- * 从历史中移除指定 taskId 的所有 task 条目（task 被删除时调用）。
- * Automations 条目不属于 task 生命周期，必须原样保留。
- */
+/** 从历史中移除指定 taskId 的所有条目（task 被删除时调用）。 */
 export function removeTaskFromHistory(
   history: TaskNavigationHistory,
   taskId: string,
 ): TaskNavigationHistory {
   const currentEntry = history.cursor >= 0 ? history.entries[history.cursor] : null;
-  const filtered = history.entries.filter(
-    (entry) => !isTaskNavEntry(entry) || entry.taskId !== taskId,
-  );
+  const filtered = history.entries.filter((entry) => entry.taskId !== taskId);
 
   if (filtered.length === history.entries.length) {
     return history;

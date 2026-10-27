@@ -35,8 +35,6 @@ import type {
   GroupedDraftTaskPlacement,
 } from "@/store/zcodeSessionStoreTypes.js";
 import type { TaskFindDialogProps } from "@/quickpick/TaskFindDialog.js";
-import type { AutomationsNavigationTab, OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
-
 export interface WorkspaceShellZCodeState {
   activeTaskId: WorkspaceZCodeUIState["activeTaskId"];
   draftFocusVersion: WorkspaceZCodeUIState["draftFocusVersion"];
@@ -105,16 +103,8 @@ export interface GitChangeSummary {
   removed: number;
 }
 
-export type WorkspaceMainView = "chat" | "automations";
-
 export interface WorkspaceShellLayoutProps extends AppProps {
   workspaceReadOnlyReason?: string;
-  workspaceMainView: WorkspaceMainView;
-  openAutomationId: string | null;
-  openAutomationTab: AutomationsNavigationTab | null;
-  onWorkspaceMainViewChange: (view: WorkspaceMainView) => void;
-  onOpenAutomationConsumed: () => void;
-  handleOpenAutomations: OpenAutomationsMain;
   workspaceShellZCodeState: WorkspaceShellZCodeState;
   theme: Theme;
   isMacFullscreen: boolean;
