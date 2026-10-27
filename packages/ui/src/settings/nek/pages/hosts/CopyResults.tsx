@@ -6,7 +6,7 @@ import type { NekCopyItemResult, NekCopyResult } from "@zcode/shared/nek-protoco
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 /** `<kind>:<id>` → 展示用的两段；id 里允许出现冒号，所以只切第一个。 */
-export function parseCopyItemKey(key: string): { kind: string; id: string } {
+function parseCopyItemKey(key: string): { kind: string; id: string } {
   const index = key.indexOf(":");
   return index < 0
     ? { kind: key, id: "" }

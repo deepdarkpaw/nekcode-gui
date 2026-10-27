@@ -17,7 +17,7 @@ import { clone, mockError, nextRevision, type MockFile, type MockMachine } from 
 import type * as models from "./mockModels.js";
 import { createLocalMachine, createRemoteMachines } from "./mockSeed.js";
 
-export type MockFileKind = "settings" | "models" | "mcp" | "yaml" | "instructions";
+type MockFileKind ="settings" | "models" | "mcp" | "yaml" | "instructions";
 
 export interface MockNekConfigApiOptions {
   /** 每次调用的模拟延迟（毫秒）；测试用 0。 */
