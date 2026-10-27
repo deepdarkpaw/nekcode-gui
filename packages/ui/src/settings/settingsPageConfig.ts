@@ -21,6 +21,11 @@ import {
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
+import {
+  NEK_SETTINGS_GROUPS,
+  NEK_SETTINGS_SECTIONS,
+  type NekSettingsGroupId,
+} from "./nek/sections.js";
 
 export const THEME_MODES: Array<{
   mode: Theme;
@@ -31,7 +36,7 @@ export const THEME_MODES: Array<{
   { mode: "zai-light", icon: Sun },
 ];
 
-type SettingsSectionGroupId = "basics" | "agentCapabilities" | "dataAndStats";
+type SettingsSectionGroupId = "basics" | "agentCapabilities" | "dataAndStats" | NekSettingsGroupId;
 
 interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -46,6 +51,7 @@ const BASE_SETTINGS_SECTION_GROUPS: Array<{
   id: SettingsSectionGroupId;
   titleId: string;
 }> = [
+  ...NEK_SETTINGS_GROUPS,
   { id: "basics", titleId: "settings.sidebar.group.basics" },
   {
     id: "agentCapabilities",
@@ -55,6 +61,7 @@ const BASE_SETTINGS_SECTION_GROUPS: Array<{
 ];
 
 const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
+  ...NEK_SETTINGS_SECTIONS,
   {
     id: "general",
     icon: Settings2,

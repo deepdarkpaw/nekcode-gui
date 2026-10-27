@@ -1,0 +1,184 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  createNekTestEnv,
+  flushNek,
+  installDomPolyfills,
+  type NekTestEnv,
+} from "../test/nekTestUtils.js";
+import { ProvidersPage } from "./providers/ProvidersPage.js";
+import { ToolsPage } from "./ToolsPage.js";
+import { McpPage } from "./mcp/McpPage.js";
+import { AccountsPage } from "./accounts/AccountsPage.js";
+
+let env: NekTestEnv;
+const LOCAL = { kind: "local" } as const;
+
+beforeEach(() => {
+  installDomPolyfills();
+  env = createNekTestEnv();
+});
+afterEach(() => cleanup());
+
+async function selectProvider(name: RegExp) {
+  fireEvent.click(await screen.findByRole("option", { name }));
+}
+
+describe("ProvidersPage", () => {
+  it("lists providers and shows the model table of the selection", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    const list = await screen.findByRole("listbox", { name: "服务商" });
+    expect(within(list).getAllByRole("option").length).toBe(5);
+    expect(screen.getByText("deepseek-reasoner")).toBeDefined();
+    expect(screen.getByText("模型（2）")).toBeDefined();
+  });
+
+  it("deletes a model with a 5 s undo toast that restores it in place", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    await screen.findByTitle("deepseek-chat");
+    const deleteButtons = screen.getAllByRole("button", { name: "删除模型" });
+    await act(async () => {
+      fireEvent.click(deleteButtons[0]!);
+    });
+    await waitFor(() => expect(screen.queryByTitle("deepseek-chat")).toBeNull());
+    const undo = await screen.findByRole("button", { name: "撤销" });
+    await act(async () => {
+      fireEvent.click(undo);
+    });
+    await flushNek(5);
+    expect(
+      env.config.machines.get("local")?.models.value[0]?.models.map((model) => model.id),
+    ).toEqual(["deepseek-chat", "deepseek-reasoner"]);
+  });
+
+  it("fetches models: already-added rows are locked, the primary button counts selections", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    await screen.findByTitle("deepseek-chat");
+    fireEvent.click(screen.getAllByRole("button", { name: "获取模型列表" })[0]!);
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("gpt-4.1");
+    const added = within(dialog).getAllByText("已添加");
+    expect(added.length).toBe(2);
+    const addButton = within(dialog).getByRole("button", { name: "添加 0 个模型" });
+    expect((addButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", { name: "全选" }));
+    const confirm = await within(dialog).findByRole("button", { name: "添加 4 个模型" });
+    expect(within(dialog).getAllByText("内置目录").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText("默认值").length).toBeGreaterThan(0);
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.models.value[0]?.models.length).toBe(6),
+    );
+  });
+
+  it("maps 401 and 404 to actionable messages", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    await selectProvider(/Broken Key/);
+    fireEvent.click((await screen.findAllByRole("button", { name: "获取模型列表" }))[0]!);
+    expect(await screen.findByText("Key 无效或无权限")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await selectProvider(/No Model List/);
+    fireEvent.click((await screen.findAllByRole("button", { name: "获取模型列表" }))[0]!);
+    expect(await screen.findByText("该地址不提供模型列表接口")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "手动添加" }));
+    expect(await screen.findByRole("dialog", { name: "添加模型" })).toBeDefined();
+  });
+
+  it("shows the external-change banner while a form has unsaved edits", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    await screen.findByTitle("deepseek-chat");
+    fireEvent.click(screen.getByRole("button", { name: "编辑服务商" }));
+    const nameInput = await screen.findByLabelText(/名称/);
+    fireEvent.change(nameInput, { target: { value: "DeepSeek CN" } });
+    act(() => {
+      env.config.simulateExternalEdit(LOCAL, "models");
+    });
+    await flushNek();
+    expect(await screen.findByText("配置已在外部修改")).toBeDefined();
+    expect(screen.getByRole("button", { name: "保留我的修改" })).toBeDefined();
+    expect((nameInput as HTMLInputElement).value).toBe("DeepSeek CN");
+  });
+});
+
+describe("ToolsPage", () => {
+  it("writes +/- deltas and rolls back a switch when saving fails", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const webSwitch = await screen.findByRole("switch", { name: "启用联网搜索" });
+    expect(webSwitch.getAttribute("aria-checked")).toBe("true");
+    await act(async () => {
+      fireEvent.click(webSwitch);
+    });
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.defaultTools).toEqual([
+        "-web_search",
+      ]),
+    );
+
+    env.config.failNext("patchSettings", { code: "io", message: "EACCES: settings.json" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("switch", { name: "启用联网搜索" }));
+    });
+    await waitFor(() =>
+      expect(screen.getAllByText("EACCES: settings.json").length).toBeGreaterThan(0),
+    );
+    expect(screen.getByRole("switch", { name: "启用联网搜索" }).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+  });
+});
+
+describe("McpPage", () => {
+  it("imports pasted JSON with per-item conflict resolution", async () => {
+    render(<McpPage />, { wrapper: env.wrapper });
+    await screen.findByText("filesystem");
+    fireEvent.click(screen.getByRole("button", { name: "粘贴 JSON 导入" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("MCP 配置 JSON"), {
+      target: {
+        value: JSON.stringify({
+          mcpServers: {
+            filesystem: { command: "fs2" },
+            linear: { url: "https://mcp.linear.app/sse" },
+          },
+        }),
+      },
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "预览" }));
+    });
+    expect(await within(dialog).findByText("已存在同名服务器")).toBeDefined();
+    // 默认跳过冲突项：只导入 1 个。
+    const confirm = within(dialog).getByRole("button", { name: "导入 1 个服务器" });
+    fireEvent.click(within(dialog).getByRole("radio", { name: "重命名" }));
+    expect(await within(dialog).findByRole("button", { name: "导入 2 个服务器" })).toBeDefined();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "导入 2 个服务器" }));
+    });
+    await waitFor(() =>
+      expect(Object.keys(env.config.machines.get("local")?.mcp.value ?? {})).toContain(
+        "filesystem-2",
+      ),
+    );
+    expect(env.config.machines.get("local")?.mcp.value.linear).toBeDefined();
+    void confirm;
+  });
+});
+
+describe("AccountsPage", () => {
+  it("shows login state and asks before signing out", async () => {
+    render(<AccountsPage />, { wrapper: env.wrapper });
+    expect(await screen.findByText(/已登录/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    const confirm = await screen.findByRole("alertdialog");
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("取消"));
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole("button", { name: "退出登录" }));
+    });
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.auth.get("anthropic")?.kind).toBe("none"),
+    );
+  });
+});
