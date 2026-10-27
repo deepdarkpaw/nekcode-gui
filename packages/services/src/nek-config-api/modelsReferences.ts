@@ -76,7 +76,6 @@ export interface ProviderRenamePlan {
 /** 计算改名影响：settings 补丁 + 预设改写清单。纯函数，便于预览与执行共用。 */
 export function planReferenceRewrites(args: ReferenceScanArgs & { to: string }): ProviderRenamePlan {
   const { providerId: from, to, settings, presets } = args;
-  const prefix = `${from}/`;
   const patch: Record<string, unknown> = {};
   if (settings.defaultProvider === from) patch.defaultProvider = to;
   const defaultModel = stringField(settings, "defaultModel");
@@ -95,7 +94,9 @@ export function planReferenceRewrites(args: ReferenceScanArgs & { to: string }):
   if (rewrittenCompaction) patch.compaction = { model: rewrittenCompaction };
   const overrides = recordField(compaction, "modelOverrides");
   const overridePatch = rewriteRecordKeys(overrides, from, to);
-  if (overridePatch) patch.compaction = { ...(recordField(patch, "compaction") ?? {}), modelOverrides: overridePatch };
+  if (overridePatch) {
+    patch.compaction = { ...recordField(patch, "compaction"), modelOverrides: overridePatch };
+  }
   const thinkingPatch = rewriteRecordKeys(recordField(settings, "modelThinkingLevels"), from, to);
   if (thinkingPatch) patch.modelThinkingLevels = thinkingPatch;
 
@@ -140,6 +141,5 @@ function rewriteRecordKeys(
     rewritten[key] = null;
     rewritten[next] = value;
   }
-  void `${from}/`;
   return changed ? rewritten : null;
 }

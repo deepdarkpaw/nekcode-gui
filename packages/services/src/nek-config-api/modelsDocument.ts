@@ -26,7 +26,8 @@ import {
   readTextDocument,
   writeTextDocument,
 } from "./documents.js";
-import { fieldErrorsOf, validationError } from "./errors.js";
+import { conflict, fieldErrorsOf, validationError } from "./errors.js";
+import { sameRevision } from "./revision.js";
 
 /** nek 内置服务商的 ID（models.json 里出现同名条目即为"覆盖内置服务商"）。 */
 export const BUILTIN_PROVIDER_IDS: ReadonlySet<string> = new Set([
@@ -152,12 +153,12 @@ export function providerToView(id: string, raw: Record<string, unknown>): NekPro
 
 /** 模型视图 → 写回 models.json 的值（保留 `extra` 里的未知字段）。 */
 export function modelWriteToValue(model: NekModelConfig): Record<string, unknown> {
-  const { extra, ...known } = model;
+  const { extra = {}, ...known } = model;
   const value: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(known)) {
     if (entry !== undefined && entry !== null) value[key] = entry;
   }
-  return { ...value, ...(extra ?? {}) };
+  return { ...value, ...extra };
 }
 
 /** API Key 的写入解析：`{keep:true}` / `undefined` 保留原值，空串表示删除。 */
@@ -255,13 +256,21 @@ export async function readModelsSnapshot(
   return { path, text, revision: document.revision, data, providers: readProviders(path, data) };
 }
 
-/** 逐条编辑后一次性原子写；返回新 revision。 */
+/**
+ * 逐条编辑后一次性原子写；返回新 revision。
+ *
+ * 写入前重新读一次原文并比对 revision：`models.json` 没有锁（nek 只读它），
+ * 靠"写前再确认"把被外部改写的窗口压到最小。
+ */
 export async function editModelsSnapshot(
   executor: NekConfigHostExecutor,
   snapshot: NekModelsSnapshot,
+  expectedRevision: string,
   edits: ReadonlyArray<{ pointer: Array<string | number>; value: unknown }>,
 ): Promise<string> {
-  let text = snapshot.text;
+  const current = await readTextDocument(executor, snapshot.path);
+  if (!sameRevision(current.revision, expectedRevision)) throw conflict(snapshot.path);
+  let text = current.content ?? EMPTY_MODELS_TEXT;
   for (const edit of edits) text = applyJsoncEdit(snapshot.path, text, edit.pointer, edit.value);
   return await writeTextDocument(executor, snapshot.path, text);
 }

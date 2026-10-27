@@ -113,6 +113,10 @@ export class NekConfigRuntime {
     });
   }
 
+  get logger(): NekConfigApiLogger | undefined {
+    return this.options.logger;
+  }
+
   /** 解析目标；未连接时抛 `not_connected`。 */
   target(target: NekConfigTarget): NekTargetContext {
     const executor = this.options.hosts.executor(target);
@@ -152,6 +156,11 @@ export class NekConfigRuntime {
   /** 有没有已经启动的控制进程（`reload` 不该为了重载而新建进程）。 */
   hasControl(target: NekConfigTarget): boolean {
     return this.controls.has(targetKeyOf(target));
+  }
+
+  /** 目标机器上正在运行的会话进程（MCP 状态、reload 用）。 */
+  sessionsOf(target: NekConfigTarget): NekConfigSessionHandle[] {
+    return this.options.sessions?.sessions(target) ?? [];
   }
 
   /** 记住最近一次出现的项目目录：models 相关方法在契约里没有 cwd 参数，靠它定位项目预设。 */
