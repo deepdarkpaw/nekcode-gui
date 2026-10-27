@@ -1,0 +1,76 @@
+# nekcode-gui 运行参数。
+#
+# 这里是 GUI 自身的可调参数（进程、超时、缓冲、重连、交互阈值），不是 nek 的配置。
+# nek 的配置在 `~/.nek/agent/`（本机或远程主机上），由设置中心管理。
+#
+# 修改后需要重启 GUI 生效。缺失的键使用内置默认值；值非法时启动诊断里会报错并回退到默认值。
+
+# 与 nek 子进程相关的参数
+nek:
+  # 会话进程池上限：同时在跑的 nek 会话进程数，超出后回收最久未使用的空闲进程
+  maxSessionProcesses: 8
+  # 空闲多久后回收会话进程（分钟）；正在跑回合的进程不会被回收
+  idleMinutes: 10
+  # 单个进程 stderr 环形缓冲上限（KB）
+  stderrBufferKb: 512
+  # 单行 JSONL 上限（MB），超过视为协议错误
+  maxLineMb: 64
+
+# RPC 超时（毫秒）。命令按类型取不同超时；这里只列可调的几类
+timeouts:
+  # 普通命令（get_state、list_sessions 等）
+  commandMs: 15000
+  # prompt 只等 preflight（回合开始前），不回等整个回合
+  promptPreflightMs: 20000
+  # 压缩、登录、模型列表拉取、测试连接
+  longRunningMs: 180000
+  # 关闭：先 stdin.end()，到这个时间后强制回收进程树
+  shutdownGraceMs: 1500
+
+# 事件与渲染
+events:
+  # 流式增量合并上限（每秒）
+  streamFlushPerSecond: 20
+  # 折叠状态 LRU 条数
+  foldStateEntries: 2000
+  # 队列、草稿、事件缓冲的条数上限
+  queueEntries: 200
+  draftEntries: 20
+  eventBufferEntries: 5000
+
+# 远程连接
+remote:
+  # 断线重连退避（秒），用完后停在最后一次间隔并提示手动重连
+  reconnectBackoffSeconds: [1, 2, 4, 8, 16]
+  # 主机密钥为 unknown 时必须由用户确认；changed 时阻断连接
+  requireHostKeyConfirmation: true
+  # 配置文件外部修改的轮询间隔（秒，远程目标）
+  configPollSeconds: 5
+  # 记住的最近工作目录条数
+  recentDirectories: 20
+
+# 输入与交互
+input:
+  # 超过这个字符数或行数的粘贴折叠成粘贴块
+  pasteCollapseChars: 2000
+  pasteCollapseLines: 40
+  # 草稿自动保存间隔（毫秒）
+  draftAutosaveMs: 800
+  # 撤销 toast 时长（毫秒）
+  undoToastMs: 5000
+
+# 日志
+logging:
+  # 日志目录：相对 `~/.nek/gui/`；单个文件上限（MB）与保留个数
+  dir: logs
+  maxFileMb: 5
+  keepFiles: 3
+  # 每个 nek 进程的 stderr 单独成文件
+  perProcessStderr: true
+
+# 更新
+updates:
+  # 更新通道：stable | dev
+  channel: stable
+  # 检查间隔（小时）
+  checkIntervalHours: 6
