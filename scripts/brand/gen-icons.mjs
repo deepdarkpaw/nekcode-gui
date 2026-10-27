@@ -65,6 +65,56 @@ function renderMark(size) {
   return canvas.toBuffer("image/png");
 }
 
+/** macOS DMG 背景（540×380 逻辑像素）：品牌名 + 拖拽箭头，图标位置由 electron-builder 的 dmg.contents 决定。 */
+function renderDmgBackground(scale) {
+  const width = 540 * scale;
+  const height = 380 * scale;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, "#faf8fe");
+  gradient.addColorStop(1, "#efeaf9");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+
+  const markSize = 40 * scale;
+  const title = "nekcode";
+  ctx.font = `600 ${44 * scale}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`;
+  const titleWidth = ctx.measureText(title).width;
+  const gap = 14 * scale;
+  const left = (width - (markSize + gap + titleWidth)) / 2;
+  const centerY = 96 * scale;
+  ctx.save();
+  ctx.translate(left, centerY - markSize / 2);
+  ctx.scale(markSize / 64, markSize / 64);
+  ctx.fillStyle = PURPLE;
+  ctx.fill(new Path2D(HEAD));
+  ctx.fillStyle = "#ffffff";
+  ctx.fill(new Path2D(PROMPT));
+  ctx.restore();
+  ctx.fillStyle = "#2b2340";
+  ctx.textBaseline = "middle";
+  ctx.fillText(title, left + markSize + gap, centerY + 2 * scale);
+
+  // 拖拽箭头：位于左侧应用图标与右侧 Applications 之间
+  ctx.strokeStyle = "rgba(109, 79, 194, 0.7)";
+  ctx.lineWidth = 5 * scale;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(220 * scale, 212 * scale);
+  ctx.quadraticCurveTo(270 * scale, 186 * scale, 320 * scale, 208 * scale);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(306 * scale, 194 * scale);
+  ctx.lineTo(322 * scale, 209 * scale);
+  ctx.lineTo(302 * scale, 216 * scale);
+  ctx.stroke();
+  return canvas.toBuffer("image/png");
+}
+
+writeFileSync(join(outDir, "dmg_background.png"), renderDmgBackground(1));
+writeFileSync(join(outDir, "dmg_background@2x.png"), renderDmgBackground(2));
+
 const appSizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 for (const size of appSizes) {
   // 小尺寸底板铺满，避免留白导致图标看起来过小

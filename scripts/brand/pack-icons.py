@@ -19,9 +19,14 @@ images = [Image.open(out / f"app-{size}.png") for size in ico_sizes]
 images[-1].save(out / "icon.ico", sizes=[(s, s) for s in ico_sizes], append_images=images[:-1])
 Image.open(out / "app-1024.png").save(out / "icon.icns")
 
-shutil.copyfile(out / "app-1024.png", build / "icon.png")
-shutil.copyfile(out / "icon.ico", build / "icon.ico")
-shutil.copyfile(out / "icon.icns", build / "icon.icns")
+for name in ["icon", "icon_installer"]:
+    shutil.copyfile(out / "app-1024.png", build / f"{name}.png")
+    shutil.copyfile(out / "icon.ico", build / f"{name}.ico")
+    shutil.copyfile(out / "icon.icns", build / f"{name}.icns")
+for name in ["icon_linux.png", "icon_windows.png"]:
+    shutil.copyfile(out / "app-1024.png", build / name)
+for name in ["dmg_background.png", "dmg_background@2x.png"]:
+    shutil.copyfile(out / name, build / name)
 for size in [16, 24, 32, 48, 64, 128, 256, 512, 1024]:
     shutil.copyfile(out / f"app-{size}.png", build / "icons" / f"{size}x{size}.png")
 print(f"packed icons into {build}")

@@ -1,4 +1,19 @@
-# ZCode 相关功能说明与第三方组件声明
+# nekcode 桌面端：修改声明、功能说明与第三方组件声明
+
+## 〇、修改声明
+
+nekcode 桌面端（nekcode-gui）是终端编程助手 nek 的图形界面，基于 ZCodium（<https://github.com/axiom-desu/ZCodium>，导入时的提交为 `406fc34f`，2026-10-24）修改而来。ZCodium 及其上游 ZCode 以 Apache License 2.0 发布，本项目继续以 Apache License 2.0 发布，原有版权与许可声明（`LICENSE`、本文件第四节、`THIRD-PARTY-NOTICES.md`、`third-party/`）均保留。
+
+主要修改：
+
+- agent 运行时改为外部的 nek CLI（`nek --mode rpc`），不再随附 ZCode 自带的 agent；
+- 删除了 Web 发行版、手机远控、bots、Computer Use、插件商店与 UI 插件、内嵌浏览器、工作流与自动化、白板等预览、官方账号与用量统计、ZCode 更新服务与遥测；
+- 设置中心改为直接读写 nek 的配置（`~/.nek/agent`）；
+- 产品名、图标与数据目录改为 nekcode（`~/.nek/gui`）。
+
+下文第一至三节沿用 ZCodium 的功能说明，其中涉及已删除功能的条目正在随裁剪工作逐步更新；描述与当前代码不一致时，以代码与 nek 文档为准。
+
+---
 
 本声明适用于本仓库公开的源码及其构建产物。各运行形态的功能、权限、存储位置和网络行为不同，不能将其中一种形态的默认设置理解为整个项目的统一设置。
 
