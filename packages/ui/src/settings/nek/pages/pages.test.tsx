@@ -182,3 +182,86 @@ describe("AccountsPage", () => {
     );
   });
 });
+
+describe("ToolsPage v2", () => {
+  it("lists the tools the host reports, including powershell being off by default", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const powershell = await screen.findByText("powershell");
+    const row = powershell.closest("label");
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain("默认关闭");
+    // 旧硬编码列表里的 todo_write 不再出现
+    expect(screen.queryByText("todo_write")).toBeNull();
+    await act(async () => {
+      fireEvent.click(within(row!).getByRole("checkbox"));
+    });
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.defaultTools).toEqual([
+        "+powershell",
+      ]),
+    );
+  });
+});
+
+describe("McpPage v2", () => {
+  it("shows the file each entry comes from", async () => {
+    render(<McpPage />, { wrapper: env.wrapper });
+    await screen.findByText("filesystem");
+    expect(
+      screen.getAllByText(`来源：${env.config.machines.get("local")!.mcp.path}`).length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe("AccountsPage v2", () => {
+  it("asks for a new sign-in when the token refresh failed", async () => {
+    const machine = env.config.machines.get("local")!;
+    machine.auth.set("anthropic", { ...machine.auth.get("anthropic")!, state: "refresh_failed" });
+    render(<AccountsPage />, { wrapper: env.wrapper });
+    expect(await screen.findByText(/刷新令牌失败/)).toBeDefined();
+    expect(screen.getByText(/需要重新登录/)).toBeDefined();
+  });
+});
+
+describe("ProviderFormDialog v2", () => {
+  it("clears a saved key with { remove: true } instead of an empty string", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    await screen.findByTitle("deepseek-chat");
+    fireEvent.click(screen.getByRole("button", { name: "编辑服务商" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(await within(dialog).findByRole("button", { name: "清除密钥" }));
+    expect(await within(dialog).findByText("保存后将删除已保存的密钥")).toBeDefined();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "保存服务商" }));
+    });
+    await waitFor(() =>
+      expect(
+        env.config.machines.get("local")?.models.value.find((item) => item.id === "deepseek")
+          ?.apiKey,
+      ).toBeUndefined(),
+    );
+  });
+
+  it("tests the edited configuration with the saved key", async () => {
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    await screen.findByTitle("deepseek-chat");
+    fireEvent.click(screen.getByRole("button", { name: "编辑服务商" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(await within(dialog).findByLabelText(/Base URL/), {
+      target: { value: "https://api.deepseek.com/v2" },
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "测试修改后的配置" }));
+    });
+    expect(await within(dialog).findByText(/连接正常/)).toBeDefined();
+  });
+});
+
+describe("target switcher", () => {
+  it("shows the machine host name next to the target", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    await screen.findByRole("switch", { name: "启用联网搜索" });
+    const trigger = await screen.findByRole("button", { name: /配置目标：/ });
+    expect(trigger.textContent).toContain("DESKTOP-NEK");
+  });
+});

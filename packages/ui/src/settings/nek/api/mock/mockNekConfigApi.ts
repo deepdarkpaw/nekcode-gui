@@ -3,152 +3,33 @@
  *
  * - 每个目标一份状态（`mockSeed.ts`）；未连接的远程目标上任何调用都抛 `not_connected`；
  * - 写入校验 revision，不一致抛 `conflict`；每次写入后异步触发 watch 事件；
- * - `simulateExternalEdit` 模拟终端里的 nek 或手工编辑修改了文件；
- * - `failNext` 让下一次调用某方法失败（测试回滚）。
+ * - 状态、事件与写盘包装在 `mockNekConfigApiBase.ts`；这里只实现 `INekConfigApi` 的方法。
  */
 import type {
   INekConfigApi,
-  NekConfigError,
   NekConfigTarget,
   NekMcpServerConfig,
-  NekSessionReloadOutcome,
   NekSettingsPatch,
 } from "@zcode/shared/nek-protocol";
-import type { NekConfigChange } from "../NekSettingsContext.js";
-import { MockLoginSimulator } from "./mockAuth.js";
-import { clone, mockError, nextRevision, type MockFile, type MockMachine } from "./mockMachine.js";
+import { MockEventHub } from "./mockEvents.js";
+import {
+  keyOf,
+  MockNekConfigApiBase,
+  type MockNekConfigApiOptions,
+} from "./mockNekConfigApiBase.js";
+import { mockError } from "./mockMachine.js";
 import * as mcp from "./mockMcp.js";
 import * as models from "./mockModels.js";
-import { createLocalMachine, createRemoteMachines, MOCK_BUILTIN_TOOLS } from "./mockSeed.js";
+import { MOCK_BUILTIN_TOOLS } from "./mockSeed.js";
 import * as settings from "./mockSettings.js";
 
-type WatchListener = (change: NekConfigChange) => void;
-type MockFileKind = "settings" | "models" | "mcp" | "yaml" | "instructions";
+export type { MockNekConfigApiOptions } from "./mockNekConfigApiBase.js";
 
-export interface MockNekConfigApiOptions {
-  /** 每次调用的模拟延迟（毫秒）；测试用 0。 */
-  latencyMs?: number;
-  deviceAutoCompleteMs?: number;
-  loginStepMs?: number;
-}
-
-function keyOf(target: NekConfigTarget): string {
-  return target.kind === "local" ? "local" : `remote:${target.connectionId}`;
-}
-
-export class MockNekConfigApi implements INekConfigApi {
-  readonly machines = new Map<string, MockMachine>();
-  readonly login: MockLoginSimulator;
-  private readonly watchers = new Map<string, Set<WatchListener>>();
-  private readonly reloadListeners = new Map<string, Set<(result: NekSessionReloadOutcome) => void>>();
-  private readonly failures = new Map<string, NekConfigError>();
-  private readonly latencyMs: number;
+export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfigApi {
+  private readonly copyFailures = new Map<string, string>();
 
   constructor(options: MockNekConfigApiOptions = {}) {
-    this.latencyMs = options.latencyMs ?? 0;
-    this.login = new MockLoginSimulator({
-      deviceAutoCompleteMs: options.deviceAutoCompleteMs ?? 8000,
-      stepMs: options.loginStepMs ?? 300,
-    });
-    for (const machine of [createLocalMachine(), ...createRemoteMachines()]) {
-      this.machines.set(keyOf(machine.info.target), machine);
-    }
-  }
-
-  // ---- mock 控制 ----
-
-  failNext(method: keyof INekConfigApi, error: NekConfigError): void {
-    this.failures.set(method, error);
-  }
-
-  setConnected(target: NekConfigTarget, connected: boolean): void {
-    const machine = this.machines.get(keyOf(target));
-    if (machine) {
-      machine.info = {
-        ...machine.info,
-        connected,
-        nek: connected
-          ? { state: "ready", version: "0.4.0", agentDir: machine.agentDir }
-          : { state: "unknown" },
-      };
-    }
-  }
-
-  /** 模拟外部修改：改动文件内容并触发 watch。 */
-  simulateExternalEdit(
-    target: NekConfigTarget,
-    kind: MockFileKind,
-    mutate?: (value: never) => unknown,
-  ): string {
-    const machine = this.machineOf(target);
-    const file = this.fileOfKind(machine, kind);
-    if (mutate) {
-      file.value = mutate(file.value as never);
-    }
-    return this.touchFor(target)(file);
-  }
-
-  machineOf(target: NekConfigTarget): MockMachine {
-    const machine = this.machines.get(keyOf(target));
-    if (!machine) {
-      throw mockError("not_connected", `Unknown target ${keyOf(target)}`);
-    }
-    if (!machine.info.connected) {
-      throw mockError("not_connected", `${machine.info.label} is not connected`);
-    }
-    return machine;
-  }
-
-  private fileOfKind(machine: MockMachine, kind: MockFileKind): MockFile<unknown> {
-    const files: Record<MockFileKind, MockFile<unknown>> = {
-      settings: machine.settings,
-      models: machine.models,
-      mcp: machine.mcp,
-      yaml: machine.yaml,
-      instructions: machine.instructions,
-    };
-    return files[kind];
-  }
-
-  private touchFor(target: NekConfigTarget): models.Touch {
-    const agentDir = this.machineOf(target).agentDir;
-    return (file) => {
-      file.revision = nextRevision();
-      const change: NekConfigChange = {
-        file: file.path,
-        revision: file.revision,
-        // `~/.nek/agent/**` 是全局；`<cwd>/.nek/**`、`<cwd>/AGENTS.md` 是项目。
-        scope: file.path.startsWith(`${agentDir}/`) ? "global" : "project",
-      };
-      setTimeout(() => {
-        for (const listener of this.watchers.get(keyOf(target)) ?? []) {
-          listener(change);
-        }
-      }, 0);
-      return file.revision;
-    };
-  }
-
-  private async call<T>(method: keyof INekConfigApi, run: () => T): Promise<T> {
-    if (this.latencyMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
-    }
-    const failure = this.failures.get(method);
-    if (failure) {
-      this.failures.delete(method);
-      throw failure;
-    }
-    return clone(run());
-  }
-
-  private write(
-    target: NekConfigTarget,
-    method: keyof INekConfigApi,
-    run: (machine: MockMachine, touch: models.Touch) => string,
-  ) {
-    return this.call(method, () => ({
-      revision: run(this.machineOf(target), this.touchFor(target)),
-    }));
+    super(new MockEventHub(), options);
   }
 
   // ---- 目标 ----
@@ -430,44 +311,12 @@ export class MockNekConfigApi implements INekConfigApi {
       return { reloaded: 1, deferred: 1, diagnostics: [], failures: [] };
     });
 
-  onReloadResult: INekConfigApi["onReloadResult"] = (target, listener) => {
-    const key = keyOf(target);
-    const set = this.reloadListeners.get(key) ?? new Set();
-    set.add(listener);
-    this.reloadListeners.set(key, set);
-    return () => {
-      set.delete(listener);
-    };
-  };
-
-  /** 模拟写盘后的自动 reload 结果（含进程级失败）。 */
-  simulateReloadResult(
-    target: NekConfigTarget,
-    result: Pick<NekSessionReloadOutcome, "failures"> &
-      Partial<Omit<NekSessionReloadOutcome, "failures">>,
-  ): void {
-    const full: NekSessionReloadOutcome = {
-      reloaded: result.reloaded ?? 1,
-      deferred: result.deferred ?? 0,
-      diagnostics: result.diagnostics ?? [],
-      failures: result.failures,
-    };
-    for (const listener of this.reloadListeners.get(keyOf(target)) ?? []) {
-      listener(full);
-    }
-  }
+  onReloadResult: INekConfigApi["onReloadResult"] = (target, listener) =>
+    this.events.onReload(keyOf(target), listener);
 
   // ---- 外部修改 ----
 
-  watch: INekConfigApi["watch"] = (target, listener) => {
-    const key = keyOf(target);
-    const set = this.watchers.get(key) ?? new Set<WatchListener>();
-    set.add(listener);
-    this.watchers.set(key, set);
-    return () => {
-      set.delete(listener);
-    };
-  };
+  watch: INekConfigApi["watch"] = (target, listener) => this.events.watch(keyOf(target), listener);
 
   // ---- 复制到远程 ----
 
@@ -477,13 +326,21 @@ export class MockNekConfigApi implements INekConfigApi {
     );
 
   copy: INekConfigApi["copy"] = (from, to, selection, resolution) =>
-    this.call("copy", () =>
-      settings.copy(
+    this.call("copy", () => {
+      const failures = new Map(this.copyFailures);
+      this.copyFailures.clear();
+      return settings.copy(
         this.machineOf(from),
         this.machineOf(to),
         selection,
         resolution,
         this.touchFor(to),
-      ),
-    );
+        (key) => failures.get(key),
+      );
+    });
+
+  /** 让下一次 `copy` 的指定项以 `status:"failed"` 返回（键是 `<kind>:<id>`）。 */
+  failCopyItem(key: string, message: string): void {
+    this.copyFailures.set(key, message);
+  }
 }

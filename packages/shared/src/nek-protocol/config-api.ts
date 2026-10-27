@@ -11,7 +11,6 @@
  */
 import type {
   NekAgentPreset,
-  NekAgentPresetEntry,
   NekAgentPresetsView,
   NekBuiltinTool,
   NekConfigRevision,

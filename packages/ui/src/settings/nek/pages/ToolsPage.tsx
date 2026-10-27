@@ -239,8 +239,6 @@ function WebSearchSection({
 
 export function ToolsPage() {
   const { intl } = useZCodeIntl();
-  const api = useNekConfigApi();
-  const { target } = useNekTarget();
   const settings = useNekSettingsDoc();
   const tools = useNekQuery((config, current) => config.listBuiltinTools(current), []);
   return (

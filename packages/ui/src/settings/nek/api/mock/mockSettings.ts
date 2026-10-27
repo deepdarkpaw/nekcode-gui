@@ -3,7 +3,6 @@
  */
 import type {
   NekAgentPreset,
-  NekAgentPresetEntry,
   NekAgentPresetsView,
   NekConfigScope,
   NekCopyItemResult,
@@ -308,11 +307,18 @@ export function copy(
   selection: NekCopySelection,
   resolution: NekCopyResolution,
   touch: Touch,
+  /** 让指定项失败（测试逐项结果用）。 */
+  failItem: (key: string) => string | undefined = () => undefined,
 ): NekCopyResult {
   const preview = previewCopy(from, to, selection);
   const items: NekCopyItemResult[] = [];
   for (const item of preview.items) {
     const key = copyKey(item.kind, item.id);
+    const forced = failItem(key);
+    if (forced !== undefined) {
+      items.push({ key, status: "failed", error: forced });
+      continue;
+    }
     if (item.conflict && resolution[key] !== "overwrite") {
       items.push({ key, status: "skipped" });
       continue;
