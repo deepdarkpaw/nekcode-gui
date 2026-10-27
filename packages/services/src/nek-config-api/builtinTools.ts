@@ -1,7 +1,7 @@
 /**
  * nek 内置工具镜像（`listBuiltinTools` 的数据源）。
  *
- * 来源：nek `packages/coding-agent/src/core/tool-names.ts`（v0.4.0）里的
+ * 来源：nek `packages/coding-agent/src/core/tool-names.ts`（v0.3.2 + `gui/rpc-v1` 分支）里的
  * `ToolName` / `allToolNames` / `DEFAULT_ACTIVE_TOOL_NAMES`。
  *
  * 为什么在 host 侧维护：nek 的 GUI RPC 没有 `list_builtin_tools`，`get_info` 也不返回工具目录，
