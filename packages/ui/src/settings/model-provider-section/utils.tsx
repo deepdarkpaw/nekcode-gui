@@ -8,10 +8,6 @@ export function createPresetProviderNodeKey(id: BuiltinModelProviderId): string 
   return `preset:${id}`;
 }
 
-export function createCodingPlanProviderNodeKey(id: BuiltinModelProviderId): string {
-  return `coding-plan:${id}`;
-}
-
 export function createCustomProviderNodeKey(id: string): string {
   return `custom:${id}`;
 }
