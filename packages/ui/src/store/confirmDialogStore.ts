@@ -5,8 +5,6 @@ export interface ConfirmDialogRequest {
   title: string;
   testId?: string;
   description?: string;
-  /** 特定业务弹框的稳定视觉规范；默认确认框不受影响。 */
-  presentation?: "automation-confirmation";
   confirmLabel?: string;
   cancelLabel?: string;
   confirmVariant?: "default" | "destructive";
