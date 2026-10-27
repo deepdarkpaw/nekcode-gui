@@ -21,7 +21,7 @@ const meta = {
   workspacePath: "/example/workspace",
   createdAt: 1,
   updatedAt: 2,
-  mode: "build",
+  mode: "agent",
   provider: "glm",
 };
 
