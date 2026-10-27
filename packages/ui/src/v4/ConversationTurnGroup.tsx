@@ -602,19 +602,9 @@ function ConversationTurnFlow({
  *
  * 这里刻意仍是白名单而不是直接信任 schema：`originMeta` 在 userInputRow 上是 optional，
  * 跨版本仍可能出现第四个取值，而没见过的来源拿不到合适的标题语义，退回普通 assistant
- * 分支比谎报一个标题好。
- *
- * workflow run 的 `backgroundSource` 是 `"workflow"`（CLI 侧
- * `background-tasks.ts` 在 CreateWorkflow 终态上报，title 由 `workflowTaskSubject` 铸造），
- * 原本落在白名单外，于是一条 run 跑完之后那一轮**既没有标题、也退化成按工时折叠的普通
- * assistant 段落**——后台结果分组整个消失。标题不需要本地化：它由 CLI 权威给出，
- * bash / subagent 同样直接透传。
+ * 分支比谎报一个标题好。标题不需要本地化：它由 agent 权威给出，直接透传。
  */
-const BACKGROUND_RESULT_TITLE_SOURCES: ReadonlySet<string> = new Set([
-  "bash",
-  "subagent",
-  "workflow",
-]);
+const BACKGROUND_RESULT_TITLE_SOURCES: ReadonlySet<string> = new Set(["bash", "subagent"]);
 
 function resolveBackgroundResultTitle(unit: ConversationTurnRenderUnit): string | undefined {
   if (unit.header?.origin !== "backgroundResult") return undefined;
@@ -674,87 +664,16 @@ function ConversationBackgroundResultWork({
 
   // 后台结果已经由独立唤醒轮总结过；复用普通 assistant 的工时折叠
   // 会显示不准确的分段耗时，并让一段短总结产生没有意义的收起状态。
-  //
-  // workflow run 的 workflow 通知带结构化载荷时改渲染既有工具卡语法的通知行（替换裸标题行）；
-  // 载荷缺席（批量轮、旧 transcript、bash/subagent）→ 原样退回标题行。
-  const workflowNotification = resolveWorkflowNotification(unit);
-  const workflowRunId = unit.header?.originMeta?.workId;
-  // 打开 run 详情：宿主注入 onOpenWorkflowRun + 联查到 toolCallId 才可点；冷恢复查不到时
-  // 展开体内不渲染链接。toolCallId 走投影/journal 联查表，与 CreateWorkflow 工具卡同一条打开路径。
-  const workflowRunSummary =
-    workflowNotification && workflowRunId
-      ? context.workflowRunByRunId?.get(workflowRunId)
-      : undefined;
-  const openRequest = workflowNotificationOpenRequest({
-    ...(context.sessionId == null ? {} : { parentSessionId: context.sessionId }),
-    ...(workflowRunId === undefined ? {} : { runId: workflowRunId }),
-    ...(workflowRunSummary?.toolCallId === undefined
-      ? {}
-      : { toolCallId: workflowRunSummary.toolCallId }),
-    workflowName: title,
-  });
-  const openWorkflowRun =
-    context.onOpenWorkflowRun && openRequest
-      ? () => context.onOpenWorkflowRun?.(openRequest)
-      : undefined;
-  // 复用现有 focusPhaseId→展开/scrollIntoView 路径，siteId 不可只显示在 toast 中。
-  const locateWorkflowHole =
-    context.onOpenWorkflowRun && openRequest
-      ? (siteId: string) => context.onOpenWorkflowRun?.({ ...openRequest, phaseId: siteId })
-      : undefined;
-  const workflowPendingQids =
-    workflowNotification && workflowRunId
-      ? context.workflowRunPendingQuestionsByRunId?.get(workflowRunId)
-      : undefined;
-  // 产物 chip → 全尺寸查看 tab。门比 `openWorkflowRun` 松一格：产物 tab 只需要
-  // (parentSessionId, runId, artifactId)，**不需要** toolCallId——它不画因果图，也就不必
-  // 回到那条 CreateWorkflow 工具行。冷恢复后联查不到 toolCallId 的通知行因此仍能开产物。
-  const openWorkflowArtifact =
-    workflowNotification && workflowRunId && context.onOpenWorkflowArtifact && context.sessionId
-      ? (artifactId: string) => {
-          // 载荷里那一枚的 `contentType`（终态通知才有产物清单）：宿主据它决定 html 产物
-          // 直接开浏览器 tab 还是开产物 tab，所以这里带得到就带上。载荷刻意不带 `sourcePath`
-          // （状态帧体积），宿主缺席时自己查 journal 补。
-          const contentType =
-            workflowNotification.kind === "terminal"
-              ? workflowNotification.artifacts?.find((candidate) => candidate.id === artifactId)
-                  ?.contentType
-              : undefined;
-          context.onOpenWorkflowArtifact?.({
-            parentSessionId: context.sessionId!,
-            runId: workflowRunId,
-            artifactId,
-            ...(contentType === undefined ? {} : { contentType }),
-          });
-        }
-      : undefined;
-
   return (
     <div className="flex flex-col gap-5">
-      {workflowNotification ? (
-        <WorkflowNotificationToolRow
-          notification={workflowNotification}
-          runName={title}
-          testIdKey={unit.key}
-          theme={context.theme}
-          onOpenRun={openWorkflowRun}
-          onOpenArtifact={openWorkflowArtifact}
-          pendingQids={workflowPendingQids}
-          {...(workflowRunSummary?.run === undefined
-            ? {}
-            : { holes: workflowRunSummary.run.holes ?? [] })}
-          {...(locateWorkflowHole === undefined ? {} : { onLocateHole: locateWorkflowHole })}
-        />
-      ) : (
-        <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
-          <div
-            data-testid={testId(TID_CHAT_BACKGROUND_RESULT_TITLE, unit.key)}
-            className="min-w-0 whitespace-pre-wrap break-words text-left text-ui-base text-[var(--color-foreground-subtle)]"
-          >
-            {title}
-          </div>
+      <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
+        <div
+          data-testid={testId(TID_CHAT_BACKGROUND_RESULT_TITLE, unit.key)}
+          className="min-w-0 whitespace-pre-wrap break-words text-left text-ui-base text-[var(--color-foreground-subtle)]"
+        >
+          {title}
         </div>
-      )}
+      </div>
       {hasHistory ? (
         <div className="flex flex-col gap-2">
           <ConversationAssistantWorkItems
