@@ -30,6 +30,12 @@ export {
   type SSHJumpClientFactory,
 } from "./sshConfig.js";
 export {
+  RemoteReconnectStateMachine,
+  type ReconnectClock,
+  type RemoteReconnectOptions,
+  type RemoteReconnectState,
+} from "./reconnectStateMachine.js";
+export {
   acquireRemoteDeployLock,
   buildRemoteDeployLockScript,
   REMOTE_DEPLOY_LOCK_DIR,
