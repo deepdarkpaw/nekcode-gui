@@ -31,6 +31,7 @@ import type {
   NekProviderReferences,
   NekProviderRenamePreview,
   NekProviderWrite,
+  NekSessionReloadOutcome,
   NekSettingsPatch,
   NekSettingsReadResult,
   NekYamlPatch,
@@ -254,22 +255,11 @@ export interface INekConfigApi {
   // ---- 校验与重载 ----
   validate(target: NekConfigTarget, cwd?: string): Promise<NekConfigDiagnostic[]>;
   /** 写入后由实现自动调用；也供"重新载入"按钮使用。返回仍需等待本轮结束的会话数。 */
-  reloadRunningSessions(
-    target: NekConfigTarget,
-  ): Promise<{
-    reloaded: number;
-    deferred: number;
-    diagnostics: NekConfigDiagnostic[];
-    failures: Array<{ sessionKey: string; message: string }>;
-  }>;
+  reloadRunningSessions(target: NekConfigTarget): Promise<NekSessionReloadOutcome>;
+  /** 写入后的自动 reload 结果（含进程级失败）；返回取消订阅函数。 */
   onReloadResult(
     target: NekConfigTarget,
-    listener: (result: {
-      reloaded: number;
-      deferred: number;
-      diagnostics: NekConfigDiagnostic[];
-      failures: Array<{ sessionKey: string; message: string }>;
-    }) => void,
+    listener: (result: NekSessionReloadOutcome) => void,
   ): () => void;
 
   // ---- 外部修改 ----

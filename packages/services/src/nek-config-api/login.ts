@@ -13,6 +13,7 @@
 import type {
   NekAuthPromptPayload,
   NekAuthProviderStatus,
+  NekAuthProviderStatusWire,
   NekConfigTarget,
   NekLoginEvent,
   NekLoginSession,
@@ -28,6 +29,25 @@ export const LOGIN_CALLBACK_PORTS: Readonly<Record<string, number>> = {
   anthropic: 53692,
   "openai-codex": 1455,
 };
+
+/**
+ * `auth_status` 的线上形状 → 契约的 `state`。
+ *
+ * nek 只给 `kind` 与 `expiresAt`：
+ * - `oauth` 且已过期 → `expired`（用户需要重新登录）；
+ * - `oauth` 未过期 / 非 oauth → `ok`；
+ * - `refresh_failed` 目前没有来源（nek 不暴露刷新结果），见报告里的 nek 侧缺项。
+ */
+function normalizeAuthStatus(
+  status: NekAuthProviderStatusWire,
+): NekAuthProviderStatus {
+  if (status.state) return { ...status, state: status.state };
+  const expired =
+    status.kind === "oauth" &&
+    typeof status.expiresAt === "string" &&
+    Date.parse(status.expiresAt) <= Date.now();
+  return { ...status, state: expired ? "expired" : "ok" };
+}
 
 const MAX_RUNS = 16;
 const MAX_EVENTS = 200;
@@ -72,14 +92,7 @@ export class NekLoginManager {
   async authStatus(target: NekConfigTarget): Promise<NekAuthProviderStatus[]> {
     const control = await this.options.control(target);
     const data = await control.call({ type: "auth_status" });
-    return data.providers.map((status) => ({
-      ...status,
-      state:
-        status.state ??
-        (status.kind === "oauth" && status.expiresAt && Date.parse(status.expiresAt) <= Date.now()
-          ? "expired"
-          : "ok"),
-    }));
+    return data.providers.map(normalizeAuthStatus);
   }
 
   async logout(target: NekConfigTarget, provider: string): Promise<void> {

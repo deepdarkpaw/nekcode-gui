@@ -164,7 +164,7 @@ test("copy logs in on the target machine instead of moving credentials", async (
   );
 });
 
-test("copy fails with a clear message when the login needs user input on the target", async () => {
+test("copy reports a failed item when the login needs user input on the target", async () => {
   const control = new FakeControlClient();
   const harness = baseHarness();
   harness.useControl(control);
@@ -185,11 +185,12 @@ test("copy fails with a clear message when the login needs user input on the tar
       payload: { provider: "anthropic", prompt: { type: "manual_code", message: "code" } },
     });
   }, 0);
-  const error = await expectNekError(
-    async () => await harness.api.copy(LOCAL, REMOTE, withLogin, {}),
-    "validation",
-  );
-  assert.match(error.message, /requires user input/);
+  const result = await harness.api.copy(LOCAL, REMOTE, withLogin, {});
+  assert.equal(result.items.length, 1);
+  const item = result.items[0];
+  assert.equal(item?.key, "login:anthropic");
+  assert.equal(item?.status, "failed");
+  assert.match(item?.error ?? "", /requires user input/);
 });
 
 test("copying onto the same target is rejected", async () => {

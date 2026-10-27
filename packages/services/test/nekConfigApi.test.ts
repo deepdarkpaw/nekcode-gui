@@ -517,7 +517,8 @@ Review the changes.
 `,
     },
   });
-  const list = await harness.api.listAgentPresets(LOCAL);
+  const view = await harness.api.listAgentPresets(LOCAL);
+  const list = view.entries;
   const builtin = list.filter((entry) => entry.source === "builtin");
   assert.equal(builtin.length, 2, "builtin presets are listed");
   assert.equal(
@@ -548,7 +549,7 @@ Review the changes.
   assert.match(text, /custom: keep/, "unknown frontmatter keys are preserved");
   assert.match(text, /Review the changes\./);
 
-  const reviewerRevision = (await harness.api.listAgentPresets(LOCAL)).find(
+  const reviewerRevision = (await harness.api.listAgentPresets(LOCAL)).entries.find(
     (entry) => entry.preset.name === "reviewer",
   )?.revision;
   assert.ok(reviewerRevision);
@@ -580,7 +581,7 @@ Review the changes.
     "validation",
   );
   const current = await harness.api.listAgentPresets(LOCAL);
-  const target = current.find((entry) => entry.preset.name === "diff-reviewer");
+  const target = current.entries.find((entry) => entry.preset.name === "diff-reviewer");
   assert.ok(target);
   await harness.api.deleteAgentPreset(LOCAL, "global", "diff-reviewer", {
     revision: target.revision,

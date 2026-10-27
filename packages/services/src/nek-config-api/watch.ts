@@ -211,7 +211,13 @@ export class NekWatchHub {
       });
     }
     for (const file of state.episodes.keys()) {
-      if (!scanned.has(file)) changes.push({ file, revision: ABSENT_REVISION });
+      if (!scanned.has(file)) {
+        changes.push({
+          file,
+          revision: ABSENT_REVISION,
+          scope: this.scopeOfFile(state.target, file),
+        });
+      }
     }
     state.episodes = scanned;
     for (const change of changes) this.emit(state.target.key, change);
@@ -243,15 +249,17 @@ export class NekWatchHub {
     return result;
   }
 
+  /** 文件属于哪个作用域：项目目录优先，其次全局目录；都不匹配时按项目处理（项目目录已被移除）。 */
   private scopeOfFile(target: NekWatchTarget, file: string): NekConfigScope {
     const normalized = file.replaceAll("\\", "/");
-    const project = target.dirs.find(
-      (dir) =>
-        dir.scope === "project" &&
-        (normalized === dir.path.replaceAll("\\", "/") ||
-          normalized.startsWith(`${dir.path.replaceAll("\\", "/")}/`)),
-    );
-    return project ? "project" : "global";
+    const under = (dir: { path: string }) => {
+      const path = dir.path.replaceAll("\\", "/");
+      return normalized === path || normalized.startsWith(`${path}/`);
+    };
+    const project = target.dirs.some((dir) => dir.scope === "project" && under(dir));
+    if (project) return "project";
+    const global = target.dirs.some((dir) => dir.scope === "global" && under(dir));
+    return global ? "global" : "project";
   }
 
   /** 目录下的候选文件：已知配置文件名 + `agents/*.md`。 */

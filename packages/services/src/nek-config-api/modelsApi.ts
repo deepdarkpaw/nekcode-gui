@@ -183,6 +183,10 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
   };
 
   return {
+    /**
+     * models.json 只有全局一份（`<agentDir>/models.json`），所以 `cwd` 不影响结果；
+     * 参数与其它 models 方法保持一致，界面一律传当前工作区目录。
+     */
     readModelsConfig: async (target, _cwd) => {
       const snapshot = await readSnapshot(target);
       return {

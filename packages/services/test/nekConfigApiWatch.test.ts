@@ -111,7 +111,7 @@ test("reload reaches every process and counts busy sessions as deferred", async 
   assert.deepEqual(outcome.diagnostics, []);
 });
 
-test("reload reports a failing session as a diagnostic instead of throwing", async () => {
+test("reload reports a failing session as a process failure instead of throwing", async () => {
   const harness = createHarness({ localFiles: { [SETTINGS_PATH]: "{}" } });
   harness.sessions.push(
     session({
@@ -123,9 +123,10 @@ test("reload reports a failing session as a diagnostic instead of throwing", asy
   );
   const outcome = await harness.api.reloadRunningSessions(LOCAL);
   assert.equal(outcome.reloaded, 0);
-  assert.equal(outcome.diagnostics.length, 1);
-  assert.match(outcome.diagnostics[0]?.message ?? "", /stdin closed/);
-  assert.equal(outcome.diagnostics[0]?.severity, "error");
+  assert.deepEqual(outcome.diagnostics, []);
+  assert.equal(outcome.failures.length, 1);
+  assert.equal(outcome.failures[0]?.sessionKey, "crashed");
+  assert.match(outcome.failures[0]?.message ?? "", /stdin closed/);
 });
 
 test("auto reload runs once after each write and can be turned off", async () => {

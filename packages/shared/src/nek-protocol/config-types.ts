@@ -339,6 +339,7 @@ export type NekCopyItemStatus = "copied" | "skipped" | "failed";
 export interface NekCopyItemResult {
   key: string;
   status: NekCopyItemStatus;
+  /** `failed` 时是失败原因；`skipped` 时是跳过原因（可选）。 */
   error?: string;
 }
 
@@ -349,6 +350,22 @@ export interface NekCopyResult {
 export interface NekBuiltinTool {
   name: string;
   description?: string;
+  /** nek 的 `DEFAULT_ACTIVE_TOOL_NAMES` 里包含该工具（新会话默认启用）。 */
+  defaultActive: boolean;
+}
+
+/**
+ * 写配置后让运行中的 nek 进程重新载入的结果。
+ *
+ * `failures` 是进程级失败（进程起不来、RPC 超时……）：它不影响其他进程的 reload，
+ * 但必须显示给用户并可重试，所以和"配置诊断"分开。
+ */
+export interface NekSessionReloadOutcome {
+  reloaded: number;
+  /** 当前回合未结束，已排队到回合结束后生效。 */
+  deferred: number;
+  diagnostics: NekConfigDiagnostic[];
+  failures: Array<{ sessionKey: string; message: string }>;
 }
 
 export interface NekHostFingerprint {

@@ -11,6 +11,7 @@ import type {
   NekRpcCommandOfType,
   NekRpcCommandType,
   NekRpcResponseDataFor,
+  NekSessionReloadOutcome,
 } from "@zcode/shared/nek-protocol";
 import type { NekControlClient } from "./control.js";
 import { createNekControlClient } from "./control.js";
@@ -98,12 +99,7 @@ export interface NekTargetContext {
   layout: { agentDir: string };
 }
 
-export interface NekReloadOutcome {
-  reloaded: number;
-  deferred: number;
-  diagnostics: NekConfigDiagnostic[];
-  failures: Array<{ sessionKey: string; message: string }>;
-}
+export type NekReloadOutcome = NekSessionReloadOutcome;
 
 export function targetKeyOf(target: NekConfigTarget): string {
   return target.kind === "local" ? "local" : `remote:${target.connectionId}`;

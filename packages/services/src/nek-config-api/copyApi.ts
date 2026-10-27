@@ -4,9 +4,12 @@
  * 冲突处理：调用方先 `previewCopy`，再按项给出 `overwrite` / `skip`（键是 `<kind>:<id>`）。
  * 没有给出决议的冲突项一律跳过 —— "覆盖"必须由用户显式选择。
  *
+ * 逐项结果：`copy` 不再中途抛错，而是返回 `{items:[{key,status,error?}]}`，
+ * 让界面能显示"哪一项成功、哪一项失败、为什么失败"，失败项可以单独重试。
+ *
  * OAuth 登录不写 `auth.json`：契约要求只能经 `auth_*` RPC。所以登录项是在**目标机器**上
- * 重新发起一次 OAuth；如果那台机器需要用户在浏览器里点确认或粘贴授权码，`copy` 会失败并
- * 提示用户去目标机器单独登录（刷新令牌不搬家，避免两台机器互相踢下线）。
+ * 重新发起一次 OAuth；如果那台机器需要用户在浏览器里点确认或粘贴授权码，这一项会以
+ * `status: "failed"` 返回，提示用户去目标机器单独登录（刷新令牌不搬家，避免两台机器互相踢下线）。
  */
 import type {
   NekConfigTarget,
@@ -168,18 +171,20 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
           } else if (sourceSettings.raw.compaction !== undefined) {
             patch.compaction = sourceSettings.raw.compaction;
           }
-          if (Object.keys(patch).length > 0) {
-            const targetSettings = await settingsOf(to);
-            const target = runtime.target(to);
-            written.push(
-              await patchSettingsDocument({
-                executor: target.executor,
-                path: settingsPath(target.layout, "global"),
-                patch,
-                expectedRevision: targetSettings.revision,
-              }),
-            );
+          if (Object.keys(patch).length === 0) {
+            results.push({ key, status: "skipped", error: "the source has nothing to copy" });
+            continue;
           }
+          const targetSettings = await settingsOf(to);
+          const target = runtime.target(to);
+          written.push(
+            await patchSettingsDocument({
+              executor: target.executor,
+              path: settingsPath(target.layout, "global"),
+              patch,
+              expectedRevision: targetSettings.revision,
+            }),
+          );
         } else {
           await runtime.login.runToCompletion(to, item.id);
         }

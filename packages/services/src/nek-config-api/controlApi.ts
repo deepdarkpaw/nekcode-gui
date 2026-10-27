@@ -21,7 +21,7 @@ import type {
 import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import type { NekModel } from "@zcode/shared/nek-protocol";
 import type { NekConfigRuntime } from "./runtime.js";
-import { NEK_BUILTIN_TOOLS } from "./builtinTools.js";
+import { listBuiltinTools } from "./builtinTools.js";
 import { validationError } from "./errors.js";
 import { readModelsSnapshot } from "./modelsDocument.js";
 import { modelsPath } from "./paths.js";
@@ -85,11 +85,21 @@ export function toCatalogModel(model: NekModel): NekCatalogModel {
   };
 }
 
+/**
+ * 请求来源 → nek 命令参数。
+ *
+ * 两种参数共用 `providerId`：没有 `draft` 时直接用已保存的 provider；有 `draft` 时
+ * 用**已保存的 apiKey**（草稿里没写就取 saved 值）加草稿里的其他字段，这样"改了 baseUrl /
+ * headers 但没重新输入密钥"也能测试。草稿里的 apiKey 优先，支持 `$ENV` / `!command`。
+ */
 async function sourceCommand(
   runtime: NekConfigRuntime,
   target: NekConfigTarget,
   source: ProviderSource,
 ): Promise<{ providerId: string } | { draft: NekProviderDraft }> {
+  if (source.providerId.trim() === "") {
+    throw validationError("providerId is required", { providerId: "required" });
+  }
   if (!source.draft) return { providerId: source.providerId };
   const context = runtime.target(target);
   const snapshot = await readModelsSnapshot(context.executor, modelsPath(context.layout));
@@ -97,20 +107,31 @@ async function sourceCommand(
   if (!provider) {
     throw validationError(`unknown provider "${source.providerId}"`, { providerId: "unknown" });
   }
+  const savedKey = typeof provider.apiKey === "string" ? provider.apiKey : undefined;
+  const apiKey = source.draft.apiKey ?? savedKey;
+  const headers = source.draft.headers ?? asHeaders(provider.headers);
+  const authHeader = source.draft.authHeader ?? asBoolean(provider.authHeader);
   return {
     draft: {
-      ...source.draft,
       api: source.draft.api ?? (provider.api as NekProviderDraft["api"]),
       baseUrl: source.draft.baseUrl ?? String(provider.baseUrl ?? ""),
-      apiKey: source.draft.apiKey ?? (typeof provider.apiKey === "string" ? provider.apiKey : undefined),
-      headers: source.draft.headers ??
-        (provider.headers && typeof provider.headers === "object"
-          ? (provider.headers as Record<string, string>)
-          : undefined),
-      authHeader: source.draft.authHeader ??
-        (typeof provider.authHeader === "boolean" ? provider.authHeader : undefined),
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(headers === undefined ? {} : { headers }),
+      ...(authHeader === undefined ? {} : { authHeader }),
     },
   };
+}
+
+function asHeaders(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
@@ -133,7 +154,7 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
 
     listBuiltinTools: async (target) => {
       runtime.target(target);
-      return NEK_BUILTIN_TOOLS.map((tool) => ({ ...tool }));
+      return listBuiltinTools();
     },
 
     fetchProviderModels: async (target, source) => {
