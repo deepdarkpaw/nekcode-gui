@@ -37,10 +37,7 @@ test("local-only source pins identity, materializes once per transaction and cle
   assert.equal(manifest.components.length, 6);
   const [a, b] = await Promise.all([source.resolveReleaseDir(), source.resolveReleaseDir()]);
   assert.equal(a, b);
-  assert.equal(
-    await readFile(join(a, "glm/linux-x64/packages/node-repl-host/dist/mcp/server.js"), "utf8"),
-    "fixture",
-  );
+  assert.equal(await readFile(join(a, "node/linux-x64/node"), "utf8"), "fixture");
   if (process.platform !== "win32")
     assert.ok((await stat(join(a, "node/linux-x64/node"))).mode & 0o111);
   await source.dispose();
