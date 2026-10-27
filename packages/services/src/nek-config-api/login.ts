@@ -11,7 +11,6 @@
  * `auth_event` → `{type:"auth_event"}`；RPC 结果 → `done` / `failed`。
  */
 import type {
-  NekAuthEventRecord,
   NekAuthPromptPayload,
   NekAuthProviderStatus,
   NekConfigTarget,
@@ -131,7 +130,8 @@ export class NekLoginManager {
   /** 答复登录提示：`promptId` 就是 nek 侧 structured 请求的 id。 */
   async answer(loginId: string, promptId: string, value: string): Promise<void> {
     const run = this.runs.get(loginId);
-    if (!run || run.finished) throw validationError(`login ${loginId} is not active`, { loginId: "not active" });
+    if (!run || run.finished)
+      throw validationError(`login ${loginId} is not active`, { loginId: "not active" });
     const pending = run.prompts.get(promptId);
     if (!pending) {
       throw validationError(`login ${loginId} has no pending prompt ${promptId}`, {
@@ -157,7 +157,10 @@ export class NekLoginManager {
     if (prompts.length === 0) {
       // 没有待答复的提示时，nek 侧还在等浏览器回调；只能中断进程才算真的取消。
       await this.options.abort?.(run.target).catch((error: unknown) => {
-        this.options.logger?.warn("failed to abort the control process after cancelling a login", error);
+        this.options.logger?.warn(
+          "failed to abort the control process after cancelling a login",
+          error,
+        );
       });
     }
   }
@@ -183,7 +186,11 @@ export class NekLoginManager {
           resolve();
         } else if (event.type === "failed") {
           detach();
-          reject(validationError(`login ${provider} failed: ${event.message}`, { provider: "login failed" }));
+          reject(
+            validationError(`login ${provider} failed: ${event.message}`, {
+              provider: "login failed",
+            }),
+          );
         } else if (event.type === "cancelled") {
           detach();
           reject(validationError(`login ${provider} was cancelled`, { provider: "cancelled" }));
@@ -293,5 +300,3 @@ export class NekLoginManager {
     }
   }
 }
-
-export type { NekAuthEventRecord };

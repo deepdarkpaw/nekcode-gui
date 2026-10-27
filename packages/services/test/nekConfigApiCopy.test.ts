@@ -38,11 +38,23 @@ function baseHarness() {
     localFiles: {
       [localModels]: JSON.stringify({
         providers: {
-          "local-proxy": { name: "Local", api: "openai-completions", baseUrl: "http://local", models: [] },
-          shared: { name: "Shared from local", api: "openai-completions", baseUrl: "http://shared", models: [] },
+          "local-proxy": {
+            name: "Local",
+            api: "openai-completions",
+            baseUrl: "http://local",
+            models: [],
+          },
+          shared: {
+            name: "Shared from local",
+            api: "openai-completions",
+            baseUrl: "http://shared",
+            models: [],
+          },
         },
       }),
-      [localMcp]: JSON.stringify({ mcpServers: { filesystem: { command: "npx", args: ["-y", "fs"] } } }),
+      [localMcp]: JSON.stringify({
+        mcpServers: { filesystem: { command: "npx", args: ["-y", "fs"] } },
+      }),
       [localSettings]: JSON.stringify({
         defaultProvider: "local-proxy",
         defaultModel: "local-proxy/qwen",
@@ -53,11 +65,19 @@ function baseHarness() {
     remoteFiles: {
       [remoteModels]: JSON.stringify({
         providers: {
-          shared: { name: "Shared from remote", api: "openai-completions", baseUrl: "http://remote", models: [] },
+          shared: {
+            name: "Shared from remote",
+            api: "openai-completions",
+            baseUrl: "http://remote",
+            models: [],
+          },
         },
       }),
       [remoteMcp]: JSON.stringify({ mcpServers: { filesystem: { command: "remote-fs" } } }),
-      [remoteSettings]: JSON.stringify({ defaultModel: "shared/x", compaction: { enabled: false } }),
+      [remoteSettings]: JSON.stringify({
+        defaultModel: "shared/x",
+        compaction: { enabled: false },
+      }),
     },
   });
 }
@@ -76,10 +96,18 @@ test("copy preview reports conflicts for every selected item", async () => {
 test("copy skips conflicting items unless the resolution says overwrite", async () => {
   const harness = baseHarness();
   await harness.api.copy(LOCAL, REMOTE, selection, {});
-  const models = readJson(harness.remote, remoteModels) as { providers: Record<string, { baseUrl: string }> };
+  const models = readJson(harness.remote, remoteModels) as {
+    providers: Record<string, { baseUrl: string }>;
+  };
   assert.equal(models.providers["local-proxy"]?.baseUrl, "http://local", "new provider is copied");
-  assert.equal(models.providers.shared?.baseUrl, "http://remote", "conflicting provider is skipped");
-  const mcp = readJson(harness.remote, remoteMcp) as { mcpServers: Record<string, { command: string }> };
+  assert.equal(
+    models.providers.shared?.baseUrl,
+    "http://remote",
+    "conflicting provider is skipped",
+  );
+  const mcp = readJson(harness.remote, remoteMcp) as {
+    mcpServers: Record<string, { command: string }>;
+  };
   assert.equal(mcp.mcpServers.filesystem?.command, "remote-fs", "conflicting server is skipped");
   const settings = readJson(harness.remote, remoteSettings) as Record<string, unknown> & {
     compaction: { reserveTokens?: number };
@@ -93,9 +121,13 @@ test("copy skips conflicting items unless the resolution says overwrite", async 
     "defaults:defaults": "overwrite",
     "compaction:compaction": "overwrite",
   });
-  const modelsAfter = readJson(harness.remote, remoteModels) as { providers: Record<string, { baseUrl: string }> };
+  const modelsAfter = readJson(harness.remote, remoteModels) as {
+    providers: Record<string, { baseUrl: string }>;
+  };
   assert.equal(modelsAfter.providers.shared?.baseUrl, "http://shared");
-  const mcpAfter = readJson(harness.remote, remoteMcp) as { mcpServers: Record<string, { command: string }> };
+  const mcpAfter = readJson(harness.remote, remoteMcp) as {
+    mcpServers: Record<string, { command: string }>;
+  };
   assert.equal(mcpAfter.mcpServers.filesystem?.command, "npx");
   const settingsAfter = readJson(harness.remote, remoteSettings) as Record<string, unknown> & {
     compaction: { reserveTokens?: number };
@@ -110,7 +142,14 @@ test("copy logs in on the target machine instead of moving credentials", async (
   const control = new FakeControlClient();
   const harness = baseHarness();
   harness.useControl(control);
-  const withLogin: NekCopySelection = { ...selection, providers: [], mcpServers: [], logins: ["anthropic"], defaults: false, compaction: false };
+  const withLogin: NekCopySelection = {
+    ...selection,
+    providers: [],
+    mcpServers: [],
+    logins: ["anthropic"],
+    defaults: false,
+    compaction: false,
+  };
   // 目标机器的控制进程很快完成 OAuth。
   setTimeout(() => control.completeLogin(), 0);
   await harness.api.copy(LOCAL, REMOTE, withLogin, {});
@@ -118,14 +157,25 @@ test("copy logs in on the target machine instead of moving credentials", async (
     control.commands.map((command) => command.type),
     ["auth_status", "auth_login"],
   );
-  assert.equal(harness.remote.files.has(join(REMOTE_AGENT_DIR, "auth.json")), false, "auth.json is never written");
+  assert.equal(
+    harness.remote.files.has(join(REMOTE_AGENT_DIR, "auth.json")),
+    false,
+    "auth.json is never written",
+  );
 });
 
 test("copy fails with a clear message when the login needs user input on the target", async () => {
   const control = new FakeControlClient();
   const harness = baseHarness();
   harness.useControl(control);
-  const withLogin: NekCopySelection = { ...selection, providers: [], mcpServers: [], logins: ["anthropic"], defaults: false, compaction: false };
+  const withLogin: NekCopySelection = {
+    ...selection,
+    providers: [],
+    mcpServers: [],
+    logins: ["anthropic"],
+    defaults: false,
+    compaction: false,
+  };
   setTimeout(() => {
     void control.pushPrompt({
       type: "extension_ui_request",
@@ -135,14 +185,18 @@ test("copy fails with a clear message when the login needs user input on the tar
       payload: { provider: "anthropic", prompt: { type: "manual_code", message: "code" } },
     });
   }, 0);
-  const error = await expectNekError(async () => await harness.api.copy(LOCAL, REMOTE, withLogin, {}), "validation");
+  const error = await expectNekError(
+    async () => await harness.api.copy(LOCAL, REMOTE, withLogin, {}),
+    "validation",
+  );
   assert.match(error.message, /requires user input/);
 });
 
 test("copying onto the same target is rejected", async () => {
   const harness = baseHarness();
   const error = await expectNekError(
-    async () => await harness.api.copy(LOCAL, LOCAL, { ...selection, providers: [], mcpServers: [] }, {}),
+    async () =>
+      await harness.api.copy(LOCAL, LOCAL, { ...selection, providers: [], mcpServers: [] }, {}),
     "validation",
   );
   assert.match(error.message, /same target/);

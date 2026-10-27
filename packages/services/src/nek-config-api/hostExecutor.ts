@@ -227,7 +227,11 @@ export function createMemoryNekConfigHostExecutor(
     },
     stat: async (path) => {
       if (files.has(path)) {
-        return { mtimeMs: mtimes.get(path) ?? 0, size: Buffer.byteLength(files.get(path) ?? ""), isDirectory: false };
+        return {
+          mtimeMs: mtimes.get(path) ?? 0,
+          size: Buffer.byteLength(files.get(path) ?? ""),
+          isDirectory: false,
+        };
       }
       const prefix = `${normalizePath(path)}/`;
       const hasChildren = [...files.keys()].some((key) => normalizePath(key).startsWith(prefix));
@@ -261,7 +265,9 @@ export function createMemoryNekConfigHostExecutor(
     },
     spawnNek: async (args) => {
       if (!options.spawn) {
-        throw new Error(`no nek process available in the memory executor (args: ${args.join(" ")})`);
+        throw new Error(
+          `no nek process available in the memory executor (args: ${args.join(" ")})`,
+        );
       }
       return await options.spawn(args);
     },

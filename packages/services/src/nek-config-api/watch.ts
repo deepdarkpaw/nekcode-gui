@@ -83,7 +83,8 @@ export class NekWatchHub {
   publish(targetKey: string, changes: readonly NekWatchChange[]): void {
     const state = this.states.get(targetKey);
     for (const change of changes) {
-      if (state) state.episodes.set(change.file, { mtimeMs: 0, size: 0, revision: change.revision });
+      if (state)
+        state.episodes.set(change.file, { mtimeMs: 0, size: 0, revision: change.revision });
       this.emit(targetKey, change);
     }
   }
@@ -164,7 +165,10 @@ export class NekWatchHub {
       }
     }
     if (watchers.length === 0) {
-      this.logger?.debug?.("no directory could be watched; falling back to polling", state.target.key);
+      this.logger?.debug?.(
+        "no directory could be watched; falling back to polling",
+        state.target.key,
+      );
       return this.startPolling(state);
     }
     return () => {
@@ -242,7 +246,8 @@ export class NekWatchHub {
         }
         continue;
       }
-      if (entry.name.endsWith(".md") && dirBelongsToInstructions(dir)) files.push(join(dir, entry.name));
+      if (entry.name.endsWith(".md") && dirBelongsToInstructions(dir))
+        files.push(join(dir, entry.name));
     }
     return files;
   }

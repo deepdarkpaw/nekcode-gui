@@ -70,22 +70,14 @@ export function fieldErrorsOf(
 }
 
 /** 任意抛出值 → `NekConfigError`；未知形状归为 `io` 并保留原文（不吞错）。 */
-export function asNekConfigError(error: unknown, fallbackCode: NekConfigErrorCode = "io"): NekConfigError {
+export function asNekConfigError(
+  error: unknown,
+  fallbackCode: NekConfigErrorCode = "io",
+): NekConfigError {
   if (error instanceof NekConfigError) return error;
   if (error instanceof NekConfigConflictError) return conflict(error.path);
   if (error instanceof NekConfigParseError)
     return new NekConfigError("validation", error.message, { [error.path]: error.detail });
   const message = error instanceof Error ? error.message : String(error);
   return new NekConfigError(fallbackCode, message);
-}
-
-/** 需要把执行器抛出的系统错误包装成 `io` 时使用（保留 cause 便于日志）。 */
-export async function guardIo<T>(context: string, run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof NekConfigError) throw error;
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new NekConfigError("io", `${context}: ${detail}`);
-  }
 }

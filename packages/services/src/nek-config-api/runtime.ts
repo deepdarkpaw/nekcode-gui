@@ -194,7 +194,10 @@ export class NekConfigRuntime {
   }
 
   /** 写盘后的通知：先推 watch 事件，再触发一次重载。 */
-  publishWrite(target: NekConfigTarget, files: ReadonlyArray<{ path: string; revision: string }>): void {
+  publishWrite(
+    target: NekConfigTarget,
+    files: ReadonlyArray<{ path: string; revision: string }>,
+  ): void {
     const key = targetKeyOf(target);
     this.watchHub.publish(
       key,
@@ -254,7 +257,11 @@ export class NekConfigRuntime {
     try {
       const result = await call();
       const queued = result.deferred || busy;
-      return { reloaded: queued ? 0 : 1, deferred: queued ? 1 : 0, diagnostics: result.diagnostics };
+      return {
+        reloaded: queued ? 0 : 1,
+        deferred: queued ? 1 : 0,
+        diagnostics: result.diagnostics,
+      };
     } catch (error) {
       return {
         reloaded: 0,

@@ -158,7 +158,9 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
 
     validate: async (target, cwd) => {
       const control = await runtime.control(target);
-      const data = await control.call(cwd ? { type: "validate_config", cwd } : { type: "validate_config" });
+      const data = await control.call(
+        cwd ? { type: "validate_config", cwd } : { type: "validate_config" },
+      );
       return data.diagnostics ?? [];
     },
   };

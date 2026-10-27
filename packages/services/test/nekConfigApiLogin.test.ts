@@ -40,7 +40,9 @@ test("login events are replayed to a late subscriber", async () => {
   const pending = control.pushPrompt(promptRequest);
 
   const received: NekLoginEvent[] = [];
-  const unsubscribe = harness.api.onLoginEvent(session.loginId, (loginEvent) => received.push(loginEvent));
+  const unsubscribe = harness.api.onLoginEvent(session.loginId, (loginEvent) =>
+    received.push(loginEvent),
+  );
 
   // 回放：两个事件都在，顺序与发生顺序一致。
   assert.equal(received.length, 2);
@@ -58,7 +60,11 @@ test("login events are replayed to a late subscriber", async () => {
   // 答复提示：变成一条 extension_ui_response，并发出 prompt_cancelled 关闭对话框。
   await harness.api.answerLoginPrompt(session.loginId, "prompt-1", "code#state");
   const answered = await pending;
-  assert.deepEqual(answered, { type: "extension_ui_response", id: "prompt-1", result: { value: "code#state" } });
+  assert.deepEqual(answered, {
+    type: "extension_ui_response",
+    id: "prompt-1",
+    result: { value: "code#state" },
+  });
   assert.equal(received.filter((event) => event.type === "prompt_cancelled").length, 1);
 
   control.completeLogin();
@@ -128,7 +134,13 @@ test("unexpected structured requests during a login are cancelled, not left hang
 test("auth status and logout go through the control process", async () => {
   const control = new FakeControlClient({
     authStatus: [
-      { provider: "anthropic", name: "Anthropic", kind: "oauth", loginMethods: ["oauth"], expiresAt: "2026-01-01T00:00:00Z" },
+      {
+        provider: "anthropic",
+        name: "Anthropic",
+        kind: "oauth",
+        loginMethods: ["oauth"],
+        expiresAt: "2026-01-01T00:00:00Z",
+      },
     ],
   });
   const harness = createHarness({ control });

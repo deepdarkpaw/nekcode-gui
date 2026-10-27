@@ -6,9 +6,12 @@
  * 与 `<cwd>/.nek/agents/*.md`。保存时保留未知 frontmatter 键与正文原文。
  */
 import { join } from "node:path";
-import type { NekAgentPreset, NekAgentPresetEntry, NekConfigScope } from "@zcode/shared/nek-protocol";
+import type {
+  NekAgentPreset,
+  NekAgentPresetEntry,
+  NekConfigScope,
+} from "@zcode/shared/nek-protocol";
 import {
-  isPlainObject,
   parseFrontmatterDocument,
   serializeFrontmatterDocument,
 } from "../nek-agent/config/nekConfigDocuments.js";
@@ -80,14 +83,16 @@ export function presetToFrontmatter(preset: NekAgentPreset): Record<string, unkn
   if (preset.contextWindow !== undefined) frontmatter.context_window = preset.contextWindow;
   if (preset.readonly !== undefined) frontmatter.readonly = preset.readonly;
   if (preset.tools !== undefined) frontmatter.tools = [...preset.tools];
-  if (preset.disallowedTools !== undefined) frontmatter.disallowed_tools = [...preset.disallowedTools];
+  if (preset.disallowedTools !== undefined)
+    frontmatter.disallowed_tools = [...preset.disallowedTools];
   if (preset.isBackground !== undefined) frontmatter.is_background = preset.isBackground;
   if (preset.autonomous !== undefined) frontmatter.autonomous = preset.autonomous;
   return frontmatter;
 }
 
 function readStringList(value: unknown): string[] | undefined {
-  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
+  if (Array.isArray(value))
+    return value.filter((entry): entry is string => typeof entry === "string");
   if (typeof value === "string") {
     const list = value
       .split(",")
@@ -113,14 +118,17 @@ export function frontmatterToPreset(
   }
   const preset: NekAgentPreset = { name, description, instructions: body };
   if (typeof frontmatter.model === "string") preset.model = frontmatter.model;
-  if (typeof frontmatter.thinking === "string") preset.thinking = frontmatter.thinking as NekAgentPreset["thinking"];
-  if (typeof frontmatter.context_window === "number") preset.contextWindow = frontmatter.context_window;
+  if (typeof frontmatter.thinking === "string")
+    preset.thinking = frontmatter.thinking as NekAgentPreset["thinking"];
+  if (typeof frontmatter.context_window === "number")
+    preset.contextWindow = frontmatter.context_window;
   if (typeof frontmatter.readonly === "boolean") preset.readonly = frontmatter.readonly;
   const tools = readStringList(frontmatter.tools);
   if (tools) preset.tools = tools;
   const disallowedTools = readStringList(frontmatter.disallowed_tools);
   if (disallowedTools) preset.disallowedTools = disallowedTools;
-  if (typeof frontmatter.is_background === "boolean") preset.isBackground = frontmatter.is_background;
+  if (typeof frontmatter.is_background === "boolean")
+    preset.isBackground = frontmatter.is_background;
   if (typeof frontmatter.autonomous === "boolean") preset.autonomous = frontmatter.autonomous;
   return preset;
 }
@@ -223,10 +231,14 @@ export interface WriteAgentPresetResult {
  * 写预设：`<scope>/agents/<name>.md`。改名（`previousName`）时写完新文件再删旧文件，
  * 中途失败最多留下两份，不会丢配置。
  */
-export async function writeAgentPreset(args: WriteAgentPresetArgs): Promise<WriteAgentPresetResult> {
+export async function writeAgentPreset(
+  args: WriteAgentPresetArgs,
+): Promise<WriteAgentPresetResult> {
   const { executor, agentDir, scope, preset, expectedRevision, previousName, cwd } = args;
   if (!PRESET_NAME_PATTERN.test(preset.name)) {
-    throw validationError(`invalid preset name "${preset.name}"`, { name: "letters, digits, dot, dash, underscore" });
+    throw validationError(`invalid preset name "${preset.name}"`, {
+      name: "letters, digits, dot, dash, underscore",
+    });
   }
   if (preset.description.trim() === "") {
     throw validationError("preset description must not be empty", { description: "required" });
@@ -240,7 +252,8 @@ export async function writeAgentPreset(args: WriteAgentPresetArgs): Promise<Writ
   const targetPath = agentPresetPath(layout, scope, preset.name, cwd);
   if (targetPath !== existingPath) {
     const target = await readAgentPresetFile(executor, targetPath);
-    if (target) throw validationError(`preset "${preset.name}" already exists`, { name: "duplicate" });
+    if (target)
+      throw validationError(`preset "${preset.name}" already exists`, { name: "duplicate" });
   }
   // 未知 frontmatter 键原样保留：nek 会持续加字段，GUI 不认识不等于可以删。
   const preserved = existing
@@ -267,16 +280,13 @@ export interface DeleteAgentPresetArgs {
   cwd?: string;
 }
 
-export async function deleteAgentPreset(args: DeleteAgentPresetArgs): Promise<{ path: string; revision: string }> {
+export async function deleteAgentPreset(
+  args: DeleteAgentPresetArgs,
+): Promise<{ path: string; revision: string }> {
   const path = agentPresetPath({ agentDir: args.agentDir }, args.scope, args.name, args.cwd);
   const existing = await readAgentPresetFile(args.executor, path);
   if (!existing) throw validationError(`preset "${args.name}" not found`, { name: "not found" });
   if (!sameRevision(existing.revision, args.expectedRevision)) throw conflict(path);
   await args.executor.remove(path);
   return { path, revision: "absent" };
-}
-
-/** 供改名引用改写使用：列出所有带文件的预设（不含内置）。 */
-export function isPresetFrontmatter(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value);
 }

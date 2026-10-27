@@ -53,8 +53,11 @@ export function scanProviderReferences(args: ReferenceScanArgs): NekProviderRefe
   const thinkingLevels = recordField(settings, "modelThinkingLevels");
   const defaultModel = stringField(settings, "defaultModel");
   return {
-    defaultModel: settings.defaultProvider === providerId || (defaultModel?.startsWith(prefix) ?? false),
-    enabledModels: (stringArray(settings.enabledModels) ?? []).filter((ref) => ref.startsWith(prefix)),
+    defaultModel:
+      settings.defaultProvider === providerId || (defaultModel?.startsWith(prefix) ?? false),
+    enabledModels: (stringArray(settings.enabledModels) ?? []).filter((ref) =>
+      ref.startsWith(prefix),
+    ),
     compactionModel: (stringField(compaction, "model") ?? "").startsWith(prefix),
     modelThinkingLevels: Object.keys(thinkingLevels ?? {}).filter((ref) => ref.startsWith(prefix)),
     agentPresets: presets
@@ -69,12 +72,21 @@ export interface ProviderRenamePlan {
   /** settings.json 的补丁；旧键用 `null` 删除（合并器语义）。 */
   settingsPatch: Record<string, unknown>;
   /** 需要改写 `model` 的预设（自带 revision，写入时校验）。 */
-  presetRewrites: Array<{ name: string; scope: NekConfigScope; path: string; revision: string; from: string; to: string }>;
+  presetRewrites: Array<{
+    name: string;
+    scope: NekConfigScope;
+    path: string;
+    revision: string;
+    from: string;
+    to: string;
+  }>;
   references: NekProviderReferences;
 }
 
 /** 计算改名影响：settings 补丁 + 预设改写清单。纯函数，便于预览与执行共用。 */
-export function planReferenceRewrites(args: ReferenceScanArgs & { to: string }): ProviderRenamePlan {
+export function planReferenceRewrites(
+  args: ReferenceScanArgs & { to: string },
+): ProviderRenamePlan {
   const { providerId: from, to, settings, presets } = args;
   const patch: Record<string, unknown> = {};
   if (settings.defaultProvider === from) patch.defaultProvider = to;
@@ -90,7 +102,9 @@ export function planReferenceRewrites(args: ReferenceScanArgs & { to: string }):
   }
   const compaction = recordField(settings, "compaction");
   const compactionModel = stringField(compaction, "model");
-  const rewrittenCompaction = compactionModel ? rewriteModelReference(compactionModel, from, to) : null;
+  const rewrittenCompaction = compactionModel
+    ? rewriteModelReference(compactionModel, from, to)
+    : null;
   if (rewrittenCompaction) patch.compaction = { model: rewrittenCompaction };
   const overrides = recordField(compaction, "modelOverrides");
   const overridePatch = rewriteRecordKeys(overrides, from, to);

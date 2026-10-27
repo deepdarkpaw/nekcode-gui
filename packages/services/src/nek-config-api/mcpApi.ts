@@ -27,12 +27,7 @@ import {
   nekMcpStdioServerSchema,
   parseWithSchema,
 } from "../nek-agent/config/schemas.js";
-import {
-  parseJsonMapping,
-  readCheckedDocument,
-  readTextDocument,
-  writeTextDocument,
-} from "./documents.js";
+import { parseJsonMapping, readTextDocument, writeTextDocument } from "./documents.js";
 import { conflict, fieldErrorsOf, validationError } from "./errors.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { mcpPath } from "./paths.js";
@@ -76,7 +71,10 @@ export interface NekMcpGroup {
     target: NekConfigTarget,
     source: { name: string; cwd?: string } | { config: NekMcpServerConfig },
   ) => Promise<NekMcpTestResult>;
-  getMcpStatus: (target: NekConfigTarget, cwd?: string) => Promise<NekMcpServerStatus[] | undefined>;
+  getMcpStatus: (
+    target: NekConfigTarget,
+    cwd?: string,
+  ) => Promise<NekMcpServerStatus[] | undefined>;
   mcpServerAction: (
     target: NekConfigTarget,
     name: string,
@@ -103,7 +101,9 @@ function readServers(path: string, text: string | null): RawMcpServers {
   const servers = parsed.mcpServers;
   if (servers === undefined) return {};
   if (!isPlainObject(servers)) {
-    throw validationError(`${path}: "mcpServers" must be an object`, { mcpServers: "must be an object" });
+    throw validationError(`${path}: "mcpServers" must be an object`, {
+      mcpServers: "must be an object",
+    });
   }
   const result: RawMcpServers = {};
   for (const [name, value] of Object.entries(servers)) {
@@ -127,10 +127,7 @@ function serializeServers(servers: RawMcpServers): string {
 const NAME_FIELD = { name: "letters, digits, underscore and dash" } as const;
 
 /** 按 transport 选 schema 并校验；失败抛字段级错误。 */
-function validateServerConfig(
-  name: string,
-  config: Record<string, unknown>,
-): NekMcpServerConfig {
+function validateServerConfig(name: string, config: Record<string, unknown>): NekMcpServerConfig {
   const validated =
     config.url !== undefined
       ? parseWithSchema(nekMcpHttpServerSchema, config)
@@ -148,7 +145,10 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
     return { context, path: mcpPath(context.layout, scope, cwd) };
   };
 
-  const sessionFor = (target: NekConfigTarget, cwd?: string): NekConfigSessionHandle | undefined => {
+  const sessionFor = (
+    target: NekConfigTarget,
+    cwd?: string,
+  ): NekConfigSessionHandle | undefined => {
     const sessions = runtime.sessionsOf(target);
     if (sessions.length === 0) return undefined;
     if (cwd) {
@@ -236,7 +236,9 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
         }
       }
       const value =
-        scope === "project" ? validateOverrideConfig(entry.name, config) : validateServerConfig(entry.name, config);
+        scope === "project"
+          ? validateOverrideConfig(entry.name, config)
+          : validateServerConfig(entry.name, config);
       const { context, path } = paths(target, scope, options.cwd);
       const current = await readServerFile(context.executor, path);
       if (current.revision !== options.revision) throw conflict(path);
@@ -368,7 +370,9 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
       const data = await session.call({ type: "extension_call", method, params: { name } });
       const result = data.result as { server?: NekMcpServerStatus } | undefined;
       if (!result?.server) {
-        throw validationError(`nek returned no status for MCP server "${name}"`, { name: "no status" });
+        throw validationError(`nek returned no status for MCP server "${name}"`, {
+          name: "no status",
+        });
       }
       return result.server;
     },
@@ -376,10 +380,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
 }
 
 /** 项目级条目只能是覆盖（`enabled` / `exposure` / `toolExposure`）。 */
-function validateOverrideConfig(
-  name: string,
-  config: Record<string, unknown>,
-): NekMcpServerConfig {
+function validateOverrideConfig(name: string, config: Record<string, unknown>): NekMcpServerConfig {
   const validated = parseWithSchema(nekMcpOverrideSchema, config);
   if (!validated.ok) {
     throw validationError(`invalid MCP override "${name}"`, fieldErrorsOf(validated.issues));
@@ -393,15 +394,6 @@ export async function readRawMcpServers(
   path: string,
 ): Promise<RawMcpServers> {
   return (await readServerFile(executor, path)).servers;
-}
-
-export async function readCheckedRawMcpServers(
-  executor: NekConfigHostExecutor,
-  path: string,
-  expected: string,
-): Promise<RawMcpServers> {
-  const document = await readCheckedDocument(executor, path, expected);
-  return readServers(path, document.content);
 }
 
 export function serializeMcpServers(servers: RawMcpServers): string {

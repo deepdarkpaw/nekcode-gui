@@ -18,7 +18,11 @@ import { diagnostic, mergeDeep } from "./documents.js";
 import { fieldErrorsOf, validationError } from "./errors.js";
 import { settingsPath } from "./paths.js";
 import type { NekConfigRuntime } from "./runtime.js";
-import { NEK_SETTINGS_DEFAULTS, settingsPatchToRecord, toSettingsView } from "./settingsDefaults.js";
+import {
+  NEK_SETTINGS_DEFAULTS,
+  settingsPatchToRecord,
+  toSettingsView,
+} from "./settingsDefaults.js";
 import { patchSettingsDocument, readSettingsDocument } from "./settingsDocument.js";
 
 export interface NekSettingsGroup {
@@ -73,7 +77,9 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
         try {
           return (await readSettingsDocument(context.executor, otherPath)).raw;
         } catch (error) {
-          diagnostics.push(diagnostic(otherPath, error instanceof Error ? error.message : String(error)));
+          diagnostics.push(
+            diagnostic(otherPath, error instanceof Error ? error.message : String(error)),
+          );
           return {};
         }
       };

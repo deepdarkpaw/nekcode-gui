@@ -160,7 +160,11 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
           if (!entry.isDirectory) continue;
           const path = join(dir, entry.name, "SKILL.md");
           const description = await descriptionOf((file) => context.executor.readFile(file), path);
-          skills.set(entry.name, { name: entry.name, path, ...(description ? { description } : {}) });
+          skills.set(entry.name, {
+            name: entry.name,
+            path,
+            ...(description ? { description } : {}),
+          });
         }
       }
       for (const dir of resourceDirs(context.layout, "prompts", cwd)) {

@@ -6,17 +6,12 @@
  * 2. 写入前比对读取时拿到的 revision，被外部改过就抛 `conflict`；
  * 3. 解析失败不落盘：宁可报错也不写一个 nek 读不了的文件。
  */
-import {
-  applyEdits,
-  modify,
-  parse as parseJsonc,
-  printParseErrorCode,
-} from "jsonc-parser";
+import { applyEdits, modify, parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
 import type { ParseError } from "jsonc-parser";
 import { parse as parseYaml } from "yaml";
 import type { NekConfigDiagnostic } from "@zcode/shared/nek-protocol";
 import { isPlainObject, stripBom } from "../nek-agent/config/nekConfigDocuments.js";
-import { asNekConfigError, conflict, validationError } from "./errors.js";
+import { conflict, validationError } from "./errors.js";
 import { ABSENT_REVISION, encodeRevision, sameRevision } from "./revision.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 
@@ -126,7 +121,10 @@ export function applyJsoncEdit(
   value: unknown,
 ): string {
   parseJsoncMapping(path, text);
-  const next = applyEdits(text, modify(text, pointer, value, { formattingOptions: JSON_FORMATTING }));
+  const next = applyEdits(
+    text,
+    modify(text, pointer, value, { formattingOptions: JSON_FORMATTING }),
+  );
   parseJsoncMapping(path, next);
   return next;
 }
@@ -191,7 +189,8 @@ export function mergeDeep(
   const merged: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(override)) {
     const current = merged[key];
-    merged[key] = isPlainObject(current) && isPlainObject(value) ? mergeDeep(current, value) : value;
+    merged[key] =
+      isPlainObject(current) && isPlainObject(value) ? mergeDeep(current, value) : value;
   }
   return merged;
 }
@@ -202,10 +201,4 @@ export function diagnostic(
   severity: NekConfigDiagnostic["severity"] = "error",
 ): NekConfigDiagnostic {
   return { file, severity, message };
-}
-
-/** 抛出值 → 诊断（读取路径用它，把"坏文件"降级成可见的诊断而非中断整页）。 */
-export function diagnosticOf(error: unknown, file: string): NekConfigDiagnostic {
-  const normalized = asNekConfigError(error);
-  return diagnostic(file, normalized.message, "error");
 }

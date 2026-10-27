@@ -13,7 +13,12 @@ import type {
   NekYamlView,
 } from "@zcode/shared/nek-protocol";
 import { stringify as stringifyYaml } from "yaml";
-import { applySettingsPatch, parseYamlMapping, readTextDocument, writeTextDocument } from "./documents.js";
+import {
+  applySettingsPatch,
+  parseYamlMapping,
+  readTextDocument,
+  writeTextDocument,
+} from "./documents.js";
 import { conflict, validationError } from "./errors.js";
 import { fieldErrorsOf, asNekConfigError } from "./errors.js";
 import { nekYamlSchema, parseWithSchema } from "../nek-agent/config/schemas.js";
@@ -75,7 +80,9 @@ function validatePatch(record: Record<string, unknown>): void {
       });
     }
     if (!isPlainObject(value)) {
-      throw validationError(`nek.yaml "${section}" must be a mapping`, { [section]: "must be a mapping" });
+      throw validationError(`nek.yaml "${section}" must be a mapping`, {
+        [section]: "must be a mapping",
+      });
     }
     const defaults = NEK_YAML_DEFAULTS[section as keyof NekYamlView] as Record<string, unknown>;
     for (const [key, entry] of Object.entries(value)) {
@@ -97,7 +104,8 @@ function validatePatch(record: Record<string, unknown>): void {
     }
   }
   const validated = parseWithSchema(nekYamlSchema, record);
-  if (!validated.ok) throw validationError("invalid nek.yaml patch", fieldErrorsOf(validated.issues));
+  if (!validated.ok)
+    throw validationError("invalid nek.yaml patch", fieldErrorsOf(validated.issues));
 }
 
 export function createYamlGroup(runtime: NekConfigRuntime): NekYamlGroup {
@@ -146,7 +154,10 @@ export function createYamlGroup(runtime: NekConfigRuntime): NekYamlGroup {
       const path = nekYamlPath(context.layout, scope, options.cwd);
       const document = await readTextDocument(context.executor, path);
       if (document.revision !== options.revision) throw conflict(path);
-      const current = document.content === null || document.content.trim() === "" ? {} : parseYamlMapping(path, document.content);
+      const current =
+        document.content === null || document.content.trim() === ""
+          ? {}
+          : parseYamlMapping(path, document.content);
       const record = patch as Record<string, unknown>;
       validatePatch(record);
       const merged = applySettingsPatch(current, record);

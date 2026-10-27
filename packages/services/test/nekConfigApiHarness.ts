@@ -114,6 +114,10 @@ export class FakeControlClient implements NekControlClient {
       return { deferred: this.reloadDeferred, diagnostics: [] } as NekRpcResponseDataFor<C>;
     }
     if (type === "validate_config") return { diagnostics: [] } as NekRpcResponseDataFor<C>;
+    if (type === "set_project_trust") return {} as NekRpcResponseDataFor<C>;
+    if (type === "test_web_search") {
+      return { ok: true, latencyMs: 12, resultCount: 3 } as NekRpcResponseDataFor<C>;
+    }
     if (type === "mcp_test") {
       return { ok: true, latencyMs: 5, tools: [{ name: "ping" }] } as NekRpcResponseDataFor<C>;
     }
@@ -247,7 +251,11 @@ export async function expectNekError(
     await run();
   } catch (error) {
     const shaped = error as Error & { code?: string; fieldErrors?: Record<string, string> };
-    assert.equal(shaped.code, code, `expected code ${code}, got ${String(shaped.code)}: ${shaped.message}`);
+    assert.equal(
+      shaped.code,
+      code,
+      `expected code ${code}, got ${String(shaped.code)}: ${shaped.message}`,
+    );
     return shaped as Error & { code: string; fieldErrors?: Record<string, string> };
   }
   throw new Error(`expected the call to fail with ${code}`);

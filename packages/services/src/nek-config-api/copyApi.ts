@@ -52,7 +52,10 @@ const DEFAULT_SETTING_KEYS = [
 export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
   const modelsOf = async (target: NekConfigTarget) => {
     const context = runtime.target(target);
-    return { context, snapshot: await readModelsSnapshot(context.executor, modelsPath(context.layout)) };
+    return {
+      context,
+      snapshot: await readModelsSnapshot(context.executor, modelsPath(context.layout)),
+    };
   };
 
   const settingsOf = async (target: NekConfigTarget) => {
@@ -74,7 +77,11 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
     const targetMcp = await mcpOf(to);
     const items: NekCopyPreview["items"] = [];
     for (const id of selection.providers) {
-      items.push({ kind: "provider", id, conflict: targetModels.snapshot.providers[id] !== undefined });
+      items.push({
+        kind: "provider",
+        id,
+        conflict: targetModels.snapshot.providers[id] !== undefined,
+      });
     }
     if (selection.logins.length > 0) {
       const statuses = await runtime.login.authStatus(to);
@@ -95,7 +102,11 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
       items.push({ kind: "defaults", id: "defaults", conflict });
     }
     if (selection.compaction) {
-      items.push({ kind: "compaction", id: "compaction", conflict: targetSettings.raw.compaction !== undefined });
+      items.push({
+        kind: "compaction",
+        id: "compaction",
+        conflict: targetSettings.raw.compaction !== undefined,
+      });
     }
     return { items };
   };
@@ -119,7 +130,10 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
     if (providerItems.length > 0) {
       const edits = providerItems.map((item) => {
         const source = sourceModels.snapshot.providers[item.id];
-        if (!source) throw validationError(`provider "${item.id}" no longer exists on the source`, { id: "missing" });
+        if (!source)
+          throw validationError(`provider "${item.id}" no longer exists on the source`, {
+            id: "missing",
+          });
         return { pointer: ["providers", item.id], value: source };
       });
       const revision = await editModelsSnapshot(
@@ -138,7 +152,10 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
       const servers = { ...target.servers };
       for (const item of mcpItems) {
         const config = source.servers[item.id];
-        if (!config) throw validationError(`MCP server "${item.id}" no longer exists on the source`, { id: "missing" });
+        if (!config)
+          throw validationError(`MCP server "${item.id}" no longer exists on the source`, {
+            id: "missing",
+          });
         servers[item.id] = config;
       }
       const revision = await writeTextDocument(
@@ -151,13 +168,20 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
 
     const sourceSettings = await settingsOf(from);
     const settingsPatch: Record<string, unknown> = {};
-    if (selection.defaults && preview.items.some((item) => item.kind === "defaults" && allowed(item))) {
+    if (
+      selection.defaults &&
+      preview.items.some((item) => item.kind === "defaults" && allowed(item))
+    ) {
       for (const key of DEFAULT_SETTING_KEYS) {
         if (sourceSettings.raw[key] !== undefined) settingsPatch[key] = sourceSettings.raw[key];
       }
     }
-    if (selection.compaction && preview.items.some((item) => item.kind === "compaction" && allowed(item))) {
-      if (sourceSettings.raw.compaction !== undefined) settingsPatch.compaction = sourceSettings.raw.compaction;
+    if (
+      selection.compaction &&
+      preview.items.some((item) => item.kind === "compaction" && allowed(item))
+    ) {
+      if (sourceSettings.raw.compaction !== undefined)
+        settingsPatch.compaction = sourceSettings.raw.compaction;
     }
     if (Object.keys(settingsPatch).length > 0) {
       const targetSettings = await settingsOf(to);

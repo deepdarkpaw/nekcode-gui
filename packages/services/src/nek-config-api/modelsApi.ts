@@ -116,7 +116,8 @@ function modelsDiagnostics(snapshot: NekModelsSnapshot): NekConfigDiagnostic[] {
 
 function requireProvider(snapshot: NekModelsSnapshot, providerId: string): Record<string, unknown> {
   const provider = snapshot.providers[providerId];
-  if (!provider) throw validationError(`unknown provider "${providerId}"`, { providerId: "unknown" });
+  if (!provider)
+    throw validationError(`unknown provider "${providerId}"`, { providerId: "unknown" });
   return provider;
 }
 
@@ -130,14 +131,21 @@ function modelIdOf(model: RawModel): string {
 
 function requireProviderId(id: string, field: string): void {
   if (!PROVIDER_ID_PATTERN.test(id)) {
-    throw validationError(`invalid provider id "${id}"`, { [field]: "use lowercase letters, digits and dashes" });
+    throw validationError(`invalid provider id "${id}"`, {
+      [field]: "use lowercase letters, digits and dashes",
+    });
   }
 }
 
 export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
-  const settingsOf = async (target: NekConfigTarget): Promise<{ raw: Record<string, unknown>; revision: string }> => {
+  const settingsOf = async (
+    target: NekConfigTarget,
+  ): Promise<{ raw: Record<string, unknown>; revision: string }> => {
     const context = runtime.target(target);
-    const document = await readSettingsDocument(context.executor, settingsPath(context.layout, "global"));
+    const document = await readSettingsDocument(
+      context.executor,
+      settingsPath(context.layout, "global"),
+    );
     return { raw: document.raw, revision: document.revision };
   };
 
@@ -189,7 +197,12 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       }
       const value = providerWriteToValue(provider, existing);
       validateProviderValue(provider.id, value);
-      return await save(target, snapshot, options.revision, providerEdits(provider.id, existing, value));
+      return await save(
+        target,
+        snapshot,
+        options.revision,
+        providerEdits(provider.id, existing, value),
+      );
     },
 
     deleteProvider: async (target, providerId, options) => {
@@ -249,7 +262,9 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
         { pointer: ["providers", to], value: provider },
         { pointer: ["providers", from], value: undefined },
       ]);
-      const written: Array<{ path: string; revision: string }> = [{ path: snapshot.path, revision }];
+      const written: Array<{ path: string; revision: string }> = [
+        { path: snapshot.path, revision },
+      ];
       const applied: string[] = [snapshot.path];
       try {
         if (Object.keys(plan.settingsPatch).length > 0) {
@@ -314,7 +329,8 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       const models = modelsOf(requireProvider(snapshot, providerId));
       const ids = new Set(models.map(modelIdOf));
       for (const model of added) {
-        if (ids.has(model.id)) throw validationError(`model "${model.id}" already exists`, { id: "duplicate" });
+        if (ids.has(model.id))
+          throw validationError(`model "${model.id}" already exists`, { id: "duplicate" });
         ids.add(model.id);
         validateModelValue(providerId, model);
       }
@@ -347,7 +363,8 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       const ordered: RawModel[] = [];
       for (const id of modelIds) {
         const entry = byId.get(id);
-        if (!entry) throw validationError(`unknown model "${id}"`, { modelIds: `unknown model ${id}` });
+        if (!entry)
+          throw validationError(`unknown model "${id}"`, { modelIds: `unknown model ${id}` });
         ordered.push(entry);
         byId.delete(id);
       }

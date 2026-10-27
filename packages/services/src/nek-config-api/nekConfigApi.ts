@@ -61,12 +61,14 @@ export class NekConfigApi implements INekConfigApi {
   readModelsConfig: INekConfigApi["readModelsConfig"] = (...args) =>
     this.models.readModelsConfig(...args);
   saveProvider: INekConfigApi["saveProvider"] = (...args) => this.models.saveProvider(...args);
-  deleteProvider: INekConfigApi["deleteProvider"] = (...args) => this.models.deleteProvider(...args);
+  deleteProvider: INekConfigApi["deleteProvider"] = (...args) =>
+    this.models.deleteProvider(...args);
   getProviderReferences: INekConfigApi["getProviderReferences"] = (...args) =>
     this.models.getProviderReferences(...args);
   previewProviderRename: INekConfigApi["previewProviderRename"] = (...args) =>
     this.models.previewProviderRename(...args);
-  renameProvider: INekConfigApi["renameProvider"] = (...args) => this.models.renameProvider(...args);
+  renameProvider: INekConfigApi["renameProvider"] = (...args) =>
+    this.models.renameProvider(...args);
   saveModel: INekConfigApi["saveModel"] = (...args) => this.models.saveModel(...args);
   addModels: INekConfigApi["addModels"] = (...args) => this.models.addModels(...args);
   deleteModel: INekConfigApi["deleteModel"] = (...args) => this.models.deleteModel(...args);
@@ -74,7 +76,8 @@ export class NekConfigApi implements INekConfigApi {
   fetchProviderModels: INekConfigApi["fetchProviderModels"] = (...args) =>
     this.control.fetchProviderModels(...args);
   testProvider: INekConfigApi["testProvider"] = (...args) => this.control.testProvider(...args);
-  getModelCatalog: INekConfigApi["getModelCatalog"] = (...args) => this.control.getModelCatalog(...args);
+  getModelCatalog: INekConfigApi["getModelCatalog"] = (...args) =>
+    this.control.getModelCatalog(...args);
   listAvailableModels: INekConfigApi["listAvailableModels"] = (...args) =>
     this.control.listAvailableModels(...args);
 
@@ -100,28 +103,37 @@ export class NekConfigApi implements INekConfigApi {
   saveMcpServer: INekConfigApi["saveMcpServer"] = (...args) => this.mcp.saveMcpServer(...args);
   setMcpServerOverride: INekConfigApi["setMcpServerOverride"] = (...args) =>
     this.mcp.setMcpServerOverride(...args);
-  deleteMcpServer: INekConfigApi["deleteMcpServer"] = (...args) => this.mcp.deleteMcpServer(...args);
-  previewMcpImport: INekConfigApi["previewMcpImport"] = (...args) => this.mcp.previewMcpImport(...args);
+  deleteMcpServer: INekConfigApi["deleteMcpServer"] = (...args) =>
+    this.mcp.deleteMcpServer(...args);
+  previewMcpImport: INekConfigApi["previewMcpImport"] = (...args) =>
+    this.mcp.previewMcpImport(...args);
   testMcpServer: INekConfigApi["testMcpServer"] = (...args) => this.mcp.testMcpServer(...args);
   getMcpStatus: INekConfigApi["getMcpStatus"] = (...args) => this.mcp.getMcpStatus(...args);
-  mcpServerAction: INekConfigApi["mcpServerAction"] = (...args) => this.mcp.mcpServerAction(...args);
+  mcpServerAction: INekConfigApi["mcpServerAction"] = (...args) =>
+    this.mcp.mcpServerAction(...args);
 
   // ---- nek.yaml、子代理预设、指令 ----
 
   readNekYaml: INekConfigApi["readNekYaml"] = (...args) => this.yaml.readNekYaml(...args);
   patchNekYaml: INekConfigApi["patchNekYaml"] = (...args) => this.yaml.patchNekYaml(...args);
-  listAgentPresets: INekConfigApi["listAgentPresets"] = (...args) => this.agent.listAgentPresets(...args);
-  saveAgentPreset: INekConfigApi["saveAgentPreset"] = (...args) => this.agent.saveAgentPreset(...args);
+  listAgentPresets: INekConfigApi["listAgentPresets"] = (...args) =>
+    this.agent.listAgentPresets(...args);
+  saveAgentPreset: INekConfigApi["saveAgentPreset"] = (...args) =>
+    this.agent.saveAgentPreset(...args);
   deleteAgentPreset: INekConfigApi["deleteAgentPreset"] = (...args) =>
     this.agent.deleteAgentPreset(...args);
-  readInstructions: INekConfigApi["readInstructions"] = (...args) => this.agent.readInstructions(...args);
-  writeInstructions: INekConfigApi["writeInstructions"] = (...args) => this.agent.writeInstructions(...args);
+  readInstructions: INekConfigApi["readInstructions"] = (...args) =>
+    this.agent.readInstructions(...args);
+  writeInstructions: INekConfigApi["writeInstructions"] = (...args) =>
+    this.agent.writeInstructions(...args);
   listResources: INekConfigApi["listResources"] = (...args) => this.agent.listResources(...args);
 
   // ---- 项目信任 ----
 
-  getProjectTrust: INekConfigApi["getProjectTrust"] = (...args) => this.control.getProjectTrust(...args);
-  setProjectTrust: INekConfigApi["setProjectTrust"] = (...args) => this.control.setProjectTrust(...args);
+  getProjectTrust: INekConfigApi["getProjectTrust"] = (...args) =>
+    this.control.getProjectTrust(...args);
+  setProjectTrust: INekConfigApi["setProjectTrust"] = (...args) =>
+    this.control.setProjectTrust(...args);
 
   // ---- 校验与重载 ----
 

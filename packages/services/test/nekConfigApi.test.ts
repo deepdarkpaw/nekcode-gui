@@ -176,7 +176,11 @@ test("settings: nested merge, null deletes the key, no null is ever persisted", 
     { revision: read.revision },
   );
   const merged = readJson(harness.local, SETTINGS_PATH) as Record<string, unknown> & {
-    compaction: { reserveTokens?: number; keepRecentTokens?: number; content: Record<string, number> };
+    compaction: {
+      reserveTokens?: number;
+      keepRecentTokens?: number;
+      content: Record<string, number>;
+    };
   };
   assert.equal(merged.defaultModel, "anthropic/claude-sonnet-4-5");
   assert.equal(merged.compaction.reserveTokens, 30000, "nested merge keeps untouched keys");
@@ -197,7 +201,11 @@ test("settings: nested merge, null deletes the key, no null is ever persisted", 
     compaction: { content: Record<string, number> };
   };
   assert.equal("retry" in afterDelete, false, "null deletes the top-level key");
-  assert.equal("thinkingMaxChars" in afterDelete.compaction.content, false, "null deletes a nested key");
+  assert.equal(
+    "thinkingMaxChars" in afterDelete.compaction.content,
+    false,
+    "null deletes a nested key",
+  );
   assert.equal(afterDelete.compaction.content.toolResultMaxChars, 4000);
 });
 
@@ -217,9 +225,15 @@ test("settings: a concurrent nek write inside the lock is not overwritten", asyn
     },
   };
   const conflict = await expectNekError(
-    async () => await harness.api.patchSettings(LOCAL, "global", { defaultModel: "x/y" }, {
-      revision: read.revision,
-    }),
+    async () =>
+      await harness.api.patchSettings(
+        LOCAL,
+        "global",
+        { defaultModel: "x/y" },
+        {
+          revision: read.revision,
+        },
+      ),
     "conflict",
   );
   assert.match(conflict.message, /modified externally/);
@@ -231,7 +245,12 @@ test("settings: a concurrent nek write inside the lock is not overwritten", asyn
   // 重新读取后写入成功，两边的内容都在（没有丢更新）。
   harness.local.lock = originalLock;
   const refreshed = await harness.api.readSettings(LOCAL, "global");
-  await harness.api.patchSettings(LOCAL, "global", { defaultModel: "x/y" }, { revision: refreshed.revision });
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { defaultModel: "x/y" },
+    { revision: refreshed.revision },
+  );
   const merged = readJson(harness.local, SETTINGS_PATH) as Record<string, unknown>;
   assert.equal(merged.defaultModel, "x/y");
   assert.equal(merged.lastChangelogVersion, "0.3.2");
@@ -268,10 +287,20 @@ test("stale revisions are rejected with a conflict error", async () => {
 
   // 同一个旧令牌也不能再写 settings
   const settings = await harness.api.readSettings(LOCAL, "global");
-  await harness.api.patchSettings(LOCAL, "global", { defaultModel: "local/a" }, { revision: settings.revision });
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { defaultModel: "local/a" },
+    { revision: settings.revision },
+  );
   await expectNekError(
     async () =>
-      await harness.api.patchSettings(LOCAL, "global", { defaultModel: "local/b" }, { revision: settings.revision }),
+      await harness.api.patchSettings(
+        LOCAL,
+        "global",
+        { defaultModel: "local/b" },
+        { revision: settings.revision },
+      ),
     "conflict",
   );
 
@@ -376,7 +405,10 @@ test("mcp: project entries only override and renames delete the old key", async 
     localFiles: {
       [MCP_PATH]: JSON.stringify({
         mcpServers: {
-          filesystem: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "."] },
+          filesystem: {
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
+          },
           docs: { type: "http", url: "https://example.com/mcp" },
         },
       }),
@@ -385,7 +417,10 @@ test("mcp: project entries only override and renames delete the old key", async 
   });
   const globalView = await harness.api.readMcpConfig(LOCAL, "global");
   assert.equal(globalView.servers.length, 2);
-  assert.equal(globalView.servers.every((server) => !server.isOverride), true);
+  assert.equal(
+    globalView.servers.every((server) => !server.isOverride),
+    true,
+  );
 
   const projectView = await harness.api.readMcpConfig(LOCAL, "project", PROJECT);
   const filesystem = projectView.servers.find((server) => server.name === "filesystem");
@@ -485,7 +520,10 @@ Review the changes.
   const list = await harness.api.listAgentPresets(LOCAL);
   const builtin = list.filter((entry) => entry.source === "builtin");
   assert.equal(builtin.length, 2, "builtin presets are listed");
-  assert.equal(builtin.every((entry) => entry.revision.length > 0), true);
+  assert.equal(
+    builtin.every((entry) => entry.revision.length > 0),
+    true,
+  );
   const user = list.find((entry) => entry.preset.name === "reviewer");
   assert.ok(user);
   assert.equal(user.source, "user");
@@ -537,13 +575,16 @@ Review the changes.
   );
 
   await expectNekError(
-    async () => await harness.api.deleteAgentPreset(LOCAL, "global", "missing", { revision: "absent" }),
+    async () =>
+      await harness.api.deleteAgentPreset(LOCAL, "global", "missing", { revision: "absent" }),
     "validation",
   );
   const current = await harness.api.listAgentPresets(LOCAL);
   const target = current.find((entry) => entry.preset.name === "diff-reviewer");
   assert.ok(target);
-  await harness.api.deleteAgentPreset(LOCAL, "global", "diff-reviewer", { revision: target.revision });
+  await harness.api.deleteAgentPreset(LOCAL, "global", "diff-reviewer", {
+    revision: target.revision,
+  });
   assert.equal(harness.local.files.has(join(AGENT_DIR, "agents", "diff-reviewer.md")), false);
 });
 
@@ -567,12 +608,9 @@ test("nek.yaml patches merge sections and reject unknown keys", async () => {
 
   await expectNekError(
     async () =>
-      await harness.api.patchNekYaml(
-        LOCAL,
-        "global",
-        { unknown: { a: 1 } } as never,
-        { revision: (await harness.api.readNekYaml(LOCAL, "global")).revision },
-      ),
+      await harness.api.patchNekYaml(LOCAL, "global", { unknown: { a: 1 } } as never, {
+        revision: (await harness.api.readNekYaml(LOCAL, "global")).revision,
+      }),
     "validation",
   );
 });
@@ -581,7 +619,8 @@ test("instructions and resources reflect the agent dir", async () => {
   const harness = createHarness({
     localFiles: {
       [join(AGENT_DIR, "AGENTS.md")]: "global rules\n",
-      [join(AGENT_DIR, "skills", "pdf", "SKILL.md")]: "---\nname: pdf\ndescription: read PDFs\n---\n",
+      [join(AGENT_DIR, "skills", "pdf", "SKILL.md")]:
+        "---\nname: pdf\ndescription: read PDFs\n---\n",
       [join(AGENT_DIR, "prompts", "review.md")]: "---\ndescription: review staged changes\n---\n",
       [join(AGENT_DIR, "extensions", "llama.ts")]: "export {};\n",
     },
@@ -595,7 +634,9 @@ test("instructions and resources reflect the agent dir", async () => {
   assert.equal(harness.local.files.get(join(AGENT_DIR, "AGENTS.md")), "new rules\n");
   await expectNekError(
     async () =>
-      await harness.api.writeInstructions(LOCAL, "global", "other\n", { revision: instructions.revision }),
+      await harness.api.writeInstructions(LOCAL, "global", "other\n", {
+        revision: instructions.revision,
+      }),
     "conflict",
   );
 
@@ -604,9 +645,15 @@ test("instructions and resources reflect the agent dir", async () => {
     { name: "pdf", path: join(AGENT_DIR, "skills", "pdf", "SKILL.md"), description: "read PDFs" },
   ]);
   assert.deepEqual(resources.prompts, [
-    { name: "review", path: join(AGENT_DIR, "prompts", "review.md"), description: "review staged changes" },
+    {
+      name: "review",
+      path: join(AGENT_DIR, "prompts", "review.md"),
+      description: "review staged changes",
+    },
   ]);
-  assert.deepEqual(resources.extensions, [{ name: "llama", path: join(AGENT_DIR, "extensions", "llama.ts") }]);
+  assert.deepEqual(resources.extensions, [
+    { name: "llama", path: join(AGENT_DIR, "extensions", "llama.ts") },
+  ]);
   assert.equal(resources.directories.agentDir, AGENT_DIR);
   assert.equal(resources.directories.projectDir, PROJECT_DIR);
 });
@@ -616,11 +663,18 @@ test("a disconnected target fails with not_connected and model catalog comes fro
   const models = await harness.api.listAvailableModels(LOCAL);
   assert.equal(models.length, 1);
   assert.equal(models[0]?.id, "claude-sonnet-4-5");
-  assert.deepEqual(models[0]?.thinkingLevels.includes("off"), false, "thinkingLevelMap null disables a level");
+  assert.deepEqual(
+    models[0]?.thinkingLevels.includes("off"),
+    false,
+    "thinkingLevelMap null disables a level",
+  );
   assert.equal(models[0]?.contextWindow, 200_000);
 
   harness.disconnect();
-  const error = await expectNekError(async () => await harness.api.readModelsConfig(LOCAL), "not_connected");
+  const error = await expectNekError(
+    async () => await harness.api.readModelsConfig(LOCAL),
+    "not_connected",
+  );
   assert.match(error.message, /not connected/);
 });
 
@@ -642,4 +696,124 @@ test("an executor without a lock is reported instead of writing unlocked", async
   );
   assert.match(error.message, /no settings lock/);
   assert.equal(harness.local.files.get(SETTINGS_PATH), "{}");
+});
+
+test("model CRUD keeps order, rejects duplicates and appends unlisted models on reorder", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [MODELS_PATH]: modelsFile(`{
+    "local": {
+      "api": "openai-completions",
+      "baseUrl": "http://a",
+      "models": [{ "id": "a" }, { "id": "b" }, { "id": "c" }]
+    }
+  }`),
+    },
+  });
+  let view = await harness.api.readModelsConfig(LOCAL);
+  assert.deepEqual(
+    view.providers[0]?.models.map((model) => model.id),
+    ["a", "b", "c"],
+  );
+
+  await harness.api.saveModel(
+    LOCAL,
+    "local",
+    { id: "b", name: "B alias" },
+    {
+      revision: view.revision,
+      previousId: "b",
+    },
+  );
+  await harness.api.addModels(LOCAL, "local", [{ id: "d", contextWindow: 200_000 }], {
+    revision: (await harness.api.readModelsConfig(LOCAL)).revision,
+  });
+  await expectNekError(
+    async () =>
+      await harness.api.addModels(LOCAL, "local", [{ id: "a" }], {
+        revision: (await harness.api.readModelsConfig(LOCAL)).revision,
+      }),
+    "validation",
+  );
+
+  view = await harness.api.readModelsConfig(LOCAL);
+  assert.deepEqual(
+    view.providers[0]?.models.map((model) => model.id),
+    ["a", "b", "c", "d"],
+  );
+  assert.equal(view.providers[0]?.models[1]?.name, "B alias");
+
+  // 只列出 c、a：未列出的 b、d 追加到末尾。
+  await harness.api.reorderModels(LOCAL, "local", ["c", "a"], { revision: view.revision });
+  view = await harness.api.readModelsConfig(LOCAL);
+  assert.deepEqual(
+    view.providers[0]?.models.map((model) => model.id),
+    ["c", "a", "b", "d"],
+  );
+  await expectNekError(
+    async () =>
+      await harness.api.reorderModels(LOCAL, "local", ["missing"], { revision: view.revision }),
+    "validation",
+  );
+
+  await harness.api.deleteModel(LOCAL, "local", "a", { revision: view.revision });
+  await expectNekError(
+    async () =>
+      await harness.api.deleteModel(LOCAL, "local", "a", {
+        revision: (await harness.api.readModelsConfig(LOCAL)).revision,
+      }),
+    "validation",
+  );
+  view = await harness.api.readModelsConfig(LOCAL);
+  assert.deepEqual(
+    view.providers[0]?.models.map((model) => model.id),
+    ["c", "b", "d"],
+  );
+
+  // 新建服务商要求 ID 合法且唯一
+  await expectNekError(
+    async () =>
+      await harness.api.saveProvider(
+        LOCAL,
+        { id: "Bad ID", api: "openai-completions", baseUrl: "http://x", models: [] },
+        { revision: view.revision, isNew: true },
+      ),
+    "validation",
+  );
+  await expectNekError(
+    async () =>
+      await harness.api.saveProvider(
+        LOCAL,
+        { id: "local", api: "openai-completions", baseUrl: "http://x", models: [] },
+        { revision: view.revision, isNew: true },
+      ),
+    "validation",
+  );
+});
+
+test("project trust, config validation and web search test use the control process", async () => {
+  const harness = createHarness();
+  const trust = await harness.api.getProjectTrust(LOCAL, PROJECT);
+  assert.equal(trust.cwd, PROJECT);
+  assert.equal(trust.trusted, null);
+  await harness.api.setProjectTrust(LOCAL, PROJECT, true);
+  assert.deepEqual(await harness.api.validate(LOCAL, PROJECT), []);
+  assert.deepEqual(await harness.api.testWebSearch(LOCAL, "nek"), {
+    ok: true,
+    latencyMs: 12,
+    resultCount: 3,
+  });
+  const commands = harness.control.commands.map((command) => command.type);
+  assert.deepEqual(commands, [
+    "get_project_trust",
+    "set_project_trust",
+    "validate_config",
+    "test_web_search",
+  ]);
+
+  // 目标表来自 host，未连接的主机状态可见
+  const targets = await harness.api.listTargets();
+  assert.equal(targets.length, 2);
+  assert.equal(targets[1]?.target.kind, "remote");
+  assert.equal(targets[1]?.connected, true);
 });

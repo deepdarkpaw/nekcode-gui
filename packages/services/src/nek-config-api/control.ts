@@ -30,7 +30,9 @@ export type NekStructuredHandler = (
 
 /** 设置页需要的最小控制进程能力。 */
 export interface NekControlClient {
-  call: <C extends NekRpcCommandType>(command: NekRpcCommandOfType<C>) => Promise<NekRpcResponseDataFor<C>>;
+  call: <C extends NekRpcCommandType>(
+    command: NekRpcCommandOfType<C>,
+  ) => Promise<NekRpcResponseDataFor<C>>;
   onAuthEvent: (listener: (record: NekAuthEventRecord) => void) => () => void;
   respondExtensionUi: (response: NekExtensionUiResponse) => void;
   setStructuredHandler: (handler: NekStructuredHandler | undefined) => void;
@@ -48,10 +50,6 @@ interface ControlProcess extends NekPooledProcess {
 
 function isRpcClient(value: unknown): value is RpcClient {
   return typeof value === "object" && value !== null && "call" in value;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function unavailable(error: unknown): Error {
@@ -130,5 +128,3 @@ export async function createNekControlClient(options: {
     },
   };
 }
-
-export { errorMessage };

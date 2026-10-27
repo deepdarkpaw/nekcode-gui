@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import test from "node:test";
-import type { NekMcpServerStatus, NekRpcCommandOfType, NekRpcCommandType, NekRpcResponseDataFor } from "@zcode/shared/nek-protocol";
+import type {
+  NekMcpServerStatus,
+  NekRpcCommandOfType,
+  NekRpcCommandType,
+  NekRpcResponseDataFor,
+} from "@zcode/shared/nek-protocol";
 import { AGENT_DIR, LOCAL, createHarness } from "./nekConfigApiHarness.js";
 import type { NekConfigSessionHandle } from "../src/nek-config-api/index.js";
 
@@ -25,7 +30,9 @@ function session(options: {
   reload?: () => Promise<{ deferred: boolean; diagnostics: never[] }>;
   key?: string;
   busy?: boolean;
-  call?: <C extends NekRpcCommandType>(command: NekRpcCommandOfType<C>) => Promise<NekRpcResponseDataFor<C>>;
+  call?: <C extends NekRpcCommandType>(
+    command: NekRpcCommandOfType<C>,
+  ) => Promise<NekRpcResponseDataFor<C>>;
 }): NekConfigSessionHandle {
   return {
     sessionKey: options.key ?? "s1",
@@ -81,8 +88,21 @@ test("reload reaches every process and counts busy sessions as deferred", async 
   const harness = createHarness({ localFiles: { [SETTINGS_PATH]: "{}" } });
   const calls: string[] = [];
   harness.sessions.push(
-    session({ key: "idle", reload: async () => { calls.push("idle"); return { deferred: false, diagnostics: [] }; } }),
-    session({ key: "busy", busy: true, reload: async () => { calls.push("busy"); return { deferred: false, diagnostics: [] }; } }),
+    session({
+      key: "idle",
+      reload: async () => {
+        calls.push("idle");
+        return { deferred: false, diagnostics: [] };
+      },
+    }),
+    session({
+      key: "busy",
+      busy: true,
+      reload: async () => {
+        calls.push("busy");
+        return { deferred: false, diagnostics: [] };
+      },
+    }),
   );
   const outcome = await harness.api.reloadRunningSessions(LOCAL);
   assert.deepEqual(calls, ["idle", "busy"]);
@@ -114,17 +134,41 @@ test("auto reload runs once after each write and can be turned off", async () =>
     autoReload: true,
   });
   let reloadCalls = 0;
-  withReload.sessions.push(session({ reload: async () => { reloadCalls += 1; return { deferred: false, diagnostics: [] }; } }));
+  withReload.sessions.push(
+    session({
+      reload: async () => {
+        reloadCalls += 1;
+        return { deferred: false, diagnostics: [] };
+      },
+    }),
+  );
   const read = await withReload.api.readSettings(LOCAL, "global");
-  await withReload.api.patchSettings(LOCAL, "global", { defaultModel: "a/b" }, { revision: read.revision });
+  await withReload.api.patchSettings(
+    LOCAL,
+    "global",
+    { defaultModel: "a/b" },
+    { revision: read.revision },
+  );
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(reloadCalls, 1);
 
   const withoutReload = createHarness({ localFiles: { [SETTINGS_PATH]: "{}" }, autoReload: false });
   let disabledCalls = 0;
-  withoutReload.sessions.push(session({ reload: async () => { disabledCalls += 1; return { deferred: false, diagnostics: [] }; } }));
+  withoutReload.sessions.push(
+    session({
+      reload: async () => {
+        disabledCalls += 1;
+        return { deferred: false, diagnostics: [] };
+      },
+    }),
+  );
   const second = await withoutReload.api.readSettings(LOCAL, "global");
-  await withoutReload.api.patchSettings(LOCAL, "global", { defaultModel: "a/b" }, { revision: second.revision });
+  await withoutReload.api.patchSettings(
+    LOCAL,
+    "global",
+    { defaultModel: "a/b" },
+    { revision: second.revision },
+  );
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(disabledCalls, 0);
 });

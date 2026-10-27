@@ -7,11 +7,7 @@
  * 2. **API Key 永不回显**：字面量在读取视图里变成掩码，`$ENV`/`${ENV}`/`!cmd` 各自带出形态；
  * 3. **未知字段透传**：`extra` 把 GUI 不认识的键原样带回写入端，避免一次保存毁掉 nek 的新字段。
  */
-import type {
-  NekModelConfig,
-  NekProviderView,
-  NekProviderWrite,
-} from "@zcode/shared/nek-protocol";
+import type { NekModelConfig, NekProviderView, NekProviderWrite } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 import {
   nekModelDefinitionSchema,
@@ -135,9 +131,7 @@ export function modelToView(raw: Record<string, unknown>): NekModelConfig {
 
 export function providerToView(id: string, raw: Record<string, unknown>): NekProviderView {
   const { value, extra } = pickKnown(raw, PROVIDER_KNOWN_KEYS);
-  const models = Array.isArray(raw.models)
-    ? raw.models.filter(isPlainObject).map(modelToView)
-    : [];
+  const models = Array.isArray(raw.models) ? raw.models.filter(isPlainObject).map(modelToView) : [];
   const view: NekProviderView = {
     ...(value as unknown as Omit<NekProviderView, "apiKey" | "models" | "overridesBuiltin">),
     id,
@@ -234,16 +228,14 @@ export function providerEdits(
 }
 
 /** 用 zod 镜像校验单个服务商 / 模型，返回字段级错误。 */
-export function validateProviderValue(
-  providerId: string,
-  value: Record<string, unknown>,
-): void {
+export function validateProviderValue(providerId: string, value: Record<string, unknown>): void {
   const validated = parseWithSchema(nekProviderSchema, value);
   if (validated.ok) return;
   const fieldErrors = fieldErrorsOf(validated.issues);
   const prefixed: Record<string, string> = {};
   for (const [path, message] of Object.entries(fieldErrors)) {
-    prefixed[path === "(root)" ? `providers.${providerId}` : `providers.${providerId}.${path}`] = message;
+    prefixed[path === "(root)" ? `providers.${providerId}` : `providers.${providerId}.${path}`] =
+      message;
   }
   throw validationError(`invalid provider "${providerId}"`, prefixed);
 }
@@ -268,11 +260,16 @@ export interface NekModelsSnapshot {
   providers: Record<string, Record<string, unknown>>;
 }
 
-function readProviders(path: string, data: Record<string, unknown>): Record<string, Record<string, unknown>> {
+function readProviders(
+  path: string,
+  data: Record<string, unknown>,
+): Record<string, Record<string, unknown>> {
   const raw = data.providers;
   if (raw === undefined) return {};
   if (!isPlainObject(raw)) {
-    throw validationError(`${path}: "providers" must be an object`, { providers: "must be an object" });
+    throw validationError(`${path}: "providers" must be an object`, {
+      providers: "must be an object",
+    });
   }
   const providers: Record<string, Record<string, unknown>> = {};
   for (const [id, value] of Object.entries(raw)) {

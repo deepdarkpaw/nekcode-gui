@@ -8,13 +8,7 @@
  */
 import type { NekSettingsView } from "@zcode/shared/nek-protocol";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
-import {
-  applySettingsPatch,
-  parseJsonMapping,
-  readCheckedDocument,
-  readTextDocument,
-  writeTextDocument,
-} from "./documents.js";
+import { applySettingsPatch, parseJsonMapping, readTextDocument } from "./documents.js";
 import { conflict, ioError } from "./errors.js";
 import { ABSENT_REVISION, encodeRevision, sameRevision } from "./revision.js";
 import { toSettingsView } from "./settingsDefaults.js";
@@ -38,19 +32,6 @@ export async function readSettingsDocument(
   }
   const raw = parseJsonMapping(path, document.content);
   return { path, revision: document.revision, values: toSettingsView(raw), raw };
-}
-
-/** 只读原始对象；文件缺失或损坏都返回空对象（`effective` 计算不能因为另一个作用域坏掉就整页失败）。 */
-export async function readSettingsRaw(
-  executor: NekConfigHostExecutor,
-  path: string,
-): Promise<Record<string, unknown>> {
-  try {
-    const document = await readSettingsDocument(executor, path);
-    return document.raw;
-  } catch {
-    return {};
-  }
 }
 
 export interface PatchSettingsArgs {
@@ -82,7 +63,8 @@ export async function patchSettingsDocument(
         ? ABSENT_REVISION
         : encodeRevision({ mtimeMs: 0, size: Buffer.byteLength(current, "utf8") }, current);
     if (!sameRevision(currentRevision, expectedRevision)) throw conflict(path);
-    const parsed = current === undefined || current.trim() === "" ? {} : parseJsonMapping(path, current);
+    const parsed =
+      current === undefined || current.trim() === "" ? {} : parseJsonMapping(path, current);
     const merged = applySettingsPatch(parsed, patch);
     next = `${JSON.stringify(merged, null, 2)}\n`;
     return next;
@@ -93,27 +75,4 @@ export async function patchSettingsDocument(
   }
   const revision = await readTextDocument(executor, path).then((document) => document.revision);
   return { path, revision };
-}
-
-/** 读取 + 校验 revision（供需要"先确认文件没被别人改过"的调用方使用）。 */
-export async function assertSettingsRevision(
-  executor: NekConfigHostExecutor,
-  path: string,
-  expected: string,
-): Promise<NekSettingsDocument> {
-  const document = await readCheckedDocument(executor, path, expected);
-  if (document.content === null || document.content.trim() === "") {
-    return { path, revision: document.revision, values: {}, raw: {} };
-  }
-  const raw = parseJsonMapping(path, document.content);
-  return { path, revision: document.revision, values: toSettingsView(raw), raw };
-}
-
-/** 整份写入（仅在补丁无法表达时使用，例如"从本机复制"）；仍需调用方保证 revision。 */
-export async function writeSettingsDocument(
-  executor: NekConfigHostExecutor,
-  path: string,
-  raw: Record<string, unknown>,
-): Promise<string> {
-  return await writeTextDocument(executor, path, `${JSON.stringify(raw, null, 2)}\n`);
 }
