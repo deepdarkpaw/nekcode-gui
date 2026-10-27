@@ -11,7 +11,11 @@ import {
   SSHHostKeyStore,
   type SSHHostKeyRejection,
 } from "./sshKnownHosts.js";
-import { buildSSHConnectConfig, normalizeSSHConnectError } from "./sshAuth.js";
+import {
+  buildSSHConnectConfig,
+  normalizeSSHConnectError,
+  resolveSSHAuthentication,
+} from "./sshAuth.js";
 
 const target: SSHConnectOptions = {
   kind: "ssh",
@@ -147,6 +151,34 @@ describe("createSSHHostVerifier", () => {
     expect(ok).toBe(false);
     expect(rejections).toHaveLength(1);
     expect(rejections[0]?.reason).toBe("changed");
+    expect(rejections[0]?.detail).toContain("旧指纹=SHA256:");
+    expect(rejections[0]?.detail).toContain("新指纹=SHA256:");
+  });
+
+  it("未知主机密钥由注入回调决定是否记录", async () => {
+    const store = new SSHHostKeyStore({ filePath: storePath() });
+    const denied = createSSHHostVerifier({
+      store,
+      target,
+      requireHostKeyConfirmation: true,
+      confirmHostKey: async () => false,
+      onRejection: () => undefined,
+    });
+    await new Promise<void>((resolve) => denied(Buffer.from("unknown"), () => resolve()));
+    expect(await store.listKnownHosts()).toHaveLength(0);
+
+    const accepted = createSSHHostVerifier({
+      store,
+      target,
+      requireHostKeyConfirmation: true,
+      confirmHostKey: async (confirmation) => confirmation.fingerprint.startsWith("SHA256:"),
+      onRejection: () => undefined,
+    });
+    const result = await new Promise<boolean>((resolve) =>
+      accepted(Buffer.from("unknown"), resolve),
+    );
+    expect(result).toBe(true);
+    expect(await store.listKnownHosts()).toHaveLength(1);
   });
 });
 
@@ -189,6 +221,29 @@ describe("sshAuth 接线", () => {
   it("其余 SSH 错误文案不受影响", () => {
     const error = normalizeSSHConnectError({ level: "client-authentication" });
     expect(error.message).toContain("认证失败");
+  });
+
+  it("显式密码关闭 agent，私钥口令通过注入回调获取", async () => {
+    const passwordAuth = await resolveSSHAuthentication({
+      password: "secret",
+      agent: "/tmp/agent.sock",
+    });
+    expect(passwordAuth.agent).toBeUndefined();
+    expect(passwordAuth.password).toBe("secret");
+
+    let asked = "";
+    const keyAuth = await resolveSSHAuthentication({
+      privateKey: "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+      askPassphrase: async (path) => {
+        asked = path ?? "";
+        return "passphrase";
+      },
+      privateKeyPath: "~/.ssh/id_ed25519",
+      agent: "/tmp/agent.sock",
+    });
+    expect(asked).toBe("~/.ssh/id_ed25519");
+    expect(keyAuth.privateKeyPassphrase).toBe("passphrase");
+    expect(keyAuth.agent).toBe("/tmp/agent.sock");
   });
 });
 

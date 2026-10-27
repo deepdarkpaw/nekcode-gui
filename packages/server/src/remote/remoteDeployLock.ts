@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import type { IRemoteBackend, StdioStream } from "@zcode/server/remote/backend.js";
-import { REMOTE_BASE } from "@zcode/server/remote/deployShared.js";
 import { quotePosixPathArg, quotePosixShellArg } from "@zcode/server/remote/posixShell.js";
 
 const DEPLOY_LOCK_HEARTBEAT_SECONDS = 30;
 const DEPLOY_LOCK_STALE_SECONDS = 600;
 const DEFAULT_ACQUIRE_TIMEOUT_MS = 120_000;
+export const REMOTE_DEPLOY_LOCK_DIR = "~/.nek/gui-server/.deploy.lock";
 const DEFAULT_RELEASE_TIMEOUT_MS = 5_000;
 const MAX_LOCK_STDERR_LENGTH = 4_096;
 
@@ -36,7 +36,7 @@ function destroyLockStreamBestEffort(stream: StdioStream): void {
   destroyStreamBestEffort(stream.stderr);
 }
 
-function buildRemoteDeployLockScript(lockDir: string, ownerToken: string): string {
+export function buildRemoteDeployLockScript(lockDir: string, ownerToken: string): string {
   const acquiredMarker = `zcode-deploy-lock-acquired:${ownerToken}`;
   const releaseMarker = `zcode-deploy-lock-release:${ownerToken}`;
   return [
@@ -44,10 +44,11 @@ function buildRemoteDeployLockScript(lockDir: string, ownerToken: string): strin
     `lock_dir=${quotePosixPathArg(lockDir)}`,
     `owner_token=${quotePosixShellArg(ownerToken)}`,
     'owner_file="$lock_dir/owner"',
+    'timestamp_file="$lock_dir/timestamp"',
     'stale_dir="$lock_dir.stale-$owner_token"',
     `mkdir -p ${quotePosixPathArg(posix.dirname(lockDir))}`,
     'while ! mkdir "$lock_dir" 2>/dev/null; do',
-    '  lock_mtime=$({ stat -c %Y "$owner_file" || stat -f %m "$owner_file" || stat -c %Y "$lock_dir" || stat -f %m "$lock_dir"; } 2>/dev/null || printf 0)',
+    '  lock_mtime=$({ stat -c %Y "$timestamp_file" || stat -f %m "$timestamp_file" || stat -c %Y "$lock_dir" || stat -f %m "$lock_dir"; } 2>/dev/null || printf 0)',
     "  lock_now=$(date +%s)",
     `  if [ "$lock_mtime" -gt 0 ] && [ $((lock_now - lock_mtime)) -ge ${DEPLOY_LOCK_STALE_SECONDS} ]; then`,
     '    if command mv "$lock_dir" "$stale_dir" 2>/dev/null; then rm -rf "$stale_dir"; fi',
@@ -56,6 +57,9 @@ function buildRemoteDeployLockScript(lockDir: string, ownerToken: string): strin
     "  sleep 1",
     "done",
     'printf %s "$owner_token" > "$owner_file"',
+    'printf %s "$$" > "$lock_dir/pid"',
+    'hostname > "$lock_dir/hostname" 2>/dev/null || printf unknown > "$lock_dir/hostname"',
+    'date +%s > "$timestamp_file"',
     "lock_heartbeat_pid=",
     "cleanup_deploy_lock() {",
     '  if [ -n "${lock_heartbeat_pid:-}" ]; then kill "$lock_heartbeat_pid" >/dev/null 2>&1 || true; wait "$lock_heartbeat_pid" 2>/dev/null || true; fi',
@@ -63,7 +67,7 @@ function buildRemoteDeployLockScript(lockDir: string, ownerToken: string): strin
     '  if [ "$current_owner" = "$owner_token" ]; then rm -rf "$lock_dir"; fi',
     "}",
     "trap cleanup_deploy_lock EXIT HUP INT TERM",
-    `(while [ "$(cat "$owner_file" 2>/dev/null || true)" = "$owner_token" ]; do touch "$owner_file" 2>/dev/null || exit 0; sleep ${DEPLOY_LOCK_HEARTBEAT_SECONDS}; done) &`,
+    `(while [ "$(cat "$owner_file" 2>/dev/null || true)" = "$owner_token" ]; do date +%s > "$timestamp_file" 2>/dev/null || exit 0; sleep ${DEPLOY_LOCK_HEARTBEAT_SECONDS}; done) &`,
     "lock_heartbeat_pid=$!",
     `printf '%s\n' ${quotePosixShellArg(acquiredMarker)}`,
     "release_marker=",
@@ -115,7 +119,7 @@ export async function acquireRemoteDeployLock(
   options: AcquireRemoteDeployLockOptions = {},
 ): Promise<RemoteDeployLockHandle> {
   const ownerToken = options.ownerToken?.trim() || randomUUID();
-  const lockDir = options.lockDir?.trim() || `${REMOTE_BASE}/.deploy.lock`;
+  const lockDir = options.lockDir?.trim() || REMOTE_DEPLOY_LOCK_DIR;
   const acquireTimeoutMs = Math.max(
     1,
     Math.floor(options.acquireTimeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS),
