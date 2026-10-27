@@ -1806,14 +1806,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/snapshot.ts\u0000MAX_PERMISSION_FEEDBACK_CHARS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/snapshot.ts\u0000PERMISSION_FULL_ACCESS_OPTION_ID",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/snapshot.ts\u0000goalIterationStateSchema",
       "count": 1
     },
@@ -2722,10 +2714,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/v4/pendingInteractionAdapter.ts\u0000pendingPermissionToLegacyRequest",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/v4/sessionsIndexStore.ts\u0000applySessionsIndexFrame",
       "count": 1
     },
@@ -3067,10 +3055,6 @@
     },
     {
       "key": "knip\u0000files\u0000packages/ui/src/lib/oauthProviderIcon.tsx\u0000packages/ui/src/lib/oauthProviderIcon.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/permissionRequest.ts\u0000packages/ui/src/lib/permissionRequest.ts",
       "count": 1
     },
     {

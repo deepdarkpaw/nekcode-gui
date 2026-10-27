@@ -1,5 +1,5 @@
 // v4 行渲染上下文（ai-elements / ToolCallBlocks 回接所需的宿主注入面）。
-// 注入模式对齐 PermissionDialog（store 耦合剥离）：展示组件不自取 store，
+// 注入模式（store 耦合剥离）：展示组件不自取 store，
 // theme / codePreviewSettings 在宿主（SessionPane）处取，向下走稳定 props。
 import type { CodePreviewSettings } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";

@@ -17,7 +17,6 @@ import type {
   ZCodeMessageWithParts,
   ModelSelection,
   ZCodeSessionImportHistory,
-  ZCodePermissionRequestParams,
   AgentLaneResourceSample,
   ZCodeMcpTelemetryEvent,
   ZCodeMcpResourceSample,
@@ -501,7 +500,6 @@ export interface ZCodeAgentWorkspaceConfigSubscribeParams extends ZCodeAgentWork
 export type ZCodeAgentServiceEvent =
   | { type: "session.event"; event: ZCodeSessionEvent }
   | { type: "state.updated"; notification: ZCodeStateUpdatedNotification }
-  | { type: "permission.request"; request: ZCodePermissionRequestParams }
   | { type: "userInput.request"; request: ZCodeUserInputRequestParams }
   | {
       type: "userInput.response";

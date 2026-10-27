@@ -177,10 +177,7 @@ function isCompletionBlockingWorkRowRunning(row: AssistantWorkRow): boolean {
       return row.state === "streaming";
     case "toolCall":
       return (
-        row.backgrounded !== true &&
-        (row.status === "inputStreaming" ||
-          row.status === "pendingApproval" ||
-          row.status === "running")
+        row.backgrounded !== true && (row.status === "inputStreaming" || row.status === "running")
       );
     case "subagent":
       return row.backgrounded !== true && row.status === "running";

@@ -354,12 +354,7 @@ function collectShareStructureIssues(
     if ((row.kind === "assistantText" || row.kind === "reasoning") && row.state === "streaming") {
       add(row, "streaming_row");
     }
-    if (
-      row.kind === "toolCall" &&
-      (row.status === "inputStreaming" ||
-        row.status === "pendingApproval" ||
-        row.status === "running")
-    ) {
+    if (row.kind === "toolCall" && (row.status === "inputStreaming" || row.status === "running")) {
       add(row, "active_tool_call");
     }
     if (row.kind === "subagent" && row.status === "running") add(row, "active_subagent");

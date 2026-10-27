@@ -36,7 +36,7 @@ export interface BuiltinProviderConfigFileInfo {
 
 export interface TaskNotificationPayload {
   taskId: string;
-  status: "completed" | "failed" | "permission_request" | "elicitation_request";
+  status: "completed" | "failed" | "elicitation_request";
   requestId?: string;
   title: string;
   body: string;

@@ -1211,7 +1211,7 @@ export function SessionPane({
   const snapshotFollowupMode = snapshot?.config.followupMode ?? null;
   const snapshotRevision = snapshot?.revision ?? null;
 
-  // 注入模式对齐 PermissionDialog：theme/codePreviewSettings 在宿主取 store，
+  // 注入模式：theme/codePreviewSettings 在宿主取 store，
   // 经稳定引用的 rowContext 下发给 memo 行组件（MessageResponse/ToolCallBlocks）。
   const theme = useZCodeStoreWithDefault((state) => state.theme, "system");
   const codePreviewSettings = useZCodeStoreWithDefault(

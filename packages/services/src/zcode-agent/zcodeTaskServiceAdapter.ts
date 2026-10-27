@@ -65,8 +65,6 @@ import {
   type ZCodeMessagePart,
   type ZCodeMessageWithParts,
   type ZCodePermissionOption,
-  type ZCodePermissionRequest,
-  type ZCodePermissionRequestParams,
   type ZCodePersistedMessage,
   type ZCodePersistedMessagePart,
   type ZCodePersistedToolCall,
@@ -1502,9 +1500,6 @@ export function createZCodeTaskServiceAdapter(
         ),
       ),
     );
-    const pendingPermissions: ZCodePermissionRequest[] = snapshot.projection.pendingPermissions
-      .filter((permission) => !isUserInputBackedPermissionToolName(permission.toolName))
-      .map((permission) => pendingPermissionToStreamEvent(snapshot.session.sessionId, permission));
     const pendingElicitations = snapshot.projection.pendingPermissions
       .filter((permission) => isUserInputBackedPermissionToolName(permission.toolName))
       .map((permission) =>
@@ -1537,7 +1532,6 @@ export function createZCodeTaskServiceAdapter(
           contextUsageFromRuntime(snapshot.runtime.contextUsage) ??
           contextUsageFromProjection(snapshot.projection) ??
           undefined,
-        pendingPermissions,
         backgroundBashJobs: backgroundTaskControls,
         // 手机 replayable 快照需要用空数组表达“用户输入队列已清空”。
         // desktop-continuous 主链路仍保持原投影形态，避免把 replayable 的集合恢复语义扩散过去。
@@ -1578,11 +1572,6 @@ export function createZCodeTaskServiceAdapter(
       for (const streamEvent of mapStateUpdated(params, event.notification)) {
         emitTaskEvent(params, streamEvent);
       }
-      return;
-    }
-
-    if (event.type === "permission.request") {
-      emitTaskEvent(params, permissionRequestToStreamEvent(params.taskId, event.request));
       return;
     }
 
@@ -4829,42 +4818,6 @@ function agentTextFromContentField(value: unknown): string | undefined {
     .filter((item): item is string => Boolean(item))
     .join("\n");
   return text || undefined;
-}
-
-function permissionRequestToStreamEvent(
-  taskId: string,
-  request: ZCodePermissionRequestParams,
-): ZCodePermissionRequest {
-  return {
-    type: "permission_request",
-    taskId,
-    traceId: generateTraceId(taskId),
-    requestId: request.requestId,
-    description: request.reason || request.toolName,
-    kind: request.toolName,
-    title: request.toolName,
-    options: request.options,
-    ...(request.origin ? { origin: request.origin } : {}),
-    raw: request,
-  };
-}
-
-function pendingPermissionToStreamEvent(
-  taskId: string,
-  permission: ZCodeSessionStateSnapshot["projection"]["pendingPermissions"][number],
-): ZCodePermissionRequest {
-  return {
-    type: "permission_request",
-    taskId,
-    traceId: generateTraceId(taskId),
-    requestId: permission.requestId,
-    description: permission.reason || permission.toolName,
-    kind: permission.toolName,
-    title: permission.toolName,
-    options: permission.options,
-    ...(permission.origin ? { origin: permission.origin } : {}),
-    raw: permission,
-  };
 }
 
 function userInputRequestToElicitationStreamEvent(

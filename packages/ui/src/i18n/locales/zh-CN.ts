@@ -119,8 +119,6 @@ const zhCN: Record<string, string> = {
   "chat.composer.addSection": "添加",
   "chat.composer.addWorkflow": "工作流",
   "chat.composer.attachment": "附件",
-  "chat.permission.feedback.ariaLabel": "拒绝时给模型的可选反馈",
-  "chat.permission.feedback.placeholder": "告诉模型接下来应该怎么做...",
   "offPeak.chatCreated.defaultTitle": "闲时任务",
   "offPeak.chatCreated.queued": "已加入闲时队列",
   "offPeak.chatCreated.queuedAt": "排队第 {position} 位",
@@ -1609,7 +1607,6 @@ const zhCN: Record<string, string> = {
   "notification.completed": "任务已完成",
   "notification.completedBody": "任务已完成",
   "notification.error": "任务出错",
-  "notification.permissionRequired": "需要你的确认",
   "notification.inputRequired": "需要你的回复",
   "notification.planApprovalRequired": "计划等待确认",
   "notification.planApprovalBody": "请确认计划后继续执行",
@@ -3537,9 +3534,6 @@ const zhCN: Record<string, string> = {
   "chat.toolCall.workflow.fill.awaitingConfirmation": "留白补全 · 等待确认",
   "chat.toolCall.workflow.fill.done": "留白已补全",
   "chat.toolCall.workflow.fill.failed": "留白补全 · 未应用",
-  "chat.permission.workflow.fill.title": "补全这处工作流留白？",
-  "chat.permission.workflow.fill.bodyOnly":
-    "完整拼接预览暂不可用。下方代码仅为拟提交的留白函数体。",
   "chat.toolCall.workflow.hole.open": "打开留白「{name}」",
   "chat.toolCall.workflow.openRunDetails": "查看实例详情",
   "chat.toolCall.workflow.run.status.pending": "待启动",
@@ -3957,65 +3951,10 @@ const zhCN: Record<string, string> = {
 
   // 权限请求
   "chat.permission.title": "需要权限",
-  "chat.permission.awaitingApproval": "等待确认",
-  "chat.permission.approve": "允许",
-  "chat.permission.approveAlways": "始终允许",
-  "chat.permission.allowForSession": "允许本会话",
-  "chat.permission.responseFailed": "审批未完成，请重试。",
-  "chat.permission.fullAccess": "完全访问",
-  "chat.permission.fullAccess.description": "授予 Agent 完全访问权限，不再确认。",
-  "chat.permission.allowCommand.description": "项目范围内，后续相同命令不再询问",
-  "chat.permission.allowCommand": "始终允许此命令",
-  "chat.permission.allowForProject": "始终允许本项目",
-  "chat.permission.deny": "拒绝",
-  "chat.permission.denyAlways": "始终拒绝",
-  "chat.permission.files": "涉及文件",
-  "chat.permission.keyboardHint": "使用 Tab / 上下键选择，回车确认",
-  "chat.permission.scope.commandPrefix": "命令前缀",
-  "chat.permission.scope.exactCommand": "仅此命令",
-  "chat.permission.workflow.title": "运行此工作流？",
-  "chat.permission.workflow.showScript": "显示完整脚本",
-  "chat.permission.workflow.hideScript": "收起完整脚本",
-  "chat.permission.workflow.refine": "提出修改",
-  "chat.permission.workflow.refine.placeholder": "描述这个工作流应该怎么改…",
-  // 会话免确认：只活在本次会话，重启后再问。
-  "chat.permission.workflow.allowForSession": "本会话内始终允许",
-  "chat.permission.workflow.allowForSession.description": "本会话内运行工作流不再询问",
-  // ── 修订──
-  // 修订的确认窗只对别的会话的 run 出现：问句换词，多一行 lineage（前驱还在跑时再多一句）。
-  // 不导入预览、不放脚本 diff。
-  "chat.permission.workflow.amend.title": "调整此工作流？",
-  "chat.permission.workflow.amends": "调整 run",
-  "chat.permission.workflow.amends.running": "仍在运行，将被停止",
-  "chat.permission.workflow.amends.scriptUnchanged": "脚本不变",
-  // 并发上限：模型只在用户要求时才写
-  // 这个字段，所以这一行说的是用户自己提的条件。单位是「同时在跑的子代理」，不是请求数。
-  "chat.permission.workflow.maxConcurrency": "最多 {count} 个子代理同时运行",
   // 子代理模型：模型只在用户开口要求时才写 `subagent_model`，
   // 所以这一行也是用户自己提的条件。只说子代理——主代理无论如何都留在会话模型上。
   // `{model}` 是解析过的模型名（必要时带思考强度），不是规范串；规范串在这一行的 tooltip 里。
-  "chat.permission.workflow.subagentModel": "子代理运行在 {model}",
-  // ── 可复用工作流──
-  // saved 来源徽标（运行确认窗）：只说明脚本来自哪个文件、带了什么实参。
-  // 它不表达任何信任——保存不产生信任，已保存的工作流照样过完整的运行确认。
-  "chat.permission.workflow.saved.badge": "已保存的工作流",
-  "chat.permission.workflow.saved.scope.project": "project",
-  "chat.permission.workflow.saved.args": "实参",
   // 保存确认窗：覆盖与新建是两句不同的问句，不是同一句话加个标记。
-  "chat.permission.workflow.save.title": "把这个工作流保存到项目里？",
-  "chat.permission.workflow.save.overwriteTitle": "覆盖已保存的同名工作流？",
-  "chat.permission.workflow.save.overwriteHint":
-    "该路径下已存在同名工作流，保存会整体替换这个文件。",
-  "chat.permission.workflow.save.path": "落点",
-  "chat.permission.workflow.save.description": "说明",
-  "chat.permission.workflow.save.whenToUse": "何时使用",
-  "chat.permission.workflow.save.args": "参数",
-  "chat.permission.workflow.save.args.name": "参数名",
-  "chat.permission.workflow.save.args.type": "类型",
-  "chat.permission.workflow.save.args.required": "必填",
-  "chat.permission.workflow.save.args.requiredYes": "必填",
-  "chat.permission.workflow.save.args.requiredNo": "可选",
-  "chat.permission.workflow.save.args.default": "默认值",
   "chat.interactionOrigin.subagent": "子智能体",
   "chat.interactionOrigin.subagent.title": "来自子智能体：{agentType}",
 
@@ -4044,22 +3983,6 @@ const zhCN: Record<string, string> = {
   "chat.askQuestion.questionsCount": "{count} 个问题",
   "chat.askQuestion.noAnswerProvided": "未提供回答",
   "chat.askQuestion.autoContinued": "未回答，已自动继续",
-  "chat.permission.allowOnce.description": "仅允许这一次",
-  "chat.permission.allowAlways.description.command": "后续相同命令不再询问",
-  "chat.permission.allowAlways.description.file": "后续相同文件操作不再询问",
-  "chat.permission.allowAlways.description.generic": "后续相同权限请求不再询问",
-  "chat.permission.denyOnce.description": "这次先拒绝",
-  "chat.permission.denyAlways.description.command": "后续相同命令也会直接拒绝",
-  "chat.permission.denyAlways.description.file": "后续相同文件操作也会直接拒绝",
-  "chat.permission.denyAlways.description.generic": "后续相同权限请求也会直接拒绝",
-  "chat.permission.fileChange.add": "创建",
-  "chat.permission.fileChange.update": "编辑",
-  "chat.permission.fileChange.addMany": "创建 {count} 个文件",
-  "chat.permission.fileChange.updateMany": "编辑 {count} 个文件",
-  "chat.permission.fileChange.mixedMany": "更新 {count} 个文件",
-
-  // 模式
-  "mode.plan": "计划",
   "mode.label.agent": "Agent",
   "mode.label.plan": "计划",
   "mode.description.agent": "直接改文件、跑命令把任务做完。",

@@ -1000,7 +1000,6 @@ export interface ZCodeSessionFile {
   turnCheckpoints?: ZCodePersistedTurnCheckpoint[];
 }
 export interface ZCodeSessionRuntimeSnapshot {
-  pendingPermissions?: ZCodePermissionRequest[];
   pendingElicitations?: ZCodeElicitationRequest[];
   /** 当前 session 的 active turn 类型；用于 UI 区分普通 streaming 与 compact 维护态。 */
   activeTurnKind?: ZCodeSessionActiveTurnKind;

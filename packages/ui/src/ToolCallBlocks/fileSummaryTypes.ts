@@ -206,7 +206,7 @@ export interface ToolCallBlockRenderContext {
   workspacePath: string;
   /**
    * 应用主题（store 耦合剥离）：由构建 render context 的宿主
-   * （ToolCallBlock / PermissionDialog 等）从上层状态传入，供
+   * （ToolCallBlock 等）从上层状态传入，供
    * MessageResponse / EditInlineDiffContent 等展示组件做 light/dark 分流。
    * 缺省时展示组件按 "system" 兜底。
    */

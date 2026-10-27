@@ -52,7 +52,7 @@ export function useZCodeStore<T>(selector: (state: ZCodeState) => T): T {
 /**
  * 带默认值的容错版 useZCodeStore（store 耦合剥离配套）。
  *
- * 使用场景：宿主组件（PermissionDialog / 各 markdown 弹窗等）负责从 store 取
+ * 使用场景：宿主组件（各 markdown 弹窗等）负责从 store 取
  * theme / codePreviewSettings，再通过 props 注入纯展示组件。这些宿主在单测里常被
  * 无 Provider 直接 renderToStaticMarkup，此时返回 defaultValue 而不是抛错，
  * 与「展示组件不触 store」的约束保持一致；真实应用 Root 必挂 StoreProvider，走真实值。
