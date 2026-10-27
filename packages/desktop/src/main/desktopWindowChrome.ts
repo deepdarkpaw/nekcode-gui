@@ -1,13 +1,5 @@
-/* eslint-disable max-lines -- 桌面窗口 chrome、webview 安全策略和 popup 路由共享同一 BrowserWindow 生命周期上下文。 */
-import { app, BrowserWindow, Menu, nativeImage, nativeTheme, screen, shell } from "electron";
-import { join } from "node:path";
-import type {
-  ContextMenuParams,
-  Input,
-  MenuItemConstructorOptions,
-  WebContents,
-  WindowOpenHandlerResponse,
-} from "electron";
+import { app, BrowserWindow, Menu, nativeImage, nativeTheme, screen } from "electron";
+import type { ContextMenuParams, MenuItemConstructorOptions } from "electron";
 import type { DesktopTitleBarTheme, Locale } from "@zcode/shared";
 import {
   DEFAULT_LOCALE,
@@ -35,22 +27,6 @@ import {
   resolveDesktopWindowSize,
   type DesktopWindowSize,
 } from "./desktopWindowSize.js";
-// CDP-on-guest pivot：内置浏览器改回 `<webview>` 渲染，宿主 BrowserWindow 需重新开 webviewTag，
-// 并在 will/did-attach-webview 里做 guest 硬化 + URL 白名单 + popup 路由回内部 tab。
-const ALLOWED_EMBEDDED_BROWSER_PROTOCOLS = new Set([
-  "about:",
-  "data:",
-  "http:",
-  "https:",
-  "zcode-browser-restore:",
-]);
-const ALLOWED_EMBEDDED_BROWSER_NEW_WINDOW_PROTOCOLS = new Set(["http:", "https:"]);
-const EXTERNAL_BROWSER_DISPOSITIONS = new Set(["background-tab"]);
-
-const embeddedBrowserJavaScriptDialogPreloadPath = join(
-  import.meta.dirname,
-  "../preload/embeddedBrowserJavaScriptDialog.cjs",
-);
 function isLinuxDesktopWindow() {
   return process.platform === "linux";
 }
@@ -184,126 +160,6 @@ function attachWindowsWindowRepaint(targetWindow: BrowserWindow) {
   });
 }
 
-function isAllowedEmbeddedBrowserUrl(url: string): boolean {
-  try {
-    return ALLOWED_EMBEDDED_BROWSER_PROTOCOLS.has(new URL(url).protocol);
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedEmbeddedBrowserNewWindowUrl(url: string): boolean {
-  try {
-    return ALLOWED_EMBEDDED_BROWSER_NEW_WINDOW_PROTOCOLS.has(new URL(url).protocol);
-  } catch {
-    return false;
-  }
-}
-
-function hasExternalBrowserModifier(input: Input): boolean {
-  const modifiers = new Set(input.modifiers ?? []);
-  return (
-    input.meta === true ||
-    input.control === true ||
-    modifiers.has("meta") ||
-    modifiers.has("command") ||
-    modifiers.has("cmd") ||
-    modifiers.has("control") ||
-    modifiers.has("ctrl")
-  );
-}
-
-function isExternalBrowserModifierKey(input: Input): boolean {
-  const key = input.key.toLowerCase();
-  const code = input.code.toLowerCase();
-  return (
-    key === "meta" ||
-    key === "control" ||
-    code === "metaleft" ||
-    code === "metaright" ||
-    code === "controlleft" ||
-    code === "controlright"
-  );
-}
-
-function shouldOpenEmbeddedBrowserRequestExternally(input: {
-  disposition: string;
-  externalBrowserModifierActive: boolean;
-}): boolean {
-  return (
-    input.externalBrowserModifierActive || EXTERNAL_BROWSER_DISPOSITIONS.has(input.disposition)
-  );
-}
-
-function attachEmbeddedBrowserWindowOpenHandler(options: {
-  hostWebContents: WebContents;
-  guestWebContents: WebContents;
-  resolveBrowserViewOwner?: (webContentsId: number) =>
-    | {
-        workspaceKey: string;
-        remoteSessionId?: string;
-        sessionId: string;
-        browserId: string;
-        browserGeneration: number;
-        tabId: string;
-      }
-    | undefined;
-  logger: { warn: (...args: unknown[]) => void };
-}) {
-  let externalBrowserModifierActive = false;
-
-  options.guestWebContents.on("before-input-event", (_event, input) => {
-    // 某些平台的 keyUp 仍可能带 modifier 标记，直接记最近一次 modifiers
-    // 会让"用系统浏览器打开"的状态粘住，导致后续普通点击也被外部打开。
-    if (input.type === "keyUp" && isExternalBrowserModifierKey(input)) {
-      externalBrowserModifierActive = false;
-      return;
-    }
-
-    externalBrowserModifierActive = hasExternalBrowserModifier(input);
-  });
-
-  options.guestWebContents.setWindowOpenHandler((details): WindowOpenHandlerResponse => {
-    const { url, disposition } = details;
-    if (!isAllowedEmbeddedBrowserNewWindowUrl(url)) {
-      options.logger.warn(`[browser-pane] blocked unsupported webview popup url: ${url}`);
-      return { action: "deny" };
-    }
-
-    if (
-      shouldOpenEmbeddedBrowserRequestExternally({
-        disposition,
-        externalBrowserModifierActive,
-      })
-    ) {
-      void shell.openExternal(url).catch((error: unknown) => {
-        options.logger.warn("[browser-pane] failed to open webview popup externally", {
-          error: error instanceof Error ? error.message : String(error),
-          url,
-        });
-      });
-      return { action: "deny" };
-    }
-
-    const owner = options.resolveBrowserViewOwner?.(options.guestWebContents.id);
-    options.hostWebContents.send(PlatformChannels.OpenBrowserUrl, {
-      disposition,
-      url,
-      ...(owner
-        ? {
-            workspaceKey: owner.workspaceKey,
-            ...(owner.remoteSessionId ? { remoteSessionId: owner.remoteSessionId } : {}),
-            sessionId: owner.sessionId,
-            browserId: owner.browserId,
-            browserGeneration: owner.browserGeneration,
-            sourceTabId: owner.tabId,
-          }
-        : {}),
-    });
-    return { action: "deny" };
-  });
-}
-
 function buildTextContextMenuTemplate(
   params: ContextMenuParams,
   locale: Locale,
@@ -372,16 +228,6 @@ export function createBrowserWindow(options: {
   initialWindowSize?: DesktopWindowSize;
   /** 每次弹出原生菜单时读取，确保应用切换语言后无需重建窗口。 */
   currentApplicationLocale?: () => Locale;
-  resolveBrowserViewOwner?: (webContentsId: number) =>
-    | {
-        workspaceKey: string;
-        remoteSessionId?: string;
-        sessionId: string;
-        browserId: string;
-        browserGeneration: number;
-        tabId: string;
-      }
-    | undefined;
 }): BrowserWindow {
   const initialDesktopZoomLevel = clampDesktopZoomLevel(options.initialDesktopZoomLevel ?? 0);
   const initialDesktopZoomFactor = resolveDesktopZoomFactorForLevel(initialDesktopZoomLevel);
@@ -404,10 +250,7 @@ export function createBrowserWindow(options: {
       preload: options.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      // CDP-on-guest pivot：内置浏览器改回 `<webview>` 渲染，宿主需开 webviewTag。
-      webviewTag: true,
-      // 永久 backgroundThrottling=false 会唤醒整窗 renderer、所有 webview guest
-      // 和 GPU。窗口保持默认节流；截图期只临时唤醒 owner renderer 与当前目标 guest。
+      webviewTag: false,
       zoomFactor: initialDesktopZoomFactor,
     },
   });
@@ -454,55 +297,6 @@ export function createBrowserWindow(options: {
       });
     },
   );
-
-  win.webContents.on("will-attach-webview", (event, webPreferences, params) => {
-    // CDP 在原生 Dialog 已创建后再替换 UI，macOS 仍可能显示已经排队的
-    // Chromium NSAlert。固定 preload 在每个 frame 调用原生 API 前拦截，且隔离世界只
-    // 暴露 alert/confirm 同步桥；网页主世界仍没有 Node 或任意 IPC 能力。
-    const targetUrl = params.src ?? "about:blank";
-    // Bugfix：引入 UI 插件沙箱的那次上游移植（cherry-pick 662c30bea）夹带了一段
-    // Coding Plan 官网页 guest 分支，但它依赖的 isCodingPlanEmbeddedWebviewSrc、
-    // codingPlanWebviewPreloadPath 与 preload/codingPlanWebview.ts 都没有一起移植，
-    // 为此本 fork 也没有 Coding Plan 购买页。引用未定义标识符会让 did-attach-webview
-    // 在运行时抛 ReferenceError，任何 webview 附加都会触发。这里移除该分支，
-    // 保持移植前的 preload 行为；上游那套管道（attachEmbeddedBrowserWindowOpenHandler
-    // 的 isCodingPlanGuest）同样未随本次移植进入，不保留无效调用。
-    webPreferences.preload = embeddedBrowserJavaScriptDialogPreloadPath;
-    webPreferences.contextIsolation = true;
-    webPreferences.nodeIntegration = false;
-    webPreferences.nodeIntegrationInSubFrames = true;
-    webPreferences.sandbox = true;
-
-    delete params.preload;
-    delete params.nodeintegration;
-    // nodeIntegrationInSubFrames 是 guest 创建期偏好；派生 WebPreferences 与原始 attach
-    // 参数都固定为 true，确保发生真实导航的子 frame 在网页脚本前加载同一 preload。
-    // 无 src 的继承型空 frame 不触发 preload，由 preload 内的同源 frame 观察器接管。
-    params.nodeintegrationinsubframes = "true";
-    delete params.disablewebsecurity;
-    delete params.allowpopups;
-
-    // webview 内 target=_blank/window.open 如果完全禁用 popup 会表现为点击无响应；
-    // 如果放任 Electron 默认处理，又会创建脱离 ZCode 的 BrowserWindow。这里由宿主重新打开
-    // allowpopups，并在 did-attach-webview 中用 setWindowOpenHandler 统一 deny 默认窗口创建，
-    // 再把合法 URL 路由到内部 Browser tab 或系统浏览器。
-    params.allowpopups = "true";
-
-    if (!isAllowedEmbeddedBrowserUrl(targetUrl)) {
-      options.logger.warn(`[browser-pane] blocked unsupported webview url: ${targetUrl}`);
-      event.preventDefault();
-      return;
-    }
-  });
-
-  win.webContents.on("did-attach-webview", (_event, guestWebContents) => {
-    attachEmbeddedBrowserWindowOpenHandler({
-      guestWebContents,
-      hostWebContents: win.webContents,
-      resolveBrowserViewOwner: options.resolveBrowserViewOwner,
-      logger: options.logger,
-    });
-  });
 
   win.webContents.on("context-menu", (_event, params) => {
     // 只设置 Electron role 时，菜单文案跟随系统/Electron 语言，可能与应用语言不一致。

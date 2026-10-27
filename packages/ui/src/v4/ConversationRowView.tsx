@@ -113,7 +113,6 @@ import {
   parseComposerPromptContexts,
   serializeComposerPromptContexts,
 } from "@/v4/composer/composerPromptContexts.js";
-import { WebElementContextAttachmentChip } from "@/v4/composer/WebElementContextAttachmentChip.js";
 import { ConversationSelectionReferenceChip } from "@/v4/composer/ConversationSelectionReferenceChip.js";
 import { PptxElementReferenceChip } from "@/v4/composer/PptxElementReferenceChip.js";
 import { useOpenPptxElementReference } from "@/v4/composer/useOpenPptxElementReference.js";
@@ -908,7 +907,6 @@ const UserInputRowView = memo(function UserInputRowView({
         });
   const visibleText = parsedShareContext.visibleContent;
   const codeCommentContexts = parsedPrompt.codeComments;
-  const webElementContexts = parsedPrompt.webElements;
   const pptxElementReferences = parsedPrompt.pptxElements;
   const conversationSelections = parsedPrompt.conversationSelections;
   const hasAttachments = (row.attachments?.length ?? 0) > 0;
@@ -926,7 +924,6 @@ const UserInputRowView = memo(function UserInputRowView({
   const hasBubble = hasVisibleText || epilogue !== undefined;
   const hasContextReferences =
     codeCommentContexts.length > 0 ||
-    webElementContexts.length > 0 ||
     pptxElementReferences.length > 0 ||
     conversationSelections.length > 0;
   const hasAttachmentArea = hasAttachments || hasContextReferences;
@@ -1087,21 +1084,6 @@ const UserInputRowView = memo(function UserInputRowView({
                         }))
                       }
                     />
-                    <WebElementContextAttachmentChip
-                      contexts={editPromptContexts.webElements}
-                      onRemove={(id) =>
-                        setEditPromptContexts((current) => ({
-                          ...current,
-                          webElements: current.webElements.filter((item) => item.id !== id),
-                        }))
-                      }
-                      onRemoveAll={() =>
-                        setEditPromptContexts((current) => ({
-                          ...current,
-                          webElements: [],
-                        }))
-                      }
-                    />
                     <PptxElementReferenceChip
                       references={editPromptContexts.pptxElements}
                       onOpen={context.onOpenCodeViewer ? openPptxElementReference : undefined}
@@ -1230,7 +1212,6 @@ const UserInputRowView = memo(function UserInputRowView({
                 />
               ) : null}
               <CodeCommentAttachmentChip comments={codeCommentContexts} contentAlign="end" />
-              <WebElementContextAttachmentChip contexts={webElementContexts} contentAlign="end" />
               <PptxElementReferenceChip
                 references={pptxElementReferences}
                 contentAlign="end"

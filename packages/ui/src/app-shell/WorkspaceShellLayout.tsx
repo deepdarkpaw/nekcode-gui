@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- workspace shell 当前集中编排 sidebar、chat、terminal 和 browser pane 的布局联动，先保持单文件收口，避免为满足行数限制打散关键布局状态。*/
+/* eslint-disable max-lines -- workspace shell 当前集中编排 sidebar、chat、terminal 和 side pane 的布局联动，先保持单文件收口，避免为满足行数限制打散关键布局状态。*/
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
@@ -46,10 +46,6 @@ import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WorkspaceHeader } from "@/WorkspaceHeader.js";
 import { WorkspaceSidebar, type SidebarFileTreeOpenRequest } from "@/WorkspaceSidebar.js";
 import { AnimatedSidePanePanel } from "@/app-shell/AnimatedSidePanePanel.js";
-import {
-  findScreenshotSurfaceTabForRender,
-  useBrowserScreenshotSurfaceRequest,
-} from "@/browser-use/useBrowserScreenshotSurfaceRequest.js";
 import { AnimatedTerminalPanel } from "@/app-shell/AnimatedTerminalPanel.js";
 import { SIDE_PANE_DEFAULT_EXPANDED_SIZE } from "@/app-shell/sidePaneLayout.js";
 import { useAnimatedResizablePanel } from "@/app-shell/useAnimatedResizablePanel.js";
@@ -66,8 +62,7 @@ import { toast } from "@/components/ui/toast.js";
 import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { getPathLeaf, toFileUrl } from "@/lib/path.js";
-import { shouldOpenAssistantHtmlInBrowser } from "@/lib/assistantPreviewCards.js";
+import { getPathLeaf } from "@/lib/path.js";
 import { setWorkspaceSidebarResizeActive } from "@/lib/workspaceSidebarResizeState.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import {
@@ -233,8 +228,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   isTerminalOpen,
   isSidebarVisible,
   isSidePaneOpen,
-  isBrowserOpen,
-  supportsEmbeddedBrowser,
   summaryPanelVariantOverride,
   onSummaryPanelVariantOverrideChange,
   sidePaneState,
@@ -253,8 +246,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   gitWorktreeChangeSummary,
   activeGitSourceId,
   gitState,
-  browserNavigationRequest,
-  browserRestoreUrls,
   taskNativeSessionLogFile,
   taskSessionFile,
   conversationFindActiveIndex,
@@ -278,12 +269,8 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleStartDraftInWorkspace,
   handleOpenCommandCenter,
   handleRefreshGit,
-  handleBrowserUrlChange,
-  handleBrowserPageMetadataChange,
   handleToggleSidebar,
   handleToggleTerminal,
-  handleToggleBrowser,
-  handleOpenBrowserTab,
   handleOpenWhiteboard,
   handleOpenDeveloperTools,
   handleOpenTerminalTab,
@@ -312,7 +299,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleCloseOtherSidePaneTabs,
   handleCloseAllSidePaneTabs,
   handleReopenClosedSidePaneTab,
-  handleBrowserNavigationRequestHandled,
   setIsTerminalOpen,
   setGitSelectedSourceId,
   taskFindDialogProps,
@@ -344,10 +330,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   );
   const [isSidebarFileTreeOpen, setIsSidebarFileTreeOpen] = useState(false);
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
-  const screenshotSurfaceRequest = useBrowserScreenshotSurfaceRequest(sidePaneState?.tabs ?? []);
-  const screenshotSurfaceTab = screenshotSurfaceRequest
-    ? findScreenshotSurfaceTabForRender(sidePaneState?.tabs ?? [], screenshotSurfaceRequest)
-    : undefined;
   // v4 pane 绑定持久化（输出中刷新恢复）：renderer 刷新后恢复上次选中的
   // session；CLI/host 进程未死，pane 重订阅即拿 snapshot+续流。
   usePaneSessionPersistence({
@@ -401,9 +383,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     panelElementRef: sidePanePanelElementRef,
     isVisible: isSidePaneVisible,
   } = useAnimatedResizablePanel({
-    // 截图 surface 由 browser-use tab 自己的 fixed 承载层提供尺寸，不能再把整个右侧
-    // ResizablePanel 撑开；否则自动化页会闪出空白的 tab 栏，且面板过渡期间 guest surface
-    // 仍可能被 Chromium 判定为不可合成。
     open: workspaceMainView === "chat" && isSidePaneOpen,
     expandedSize: SIDE_PANE_DEFAULT_EXPANDED_SIZE,
     rememberExpandedSize: true,
@@ -1228,16 +1207,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           path: target.path,
         });
         if (fileStat.type === "file") {
-          if (
-            shouldOpenAssistantHtmlInBrowser({
-              path: target.path,
-              workspaceIdentity: target.workspaceIdentity,
-              workspaceRemoteSessionId: target.workspaceRemoteSessionId,
-            })
-          ) {
-            handleOpenBrowserUrl(toFileUrl(target.path));
-            return;
-          }
           handleOpenCodeViewer({
             type: "file",
             title: getPathLeaf(target.path),
@@ -1391,8 +1360,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       toggleSidePaneShortcutLabel={toggleSidePaneShortcutLabel}
       sidePaneState={sidePaneState}
       recentClosedSidePaneTabs={recentClosedSidePaneTabs}
-      isBrowserOpen={isBrowserOpen}
-      supportsEmbeddedBrowser={supportsEmbeddedBrowser}
       workspaceAbsPath={workspaceAbsPath}
       workspaceIdentity={workspaceIdentity}
       workspaceRemoteSessionId={workspaceRemoteSessionId}
@@ -1402,10 +1369,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       activeGitSourceId={activeGitSourceId}
       panelRef={sidePanePanelRef}
       panelElementRef={sidePanePanelElementRef}
-      browserNavigationRequest={browserNavigationRequest}
-      browserRestoreUrls={browserRestoreUrls}
-      screenshotSurfaceRequest={screenshotSurfaceRequest}
-      screenshotSurfaceTabId={screenshotSurfaceTab?.id ?? null}
       fileChangeFindActiveIndex={fileChangeFindActiveIndex}
       fileChangeFindNavigationRequestId={fileChangeFindNavigationRequestId}
       fileChangeFindQuery={fileChangeFindQuery}
@@ -1418,7 +1381,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       onCloseOtherTabs={handleCloseOtherSidePaneTabs}
       onCloseAllTabs={handleCloseAllSidePaneTabs}
       onReopenClosedTab={handleReopenClosedSidePaneTab}
-      onOpenBrowserTab={handleOpenBrowserTab}
       onOpenWhiteboard={handleOpenWhiteboard}
       onOpenDeveloperTools={handleOpenDeveloperTools}
       onOpenTerminalTab={handleOpenTerminalTab}
@@ -1435,9 +1397,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       onOpenWorkflowArtifact={handleOpenWorkflowArtifact}
       onOpenWorkflowRun={handleOpenWorkflowRun}
       onRefreshGit={handleRefreshGit}
-      onBrowserNavigationRequestHandled={handleBrowserNavigationRequestHandled}
-      onBrowserUrlChange={handleBrowserUrlChange}
-      onBrowserPageMetadataChange={handleBrowserPageMetadataChange}
       onSelectGitSource={setGitSelectedSourceId}
     />
   );
@@ -1583,7 +1542,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
             )}
           />
         ) : null}
-        {/* 右侧主工作区：上方 header，下面左侧会话+终端，右侧共享 browser/code-viewer 槽位 */}
+        {/* 右侧主工作区：上方 header，下面左侧会话+终端，右侧共享 code-viewer 等槽位 */}
         <div
           data-panel=""
           id="content"
@@ -1682,7 +1641,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           isSidePaneOpen={isSidePaneOpen}
                           onRefreshGit={handleRefreshGit}
                           onToggleTerminal={handleToggleTerminal}
-                          onToggleBrowser={handleToggleBrowser}
                           onToggleSidePane={handleToggleSidePane}
                           toggleSidePaneShortcutLabel={toggleSidePaneShortcutLabel}
                           onReloadSession={handleReloadSession}
@@ -1856,8 +1814,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                 ) : null}
               </ResizablePanelGroup>
             </ResizablePanel>
-            {/* Browser Guest Host 必须与主视图路由解耦，避免 automations/plugin
-                    切换时卸载 Guest；截图请求期间由上层临时展开真实面板承载可合成的 WebContents。 */}
             {sidePanePanel}
           </ResizablePanelGroup>
         </div>

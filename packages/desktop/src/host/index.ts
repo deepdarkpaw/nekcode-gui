@@ -27,8 +27,6 @@ import {
 import { registerHostNetworkTelemetry, stopHostNetworkTelemetry } from "./hostNetworkTelemetry.js";
 import { registerHostServiceResourceTelemetry } from "./hostServiceResourceTelemetry.js";
 import { resolveResourceTelemetryEnvironmentKey } from "./hostResourceTelemetryEnvironment.js";
-import { createBrowserControlMainBridge } from "./browserControlMainBridge.js";
-import { materializeBrowserRecordingArtifact } from "./browserRecordingArtifactMaterializer.js";
 import {
   ServiceCollection,
   IFileService,
@@ -137,7 +135,6 @@ type RemoteBackendHostConnection = RemoteConnection & {
 };
 type HostRemoteConnection = RemoteBackendHostConnection;
 interface HostRemoteConnectionCapabilities {
-  browserRecordingUploader?: Pick<IRemoteBackend, "upload">;
   remoteMediaPreviewFactory?: (
     scope: Extract<WindowHostAttachmentScope, { kind: "remote" }>,
   ) => RemoteMediaPreviewProxy;
@@ -197,38 +194,6 @@ function authorizeLocalMediaPreviewPath(path: string): Promise<string> {
     }
   });
 }
-
-// browser-use host↔main 桥：把 agent 的 browser 命令经 parentPort 转给 main（WebContentsView+CDP）。
-// parentPort 为空（不应发生于 host 进程）时 postToMain 抛错，bridge 自身返回 backend_unavailable。
-const browserControlMainBridge = createBrowserControlMainBridge({
-  postToMain: (message) => {
-    if (!parentPort) {
-      throw new Error("parentPort unavailable");
-    }
-    parentPort.postMessage(message);
-  },
-  materializeRecording: (input) => {
-    let remoteBackend: Pick<IRemoteBackend, "upload"> | undefined;
-    if (input.remoteSessionId) {
-      const workspaceIdentity = input.workspaceIdentity;
-      if (!workspaceIdentity?.trim()) {
-        throw new Error("remote Browser recording materialization requires workspaceIdentity");
-      }
-      // Window Host 重构后同一进程可同时持有多个远端连接，旧的进程级
-      // remoteConnection 会串 session。必须用完整 scope 从 registry 的权威 entry 取 uploader。
-      remoteBackend = windowRemoteConnectionRegistry.resolveScopedCapabilities({
-        kind: "remote",
-        remoteSessionId: input.remoteSessionId,
-        workspacePath: input.workspacePath,
-        workspaceIdentity,
-      })?.browserRecordingUploader;
-    }
-    return materializeBrowserRecordingArtifact({
-      ...input,
-      ...(remoteBackend ? { remoteBackend } : {}),
-    });
-  },
-});
 
 function reportHostLog(level: HostLogLevel, args: unknown[]): void {
   args = safeLogArgs(args);
@@ -1293,12 +1258,7 @@ async function createWindowRemoteConnectionHandle(params: {
   return {
     services,
     capabilities:
-      "backend" in connection
-        ? {
-            browserRecordingUploader: connection.backend,
-            ...(remoteMediaPreviewFactory ? { remoteMediaPreviewFactory } : {}),
-          }
-        : {},
+      "backend" in connection && remoteMediaPreviewFactory ? { remoteMediaPreviewFactory } : {},
     onDidClose(listener) {
       closeListeners.add(listener);
       return { dispose: () => closeListeners.delete(listener) };
@@ -1913,15 +1873,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     return;
   }
 
-  if (msg.type === HostMessageTypes.BrowserExecuteResult) {
-    // main 的 WebContentsView+CDP 执行完 browser 命令，按 requestId 关联回 bridge 的 pending。
-    void browserControlMainBridge.handleResult({
-      requestId: msg.requestId,
-      result: msg.result,
-    });
-    return;
-  }
-
   if (msg.type === HostMessageTypes.Dispose) {
     // main 进程通知清理（窗口关闭 / app 退出时）
     // 这里必须等待统一资源清理完成（含异步收尾写回），再让进程退出；main 侧仍有强杀 timer 兜底。
@@ -2328,9 +2279,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
                   trigger,
                 });
               },
-              // browser-use：agent 的 interaction/browserExecute 经 zcodeAgentService 转到这个 executor，
-              // 再经 parentPort 到 main 的 WebContentsView+CDP 执行。
-              browserControlExecutor: browserControlMainBridge,
             });
             activeServices = initializedServices;
             return initializedServices;

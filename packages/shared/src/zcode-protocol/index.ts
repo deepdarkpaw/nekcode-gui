@@ -29,13 +29,6 @@ import { errorAttributionSchema } from "../zcode-protocol-v4/snapshot.js";
 // 后台详情共享精简的只读响应 schema，不携带命令或计时元数据。
 export * from "../background-bash-output.js";
 export * from "../process-diagnostic.js";
-// browser-use 命令/结果契约单一来源：agent 构造、协议校验和 main executor 共用同一 schema。
-import {
-  browserBackendListResultSchema,
-  browserSessionContextKindSchema,
-} from "../browser-use/backend.js";
-import { browserClientModeSchema, browserCommandSchema } from "../browser-use/commands.js";
-import { browserCommandResultSchema } from "../browser-use/result.js";
 import { integratedTerminalShellSelectionSchema } from "../validationAppSettings.js";
 import { zcodeTaskModeSchema } from "../zcode-task-mode-schema.js";
 import {
@@ -1641,18 +1634,6 @@ export type ZCodeSessionRuntimePreferencesResult = z.infer<
   typeof zcodeSessionRuntimePreferencesResultSchema
 >;
 
-/**
- * App 在提交 prompt 前只读采集的 IAB 可见状态。该字段只用于 provider-visible
- * ambient context，不进入用户可见 transcript；内容有界，禁止携带页面正文或凭据。
- */
-export const zcodeBrowserAmbientContextSchema = z
-  .object({
-    tabCount: z.number().int().positive().max(100),
-    currentUrl: z.string().trim().min(1).max(4096).optional(),
-  })
-  .strict();
-export type ZCodeBrowserAmbientContext = z.infer<typeof zcodeBrowserAmbientContextSchema>;
-
 // 旧 RPC 调用方可能绕过 TypeScript；先拒绝退休字段，再做 Host→Agent 参数投影，
 // 否则投影丢掉闲时身份后，旧派发会静默变成使用个人模型的普通输入。
 const retiredIdleExecutionGuardSchema = z
@@ -1676,7 +1657,6 @@ export const zcodeSessionSendParamsSchema = z
     queryId: nonEmptyString.optional(),
     content: z.string(),
     attachments: z.array(jsonObjectSchema).optional(),
-    browserAmbientContext: zcodeBrowserAmbientContextSchema.optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
     expectedProviderRevision: nonEmptyString.optional(),
     automationId: nonEmptyString.optional(),
@@ -2140,49 +2120,6 @@ export const zcodePermissionRequestParamsSchema = z
   })
   .strict();
 export type ZCodePermissionRequestParams = z.infer<typeof zcodePermissionRequestParamsSchema>;
-
-/** Agent 请求 app 枚举当前 workspace/session 可达且已完成握手的 browser backend。 */
-export const zcodeBrowserListParamsSchema = z
-  .object({
-    requestId: nonEmptyString,
-    sessionId: nonEmptyString,
-    turnId: nonEmptyString.optional(),
-    workspaceKey: nonEmptyString,
-    workspacePath: nonEmptyString,
-    workspaceIdentity: nonEmptyString.optional(),
-    remoteSessionId: nonEmptyString.optional(),
-    clientMode: browserClientModeSchema,
-    sessionContext: browserSessionContextKindSchema,
-  })
-  .strict();
-export type ZCodeBrowserListParams = z.infer<typeof zcodeBrowserListParamsSchema>;
-
-export const zcodeBrowserListResultSchema = browserBackendListResultSchema;
-export type ZCodeBrowserListResult = z.infer<typeof zcodeBrowserListResultSchema>;
-
-/** Agent 把一条 browser-use 命令发送给 app 执行。 */
-export const zcodeBrowserExecuteParamsSchema = z
-  .object({
-    requestId: nonEmptyString,
-    sessionId: nonEmptyString,
-    turnId: nonEmptyString.optional(),
-    browserId: nonEmptyString.optional(),
-    browserGeneration: z.number().int().nonnegative().optional(),
-    workspaceKey: nonEmptyString.optional(),
-    workspacePath: nonEmptyString.optional(),
-    workspaceIdentity: nonEmptyString.optional(),
-    remoteSessionId: nonEmptyString.optional(),
-    clientMode: browserClientModeSchema.optional(),
-    sessionContext: browserSessionContextKindSchema.optional(),
-    command: browserCommandSchema,
-  })
-  .strict();
-export type ZCodeBrowserExecuteParams = z.infer<typeof zcodeBrowserExecuteParamsSchema>;
-
-// browser command result 是 app/agent 的同源协议结果；其中 duplicate_request_id 用于在真正维护
-// pending/running 生命周期的边界拒绝 correlation key 冲突，不能依赖上游 UUID 概率保证。
-export const zcodeBrowserExecuteResultSchema = browserCommandResultSchema;
-export type ZCodeBrowserExecuteResult = z.infer<typeof zcodeBrowserExecuteResultSchema>;
 
 export const zcodeUserInputOptionSchema = z
   .object({
@@ -2765,17 +2702,14 @@ export const zcodeProtocolMethods = {
   processChildProcesses: "process/childProcesses",
   interactionRequestPermission: "interaction/requestPermission",
   interactionRequestUserInput: "interaction/requestUserInput",
-  // browser-use 反向请求由 agent 发起，host 转给 main 中的 CDP executor。
-  interactionBrowserList: "interaction/browserList",
-  interactionBrowserExecute: "interaction/browserExecute",
 } as const;
 
 export type ZCodeProtocolMethod = (typeof zcodeProtocolMethods)[keyof typeof zcodeProtocolMethods];
 
 export const zcodeProtocolEmptyResultSchema = z.object({}).strict();
 
-// 最新 V4 主链已不再依赖旧版全量方法表；这里仅保留仍被兼容测试和 browser broker
-// 消费的最小契约集合，避免重新引入已移除的 legacy 方法。
+// 最新 V4 主链已不再依赖旧版全量方法表；这里仅保留仍被兼容测试消费的最小契约集合，
+// 避免重新引入已移除的 legacy 方法。
 export const zcodeProtocolSessionMethodContracts = {
   [zcodeProtocolMethods.workspaceHookTrustGrant]: {
     params: zcodeWorkspaceHookTrustGrantParamsSchema,
@@ -2784,14 +2718,6 @@ export const zcodeProtocolSessionMethodContracts = {
   [zcodeProtocolMethods.mcpList]: {
     params: zcodeMcpListParamsSchema,
     result: zcodeMcpListResultSchema,
-  },
-  [zcodeProtocolMethods.interactionBrowserList]: {
-    params: zcodeBrowserListParamsSchema,
-    result: zcodeBrowserListResultSchema,
-  },
-  [zcodeProtocolMethods.interactionBrowserExecute]: {
-    params: zcodeBrowserExecuteParamsSchema,
-    result: zcodeBrowserExecuteResultSchema,
   },
 } as const satisfies Partial<
   Record<ZCodeProtocolMethod, { params: z.ZodTypeAny; result: z.ZodTypeAny }>

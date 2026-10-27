@@ -1,8 +1,6 @@
 import { selectBrowserFileData } from "@zcode/ui";
 import { DesktopCommandIds, buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
 
-import { desktopBrowserPlatformBridge } from "./desktopBrowserPlatformBridge.js";
-
 export function createDesktopPlatform(options: {
   isLocalDevelopmentRuntime: boolean;
 }): IPlatformService {
@@ -54,14 +52,6 @@ export function createDesktopPlatform(options: {
     onNewTab: (handler) => window.zcode.onNewTab(handler),
     onCloseActiveContextRequest: (handler) =>
       window.zcode.onCloseActiveContextRequest?.(handler) ?? (() => {}),
-    onOpenBrowserUrl: (handler) => window.zcode.onOpenBrowserUrl?.(handler) ?? (() => {}),
-    onBrowserViewScreenshotSurfacePrepare: (handler) =>
-      window.zcode.onBrowserViewScreenshotSurfacePrepare?.(handler) ?? (() => {}),
-    onBrowserViewScreenshotSurfaceRelease: (handler) =>
-      window.zcode.onBrowserViewScreenshotSurfaceRelease?.(handler) ?? (() => {}),
-    browserViewScreenshotSurfaceReady: (payload) =>
-      window.zcode.browserViewScreenshotSurfaceReady?.(payload),
-    ...desktopBrowserPlatformBridge,
     onNewTask: (handler) => window.zcode.onNewTask(handler),
     onOpenWorkspace: (handler) => {
       // 开发态或升级后的旧窗口可能仍运行未暴露 onOpenWorkspace 的 preload，

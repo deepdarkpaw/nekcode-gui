@@ -43,7 +43,6 @@ import { CapabilitySection } from "@/settings/CapabilitySection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
-import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
 import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
 import { NekSettingsSection } from "@/settings/nek/NekSettingsSection.js";
@@ -264,8 +263,6 @@ export function SettingsPage({
   const [httpProxy, setHttpProxy] = useState("");
   const [httpProxyNoProxy, setHttpProxyNoProxy] = useState("");
   const [httpProxyCaCertPath, setHttpProxyCaCertPath] = useState("");
-  const [embeddedBrowserAllowInsecureCertificates, setEmbeddedBrowserAllowInsecureCertificates] =
-    useState(false);
   const [taskAutoArchiveEnabled, setTaskAutoArchiveEnabled] = useState(false);
   const [taskAutoArchiveOlderThanDays, setTaskAutoArchiveOlderThanDays] = useState(7);
   const [closeToTrayOnWindows, setCloseToTrayOnWindows] = useState(true);
@@ -314,9 +311,6 @@ export function SettingsPage({
         setHttpProxy(settings.httpProxy ?? "");
         setHttpProxyNoProxy(settings.httpProxyNoProxy ?? "");
         setHttpProxyCaCertPath(settings.httpProxyCaCertPath ?? "");
-        setEmbeddedBrowserAllowInsecureCertificates(
-          settings.embeddedBrowserAllowInsecureCertificates ?? false,
-        );
         setTaskAutoArchiveEnabled(settings.taskAutoArchiveEnabled ?? false);
         setTaskAutoArchiveOlderThanDays(settings.taskAutoArchiveOlderThanDays ?? 7);
         setCloseToTrayOnWindows(settings.closeToTrayOnWindows ?? true);
@@ -499,19 +493,6 @@ export function SettingsPage({
       toast(
         intl.formatMessage({
           id: "settings.desktopChromiumHardwareAccelerationSavedHint",
-        }),
-      );
-    },
-    [services.settingService, intl],
-  );
-  const handleEmbeddedBrowserAllowInsecureCertificatesChange = useCallback(
-    async (enabled: boolean) => {
-      await services.settingService.update({ embeddedBrowserAllowInsecureCertificates: enabled });
-      setEmbeddedBrowserAllowInsecureCertificates(enabled);
-      // 证书策略在 main 启动时装到 Session 上，改完必须重启才会换掉 verifyProc。
-      toast(
-        intl.formatMessage({
-          id: "settings.embeddedBrowserAllowInsecureCertificatesSavedHint",
         }),
       );
     },
@@ -1040,17 +1021,6 @@ export function SettingsPage({
                           <WorkspaceFileSearchSection
                             workspacePath={activeWorkspacePath}
                             workspaceIdentity={activeWorkspaceIdentity}
-                          />
-                        ) : activeSection === "browser" ? (
-                          <BrowserSettingsSection
-                            isDesktop={Boolean(isDesktop)}
-                            isWindowsDesktop={isWindowsDesktop}
-                            embeddedBrowserAllowInsecureCertificates={
-                              embeddedBrowserAllowInsecureCertificates
-                            }
-                            onEmbeddedBrowserAllowInsecureCertificatesChange={
-                              handleEmbeddedBrowserAllowInsecureCertificatesChange
-                            }
                           />
                         ) : null}
                       </div>

@@ -110,7 +110,6 @@ export function App({
   isDesktop,
   isMacDesktop,
   isWindowsDesktop,
-  supportsEmbeddedBrowser: explicitSupportsEmbeddedBrowser,
 }: AppProps) {
   // 展示 label 统一从快捷键生效表取（用户改键后 tooltip 同步更新），不再硬编码键位。
   const toggleSidebarShortcutLabel = useShortcutCommandLabel("toggleSidebar");
@@ -121,7 +120,6 @@ export function App({
   const toggleSidePaneShortcutLabel = useShortcutCommandLabel("toggleSidePane");
   const openWorkspaceShortcutLabel = useShortcutCommandLabel("openWorkspace");
   const isLinuxDesktop = Boolean(isDesktop && !isMacDesktop && !isWindowsDesktop);
-  const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
   const { intl, locale, setLocale } = useZCodeIntl();
   const isOfficeMode = useIsOfficeMode();
   const platform = usePlatform();
@@ -203,13 +201,9 @@ export function App({
     isSidePaneCollapsed,
     setIsSidePaneCollapsed,
     isSidebarVisible,
-    browserNavigationRequest,
-    setBrowserNavigationRequest,
     handleOpenCodeViewer,
     handleOpenCodeViewers,
     handleOpenBrowserUrl,
-    handleToggleBrowser,
-    handleOpenBrowserTab,
     handleToggleGit,
     handleOpenGit,
     handleOpenTreemapping,
@@ -238,17 +232,12 @@ export function App({
     handleCloseOtherSidePaneTabs,
     handleCloseAllSidePaneTabs,
     handleReopenClosedSidePaneTab,
-    handleBrowserNavigationRequestHandled,
-    handleBrowserPageMetadataChange,
   } = useAppPanels({
     workspaceAbsPath,
     workspaceIdentity,
     workspaceRemoteSessionId,
     activeTaskId,
     sidePaneOwnerId,
-    isDesktop,
-    isWorkspaceVisible,
-    supportsEmbeddedBrowser,
     platform,
     defaultWhiteboardNamePrefix: intl.formatMessage({
       id: "whiteboard.defaultName",
@@ -323,7 +312,7 @@ export function App({
   const [canOpenCommunityFromQuickPick, setCanOpenCommunityFromQuickPick] = useState(false);
   const [gitSelectedSourceId, setGitSelectedSourceId] = useState<GitChangeSourceId>("unstaged");
   const [gitRefreshVersion, setGitRefreshVersion] = useState(0);
-  const { browserRestoreUrls, handleBrowserUrlChange } = useTaskSidePaneMemoryBridge({
+  useTaskSidePaneMemoryBridge({
     activeTaskId,
     gitSelectedSourceId,
     setGitSelectedSourceId,
@@ -384,7 +373,6 @@ export function App({
   );
   const commandCenterWorkspaceTabs = useMemo(() => tabs.filter(isWorkspaceTab), [tabs]);
   const activeSidePaneTab = useMemo(() => getActiveSidePaneTab(sidePaneState), [sidePaneState]);
-  const isBrowserOpen = activeSidePaneTab?.type === "browser";
   const isGitOpen = activeSidePaneTab?.type === "git";
   const hasGitTab = sidePaneState?.tabs.some((tab) => tab.type === "git") ?? false;
   const handleRefreshGit = useCallback(() => {
@@ -507,8 +495,8 @@ export function App({
   }, [handleCloseSidePaneTab, isSidePaneCollapsed, isWorkspaceVisible, sidePaneState]);
   const handleToggleSidePane = useCallback(() => {
     // 交互说明：toggle panel 只改变右侧容器显隐，不隐式创建或切换任何 tab。
-    // 之前无 tab 时会按 diff/browser 兜底自动开内容，导致用户只是想打开 side pane
-    // 却得到一个新 Browser 或 Review。现在空内容统一交给 Open tab 空态承接。
+    // 之前无 tab 时会按 diff 兜底自动开内容，导致用户只是想打开 side pane
+    // 却得到一个新 Review。现在空内容统一交给 Open tab 空态承接。
     handleToggleSidePaneCollapse();
   }, [handleToggleSidePaneCollapse]);
   const runVisibleWorkspaceCommand = useCallback(
@@ -754,7 +742,6 @@ export function App({
     workspaceAbsPath,
     workspaceIdentity,
     services,
-    setBrowserNavigationRequest,
     setTestMessages,
   });
 
@@ -912,7 +899,6 @@ export function App({
         allowOpenWorkspace,
         canOpenCommunity: canOpenCommunityFromQuickPick,
         isSidebarVisible,
-        supportsEmbeddedBrowser,
         themeTarget,
         shortcuts: {
           newTask: newTaskShortcutLabel,
@@ -938,9 +924,7 @@ export function App({
           openProductDocs: handleOpenProductDocs,
           toggleSidebar: () => runVisibleWorkspaceCommand(handleToggleSidebar),
           toggleTerminal: () => runVisibleWorkspaceCommand(handleToggleTerminalIfWritable),
-          togglePreview: () => runVisibleWorkspaceCommand(handleToggleBrowser),
           openTerminalTab: () => runVisibleWorkspaceCommand(handleOpenTerminalTabIfWritable),
-          openBrowserTab: () => runVisibleWorkspaceCommand(handleOpenBrowserTab),
           openReviewTab: () => runVisibleWorkspaceCommand(handleOpenGitIfWritable),
         },
       }),
@@ -953,10 +937,8 @@ export function App({
       handleOpenProductDocs,
       handleOpenSettingsSection,
       handleSwitchTheme,
-      handleOpenBrowserTab,
       handleOpenGitIfWritable,
       handleOpenTerminalTabIfWritable,
-      handleToggleBrowser,
       handleToggleSidebar,
       handleToggleTerminalIfWritable,
       isSidebarVisible,
@@ -966,7 +948,6 @@ export function App({
       runVisibleWorkspaceCommand,
       openSettingsTab,
       openWorkspaceShortcutLabel,
-      supportsEmbeddedBrowser,
       toggleSidebarShortcutLabel,
       toggleTerminalShortcutLabel,
       themeTarget,
@@ -1083,8 +1064,6 @@ export function App({
         canTaskNavForward={canTaskNavForward}
         isTerminalOpen={isTerminalOpen}
         isSidebarVisible={isSidebarVisible}
-        isBrowserOpen={isBrowserOpen}
-        supportsEmbeddedBrowser={supportsEmbeddedBrowser}
         isGitOpen={isGitOpen}
         isSidePaneOpen={isSidePaneOpen}
         summaryPanelVariantOverride={summaryPanelVariantOverride}
@@ -1106,8 +1085,6 @@ export function App({
         gitWorktreeChangeSummary={gitWorktreeChangeSummary}
         activeGitSourceId={activeGitSourceId}
         gitState={gitState}
-        browserNavigationRequest={browserNavigationRequest}
-        browserRestoreUrls={browserRestoreUrls}
         taskNativeSessionLogFile={taskNativeSessionLogFile}
         taskSessionFile={taskSessionFile}
         testMessages={testMessages}
@@ -1133,12 +1110,8 @@ export function App({
         handleOpenCommandCenter={handleOpenQuickPick}
         handleRefreshGit={handleRefreshGit}
         handleOpenGitReview={handleOpenGitReview}
-        handleBrowserUrlChange={handleBrowserUrlChange}
-        handleBrowserPageMetadataChange={handleBrowserPageMetadataChange}
         handleToggleSidebar={handleToggleSidebar}
         handleToggleTerminal={handleToggleTerminalIfWritable}
-        handleToggleBrowser={handleToggleBrowser}
-        handleOpenBrowserTab={handleOpenBrowserTab}
         handleOpenTreemapping={handleOpenTreemappingIfWritable}
         handleOpenWhiteboard={handleOpenWhiteboard}
         handleOpenDeveloperTools={handleOpenDeveloperTools}
@@ -1167,7 +1140,6 @@ export function App({
         handleCloseOtherSidePaneTabs={handleCloseOtherSidePaneTabs}
         handleCloseAllSidePaneTabs={handleCloseAllSidePaneTabs}
         handleReopenClosedSidePaneTab={handleReopenClosedSidePaneTab}
-        handleBrowserNavigationRequestHandled={handleBrowserNavigationRequestHandled}
         setIsTerminalOpen={setIsTerminalOpen}
         setGitSelectedSourceId={setGitSelectedSourceId}
         // taskFindDialogProps 是对象 prop，内联创建会让 shell 在流式刷新中每轮都看到新引用。

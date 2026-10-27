@@ -389,10 +389,8 @@ const zhCN: Record<string, string> = {
   "quickPick.command.toggleTerminal": "切换终端",
   "quickPick.command.togglePreview": "切换预览",
   "quickPick.command.addTerminalTab": "添加终端标签",
-  "quickPick.command.addBrowserTab": "添加浏览器标签",
   "quickPick.command.addReviewTab": "添加审查标签",
   "quickPick.command.toggleSidePane": "切换面板",
-  "quickPick.command.toggleBrowserPanel": "显示/隐藏浏览器面板",
   "quickPick.command.toggleDiffPanel": "切换到差异面板",
   "quickPick.command.feedback": "问题上报",
   "quickPick.command.myTickets": "我的反馈",
@@ -495,48 +493,6 @@ const zhCN: Record<string, string> = {
   "sidebar.settings.preferences": "偏好设置",
   "app.selectFile": "选择文件以开始",
   "app.workspace": "工作区",
-  "browser.title": "浏览器",
-  "browser.addressPlaceholder": "输入网址后回车",
-  "browser.back": "后退",
-  "browser.forward": "前进",
-  "browser.reload": "刷新",
-  "browser.more": "更多浏览器操作",
-  "browser.openExternal": "在默认浏览器中打开",
-  "browser.devtools": "打开调试工具",
-  "browser.responsive.enter": "自由尺寸",
-  "browser.responsive.exit": "退出自由尺寸",
-  "browser.responsive.viewport": "自由尺寸浏览器视口",
-  "browser.responsive.resizeWidth": "调整浏览器视口宽度",
-  "browser.responsive.resizeHeight": "调整浏览器视口高度",
-  "browser.responsive.width": "浏览器视口宽度",
-  "browser.responsive.height": "浏览器视口高度",
-  "browser.responsive.zoom": "浏览器预览缩放",
-  "browser.responsive.fitToWindow": "适应窗口",
-  "browser.responsive.dimensionRangeError": "请输入 {min} 到 {max} 之间的整数",
-  "browser.elementPicker.start": "选择网页元素加入聊天",
-  "browser.elementPicker.cancel": "取消网页元素选择",
-  "browser.elementPickerFailed": "网页元素选择失败：{message}",
-  "browser.elementPicker.popover.background": "背景",
-  "browser.elementPicker.popover.color": "颜色",
-  "browser.elementPicker.popover.font": "字体",
-  "browser.show": "打开浏览器",
-  "browser.hide": "收起浏览器",
-  "browser.toggle": "切换浏览器",
-  "browser.close": "关闭浏览器面板",
-  "browser.desktopOnly": "浏览器面板仅桌面端可用",
-  "browser.empty": "粘贴或输入 URL 以打开网页。",
-  "browser.guestFailed.title": "内置浏览器启动失败",
-  "browser.guestFailed.description": "浏览器进程在显示页面前退出。检查系统环境后可以重试。",
-  "browser.guestFailed.detail": "渲染进程：{reason}（退出码 {exitCode}）",
-  "browser.guestFailed.retry": "重试浏览器",
-  "browser.invalidUrl": "仅支持 http、https、file、about、data 地址",
-  "browser.loadFailed": "页面加载失败：{message}",
-  "browser.loadError.title": "无法打开该页面",
-  "browser.loadError.certTitle": "该站点的 HTTPS 证书不受信任",
-  "browser.loadError.certHint":
-    "如确认此地址可信，可在「设置 → 浏览器 → 安全」里开启「忽略证书校验」，再重启 App 后即可访问。",
-  "browser.loadError.retry": "重新加载",
-  "browser.resizeDuringOperationWarning": "浏览器尺寸发生变化，可能影响当前自动操作",
   "diff.title": "Diff",
   "diff.toggle": "切换 Diff 面板",
   "diff.close": "关闭 Diff 面板",
@@ -1014,7 +970,6 @@ const zhCN: Record<string, string> = {
   "chat.codeCommentCards.expandAll": "展开 {count} 条评论",
   "chat.codeCommentCards.collapseAll": "收起评论",
   "chat.codeCommentCards.openReview": "打开 {title} 的代码审查",
-  "chat.webElements.one": "1 个网页元素",
   "chat.pptxElements.one": "1 个幻灯片元素",
   "chat.pptxElements.many": "{count} 个幻灯片元素",
   "chat.pptxElements.remove": "移除幻灯片元素",
@@ -1023,8 +978,6 @@ const zhCN: Record<string, string> = {
   "chat.pptxElements.previewSourceChanged":
     "演示文稿已发生变化，已打开原第 {pageNumber} 页，但内容可能不同。",
   "chat.pptxElements.previewScopeUnavailable": "当前工作区无法打开这个演示文稿引用。",
-  "chat.webElements.many": "{count} 个网页元素",
-  "chat.webElements.remove": "移除网页元素上下文",
   "appHeader.openInFinder": "在 Finder 中打开",
   "appHeader.builtinProviderConfigOpenFailed": "无法打开 Provider 配置文件",
   "appHeader.builtinProviderConfigMissing": "Provider 配置文件尚未生成，请先启动一次会话",
@@ -1905,70 +1858,6 @@ const zhCN: Record<string, string> = {
     "未归类的文件，以及切换数据存储路径后遗留的旧副本。",
   "resourceManager.storage.confirmDescription.backups":
     "这些副本用于升级或迁移出错时恢复数据，删除后将无法回退。",
-  "settings.browser.title": "浏览器控制",
-  "settings.browser.security.section": "安全",
-  "settings.embeddedBrowserAllowInsecureCertificates": "忽略证书校验",
-  "settings.embeddedBrowserAllowInsecureCertificatesDescription":
-    "开启后内置浏览器不再校验 HTTPS 证书，仅影响内置浏览器。修改后需重启生效。",
-  "settings.embeddedBrowserAllowInsecureCertificatesSavedHint":
-    "证书校验设置已保存，重启应用后生效",
-  "settings.browser.data.section": "浏览器数据",
-  "settings.browser.desktopOnly": "浏览器数据只能在 ZCodium Exp 桌面端管理。",
-  "settings.browser.import.title": "导入 Chrome 登录状态",
-  "settings.browser.import.description":
-    "一次性把 Chrome 登录状态带到内置浏览器，AI 就能直接打开你已经登录的网站，操作更流畅。",
-  "settings.browser.import.action": "导入浏览器数据",
-  "settings.browser.import.notFound":
-    "未找到可导入的 Chrome Profile。请先打开 Chrome 并确认已有浏览数据。",
-  "settings.browser.import.ambiguous":
-    "发现多个 Chrome Profile，但无法确定最近使用的 Profile。请先打开要导入的 Profile 后重试。",
-  "settings.browser.import.executableNotFound": "Chrome 未找到。请安装 Chrome 后重试。",
-  "settings.browser.import.accessDenied":
-    "已取消导入：你未允许访问 macOS 钥匙串中的 Chrome 安全存储，未导入任何 Chrome 数据。",
-  "settings.browser.import.elevationRequired":
-    "需要确认管理员授权后才能导入受 App-Bound 保护的 Chrome Cookie。",
-  "settings.browser.import.elevationCancelled": "已取消 Windows 管理员授权，Cookie 未导入。",
-  "settings.browser.import.helperVerificationFailed":
-    "ZCodium 的 Windows 安全导入组件校验失败，Cookie 未导入。请重新安装或更新 ZCodium。",
-  "settings.browser.import.appBoundFailed":
-    "Windows 未能解开 Chrome 的 App-Bound Cookie，Cookie 未导入。",
-  "settings.browser.import.adminConfirmTitle": "允许管理员权限导入 Chrome Cookie？",
-  "settings.browser.import.adminConfirmDescription":
-    "Chrome 在 Windows 上使用 App-Bound 加密保护 Cookie。ZCodium 将为本次导入请求管理员权限，临时启动系统服务，完成后立即删除。不会读取或导入 Chrome 密码。",
-  "settings.browser.import.adminConsent": "我确认只为本次 Cookie 导入授予管理员权限",
-  "settings.browser.import.adminConfirmAction": "继续并请求授权",
-  "settings.browser.import.cookieProtected":
-    "Chrome Cookie 受系统的应用绑定保护，当前无法安全导入。LocalStorage 中没有可导入的数据。",
-  "settings.browser.import.profileLocked":
-    "Chrome Profile 正在被占用，无法创建一致的数据快照。请关闭 Chrome 后重试。",
-  "settings.browser.import.localStorageFailed":
-    "Chrome LocalStorage 快照读取失败。请关闭 Chrome 后重试。",
-  "settings.browser.import.failed": "Chrome 浏览器数据导入失败。",
-  "settings.browser.import.success":
-    "已导入 {cookies} 个 Cookie，以及 {origins} 个站点的 {entries} 条 LocalStorage 数据。",
-  "settings.browser.import.successWithSkipped":
-    "已导入 {cookies} 个 Cookie，以及 {origins} 个站点的 {entries} 条 LocalStorage 数据；另有 {skipped} 个 Cookie 未导入。",
-  "settings.browser.import.partialCookieProtected":
-    "已导入 {cookies} 个 Cookie，以及 {origins} 个站点的 {entries} 条 LocalStorage 数据；另有 {skipped} 个 Cookie 受 Chrome 系统保护，未导入。",
-  "settings.browser.import.partialAppBound":
-    "已导入 {origins} 个站点的 {entries} 条 LocalStorage 数据，但 Windows App-Bound Cookie 未导入。",
-  "settings.browser.import.partialLocalStorage":
-    "已导入 {cookies} 个 Cookie，但部分 LocalStorage 数据未导入。关闭 Chrome 后重试可提高成功率。",
-  "settings.browser.clearCache.title": "清除内置浏览器缓存",
-  "settings.browser.clearCache.description":
-    "清除 HTTP 缓存、Cache Storage 和 Service Worker，保留 Cookie 和本地站点数据。",
-  "settings.browser.clearCache.action": "清除缓存",
-  "settings.browser.clearCache.success": "内置浏览器缓存已清除",
-  "settings.browser.clearAll.title": "清除全部浏览器数据",
-  "settings.browser.clearAll.description":
-    "删除内置浏览器中的 Cookie、站点数据和缓存。此操作不可撤销。",
-  "settings.browser.clearAll.action": "清除全部",
-  "settings.browser.clearAll.success": "内置浏览器数据已全部清除",
-  "settings.browser.clear.failed": "内置浏览器数据清理失败。",
-  "settings.browser.clearAll.confirmTitle": "清除全部内置浏览器数据？",
-  "settings.browser.clearAll.confirmDescription":
-    "这会退出内置浏览器中已登录的网站，并删除 Cookie、站点数据和缓存。此操作不可撤销。",
-  "settings.browser.clearAll.confirmAction": "确认清除",
   "settings.lightTheme": "浅色代码主题",
   "settings.lightThemeDescription": "浅色界面下代码内容使用的高亮主题。",
   "settings.darkTheme": "深色代码主题",

@@ -135,7 +135,6 @@ export default defineConfig([
     name: "main",
     entry: {
       "main/index": "src/main/index.ts",
-      "main/browserWebmRecorder": "src/main/browserView/electronBrowserWebmRecorder.ts",
       // 资源管理器「存储」tab 的扫描 Worker：main 持有 StorageService，遍历放独立线程，供 new Worker(new URL()) 解析。
       "main/storageScanWorker": "src/main/storageScanWorker.ts",
     },
@@ -172,8 +171,6 @@ export default defineConfig([
   {
     name: "preload",
     entry: {
-      "preload/embeddedBrowserJavaScriptDialog": "src/preload/embeddedBrowserJavaScriptDialog.ts",
-      "preload/browserVideoRecorder": "src/preload/browserVideoRecorder.ts",
       "preload/index": "src/preload/index.ts",
       "preload/resourceManager": "src/preload/resourceManager.ts",
     },

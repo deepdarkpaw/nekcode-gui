@@ -176,22 +176,6 @@ export function spawnHostProcess(
     }) => void;
     /** host 中 manual run 落库后请求 main 立即唤醒 scheduler。 */
     onCronSchedulerWakeRequested?: (automationId: string) => void;
-    // browser-use：main 用 WebContentsView+CDP 执行一条命令。实现由宿主注入；缺省则 backend_unavailable。
-    handleBrowserExecuteRequest?: (params: {
-      win: BrowserWindow;
-      requestId: string;
-      browserId?: string;
-      browserGeneration?: number;
-      sessionId: string;
-      turnId?: string;
-      workspaceKey?: string;
-      workspacePath?: string;
-      workspaceIdentity?: string;
-      remoteSessionId?: string;
-      clientMode?: "desktop-continuous" | "web-remote-replayable";
-      sessionContext?: "live" | "cached";
-      command: unknown;
-    }) => Promise<{ ok: boolean; [k: string]: unknown }>;
     /** Host 已完成附件授权后，由 Main 将本地视频 realpath 加入精确协议授权集合。 */
     authorizeLocalMediaPreviewPath?: (path: string) => Promise<string>;
   },
@@ -329,54 +313,6 @@ export function spawnHostProcess(
             error: error instanceof Error ? error.message : String(error),
           });
         });
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.BrowserExecuteRequest) {
-      // browser-use：main 用 WebContentsView+CDP 执行命令（handleBrowserExecuteRequest）。
-      // 缺省实现时返回 backend_unavailable，保证通道打通但不阻塞。
-      const requestId = result.data.requestId;
-      const handler = dependencies.handleBrowserExecuteRequest;
-      const fallback = {
-        ok: false as const,
-        error: {
-          code: "backend_unavailable",
-          message: "browser executor not ready",
-        },
-        elapsedMs: 0,
-      };
-      void (
-        handler
-          ? handler({
-              win,
-              requestId,
-              browserId: result.data.browserId,
-              browserGeneration: result.data.browserGeneration,
-              sessionId: result.data.sessionId,
-              turnId: result.data.turnId,
-              workspaceKey: result.data.workspaceKey,
-              workspacePath: result.data.workspacePath,
-              workspaceIdentity: result.data.workspaceIdentity,
-              remoteSessionId: result.data.remoteSessionId,
-              clientMode: result.data.clientMode,
-              sessionContext: result.data.sessionContext,
-              command: result.data.command,
-            }).catch((error: unknown) => ({
-              ok: false as const,
-              error: {
-                code: "execution_error",
-                message: error instanceof Error ? error.message : String(error),
-              },
-              elapsedMs: 0,
-            }))
-          : Promise.resolve(fallback)
-      ).then((commandResult) => {
-        child.postMessage({
-          type: HostMessageTypes.BrowserExecuteResult,
-          requestId,
-          result: commandResult,
-        });
-      });
       return;
     }
 

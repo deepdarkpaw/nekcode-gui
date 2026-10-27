@@ -119,7 +119,7 @@ interface UseComposerAttachmentsOptions {
   disabled?: boolean;
   /**
    * 是否消费全局 add-to-chat 事件（whiteboard 引用）。
-   * 语义与 useWebElementContexts 等一致：由调用方传 `listenAddToChatEvents && !disabled`
+   * 语义与 useCodeCommentContexts 一致：由调用方传 `listenAddToChatEvents && !disabled`
    * （SessionPane 以 focused 区分聚焦 composer）。SidePane forceMount 常驻多个同
    * workspace 的 SessionPane，若不门控，一次白板引用会被所有 composer 同时
    * preventDefault 并各自注入附件，用户看不见的后台草稿被静默塞入画板内容。
@@ -887,7 +887,7 @@ export function useComposerAttachments(
     [addWhiteboardToChat],
   );
   useEffect(() => {
-    // 与 useWebElementContexts 等同款早退。SidePane forceMount 使非聚焦
+    // 与 useCodeCommentContexts 同款早退。SidePane forceMount 使非聚焦
     // 会话的 SessionPane 常驻，只有聚焦 composer（listenAddToChatEvents）才允许消费
     // add-to-chat 事件，否则同 workspace 的多个 composer 会同时注入附件。
     if (!listenAddToChatEvents || typeof window === "undefined") return;

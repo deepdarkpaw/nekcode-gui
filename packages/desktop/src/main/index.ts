@@ -33,32 +33,12 @@ import {
   onLocalDatabaseStartupReady,
   configureDatabaseStartupQuit,
 } from "./databaseStartupRelay.js";
-import { buildBrowserViewCloseTabNotification } from "./browserView/browserCloseTabNotification.js";
-import { BrowserGuestManager } from "./browserView/browserGuestManager.js";
-import { createElectronBrowserWebmRecorder } from "./browserView/electronBrowserWebmRecorder.js";
-import { installBrowserRestoreBootstrapProtocol } from "./browserView/browserRestoreBootstrapProtocol.js";
 import {
   createLocalMediaPreviewPathRegistry,
   installLocalMediaPreviewProtocol,
   registerLocalMediaPreviewScheme,
 } from "./localMediaPreviewProtocol.js";
-import { createDesktopBrowserScreenshotSurfaceCoordinator } from "./browserView/browserScreenshotSurfaceCoordinatorWiring.js";
-import { EMBEDDED_BROWSER_PARTITION } from "./browserDataManager.js";
-import { EmbeddedBrowserJavaScriptDialogController } from "./embeddedBrowserJavaScriptDialog.js";
-import {
-  browserOperationResetsResizeBaseline,
-  resolveBrowserOperationTabId,
-} from "./browserView/browserOperationIndicator.js";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  nativeImage,
-  protocol,
-  session,
-  webContents,
-} from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, protocol, session } from "electron";
 import type { UtilityProcess as ElectronUtilityProcess } from "electron";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
@@ -179,10 +159,7 @@ import {
 } from "./desktopDeepLinkUrl.js";
 import { createRemoteWorkspaceSessionManager } from "./desktopRemoteSessions.js";
 import { resolveCanonicalWslTarget } from "./desktopWslTargetResolver.js";
-import {
-  listRegisteredHostAgentProcessIds,
-  setBrowserUseGuestWebContentsIdsProvider,
-} from "./resourceManagerWindow.js";
+import { listRegisteredHostAgentProcessIds } from "./resourceManagerWindow.js";
 import { registerPlatformIpcHandlers } from "./desktopMainIpcPlatform.js";
 import { registerRemoteIpcHandlers } from "./desktopMainIpcRemote.js";
 import { applyDesktopChromiumNetworkPolicies } from "./desktopNetworkPolicy.js";
@@ -272,218 +249,6 @@ function reconcileKeepAwakeBlocker(): void {
   }
 }
 
-const embeddedBrowserDialogController = new EmbeddedBrowserJavaScriptDialogController({
-  iconPath,
-  getLocale: () => currentApplicationLocale,
-  logger,
-});
-ipcMain.on(PlatformChannels.EmbeddedBrowserJavaScriptDialog, (event, payload: unknown) => {
-  event.returnValue = embeddedBrowserDialogController.handleDialogRequest(
-    event.sender.id,
-    event.senderFrame?.url ?? "",
-    payload,
-  );
-});
-// browser-use CDP-on-guest pivot：main 进程按 key 管理 `<webview>` guest 的
-// webContents + CDP，为 executor 提供 ControlledView。所有 execute/attach 出口都走这里。
-// BrowserGuestManager 虽是 main singleton，但 tab owner 带 window/workspace/session/generation；
-// create/close 只投递到 owner window，禁止旧的全窗口广播造成跨窗口 attach。
-const browserScreenshotSurfaceCoordinator = createDesktopBrowserScreenshotSurfaceCoordinator({
-  fromId: (windowId) => BrowserWindow.fromId(windowId),
-  fromWebContentsId: (webContentsId) => webContents.fromId(webContentsId) ?? null,
-  log: (message) => logger.debug(message),
-  warn: (message) => logger.warn(message),
-});
-const browserGuestManager = new BrowserGuestManager(
-  (msg) => logger.debug(msg),
-  undefined,
-  (tabId, owner) => {
-    const win = owner ? BrowserWindow.fromId(owner.windowId) : null;
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(
-        PlatformChannels.BrowserViewCloseTab,
-        buildBrowserViewCloseTabNotification(tabId, owner),
-      );
-    }
-  },
-  (tabId, owner) => {
-    const win = BrowserWindow.fromId(owner.windowId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(PlatformChannels.BrowserViewReady, {
-        workspaceKey: owner.workspaceKey,
-        ...(owner.remoteSessionId ? { remoteSessionId: owner.remoteSessionId } : {}),
-        sessionId: owner.sessionId,
-        tabId,
-        browserId: owner.browserId,
-        browserGeneration: owner.browserGeneration,
-      });
-    }
-  },
-  (visible, owner, tabId) => {
-    const win = BrowserWindow.fromId(owner.windowId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(PlatformChannels.BrowserViewVisibility, {
-        visible,
-        workspaceKey: owner.workspaceKey,
-        remoteSessionId: owner.remoteSessionId,
-        sessionId: owner.sessionId,
-        ...(tabId ? { tabId } : {}),
-        browserId: owner.browserId,
-        browserGeneration: owner.browserGeneration,
-      });
-    }
-  },
-  (viewport, owner, tabId) => {
-    const win = BrowserWindow.fromId(owner.windowId);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(PlatformChannels.BrowserViewViewportChanged, {
-        workspaceKey: owner.workspaceKey,
-        ...(owner.remoteSessionId ? { remoteSessionId: owner.remoteSessionId } : {}),
-        sessionId: owner.sessionId,
-        tabId,
-        browserId: owner.browserId,
-        browserGeneration: owner.browserGeneration,
-        viewport,
-      });
-    }
-  },
-  (base64Png, target) => {
-    const source = nativeImage.createFromBuffer(Buffer.from(base64Png, "base64"));
-    if (source.isEmpty()) return undefined;
-    const resized = source.resize({
-      width: target.width,
-      height: target.height,
-      quality: "best",
-    });
-    if (resized.isEmpty()) return undefined;
-    return resized.toPNG().toString("base64");
-  },
-  browserScreenshotSurfaceCoordinator,
-  {
-    // Browser shell/pageState 不跨进程恢复，以保持“完整退出即清空”的语义，
-    // 并避免恢复的 shell 与新 webview 重复 attach。因此不注入 recoveryStore；
-    // 进程内 residency 事件仍保留给现有 IPC 兼容层。
-    onSuspendTabRequested: (payload) => {
-      const tabOwner = browserGuestManager.getTabOwner(payload.tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewSuspend, payload);
-      }
-    },
-    onRestoreTabRequested: (payload) => {
-      const tabOwner = browserGuestManager.getTabOwner(payload.tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewRestore, payload);
-      }
-    },
-    onResidencyChanged: (payload) => {
-      const tabOwner = browserGuestManager.getTabOwner(payload.tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewRestore, payload);
-      }
-    },
-    onRecoveryOrphanCloseRequested: ({ tabId, reason }) => {
-      const tabOwner = browserGuestManager.getTabOwner(tabId);
-      const win = tabOwner ? BrowserWindow.fromId(tabOwner.windowId) : null;
-      if (win && !win.isDestroyed()) {
-        win.webContents.send(PlatformChannels.BrowserViewCloseTab, {
-          tabId,
-          reason,
-        });
-      }
-    },
-    warn: (message) => logger.warn(message),
-    recording: {
-      createRecorder: (input) =>
-        createElectronBrowserWebmRecorder(input, (message) => logger.debug(message)),
-    },
-  },
-  // 隐藏窗口截图的透明 presentation：capture 期间 showInactive + opacity 0 主动要帧。
-  (windowId) => BrowserWindow.fromId(windowId),
-);
-setBrowserUseGuestWebContentsIdsProvider(() => browserGuestManager.listGuestWebContentsIds());
-
-// browser-use：带诊断日志地执行 browser 命令（两处 spawnHostProcess wiring 共用）。
-// 打入口/出口便于定位卡点（如 navigate loadURL 挂起、CDP 报错等）。
-// CDP-on-guest pivot：execute 走 browserGuestManager（不再传 win —— guest 已由 attachGuest 关联）。
-async function runBrowserCommandOnView(params: {
-  win: BrowserWindow;
-  requestId: string;
-  browserId?: string;
-  browserGeneration?: number;
-  sessionId: string;
-  turnId?: string;
-  workspaceKey?: string;
-  workspacePath?: string;
-  workspaceIdentity?: string;
-  remoteSessionId?: string;
-  clientMode?: "desktop-continuous" | "web-remote-replayable";
-  sessionContext?: "live" | "cached";
-  command: unknown;
-}): Promise<{ ok: boolean; [k: string]: unknown }> {
-  const endDialogAutomation = embeddedBrowserDialogController.beginAutomation(params.win.id);
-  const command = params.command as { method?: string; tabId?: unknown } | null;
-  const method = command?.method ?? "?";
-  const workspaceKey =
-    params.workspaceIdentity?.trim() ||
-    params.workspaceKey ||
-    params.workspacePath ||
-    params.sessionId;
-  const requestedTabId = resolveBrowserOperationTabId(command);
-  const resetsResizeBaseline = browserOperationResetsResizeBaseline(command);
-  const sendOperation = (tabId: string) => {
-    if (params.win.isDestroyed()) return;
-    params.win.webContents.send(PlatformChannels.BrowserViewOperation, {
-      workspaceKey,
-      ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
-      sessionId: params.sessionId,
-      tabId,
-      browserId: params.browserId ?? "legacy-iab",
-      browserGeneration: params.browserGeneration ?? 0,
-      resetsResizeBaseline,
-    });
-  };
-  // 交互说明：绝大多数 Tab API 都显式携带 tabId，可在命令真正执行前亮起操作图标；
-  // newTab / default-tab 兼容调用要等 manager 返回真实 meta.tabId 后再补发，避免猜 tab identity。
-  if (requestedTabId) sendOperation(requestedTabId);
-  logger.debug(
-    `[browser-use] execute start browserId=${params.browserId ?? "legacy-iab"} sessionId=${params.sessionId} method=${method}`,
-  );
-  try {
-    const result = await browserGuestManager.execute(
-      {
-        requestId: params.requestId,
-        browserId: params.browserId ?? "legacy-iab",
-        browserGeneration: params.browserGeneration ?? 0,
-        windowId: params.win.id,
-        workspaceKey,
-        sessionId: params.sessionId,
-        ...(params.turnId ? { turnId: params.turnId } : {}),
-        ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
-        clientMode: params.clientMode ?? "desktop-continuous",
-      },
-      params.command as Parameters<typeof browserGuestManager.execute>[1],
-    );
-    logger.debug(
-      `[browser-use] execute done sessionId=${params.sessionId} method=${method} ok=${result.ok} elapsedMs=${(result as { elapsedMs?: number }).elapsedMs ?? "?"}`,
-    );
-    if (!requestedTabId) {
-      const resolvedTabId = resolveBrowserOperationTabId(command, result);
-      if (resolvedTabId) sendOperation(resolvedTabId);
-    }
-    return result;
-  } catch (error) {
-    logger.error(
-      `[browser-use] execute threw sessionId=${params.sessionId} method=${method}:`,
-      error,
-    );
-    throw error;
-  } finally {
-    endDialogAutomation();
-  }
-}
 let currentDesktopZoomLevel = 0;
 let currentDesktopWindowSize: DesktopWindowSize | undefined;
 const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
@@ -498,9 +263,6 @@ const taskRealtimeBus = new TaskRealtimeBus({ logger });
 // 一次写主日志。will-download 监听数用于观察关窗后 defaultSession 是否残留监听。
 mainMemoryDiagnosticsRegistry.register("taskBus", () => taskRealtimeBus.collectMemoryDiagnostics());
 mainMemoryDiagnosticsRegistry.register("broadcast", () => broadcastHub.collectMemoryDiagnostics());
-mainMemoryDiagnosticsRegistry.register("guest", () =>
-  browserGuestManager.collectMemoryDiagnostics(),
-);
 mainMemoryDiagnosticsRegistry.register("app", () => ({
   windows: BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed()).length,
   willDownloadListeners: session.defaultSession.listenerCount("will-download"),
@@ -822,7 +584,6 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   notifyStabilityAppExit(
     activeAppShutdownKind === "update-install" ? "update_install" : "app_quit",
   );
-  browserScreenshotSurfaceCoordinator.dispose();
 
   const cronSchedulerToDispose = cronScheduler;
   cronScheduler = null;
@@ -1474,9 +1235,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onCronRunResult: forwardCronRunResult,
           onCronSchedulerWakeRequested: wakeCronScheduler,
           authorizeLocalMediaPreviewPath: localMediaPreviewPathRegistry.authorize,
-          // browser-use：main 用 WebContentsView+CDP 执行命令。
-          handleBrowserExecuteRequest: ({ win: browserWin, ...request }) =>
-            runBrowserCommandOnView({ win: browserWin, ...request }),
         },
         {
           taskRealtime: {
@@ -1519,8 +1277,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
     initialDesktopZoomLevel: currentDesktopZoomLevel,
     initialWindowSize: currentDesktopWindowSize,
     currentApplicationLocale: () => currentApplicationLocale,
-    resolveBrowserViewOwner: (webContentsId) =>
-      browserGuestManager.getTabOwnerByWebContentsId(webContentsId),
     persistWindowSize: async (state) => {
       currentDesktopWindowSize = state;
       await mainSettingService.update({ desktopWindowSize: state });
@@ -1602,9 +1358,6 @@ app.whenReady().then(async () => {
   // 注意：该引用曾被上游 cherry-pick 反复带回，且在缺少声明的 whenReady 回调里直接求值，
   // 打包产物会抛 ReferenceError: desktopContextPromptRollout is not defined，
   // 使主进程启动链断裂、窗口不再创建（见 issue #58），不要再加回。
-  installBrowserRestoreBootstrapProtocol(
-    session.fromPartition(EMBEDDED_BROWSER_PARTITION).protocol,
-  );
   // Bootstrap: 从设置文件读取自定义数据目录，在所有 host 进程启动前生效
   let loadedBootstrapLocale = false;
   let bootstrapSettings: AppSettings | undefined;
@@ -1727,42 +1480,6 @@ app.whenReady().then(async () => {
 
   registerPlatformIpcHandlers({
     logger,
-    // CDP-on-guest pivot：renderer `<webview>` dom-ready 上报 guest webContentsId → attach。
-    attachBrowserGuest: (key, webContentsId, options) => {
-      const result = browserGuestManager.attachGuest(key, webContentsId, options);
-      if (result.ok && options?.windowId !== undefined) {
-        embeddedBrowserDialogController.bindGuest(key, webContentsId, options.windowId);
-      }
-      return result;
-    },
-    updateBrowserGuestViewport: (tabId, viewport, windowId, desktopZoomFactor) =>
-      browserGuestManager.updateViewportFromRenderer(tabId, viewport, windowId, desktopZoomFactor),
-    reportBrowserScreenshotSurfaceReady: (windowId, senderWebContentsId, payload) => {
-      logger.debug("[browser-screenshot-surface] renderer ready", {
-        windowId,
-        senderWebContentsId,
-        requestId: payload.requestId,
-        tabId: payload.tabId,
-        webContentsId: payload.webContentsId,
-        viewport: payload.viewport,
-        surfaceScale: payload.surfaceScale,
-      });
-      browserScreenshotSurfaceCoordinator.handleReady({
-        windowId,
-        senderWebContentsId,
-        payload,
-      });
-    },
-    browserViewResidencyHandlers: {
-      detachBrowserGuest: (key, webContentsId, windowId) =>
-        browserGuestManager.detachGuestBeforeReplacement(key, webContentsId, windowId),
-      closeBrowserTab: (payload) => browserGuestManager.closeTabFromRenderer(payload),
-      reportBrowserTabResidency: (payload) => browserGuestManager.reportResidency(payload),
-      acknowledgeBrowserTabSuspend: (payload) => browserGuestManager.acknowledgeSuspend(payload),
-      ensureBrowserTabResident: (payload) =>
-        browserGuestManager.ensureResidentFromRenderer(payload),
-      restoreBrowserTabs: (payload) => browserGuestManager.restoreTabs(payload),
-    },
     applyApplicationLocale: async (locale) => {
       currentApplicationLocale = locale;
       rebuildMenu();
@@ -1894,8 +1611,6 @@ app.whenReady().then(async () => {
 app.on("browser-window-created", (_, win) => {
   const windowWebContentsId = win.webContents.id;
   win.on("closed", () => {
-    browserScreenshotSurfaceCoordinator.handleWindowDestroyed(win.id);
-    browserGuestManager.closeWindow(win.id);
     windowWorkspaceMap.delete(win.id);
     windowTaskRealtimeHostIdMap.delete(win.id);
     if (windowUnreadCountMap.delete(win.id)) {

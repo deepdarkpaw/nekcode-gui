@@ -12,7 +12,6 @@ import {
   AlarmClock,
   Anchor,
   Brain,
-  Globe2,
   Cable,
   WandSparkles,
   Keyboard,
@@ -121,12 +120,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: Anchor,
     titleId: "settings.hooks.title",
     groupId: "agentCapabilities",
-  },
-  {
-    id: "browser",
-    icon: Globe2,
-    titleId: "settings.browser.title",
-    groupId: "basics",
   },
   // 键盘快捷键：本机效率配置，收纳在基础设置尾部。
   {

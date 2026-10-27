@@ -309,9 +309,6 @@ import {
   formatLogPrefix,
   type ServiceAuthorityMode,
   resolveRuntimeZCodeEndpointOrigin,
-  type BrowserBackendDescriptor,
-  type BrowserClientMode,
-  type BrowserCommand,
   type ZCodeAutomation,
   type ZCodeAutomationRun,
   ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
@@ -422,34 +419,6 @@ export function createLocalServices(options: {
   serviceAuthorityMode?: ServiceAuthorityMode;
   agentRuntimeContext?: {
     runtimeSurface?: "desktop_local_host" | "remote_workspace_host";
-  };
-  /** browser-use 执行桥（host→main WebContentsView+CDP）；desktop host 注入，缺省则 browser 不可用。 */
-  browserControlExecutor?: {
-    list(input: {
-      requestId: string;
-      sessionId: string;
-      turnId?: string;
-      workspaceKey: string;
-      workspacePath: string;
-      workspaceIdentity?: string;
-      remoteSessionId?: string;
-      clientMode: BrowserClientMode;
-      sessionContext: "live" | "cached";
-    }): Promise<BrowserBackendDescriptor[]>;
-    execute(input: {
-      requestId: string;
-      browserId?: string;
-      browserGeneration?: number;
-      sessionId: string;
-      turnId?: string;
-      workspaceKey: string;
-      workspacePath: string;
-      workspaceIdentity?: string;
-      remoteSessionId?: string;
-      clientMode: BrowserClientMode;
-      sessionContext: "live" | "cached";
-      command: BrowserCommand;
-    }): Promise<{ ok: boolean; [k: string]: unknown }>;
   };
 }): ServiceCollection {
   const isDesktopAttachedRemote = options?.serviceAuthorityMode === "desktop-attached-remote";
@@ -598,8 +567,6 @@ export function createLocalServices(options: {
     // 因而看不到实际运行的 Agent，也无法验证只读到可写升级是否复用同一进程。
     processLifecycleReporter: options?.processLifecycleReporter,
     spawnFallbackCwd: options?.zcodeAgentSpawnFallbackCwd,
-    // browser-use：host→main 执行桥透传给 agent service 的 onRequest browserExecute 路由。
-    browserControlExecutor: options?.browserControlExecutor,
     // 设置页的 HTTP 代理、No Proxy + 自定义 CA 按 spawn 时读取注入 agent 子进程 env，
     // 覆盖模型 API / MCP / Bash 出口流量并信任用户显式配置的证书；改动后下次启动 agent 生效。
     resolveSpawnEnv: async () => {

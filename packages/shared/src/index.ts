@@ -132,8 +132,6 @@ export * from "./onboardingRecord.js";
 export * from "./remoteResourcePackages.js";
 export * from "./plan-identity.js";
 export {
-  BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS,
-  BROWSER_VIEW_RESTORE_BOOTSTRAP_URL,
   LOCAL_MEDIA_PREVIEW_SCHEME,
   DesktopCommandIds,
   buildLocalMediaPreviewUrl,
@@ -145,21 +143,6 @@ export { LAUNCH_MARKS_QUERY_KEY, parseLaunchMarks, serializeLaunchMarks } from "
 export type {
   CancelPendingRemoteConnectionRequest,
   BindRemoteWorkspaceSessionContextRequest,
-  BrowserTabResidencyState,
-  BrowserViewCloseTabNotification,
-  BrowserViewCloseTabRequest,
-  BrowserViewOperationPayload,
-  BrowserViewResidencyReportPayload,
-  BrowserViewResidencyTransitionPayload,
-  BrowserViewRestoredTabShell,
-  BrowserViewRestoreTabsRequest,
-  BrowserViewScreenshotSurfacePreparePayload,
-  BrowserViewScreenshotSurfaceReadyPayload,
-  BrowserViewScreenshotSurfaceReleasePayload,
-  BrowserViewViewportChangedPayload,
-  ChromeBrowserDataImportError,
-  ChromeBrowserDataImportOptions,
-  ChromeBrowserDataImportResult,
   ConnectRemoteRequest,
   CreateTempTextAttachmentRequest,
   CreateTempTextAttachmentResult,
@@ -175,10 +158,6 @@ export type {
   ApplicationIconInfo,
   ApplicationIconLocator,
   ApplicationIconRequest,
-  BrowserGuestAttachRejectReason,
-  BrowserGuestAttachResult,
-  EmbeddedBrowserDataClearResult,
-  EmbeddedBrowserOpenUrlRequest,
   IPlatformService,
   OpenInEditorRemoteTarget,
   OpenInEditorOptions,
@@ -247,7 +226,6 @@ export * from "./hooks.js";
 export * from "./openrouter-attribution.js";
 export * from "./workspaceSessionRestore.js";
 export * from "./skill-scan-policy.js";
-export * from "./browser-use/index.js";
 
 export * from "./coding-plan-reset.js";
 export {

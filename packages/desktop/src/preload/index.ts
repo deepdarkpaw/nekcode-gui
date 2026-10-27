@@ -8,24 +8,10 @@ import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 import type {
   AppSettings,
   ApplicationIconRequest,
-  BrowserViewOperationPayload,
-  BrowserGuestAttachResult,
-  BrowserViewScreenshotSurfacePreparePayload,
-  BrowserViewScreenshotSurfaceReadyPayload,
-  BrowserViewScreenshotSurfaceReleasePayload,
-  BrowserViewViewportChangedPayload,
-  BrowserViewCloseTabNotification,
-  BrowserViewCloseTabRequest,
-  BrowserViewResidencyReportPayload,
-  BrowserViewResidencyTransitionPayload,
-  BrowserViewRestoredTabShell,
-  BrowserViewRestoreTabsRequest,
-  BrowserViewportSize,
   DesktopZoomState,
   DesktopWindowChromeState,
   DesktopCommandId,
   DesktopTitleBarTheme,
-  EmbeddedBrowserOpenUrlRequest,
   Locale,
   OpenInEditorOptions,
   RemoteTarget,
@@ -301,126 +287,6 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.on(PlatformChannels.CloseActiveContextRequest, handler);
     return () => ipcRenderer.removeListener(PlatformChannels.CloseActiveContextRequest, handler);
   },
-  /** 注册内置 webview 的受控新页面请求，返回 disposer */
-  onOpenBrowserUrl: (callback: (request: EmbeddedBrowserOpenUrlRequest) => void): (() => void) => {
-    const handler = (_event: unknown, request: EmbeddedBrowserOpenUrlRequest) => callback(request);
-    ipcRenderer.on(PlatformChannels.OpenBrowserUrl, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.OpenBrowserUrl, handler);
-  },
-  /** 注册 agent 首次 browser 命令建好受控 view 的回调（自动开 browser-use tab），返回 disposer */
-  onBrowserViewReady: (
-    callback: (payload: {
-      workspaceKey: string;
-      remoteSessionId?: string;
-      sessionId: string;
-      tabId: string;
-      browserId: string;
-      browserGeneration: number;
-    }) => void,
-  ): (() => void) => {
-    const handler = (
-      _event: unknown,
-      payload: {
-        workspaceKey: string;
-        remoteSessionId?: string;
-        sessionId: string;
-        tabId: string;
-        browserId: string;
-        browserGeneration: number;
-      },
-    ) => callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewReady, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewReady, handler);
-  },
-  /** 注册 agent browser-use 命中真实 tab 的操作状态回调，返回 disposer。 */
-  onBrowserViewOperation: (
-    callback: (payload: BrowserViewOperationPayload) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewOperationPayload) => callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewOperation, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewOperation, handler);
-  },
-  /** 注册当前受控 tab viewport 变化回调，Agent 设置时用于同步自由尺寸模式。 */
-  onBrowserViewViewportChanged: (
-    callback: (payload: BrowserViewViewportChangedPayload) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewViewportChangedPayload) =>
-      callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewViewportChanged, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewViewportChanged, handler);
-  },
-  onBrowserViewScreenshotSurfacePrepare: (
-    callback: (payload: BrowserViewScreenshotSurfacePreparePayload) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewScreenshotSurfacePreparePayload) =>
-      callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewScreenshotSurfacePrepare, handler);
-    return () =>
-      ipcRenderer.removeListener(PlatformChannels.BrowserViewScreenshotSurfacePrepare, handler);
-  },
-  onBrowserViewScreenshotSurfaceRelease: (
-    callback: (payload: BrowserViewScreenshotSurfaceReleasePayload) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewScreenshotSurfaceReleasePayload) =>
-      callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewScreenshotSurfaceRelease, handler);
-    return () =>
-      ipcRenderer.removeListener(PlatformChannels.BrowserViewScreenshotSurfaceRelease, handler);
-  },
-  browserViewScreenshotSurfaceReady: (payload: BrowserViewScreenshotSurfaceReadyPayload): void => {
-    ipcRenderer.send(PlatformChannels.BrowserViewScreenshotSurfaceReady, payload);
-  },
-  onBrowserViewVisibility: (
-    callback: (payload: {
-      visible: boolean;
-      workspaceKey: string;
-      remoteSessionId: string | undefined;
-      sessionId: string;
-      tabId?: string;
-      browserId: string;
-      browserGeneration: number;
-    }) => void,
-  ): (() => void) => {
-    const handler = (
-      _event: unknown,
-      payload: {
-        visible: boolean;
-        workspaceKey: string;
-        remoteSessionId: string | undefined;
-        sessionId: string;
-        tabId?: string;
-        browserId: string;
-        browserGeneration: number;
-      },
-    ) => callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewVisibility, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewVisibility, handler);
-  },
-  /** 注册 agent close 命令要求卸载受控 tab 的回调，返回 disposer */
-  onBrowserViewCloseTab: (
-    callback: (payload: BrowserViewCloseTabNotification) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewCloseTabNotification) =>
-      callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewCloseTab, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewCloseTab, handler);
-  },
-  onBrowserViewSuspend: (
-    callback: (payload: BrowserViewResidencyTransitionPayload) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewResidencyTransitionPayload) =>
-      callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewSuspend, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewSuspend, handler);
-  },
-  onBrowserViewRestore: (
-    callback: (payload: BrowserViewResidencyTransitionPayload) => void,
-  ): (() => void) => {
-    const handler = (_event: unknown, payload: BrowserViewResidencyTransitionPayload) =>
-      callback(payload);
-    ipcRenderer.on(PlatformChannels.BrowserViewRestore, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.BrowserViewRestore, handler);
-  },
   /** 注册 main 进程触发新建任务的回调，返回 disposer */
   onNewTask: (callback: () => void): (() => void) => {
     const handler = () => callback();
@@ -533,41 +399,6 @@ contextBridge.exposeInMainWorld("zcode", {
   }> => ipcRenderer.invoke(PlatformChannels.ExportLogs),
   /** 截取当前窗口，用于错误反馈携带现场画面 */
   captureWindowScreenshot: () => ipcRenderer.invoke(PlatformChannels.CaptureWindowScreenshot),
-  // CDP-on-guest pivot：`<webview>` guest dom-ready 后上报 webContentsId 给 main attach。
-  browserViewAttachGuest: (payload: {
-    key: string;
-    webContentsId: number;
-    active?: boolean;
-    workspaceKey?: string;
-    remoteSessionId?: string;
-    sessionId?: string;
-    residencyGeneration?: number;
-  }): Promise<BrowserGuestAttachResult> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewAttachGuest, payload),
-  /** React 卸载旧 `<webview>` 前同步等待 main 断开 native CDP session。 */
-  browserViewDetachGuest: (payload: { key: string; webContentsId: number }): Promise<boolean> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewDetachGuest, payload),
-  browserViewCloseTab: (payload: BrowserViewCloseTabRequest): Promise<void> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewCloseTabFromRenderer, payload),
-  browserViewReportResidency: (payload: BrowserViewResidencyReportPayload): Promise<void> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewReportResidency, payload),
-  browserViewSuspendReady: (payload: { tabId: string; generation: number }): Promise<void> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewSuspendReady, payload),
-  browserViewEnsureResident: (payload: BrowserViewCloseTabRequest): Promise<void> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewEnsureResident, payload),
-  browserViewRestoreTabs: (
-    payload: BrowserViewRestoreTabsRequest,
-  ): Promise<BrowserViewRestoredTabShell[]> =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewRestoreTabs, payload),
-  /** 将 UI 自由尺寸同步为当前受控 tab 的真实 viewport。 */
-  browserViewUpdateViewport: (payload: { tabId: string; viewport: BrowserViewportSize | null }) =>
-    ipcRenderer.invoke(PlatformChannels.BrowserViewUpdateViewport, payload),
-  /** 从自动发现的 Chrome Profile 一次性导入内置浏览器数据。 */
-  importChromeBrowserData: (options?: import("@zcode/shared").ChromeBrowserDataImportOptions) =>
-    ipcRenderer.invoke(PlatformChannels.ImportChromeBrowserData, options),
-  /** 清理内置浏览器缓存或全部站点数据。 */
-  clearEmbeddedBrowserData: (mode: "cache" | "all") =>
-    ipcRenderer.invoke(PlatformChannels.ClearEmbeddedBrowserData, mode),
   /** 读取开发态 stdio tap proxy 开关状态 */
   getZCodeStdioTapDevState: (): Promise<ZCodeStdioTapDevState> =>
     ipcRenderer.invoke(PlatformChannels.GetZCodeStdioTapDevState),

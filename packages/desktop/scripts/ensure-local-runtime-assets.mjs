@@ -26,10 +26,6 @@ const nativeSearchBuildPlan = nativeSearchReleasePlan.enabled
       outputDir: bundledToolsRoot,
     })
   : undefined;
-// Windows Chrome 导入入口未启用，默认 dev 启动不应把可选 helper 当成本地必需资源。
-// 显式 opt-in 时继续沿用原有按需构建，避免删除未来恢复所需代码。
-const shouldRequireWindowsBrowserImportHelper =
-  target.os === "win32" && process.env.ZCODE_ENABLE_WINDOWS_BROWSER_IMPORT === "1";
 
 function isNativeSearchReady() {
   if (!nativeSearchBuildPlan) return true;
@@ -63,27 +59,15 @@ function isNativeSearchReady() {
   }
 }
 
-const REQUIRED_LOCAL_RUNTIME_ASSETS = [
-  ...(nativeSearchReleasePlan.enabled
-    ? [
-        {
-          label: "embedded search",
-          script: "prepare:native-search",
-          isReady: isNativeSearchReady,
-        },
-      ]
-    : []),
-  ...(shouldRequireWindowsBrowserImportHelper
-    ? [
-        {
-          label: "Windows browser import helper",
-          script: "prepare:browser-import-helper",
-          isReady: () =>
-            existsSync(join(bundledToolsRoot, "browser-import", "zcode-browser-import-helper.exe")),
-        },
-      ]
-    : []),
-];
+const REQUIRED_LOCAL_RUNTIME_ASSETS = nativeSearchReleasePlan.enabled
+  ? [
+      {
+        label: "embedded search",
+        script: "prepare:native-search",
+        isReady: isNativeSearchReady,
+      },
+    ]
+  : [];
 
 const missingAssets = [];
 for (const asset of REQUIRED_LOCAL_RUNTIME_ASSETS) {

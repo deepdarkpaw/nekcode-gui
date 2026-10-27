@@ -32,8 +32,6 @@ import {
   ZCODE_PROTOCOL_VERSION,
   zcodeMcpListResultSchema,
   zcodePermissionRequestParamsSchema,
-  zcodeBrowserListParamsSchema,
-  zcodeBrowserExecuteParamsSchema,
   zcodeProcessChildProcessesResultSchema,
   type ZCodeProcessChildProcess,
   zcodeSkillsReferenceCatalogResultSchema,
@@ -251,10 +249,6 @@ import {
   type ZCodeProtocolClient,
 } from "./zcodeProtocolClient.js";
 import { getDataBaseDir } from "../paths.js";
-import {
-  collectBrowserAmbientContext,
-  type BrowserAmbientContextExecutor,
-} from "./zcodeAgentBrowserAmbientContext.js";
 import { registerMemoryDiagnosticsProvider } from "#src/memoryDiagnostics.js";
 const logger = createServiceLogger("zcode-agent-service");
 const PLUGIN_MANAGEMENT_WORKSPACE_DIR_NAME = "plugin-workspace";
@@ -291,7 +285,7 @@ type SessionResumeCompatField =
   | "toolAllowlist"
   | "toolDenylist"
   | "dynamicWorkflowEnabled";
-type SessionSendCompatField = "browserAmbientContext" | "automationId" | "toolDenylist";
+type SessionSendCompatField = "automationId" | "toolDenylist";
 
 const SESSION_CREATE_OPTIONAL_COMPAT_FIELDS = new Set<SessionCreateCompatField>([
   "persistence",
@@ -314,7 +308,6 @@ const SESSION_RESUME_OPTIONAL_COMPAT_FIELDS = new Set<SessionResumeCompatField>(
   "dynamicWorkflowEnabled",
 ]);
 const SESSION_SEND_OPTIONAL_COMPAT_FIELDS = new Set<SessionSendCompatField>([
-  "browserAmbientContext",
   "automationId",
   "toolDenylist",
 ]);
@@ -619,9 +612,6 @@ function buildSessionSendParams(
     queryId: params.queryId,
     content: params.content,
     attachments: params.attachments,
-    ...(params.browserAmbientContext !== undefined && !omittedFields.has("browserAmbientContext")
-      ? { browserAmbientContext: params.browserAmbientContext }
-      : {}),
     expectedRevision: params.expectedRevision,
     expectedProviderRevision: params.expectedProviderRevision,
     ...(params.automationId !== undefined && !omittedFields.has("automationId")
@@ -779,12 +769,6 @@ interface CreateZCodeAgentServiceOptions extends Omit<
    * dynamicWorkflowEnabled。缺省不传（纯 CLI 装配）= 永远关闭，与 CLI 缺省一致。
    */
   resolveDynamicWorkflowClientConfig?: () => Promise<DynamicWorkflowClientConfig | undefined>;
-  /**
-   * browser-use 执行桥：把 agent 的 interaction/browserExecute 反向请求转发到 main
-   * （WebContentsView+CDP）。desktop host 装配时注入；缺省（纯 CLI/远控无 main）则
-   * browser 命令返回 backend_unavailable，不影响其它功能。
-   */
-  browserControlExecutor?: BrowserAmbientContextExecutor;
 }
 
 function toProtocolAutomation(automation: ZCodeAutomation) {
@@ -1704,97 +1688,6 @@ export function createZCodeAgentService(
               request: parsed.data,
             });
           }
-          return;
-        }
-
-        // browser-use discovery：backend 在线状态与 plugin/skill 是否暴露是两层状态。
-        // executor 缺省时返回空列表，禁止 facade 伪造 IAB available。
-        if (request.method === zcodeProtocolMethods.interactionBrowserList) {
-          const parsed = zcodeBrowserListParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid interaction/browserList params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          const executor = options?.browserControlExecutor;
-          if (!executor) {
-            void client.respond(request.id, { browsers: [] });
-            return;
-          }
-          void executor
-            .list(parsed.data)
-            .then((browsers) => client.respond(request.id, { browsers }))
-            .catch((error: unknown) => {
-              void client.respondError(request.id, {
-                code: -32603,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            });
-          return;
-        }
-
-        // browser-use：agent 的 agent.browsers.* 经 interaction/browserExecute 到达这里。
-        // 纯 RPC 中继——转发给 main（WebContentsView+CDP）执行后 respondResult，不 emitSessionEvent、
-        // 不进 pending map（区别于 permission 的 UI 阻塞语义）。executor 缺省则 backend_unavailable。
-        if (request.method === zcodeProtocolMethods.interactionBrowserExecute) {
-          const parsed = zcodeBrowserExecuteParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid interaction/browserExecute params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          const executor = options?.browserControlExecutor;
-          if (!executor) {
-            void client.respond(request.id, {
-              ok: false,
-              error: {
-                code: "backend_unavailable",
-                message: "browser control not available",
-              },
-              elapsedMs: 0,
-            });
-            return;
-          }
-          void executor
-            .execute({
-              requestId: parsed.data.requestId,
-              ...(parsed.data.browserId ? { browserId: parsed.data.browserId } : {}),
-              ...(parsed.data.browserGeneration !== undefined
-                ? { browserGeneration: parsed.data.browserGeneration }
-                : {}),
-              sessionId: parsed.data.sessionId,
-              ...(parsed.data.turnId ? { turnId: parsed.data.turnId } : {}),
-              workspaceKey: parsed.data.workspaceKey ?? resolveWorkspaceKey(workspace),
-              workspacePath: parsed.data.workspacePath ?? workspace.workspacePath,
-              ...((parsed.data.workspaceIdentity ?? workspace.workspaceIdentity)
-                ? {
-                    workspaceIdentity: parsed.data.workspaceIdentity ?? workspace.workspaceIdentity,
-                  }
-                : {}),
-              ...(parsed.data.remoteSessionId
-                ? { remoteSessionId: parsed.data.remoteSessionId }
-                : {}),
-              clientMode: parsed.data.clientMode ?? "desktop-continuous",
-              sessionContext: parsed.data.sessionContext ?? "live",
-              command: parsed.data.command,
-            })
-            .then((result) => client.respond(request.id, result))
-            .catch((error: unknown) => {
-              void client.respond(request.id, {
-                ok: false,
-                error: {
-                  code: "execution_error",
-                  message: error instanceof Error ? error.message : String(error),
-                },
-                elapsedMs: 0,
-              });
-            });
           return;
         }
 
@@ -3227,22 +3120,8 @@ export function createZCodeAgentService(
       const client = await getClient(params);
       const sessionTraceId = params.sessionTraceId?.trim() || getSessionTraceId(params);
       const logTraceId = sessionTraceId ?? params.inputId;
-      const browserAmbientContext =
-        params.browserAmbientContext ??
-        (await collectBrowserAmbientContext(options?.browserControlExecutor, {
-          sessionId: params.sessionId,
-          workspacePath: params.workspacePath,
-          ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
-          ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
-          ...(params.clientMode ? { clientMode: params.clientMode } : {}),
-        }));
-      const protocolParams: ZCodeAgentSendPromptParams = {
-        ...params,
-        ...(browserAmbientContext ? { browserAmbientContext } : {}),
-      };
       logger.info(logTraceId, "ZCode Agent session/send 开始", {
         attachmentCount: params.attachments?.length ?? 0,
-        hasBrowserAmbientContext: browserAmbientContext !== undefined,
         inputId: params.inputId,
         queryId: params.queryId ?? null,
         sessionId: params.sessionId,
@@ -3254,7 +3133,7 @@ export function createZCodeAgentService(
       try {
         const result = await client.request(
           zcodeProtocolMethods.sessionSend,
-          buildSessionSendParams(protocolParams),
+          buildSessionSendParams(params),
           zcodeSessionSendResultSchema,
         );
         logger.info(logTraceId, "ZCode Agent session/send ACK", {
@@ -3279,7 +3158,7 @@ export function createZCodeAgentService(
           });
           const result = await client.request(
             zcodeProtocolMethods.sessionSend,
-            buildSessionSendParams(protocolParams, new Set(compatFields)),
+            buildSessionSendParams(params, new Set(compatFields)),
             zcodeSessionSendResultSchema,
           );
           return result;
@@ -3851,25 +3730,6 @@ export function createZCodeAgentService(
       ) {
         const { ttft: _ttft, ...withoutTtft } = envelope;
         envelope = withoutTtft;
-      }
-      if (envelope.type === "sendText" && envelope.sessionId) {
-        const payload = commandPayloadSchemas.sendText.parse(envelope.payload);
-        const browserAmbientContext = await collectBrowserAmbientContext(
-          options?.browserControlExecutor,
-          {
-            sessionId: envelope.sessionId,
-            workspacePath: params.workspacePath,
-            ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
-            ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
-            clientMode: commandClientMode,
-          },
-        );
-        if (browserAmbientContext) {
-          envelope = {
-            ...envelope,
-            payload: { ...payload, browserAmbientContext },
-          };
-        }
       }
       const ack: CommandAck = await client.request(V4_METHODS.command, envelope, commandAckSchema);
       // Prompt command 在 committed TurnStarted 或 committed WorkspaceHookReviewRequested

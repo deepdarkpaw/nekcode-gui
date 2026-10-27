@@ -2,8 +2,6 @@ import { DiagnosticRecordSchema } from "./diagnostics.js";
 import { z } from "zod";
 import { databaseStartupControlSchema, databaseStartupStateSchema } from "./database-startup.js";
 /* eslint-disable max-lines -- 运行时 schema 当前集中在共享包入口，外部 relay payload 校验加入后先保持单一导出面。 */
-import { browserCommandSchema } from "./browser-use/commands.js";
-import { browserCommandResultSchema } from "./browser-use/result.js";
 import { PROCESS_RESOURCE_CLI_LANES } from "./processResourceTelemetry.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { zcodeProviderSchema } from "./providers.js";
@@ -322,13 +320,6 @@ export const hostCronRunMessageSchema = z.object({
   mode: z.string().optional(),
 });
 
-// main → host：browser-use 命令执行结果（按 requestId 关联到 host 的 pending）。
-export const hostBrowserExecuteResultMessageSchema = z.object({
-  type: z.literal("browser-execute-result"),
-  requestId: nonEmptyStringSchema,
-  result: browserCommandResultSchema,
-});
-
 export const hostLocalMediaPreviewPathAuthorizeResultMessageSchema = z
   .object({
     type: z.literal("local-media-preview-path-authorize-result"),
@@ -384,7 +375,6 @@ export const hostIncomingMessageSchema = z.discriminatedUnion("type", [
   hostSessionMessageDeliverMessageSchema,
   hostSessionMessageDeliveryResultMessageSchema,
   hostCronRunMessageSchema,
-  hostBrowserExecuteResultMessageSchema,
   hostLocalMediaPreviewPathAuthorizeResultMessageSchema,
   hostProviderProvisioningExecuteMessageSchema,
 ]);
@@ -701,24 +691,6 @@ export const hostCronSchedulerWakeRequestResponseSchema = z.object({
   automationId: nonEmptyStringSchema,
 });
 
-// host → main：执行一条 browser-use 命令（main 用 WebContentsView+CDP 执行）。
-export const hostBrowserExecuteRequestResponseSchema = z.object({
-  type: z.literal("browser-execute-request"),
-  requestId: nonEmptyStringSchema,
-  // 迁移兼容：旧 host bundle 没有 browserId/context；新 browser-client 链路始终携带。
-  browserId: nonEmptyStringSchema.optional(),
-  browserGeneration: z.number().int().nonnegative().optional(),
-  sessionId: nonEmptyStringSchema,
-  turnId: nonEmptyStringSchema.optional(),
-  workspaceKey: nonEmptyStringSchema.optional(),
-  workspacePath: nonEmptyStringSchema.optional(),
-  workspaceIdentity: nonEmptyStringSchema.optional(),
-  remoteSessionId: nonEmptyStringSchema.optional(),
-  clientMode: z.enum(["desktop-continuous", "web-remote-replayable"]).optional(),
-  sessionContext: z.enum(["live", "cached"]).optional(),
-  command: browserCommandSchema,
-});
-
 export const hostLocalMediaPreviewPathAuthorizeRequestResponseSchema = z
   .object({
     type: z.literal("local-media-preview-path-authorize-request"),
@@ -824,7 +796,6 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostSessionMessageSendRequestedResponseSchema,
   hostSessionRouteAnnounceResponseSchema,
   hostSessionMessageDeliverResultResponseSchema,
-  hostBrowserExecuteRequestResponseSchema,
   hostLocalMediaPreviewPathAuthorizeRequestResponseSchema,
   hostNetworkTelemetryBatchResponseSchema,
   hostProviderProvisioningSourceChangedResponseSchema,

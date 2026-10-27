@@ -13,7 +13,6 @@
     "prepare:runtime-assets": "node scripts/prepare-runtime-assets.mjs",
     "prepare:remote-assets": "node ../../scripts/prepare-prebuilds.mjs",
     "prepare:native-search": "node ../../scripts/prepare-native-search-tools.mjs",
-    "prepare:browser-import-helper": "node scripts/build-windows-browser-import-helper.mjs",
     "build:no-runtime-assets": "pnpm prepare:build-meta && node scripts/run-production-build.mjs",
     "build": "pnpm prepare:runtime-assets && pnpm run build:no-runtime-assets",
     "bundle": "node scripts/bundle.mjs",

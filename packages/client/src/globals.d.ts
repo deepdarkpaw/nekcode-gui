@@ -4,22 +4,7 @@ import type {
   DesktopWindowChromeState,
   DesktopTitleBarTheme,
   AppSettings,
-  BrowserViewOperationPayload,
-  BrowserGuestAttachResult,
-  BrowserViewScreenshotSurfacePreparePayload,
-  BrowserViewScreenshotSurfaceReadyPayload,
-  BrowserViewScreenshotSurfaceReleasePayload,
-  BrowserViewViewportChangedPayload,
-  BrowserViewCloseTabNotification,
-  BrowserViewCloseTabRequest,
-  BrowserViewResidencyReportPayload,
-  BrowserViewResidencyTransitionPayload,
-  BrowserViewRestoredTabShell,
-  BrowserViewRestoreTabsRequest,
-  BrowserViewportSize,
-  ChromeBrowserDataImportResult,
   DockerContainerInfo,
-  EmbeddedBrowserOpenUrlRequest,
   EditorInfo,
   ApplicationIconInfo,
   ApplicationIconRequest,
@@ -31,7 +16,6 @@ import type {
   SSHConfigAliasOption,
   TaskNotificationPayload,
   WindowScreenshotResult,
-  EmbeddedBrowserDataClearResult,
   WSLDistro,
   UpdateCheckResultPayload,
   UpdateStatePayload,
@@ -62,7 +46,7 @@ declare global {
         remoteSessionId: string;
         workspacePath: string;
         workspaceIdentity?: string;
-      }): Promise<BrowserGuestAttachResult>;
+      }): Promise<void>;
       /** 释放当前窗口里的远程 session */
       disposeRemoteSession(sessionId: string): Promise<void>;
       /** 检查本机 Docker daemon 是否可用 */
@@ -106,49 +90,6 @@ declare global {
       onFocusTab(handler: (path: string) => void): () => void;
       /** 注册 main 进程触发新建 tab 的回调，返回 disposer */
       onNewTab(handler: () => void): () => void;
-      /** 注册内置浏览器 webview 请求打开新页面的回调，返回 disposer */
-      onOpenBrowserUrl?(handler: (request: EmbeddedBrowserOpenUrlRequest) => void): () => void;
-      onBrowserViewReady?(
-        handler: (payload: {
-          workspaceKey: string;
-          remoteSessionId?: string;
-          sessionId: string;
-          tabId: string;
-          browserId: string;
-          browserGeneration: number;
-        }) => void,
-      ): () => void;
-      onBrowserViewOperation?(handler: (payload: BrowserViewOperationPayload) => void): () => void;
-      onBrowserViewVisibility?(
-        handler: (payload: {
-          visible: boolean;
-          workspaceKey: string;
-          remoteSessionId: string | undefined;
-          sessionId: string;
-          tabId?: string;
-          browserId: string;
-          browserGeneration: number;
-        }) => void,
-      ): () => void;
-      onBrowserViewViewportChanged?(
-        handler: (payload: BrowserViewViewportChangedPayload) => void,
-      ): () => void;
-      onBrowserViewScreenshotSurfacePrepare?(
-        handler: (payload: BrowserViewScreenshotSurfacePreparePayload) => void,
-      ): () => void;
-      onBrowserViewScreenshotSurfaceRelease?(
-        handler: (payload: BrowserViewScreenshotSurfaceReleasePayload) => void,
-      ): () => void;
-      browserViewScreenshotSurfaceReady?(payload: BrowserViewScreenshotSurfaceReadyPayload): void;
-      onBrowserViewCloseTab?(
-        handler: (payload: BrowserViewCloseTabNotification) => void,
-      ): () => void;
-      onBrowserViewSuspend?(
-        handler: (payload: BrowserViewResidencyTransitionPayload) => void,
-      ): () => void;
-      onBrowserViewRestore?(
-        handler: (payload: BrowserViewResidencyTransitionPayload) => void,
-      ): () => void;
       /** 注册 main 进程触发新建任务的回调，返回 disposer */
       onNewTask(handler: () => void): () => void;
       /** 注册 main 进程触发打开工作区的回调，返回 disposer */
@@ -190,35 +131,6 @@ declare global {
       }>;
       /** 截取当前窗口，用于错误反馈携带现场画面 */
       captureWindowScreenshot?(): Promise<WindowScreenshotResult | null>;
-      browserViewAttachGuest?(payload: {
-        key: string;
-        webContentsId: number;
-        active?: boolean;
-        workspaceKey?: string;
-        remoteSessionId?: string;
-        sessionId?: string;
-        residencyGeneration?: number;
-      }): Promise<void>;
-      /** 重建 `<webview>` 前让 main 精确断开旧 guest 的 CDP。 */
-      browserViewDetachGuest?(payload: { key: string; webContentsId: number }): Promise<boolean>;
-      browserViewCloseTab?(payload: BrowserViewCloseTabRequest): Promise<void>;
-      browserViewReportResidency?(payload: BrowserViewResidencyReportPayload): Promise<void>;
-      browserViewSuspendReady?(payload: { tabId: string; generation: number }): Promise<void>;
-      browserViewEnsureResident?(payload: BrowserViewCloseTabRequest): Promise<void>;
-      browserViewRestoreTabs?(
-        payload: BrowserViewRestoreTabsRequest,
-      ): Promise<BrowserViewRestoredTabShell[]>;
-      /** renderer 自由尺寸回写 main。 */
-      browserViewUpdateViewport?(payload: {
-        tabId: string;
-        viewport: BrowserViewportSize | null;
-      }): Promise<void>;
-      /** 从自动发现的 Chrome Profile 一次性导入内置浏览器数据。 */
-      importChromeBrowserData?(
-        options?: import("@zcode/shared").ChromeBrowserDataImportOptions,
-      ): Promise<ChromeBrowserDataImportResult>;
-      /** 清理内置浏览器缓存或全部站点数据。 */
-      clearEmbeddedBrowserData?(mode: "cache" | "all"): Promise<EmbeddedBrowserDataClearResult>;
       /** 注册新版本已下载完毕的回调，返回 disposer */
       onUpdateReady(callback: (version: string) => void): () => void;
       /** 注册"手动检查更新"结果的回调，返回 disposer */

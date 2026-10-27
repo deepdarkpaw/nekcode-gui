@@ -13,21 +13,10 @@ import type { StorageCleanRequest, StorageCleanResult, StorageUsageSnapshot } fr
 import type {
   CancelPendingRemoteConnectionRequest,
   BindRemoteWorkspaceSessionContextRequest,
-  BrowserViewScreenshotSurfacePreparePayload,
-  BrowserViewScreenshotSurfaceReadyPayload,
-  BrowserViewScreenshotSurfaceReleasePayload,
-  BrowserViewCloseTabNotification,
-  BrowserViewCloseTabRequest,
-  BrowserViewResidencyReportPayload,
-  BrowserViewResidencyTransitionPayload,
-  BrowserViewRestoredTabShell,
-  BrowserViewRestoreTabsRequest,
-  BrowserViewViewportChangedPayload,
   ConnectRemoteRequest,
   DesktopCommandId,
   DesktopTitleBarTheme,
   DockerContainerInfo,
-  EmbeddedBrowserOpenUrlRequest,
   EditorInfo,
   CreateTempTextAttachmentRequest,
   CreateTempTextAttachmentResult,
@@ -48,7 +37,6 @@ import type {
   WindowControlsOverlayReadyPayload,
   BuiltinProviderConfigFileInfo,
 } from "./platform.js";
-import type { BrowserViewportSize } from "./browser-use/command-metadata.js";
 
 // ============================================================================
 // RPC 服务频道 —— 通过 ChannelServer/ChannelClient 传输
@@ -180,28 +168,6 @@ export const PlatformChannels = {
   NewTab: "zcode:new-tab",
   /** Main → Renderer：菜单或快捷键请求关闭当前上下文 */
   CloseActiveContextRequest: "zcode:close-active-context-request",
-  /** Main → Renderer：内置 webview 请求打开新的浏览器 tab */
-  OpenBrowserUrl: "zcode:open-browser-url",
-  /** Main → Renderer：agent 首次 browser 命令建好受控 view，通知 renderer 自动开 browser-use tab */
-  BrowserViewReady: "zcode:browser-view-ready",
-  /** Main → Renderer：agent 正在操作某个 browser-use tab，renderer 临时显示状态图标 */
-  BrowserViewOperation: "zcode:browser-view-operation",
-  /** Main → Renderer：browser visibility capability 显示/隐藏 IAB 右侧面板 */
-  BrowserViewVisibility: "zcode:browser-view-visibility",
-  /** Main → Renderer：Agent 设置/重置目标 tab viewport */
-  BrowserViewViewportChanged: "zcode:browser-view-viewport-changed",
-  /** Main → Renderer：截图前请求 owner renderer 准备后台 guest 合成表面。 */
-  BrowserViewScreenshotSurfacePrepare: "zcode:browser-view-screenshot-surface-prepare",
-  /** Renderer → Main：目标 guest 连续两个 animation frame 的 viewport 已稳定。 */
-  BrowserViewScreenshotSurfaceReady: "zcode:browser-view-screenshot-surface-ready",
-  /** Main → Renderer：截图结束或准备失败，释放临时后台合成层。 */
-  BrowserViewScreenshotSurfaceRelease: "zcode:browser-view-screenshot-surface-release",
-  /** Main → Renderer：agent close 命令 detach 受控 guest 后，通知 renderer 卸载对应 tab */
-  BrowserViewCloseTab: "zcode:browser-view-close-tab",
-  /** Main → Renderer：预算淘汰时卸载 guest，但保留 logical tab shell。 */
-  BrowserViewSuspend: "zcode:browser-view-suspend",
-  /** Main → Renderer：为 suspended shell 重新挂载 guest。 */
-  BrowserViewRestore: "zcode:browser-view-restore",
   /** Main → Renderer：菜单触发新建任务 */
   NewTask: "zcode:new-task",
   /** Main → Renderer：菜单触发打开工作区 */
@@ -260,31 +226,6 @@ export const PlatformChannels = {
   ExportLogs: "zcode:export-logs",
   /** Renderer → Main：截取当前窗口作为反馈附件 */
   CaptureWindowScreenshot: "zcode:capture-window-screenshot",
-  /**
-   * Renderer → Main：`<webview>` guest dom-ready 后上报 webContentsId，
-   * main 用 BrowserGuestManager attach 该 guest（fire-and-forget）。CDP-on-guest pivot。
-   */
-  BrowserViewAttachGuest: "zcode:browser-view-attach-guest",
-  /** Renderer → Main：重建 `<webview>` 前主动断开旧 guest 的 CDP。 */
-  BrowserViewDetachGuest: "zcode:browser-view-detach-guest",
-  /** Renderer → Main：用户显式关闭 Browser tab。 */
-  BrowserViewCloseTabFromRenderer: "zcode:browser-view-close-tab-from-renderer",
-  /** Renderer → Main：上报 Browser tab residency/display facts。 */
-  BrowserViewReportResidency: "zcode:browser-view-report-residency",
-  /** Renderer → Main：指定 generation 的 guest 已卸载。 */
-  BrowserViewSuspendReady: "zcode:browser-view-suspend-ready",
-  /** Renderer → Main：用户访问 suspended tab，请求恢复。 */
-  BrowserViewEnsureResident: "zcode:browser-view-ensure-resident",
-  /** Renderer → Main：读取 workspace/task 的持久化 logical shells。 */
-  BrowserViewRestoreTabs: "zcode:browser-view-restore-tabs",
-  /** Renderer → Main：自由尺寸拖拽/开关回写目标 guest viewport */
-  BrowserViewUpdateViewport: "zcode:browser-view-update-viewport",
-  /** Embedded Browser preload → Main：在网页原生 Dialog 创建前同步请求可信系统框。 */
-  EmbeddedBrowserJavaScriptDialog: "zcode:embedded-browser-javascript-dialog",
-  /** Renderer → Main：把自动发现的本机 Chrome Profile 数据一次性导入内置浏览器分区。 */
-  ImportChromeBrowserData: "zcode:import-chrome-browser-data",
-  /** Renderer → Main：清理内置浏览器缓存或全部站点数据。 */
-  ClearEmbeddedBrowserData: "zcode:clear-embedded-browser-data",
   /** Main → Renderer：通知有新版本已下载完毕，可以重启安装 */
   UpdateReady: "zcode:update-ready",
   /** Main → Renderer：用户手动点击"检查更新"后的结果反馈（toast 用） */
@@ -342,21 +283,6 @@ export const PlatformChannels = {
 } as const;
 
 export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof PlatformChannels];
-
-// ============================================================================
-// 内置 WebView 频道 —— 固定 guest preload ↔ embedder renderer
-// ============================================================================
-
-/** Electron `<webview>` 的 `sendToHost` / `ipc-message` 频道，不经过 main process。 */
-export const EmbeddedBrowserWebviewChannels = {
-  /** Guest 无法继续消费某方向的滚动时，把二维 delta 转交自由尺寸画布。 */
-  WheelBoundary: "zcode:embedded-browser-wheel-boundary",
-} as const;
-
-export interface EmbeddedBrowserWheelBoundaryPayload {
-  deltaX: number;
-  deltaY: number;
-}
 
 // ============================================================================
 // Coding Plan WebView 频道 —— 官网页 preload ↔ App renderer
@@ -456,8 +382,6 @@ export const HostMessageTypes = {
   SessionMessageDeliveryResult: "session-message-delivery-result",
   /** main → host：定时任务到点派发；会话内 cron 复用 targetTaskId，历史未绑定任务才建 session */
   CronRun: "cron-run",
-  /** main → host：browser-use 命令执行结果（CDP 执行完回传，按 requestId 关联） */
-  BrowserExecuteResult: "browser-execute-result",
   /** main → host：本地视频 canonical path 授权结果 */
   LocalMediaPreviewPathAuthorizeResult: "local-media-preview-path-authorize-result",
   /** main → host：要求 Host 现读本地 Source，并同步指定 Remote Environment。 */
@@ -534,8 +458,6 @@ export const HostResponseTypes = {
   CronRunResult: "cron-run-result",
   /** host → main：manual run 已落库，请立即唤醒 scheduler 认领派发 */
   CronSchedulerWakeRequest: "cron-scheduler-wake-request",
-  /** host → main：执行一条 browser-use 命令（main 用 WebContentsView+CDP 执行，按 requestId 关联） */
-  BrowserExecuteRequest: "browser-execute-request",
   /** host → main：请求授权 Agent 已精确校验的本地视频路径 */
   LocalMediaPreviewPathAuthorizeRequest: "local-media-preview-path-authorize-request",
   /** host → main：本地 Provisioning Source 成功持久化。 */
@@ -691,61 +613,6 @@ export interface PlatformChannelMap {
     request: string;
     response: void;
   };
-  [PlatformChannels.OpenBrowserUrl]: {
-    request: EmbeddedBrowserOpenUrlRequest;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewReady]: {
-    request: {
-      workspaceKey: string;
-      remoteSessionId?: string;
-      sessionId: string;
-      tabId: string;
-      browserId: string;
-      browserGeneration: number;
-    };
-    response: void;
-  };
-  [PlatformChannels.BrowserViewVisibility]: {
-    request: {
-      visible: boolean;
-      workspaceKey: string;
-      remoteSessionId: string | undefined;
-      sessionId: string;
-      tabId?: string;
-      browserId: string;
-      browserGeneration: number;
-    };
-    response: void;
-  };
-  [PlatformChannels.BrowserViewViewportChanged]: {
-    request: BrowserViewViewportChangedPayload;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewScreenshotSurfacePrepare]: {
-    request: BrowserViewScreenshotSurfacePreparePayload;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewScreenshotSurfaceReady]: {
-    request: BrowserViewScreenshotSurfaceReadyPayload;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewScreenshotSurfaceRelease]: {
-    request: BrowserViewScreenshotSurfaceReleasePayload;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewCloseTab]: {
-    request: BrowserViewCloseTabNotification;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewSuspend]: {
-    request: BrowserViewResidencyTransitionPayload;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewRestore]: {
-    request: BrowserViewResidencyTransitionPayload;
-    response: void;
-  };
   [PlatformChannels.CanOpenCommunity]: {
     request: Locale;
     response: boolean;
@@ -810,57 +677,6 @@ export interface PlatformChannelMap {
       contentType: string;
       size: number;
     } | null;
-  };
-  // CDP-on-guest pivot：renderer `<webview>` 上报 guest webContentsId → main attach。
-  [PlatformChannels.BrowserViewAttachGuest]: {
-    request: {
-      key: string;
-      webContentsId: number;
-      active?: boolean;
-      workspaceKey?: string;
-      remoteSessionId?: string;
-      sessionId?: string;
-      residencyGeneration?: number;
-    };
-    response: void;
-  };
-  [PlatformChannels.BrowserViewDetachGuest]: {
-    request: { key: string; webContentsId: number };
-    response: boolean;
-  };
-  [PlatformChannels.BrowserViewCloseTabFromRenderer]: {
-    request: BrowserViewCloseTabRequest;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewReportResidency]: {
-    request: BrowserViewResidencyReportPayload;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewSuspendReady]: {
-    request: { tabId: string; generation: number };
-    response: void;
-  };
-  [PlatformChannels.BrowserViewEnsureResident]: {
-    request: BrowserViewCloseTabRequest;
-    response: void;
-  };
-  [PlatformChannels.BrowserViewRestoreTabs]: {
-    request: BrowserViewRestoreTabsRequest;
-    response: BrowserViewRestoredTabShell[];
-  };
-  [PlatformChannels.BrowserViewUpdateViewport]: {
-    request: { tabId: string; viewport: BrowserViewportSize | null };
-    response: void;
-  };
-  [PlatformChannels.EmbeddedBrowserJavaScriptDialog]: {
-    request: {
-      type: "alert" | "confirm";
-      message: string;
-    };
-    response: {
-      handled: boolean;
-      value?: boolean;
-    };
   };
   [PlatformChannels.UpdateReady]: {
     request: string;

@@ -424,10 +424,8 @@ const enUS: Record<string, string> = {
   "quickPick.command.toggleTerminal": "Toggle terminal",
   "quickPick.command.togglePreview": "Toggle preview",
   "quickPick.command.addTerminalTab": "Add terminal tab",
-  "quickPick.command.addBrowserTab": "Add browser tab",
   "quickPick.command.addReviewTab": "Add review tab",
   "quickPick.command.toggleSidePane": "Toggle panel",
-  "quickPick.command.toggleBrowserPanel": "Show/hide browser panel",
   "quickPick.command.toggleDiffPanel": "Switch to diff panel",
   "quickPick.command.feedback": "Feedback",
   "quickPick.command.myTickets": "My feedback",
@@ -538,50 +536,6 @@ const enUS: Record<string, string> = {
   "sidebar.settings.preferences": "Preferences",
   "app.selectFile": "Select a file to get started",
   "app.workspace": "Workspace",
-  "browser.title": "Browser",
-  "browser.addressPlaceholder": "Enter a URL and press Enter",
-  "browser.back": "Back",
-  "browser.forward": "Forward",
-  "browser.reload": "Refresh",
-  "browser.more": "More browser actions",
-  "browser.openExternal": "Open in default browser",
-  "browser.devtools": "Open DevTools",
-  "browser.responsive.enter": "Free-size viewport",
-  "browser.responsive.exit": "Exit free-size viewport",
-  "browser.responsive.viewport": "Free-size browser viewport",
-  "browser.responsive.resizeWidth": "Resize browser viewport width",
-  "browser.responsive.resizeHeight": "Resize browser viewport height",
-  "browser.responsive.width": "Browser viewport width",
-  "browser.responsive.height": "Browser viewport height",
-  "browser.responsive.zoom": "Browser preview zoom",
-  "browser.responsive.fitToWindow": "Fit to window",
-  "browser.responsive.dimensionRangeError": "Enter an integer between {min} and {max}",
-  "browser.elementPicker.start": "Select page element for chat",
-  "browser.elementPicker.cancel": "Cancel element selection",
-  "browser.elementPickerFailed": "Failed to select page element: {message}",
-  "browser.elementPicker.popover.background": "Background",
-  "browser.elementPicker.popover.color": "Color",
-  "browser.elementPicker.popover.font": "Font",
-  "browser.show": "Toggle browser",
-  "browser.hide": "Toggle browser",
-  "browser.toggle": "Toggle browser",
-  "browser.close": "Close browser pane",
-  "browser.desktopOnly": "Browser pane is available on desktop only",
-  "browser.empty": "Paste or type a URL to open a page.",
-  "browser.guestFailed.title": "The built-in browser failed to start",
-  "browser.guestFailed.description":
-    "The browser process exited before it could display the page. You can retry after checking the system environment.",
-  "browser.guestFailed.detail": "Renderer: {reason} (exit code {exitCode})",
-  "browser.guestFailed.retry": "Retry browser",
-  "browser.invalidUrl": "Only http, https, file, about, and data URLs are supported",
-  "browser.loadFailed": "Failed to load page: {message}",
-  "browser.loadError.title": "This page could not be opened",
-  "browser.loadError.certTitle": "This site's HTTPS certificate is not trusted",
-  "browser.loadError.certHint":
-    'If you trust this address, enable "Ignore certificate errors" under Settings → Browser → Security, then restart the app to access it.',
-  "browser.loadError.retry": "Reload",
-  "browser.resizeDuringOperationWarning":
-    "The browser size changed and may affect the current automated action",
   "diff.title": "Diff",
   "diff.toggle": "Toggle diff panel",
   "diff.close": "Close diff panel",
@@ -1089,7 +1043,6 @@ const enUS: Record<string, string> = {
   "chat.codeCommentCards.expandAll": "Show {count} comments",
   "chat.codeCommentCards.collapseAll": "Collapse comments",
   "chat.codeCommentCards.openReview": "Open code review for {title}",
-  "chat.webElements.one": "1 web element",
   "chat.pptxElements.one": "1 slide element",
   "chat.pptxElements.many": "{count} slide elements",
   "chat.pptxElements.remove": "Remove slide element",
@@ -1100,8 +1053,6 @@ const enUS: Record<string, string> = {
     "The presentation has changed. Slide {pageNumber} was opened, but its content may differ.",
   "chat.pptxElements.previewScopeUnavailable":
     "This presentation reference is not available in the current workspace.",
-  "chat.webElements.many": "{count} web elements",
-  "chat.webElements.remove": "Remove web element context",
   "appHeader.openInFinder": "Open in Finder",
   "appHeader.builtinProviderConfigOpenFailed": "Could not open the provider config file",
   "appHeader.builtinProviderConfigMissing":
@@ -2015,75 +1966,6 @@ const enUS: Record<string, string> = {
     "Unclassified files and stale copies left after changing the data directory.",
   "resourceManager.storage.confirmDescription.backups":
     "These copies allow recovery if an upgrade or migration goes wrong; deleting them cannot be undone.",
-  "settings.browser.title": "Browser Use",
-  "settings.browser.security.section": "Security",
-  "settings.embeddedBrowserAllowInsecureCertificates": "Ignore certificate errors",
-  "settings.embeddedBrowserAllowInsecureCertificatesDescription":
-    "When enabled, the built-in browser stops verifying HTTPS certificates. Affects the built-in browser only. Restart to take effect.",
-  "settings.embeddedBrowserAllowInsecureCertificatesSavedHint":
-    "Certificate setting saved. Restart the app to take effect.",
-  "settings.browser.data.section": "Browser data",
-  "settings.browser.desktopOnly":
-    "Browser data can only be managed in the ZCodium Exp desktop app.",
-  "settings.browser.import.title": "Import Chrome sign-in state",
-  "settings.browser.import.description":
-    "Bring your Chrome sign-in state into the built-in browser once, so the AI can open sites you are already signed in to and work more smoothly.",
-  "settings.browser.import.action": "Import browser data",
-  "settings.browser.import.notFound":
-    "No importable Chrome profile was found. Open Chrome and make sure the profile contains browsing data.",
-  "settings.browser.import.ambiguous":
-    "Multiple Chrome profiles were found, but the most recently used profile could not be determined. Open the profile you want to import and try again.",
-  "settings.browser.import.executableNotFound":
-    "Chrome was not found. Install Chrome and try again.",
-  "settings.browser.import.accessDenied":
-    "Import canceled: access to Chrome Safe Storage in the macOS Keychain was not allowed. No Chrome data was imported.",
-  "settings.browser.import.elevationRequired":
-    "Confirm administrator access before importing Chrome cookies protected by App-Bound encryption.",
-  "settings.browser.import.elevationCancelled":
-    "Windows administrator access was canceled. No cookies were imported.",
-  "settings.browser.import.helperVerificationFailed":
-    "ZCodium could not verify its Windows secure import component. Reinstall or update ZCodium before importing cookies.",
-  "settings.browser.import.appBoundFailed":
-    "Windows could not unlock Chrome's App-Bound cookies. No cookies were imported.",
-  "settings.browser.import.adminConfirmTitle":
-    "Allow administrator access to import Chrome cookies?",
-  "settings.browser.import.adminConfirmDescription":
-    "Chrome protects cookies with App-Bound encryption on Windows. For this import only, ZCodium will request administrator access, start a temporary system service, and delete it immediately afterward. Chrome passwords are never read or imported.",
-  "settings.browser.import.adminConsent":
-    "I confirm administrator access for this cookie import only",
-  "settings.browser.import.adminConfirmAction": "Continue and request access",
-  "settings.browser.import.cookieProtected":
-    "Chrome cookies are protected by application-bound encryption and cannot be imported safely. No LocalStorage data was available to import.",
-  "settings.browser.import.profileLocked":
-    "The Chrome profile is in use and a consistent snapshot could not be created. Close Chrome and try again.",
-  "settings.browser.import.localStorageFailed":
-    "The Chrome LocalStorage snapshot could not be read. Close Chrome and try again.",
-  "settings.browser.import.failed": "Chrome browser data import failed.",
-  "settings.browser.import.success":
-    "Imported {cookies} cookies and {entries} LocalStorage entries from {origins} sites.",
-  "settings.browser.import.successWithSkipped":
-    "Imported {cookies} cookies and {entries} LocalStorage entries from {origins} sites; {skipped} cookies were not imported.",
-  "settings.browser.import.partialCookieProtected":
-    "Imported {cookies} cookies and {entries} LocalStorage entries from {origins} sites; {skipped} cookies were protected by Chrome and were not imported.",
-  "settings.browser.import.partialAppBound":
-    "Imported {entries} LocalStorage entries from {origins} sites, but Windows App-Bound cookies were not imported.",
-  "settings.browser.import.partialLocalStorage":
-    "Imported {cookies} cookies, but some LocalStorage data was not imported. Closing Chrome before retrying may improve the result.",
-  "settings.browser.clearCache.title": "Clear built-in browser cache",
-  "settings.browser.clearCache.description":
-    "Clear HTTP cache, Cache Storage, and service workers while keeping cookies and local site data.",
-  "settings.browser.clearCache.action": "Clear cache",
-  "settings.browser.clearCache.success": "Built-in browser cache cleared",
-  "settings.browser.clearAll.title": "Clear all browser data",
-  "settings.browser.clearAll.description":
-    "Delete cookies, site data, and cache from the built-in browser. This cannot be undone.",
-  "settings.browser.clearAll.action": "Clear all",
-  "settings.browser.clearAll.success": "All built-in browser data cleared",
-  "settings.browser.clear.failed": "Failed to clear built-in browser data.",
-  "settings.browser.clearAll.confirmTitle": "Clear all built-in browser data?",
-  "settings.browser.clearAll.confirmDescription":
-    "This signs you out of sites in the built-in browser and deletes cookies, site data, and cache. This cannot be undone.",
-  "settings.browser.clearAll.confirmAction": "Clear data",
   "settings.lightTheme": "Light code theme",
   "settings.lightThemeDescription":
     "Highlighting theme used for code content in the light interface.",

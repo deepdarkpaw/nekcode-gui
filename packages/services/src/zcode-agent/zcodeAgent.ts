@@ -46,7 +46,6 @@ import type {
   ZCodeSessionSubagentsResult,
   ZCodeStateUpdatedNotification,
   ZCodeTaskClientMode,
-  ZCodeBrowserAmbientContext,
   ZCodeWorkspacePresentation,
   ZCodeWorkspaceGenerateTextResult,
   ZCodeWorkspaceGenerateTextParams,
@@ -227,8 +226,6 @@ export interface ZCodeAgentSendPromptParamsBase extends ZCodeAgentSessionTarget 
   sessionTraceId?: TraceId;
   content: string;
   attachments?: Record<string, unknown>[];
-  /** provider-only 的当前 IAB 状态；UI/session persistence 仍使用 content 原文。 */
-  browserAmbientContext?: ZCodeBrowserAmbientContext;
   clientMode?: ZCodeTaskClientMode;
   expectedRevision?: number;
   expectedProviderRevision?: string;

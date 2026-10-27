@@ -69,7 +69,6 @@ import {
   type MarkdownImageProps,
 } from "@/components/ai-elements/markdown-image.js";
 import { STREAMDOWN_CONTROLS } from "@/components/ai-elements/streamdown-controls.js";
-import { resolveMessageLinkOpenTarget } from "@/embeddedBrowserHelpers.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { persistLastSelectedEditorId, readLastSelectedEditorId } from "@/lib/editorPreference.js";
 import {
@@ -1011,29 +1010,16 @@ function MessageExternalLink({
 }: MessageExternalLinkProps) {
   const { intl } = useZCodeIntl();
   const platform = useOptionalPlatform();
-  const handleOpen = useCallback(
-    (options: { forceExternal?: boolean; forceInApp?: boolean } = {}) => {
-      // 交互语义：本机/私网白名单只决定左键单击的默认目标；右键菜单两项各自强制一个目标。
-      // 菜单「打开」过去复用左键默认行为，公网链接（如飞书文档）两项都会跳系统浏览器。
-      const target = resolveMessageLinkOpenTarget({ href, ...options });
-      logger.debug("[MessageExternalLink] 打开 Markdown 外链", {
-        forceExternal: Boolean(options.forceExternal),
-        forceInApp: Boolean(options.forceInApp),
-        href,
-        target,
-      });
-
-      if (target === "app-browser" || !platform) {
-        // Share/普通 Web 没有 Desktop PlatformProvider；仍交给调用方的安全 URL handler，
-        // 避免 MessageResponse 因缺少宿主上下文整棵 Markdown 降级为纯文本。
-        onOpenExternalUrl(href);
-        return;
-      }
-
-      platform.openExternal(href);
-    },
-    [href, onOpenExternalUrl, platform],
-  );
+  const handleOpen = useCallback(() => {
+    logger.debug("[MessageExternalLink] 打开 Markdown 外链", { href });
+    if (!platform) {
+      // Share/普通 Web 没有 Desktop PlatformProvider；交给调用方的安全 URL handler，
+      // 避免 MessageResponse 因缺少宿主上下文整棵 Markdown 降级为纯文本。
+      onOpenExternalUrl(href);
+      return;
+    }
+    platform.openExternal(href);
+  }, [href, onOpenExternalUrl, platform]);
   const handleClick = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       onClick?.(event);
@@ -1041,7 +1027,7 @@ function MessageExternalLink({
         return;
       }
 
-      handleOpen({ forceExternal: event.metaKey || event.ctrlKey });
+      handleOpen();
     },
     [handleOpen, onClick],
   );
@@ -1059,18 +1045,14 @@ function MessageExternalLink({
           title={href}
           {...props}
           // markdown 外链之前被统一降级成 span，用户看得到链接却点不开。
-          // 这里仍阻断原生 a 标签跳转，但不再把所有 http/https 都默认送进内置浏览器。
+          // 这里阻断原生 a 标签跳转，统一交给系统浏览器打开。
           onClick={handleClick}
         >
           {children}
         </button>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-44">
-        <ContextMenuItem onSelect={() => handleOpen({ forceInApp: true })}>
-          {intl.formatMessage({ id: "common.open" })}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => handleOpen({ forceExternal: true })}>
+        <ContextMenuItem onSelect={handleOpen}>
           <ExternalLinkIcon className="size-4" />
           <span>{intl.formatMessage({ id: "chat.previewCards.openExternal" })}</span>
         </ContextMenuItem>

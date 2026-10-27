@@ -39,13 +39,6 @@ import { resolveDesktopWindowChromeState } from "./desktopWindowChromeState.js";
 import { handleWindowUnreadCountSync } from "./desktopWindowLifecycle.js";
 import { captureWindowScreenshot, openPathInFileManager } from "./desktopMainIpcHelpers.js";
 import {
-  registerDesktopBrowserIpcHandlers,
-  type AttachBrowserGuest,
-  type ReportBrowserScreenshotSurfaceReady,
-  type UpdateBrowserGuestViewport,
-  type BrowserViewResidencyIpcHandlers,
-} from "./desktopBrowserViewIpc.js";
-import {
   loadCliMcpFromUserDirectory,
   migrateLegacyCommonMcp,
   saveCliMcpToUserDirectory,
@@ -87,14 +80,6 @@ export function registerPlatformIpcHandlers(options: {
   /** 快捷键设置页录制态开关：true 时 main 重建菜单摘除可配置 accelerator */
   setShortcutRecordingActive?: (active: boolean, ownerWebContentsId?: number | null) => void;
   /** 桌面端设备标识符（基于 userData 路径的 SHA-256） */
-  /** CDP-on-guest pivot：renderer `<webview>` 上报 guest webContentsId → main attach。 */
-  attachBrowserGuest?: AttachBrowserGuest;
-  /** renderer 自由尺寸变化 → 当前窗口所属的受控 tab。 */
-  updateBrowserGuestViewport?: UpdateBrowserGuestViewport;
-  /** 可信 owner renderer 上报的后台截图表面 ready。 */
-  reportBrowserScreenshotSurfaceReady?: ReportBrowserScreenshotSurfaceReady;
-  /** Browser tab 关闭、挂起、恢复与跨重启 shell IPC。 */
-  browserViewResidencyHandlers?: BrowserViewResidencyIpcHandlers;
 }) {
   ipcMain.handle(PlatformChannels.SelectDirectory, async () => {
     const result = await dialog.showOpenDialog({
@@ -134,14 +119,6 @@ export function registerPlatformIpcHandlers(options: {
     async (_event, payload: CreateTempTextAttachmentRequest) => {
       return createTempTextAttachment(payload);
     },
-  );
-
-  registerDesktopBrowserIpcHandlers(
-    options.attachBrowserGuest,
-    options.updateBrowserGuestViewport,
-    options.logger,
-    options.reportBrowserScreenshotSurfaceReady,
-    options.browserViewResidencyHandlers,
   );
 
   ipcMain.handle(PlatformChannels.ActivateOrSetWorkspace, (event, path: string) => {

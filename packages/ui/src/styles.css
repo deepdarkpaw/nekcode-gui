@@ -1193,55 +1193,6 @@ body {
   }
 }
 
-/*
- *  通用 animate-pulse 只让 14px 的 SVG 以 2 秒周期改变透明度，运行时虽然处于 running，
- * 但视觉上几乎像静止。把专用呼吸动画挂到图标外层，同时改变透明度和缩放，确保操作状态可感知。
- */
-@keyframes browser-use-operation-breathe {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(0.9);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.08);
-  }
-}
-
-.browser-use-operation-breathe {
-  transform-origin: center;
-  animation: browser-use-operation-breathe 900ms ease-in-out infinite;
-  will-change: opacity, transform;
-}
-
-/*
- * Browser Use 执行期间发生 resize 时，直接降低 webview guest 的亮度，让提示不会只浮在复杂网页上。
- * filter 不增加点击遮罩，地址栏也不在该节点内，因此自动操作与用户控制仍保持可用。
- */
-.browser-use-viewport {
-  transition: filter 160ms ease-out;
-}
-
-.browser-use-viewport[data-browser-resize-dimmed="true"] {
-  filter: brightness(0.88);
-  will-change: filter;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .browser-use-operation-breathe {
-    animation: none;
-    opacity: 1;
-    transform: none;
-    will-change: auto;
-  }
-
-  .browser-use-viewport {
-    transition: none;
-  }
-}
-
 @keyframes task-search-result-highlight {
   0% {
     background-color: color-mix(in oklab, var(--color-brand) 20%, transparent);

@@ -2,7 +2,6 @@ import { getSidePaneTabTitle } from "@/app-shell/SidePaneTabTrigger.js";
 import type { WorkspaceSidePaneTab } from "@/lib/workspaceSidePane.js";
 
 export interface SidePaneTabPresentationLabels {
-  browserTitle: string;
   reviewTitle: string;
   codeViewerTitle: string;
   treemappingTitle: string;
@@ -51,10 +50,6 @@ export function getSidePaneTabSearchHint(tab: WorkspaceSidePaneTab): string {
   if (tab.type === "subagent-directory") {
     return `${tab.rootSessionId} ${tab.parentSessionId} subagent directory`;
   }
-  if (tab.type === "browser") return tab.initialUrl ?? "";
-  if (tab.type === "browser-use") {
-    return `${tab.title ?? ""} ${tab.sessionId} browser use`;
-  }
   if (tab.type === "git") return "git diff";
   if (tab.type === "treemapping") return "file activity diff map treemapping";
   if (tab.type === "whiteboard") return `${tab.title} whiteboard canvas draw sketch`;
@@ -75,7 +70,6 @@ export function getLocalizedSidePaneTabTitle(
 ): string {
   return getSidePaneTabTitle(tab, (descriptor) => {
     const titleByMessageId: Record<string, string> = {
-      "browser.title": labels.browserTitle,
       "sidePane.review": labels.reviewTitle,
       "codeViewer.title": labels.codeViewerTitle,
       "treemapping.title": labels.treemappingTitle,
@@ -111,7 +105,6 @@ export function getSidePaneTabTypeLabel(
     return tab.subagentType.trim() || labels.subagentTypeLabel;
   }
   if (tab.type === "subagent-directory") return labels.subagentDirectoryTitle;
-  if (tab.type === "browser" || tab.type === "browser-use") return labels.browserTitle;
   if (tab.type === "git") return labels.reviewTitle;
   if (tab.type === "treemapping") return labels.treemappingTitle;
   if (tab.type === "whiteboard") return labels.whiteboardTitle;

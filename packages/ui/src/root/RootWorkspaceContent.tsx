@@ -41,7 +41,6 @@ interface RootWorkspaceContentProps {
   isDesktop?: RootProps["isDesktop"];
   isMacDesktop?: RootProps["isMacDesktop"];
   isWindowsDesktop?: RootProps["isWindowsDesktop"];
-  supportsEmbeddedBrowser: NonNullable<RootProps["supportsEmbeddedBrowser"]>;
   windowsWindowControlsRightPaddingPx?: number;
 }
 
@@ -75,7 +74,6 @@ export function RootWorkspaceContent({
   isDesktop,
   isMacDesktop,
   isWindowsDesktop,
-  supportsEmbeddedBrowser,
   windowsWindowControlsRightPaddingPx,
 }: RootWorkspaceContentProps) {
   const workspaceKey = workspaceIdentity?.trim() || workspaceShellPath;
@@ -159,7 +157,6 @@ export function RootWorkspaceContent({
                 isDesktop={isDesktop}
                 isMacDesktop={isMacDesktop}
                 isWindowsDesktop={isWindowsDesktop}
-                supportsEmbeddedBrowser={supportsEmbeddedBrowser}
               />
             </ScopedErrorBoundary>
           </ServiceProvider>
