@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import os from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { NekMcpServerConfig, NekProviderWrite } from "@zcode/shared/nek-protocol";
 import {
+  createLocalNekConfigTargetHost,
+  createMemoryNekConfigHostExecutor,
+} from "../src/nek-config-api/index.js";
+import { NekLocatorError } from "../src/nek-agent/nekLocator.js";
+import {
   AGENT_DIR,
+  HOME,
   LOCAL,
   PROJECT,
   PROJECT_DIR,
@@ -817,4 +824,214 @@ test("project trust, config validation and web search test use the control proce
   assert.equal(targets.length, 2);
   assert.equal(targets[1]?.target.kind, "remote");
   assert.equal(targets[1]?.connected, true);
+});
+
+test("model helpers take the project cwd explicitly instead of a remembered hint", async () => {
+  const projectPresetPath = join(PROJECT_DIR, "agents", "project-reviewer.md");
+  const harness = createHarness({
+    localFiles: {
+      [MODELS_PATH]: modelsFile(`{
+    "local": { "api": "openai-completions", "baseUrl": "http://a", "models": [] }
+  }`),
+      [PRESET_PATH]:
+        "---\nname: reviewer\ndescription: Reviews diffs\nmodel: local/one\n---\n\nGlobal.\n",
+      [projectPresetPath]:
+        "---\nname: project-reviewer\ndescription: Project reviews\nmodel: local/two\n---\n\nProject.\n",
+    },
+  });
+
+  // 先看一次项目目录：不能因此"记住" cwd，后续不带 cwd 的调用仍只看全局。
+  const withCwd = await harness.api.getProviderReferences(LOCAL, "local", PROJECT);
+  assert.deepEqual(
+    withCwd.agentPresets.map((entry) => entry.name),
+    ["reviewer", "project-reviewer"],
+  );
+  const withoutCwd = await harness.api.getProviderReferences(LOCAL, "local");
+  assert.deepEqual(
+    withoutCwd.agentPresets.map((entry) => entry.name),
+    ["reviewer"],
+  );
+
+  // 改名时按传入的 cwd 重写项目预设里的引用
+  const view = await harness.api.readModelsConfig(LOCAL, PROJECT);
+  await harness.api.renameProvider(LOCAL, "local", "local2", {
+    revision: view.revision,
+    cwd: PROJECT,
+  });
+  assert.match(harness.local.files.get(projectPresetPath) ?? "", /model: local2\/two/);
+  assert.match(harness.local.files.get(PRESET_PATH) ?? "", /model: local2\/one/);
+});
+
+test("provider api keys: {remove:true} deletes, an empty string is a validation error", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [MODELS_PATH]: modelsFile(`{
+    "local": { "api": "openai-completions", "baseUrl": "http://a", "apiKey": "sk-existing", "models": [] }
+  }`),
+    },
+  });
+  const view = await harness.api.readModelsConfig(LOCAL);
+  const provider = view.providers[0];
+  assert.ok(provider);
+  assert.deepEqual(provider.apiKey, { kind: "literal", masked: "••••ting" });
+
+  const empty = await expectNekError(
+    async () =>
+      await harness.api.saveProvider(
+        LOCAL,
+        { ...toWrite(provider), apiKey: "" } as NekProviderWrite,
+        { revision: view.revision, isNew: false },
+      ),
+    "validation",
+  );
+  assert.ok(empty.fieldErrors?.apiKey);
+
+  await harness.api.saveProvider(
+    LOCAL,
+    { ...toWrite(provider), apiKey: { remove: true } } as NekProviderWrite,
+    { revision: view.revision, isNew: false },
+  );
+  const after = readJson(harness.local, MODELS_PATH) as {
+    providers: Record<string, { apiKey?: string }>;
+  };
+  assert.equal(after.providers.local?.apiKey, undefined);
+  assert.equal((await harness.api.readModelsConfig(LOCAL)).providers[0]?.apiKey.kind, "none");
+});
+
+test("agent presets report broken files as diagnostics with a directory revision", async () => {
+  const brokenPath = join(AGENT_DIR, "agents", "broken.md");
+  const harness = createHarness({
+    localFiles: {
+      [PRESET_PATH]: "---\nname: reviewer\ndescription: Reviews diffs\n---\n\nFine.\n",
+      [brokenPath]: "---\nname: [unterminated\n---\n\nBroken.\n",
+    },
+  });
+  const view = await harness.api.listAgentPresets(LOCAL);
+  assert.deepEqual(
+    view.entries.map((entry) => entry.preset.name),
+    ["generalPurpose", "explorer", "reviewer"],
+  );
+  assert.equal(view.diagnostics.length, 1);
+  assert.equal(view.diagnostics[0]?.file, brokenPath);
+  assert.equal(view.diagnostics[0]?.severity, "error");
+  assert.ok(view.revision.length > 0);
+
+  // revision 只随目录内容变化
+  assert.equal((await harness.api.listAgentPresets(LOCAL)).revision, view.revision);
+  harness.local.files.set(brokenPath, "---\nname: fixed\ndescription: Now valid\n---\n\nFixed.\n");
+  const fixed = await harness.api.listAgentPresets(LOCAL);
+  assert.notEqual(fixed.revision, view.revision);
+  assert.equal(fixed.diagnostics.length, 0);
+  assert.ok(fixed.entries.some((entry) => entry.preset.name === "fixed"));
+});
+
+test("builtin tools mirror nek, including powershell being off by default", async () => {
+  const harness = createHarness();
+  const tools = await harness.api.listBuiltinTools(LOCAL);
+  assert.deepEqual(
+    tools.map((tool) => tool.name),
+    ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls", "ast_grep", "web_search"],
+  );
+  assert.equal(tools.find((tool) => tool.name === "powershell")?.defaultActive, false);
+  assert.equal(tools.find((tool) => tool.name === "read")?.defaultActive, true);
+  // 返回副本：改结果不会污染镜像
+  const first = tools[0];
+  assert.ok(first);
+  first.name = "mutated";
+  assert.equal((await harness.api.listBuiltinTools(LOCAL))[0]?.name, "read");
+});
+
+test("mcp entries carry the file they come from", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [MCP_PATH]: JSON.stringify({ mcpServers: { filesystem: { command: "npx" } } }),
+      [PROJECT_MCP_PATH]: JSON.stringify({ mcpServers: { docs: { url: "https://docs" } } }),
+    },
+  });
+  const global = await harness.api.readMcpConfig(LOCAL, "global");
+  assert.equal(global.servers[0]?.path, MCP_PATH);
+  const project = await harness.api.readMcpConfig(LOCAL, "project", PROJECT);
+  assert.equal(project.servers[0]?.path, PROJECT_MCP_PATH);
+});
+
+test("fetching models and testing a provider accept {providerId} or {providerId, draft}", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [MODELS_PATH]: modelsFile(`{
+    "local": {
+      "api": "openai-completions",
+      "baseUrl": "http://saved",
+      "apiKey": "sk-saved",
+      "headers": { "x-saved": "1" },
+      "models": [{ "id": "m1" }]
+    }
+  }`),
+    },
+  });
+
+  await harness.api.fetchProviderModels(LOCAL, { providerId: "local" });
+  const savedCommand = harness.control.commands.at(-1);
+  assert.equal(savedCommand?.type, "fetch_provider_models");
+  assert.equal(savedCommand?.provider, "local");
+  assert.equal(savedCommand?.draft, undefined);
+
+  // 草稿只带端点与请求头：密钥沿用 models.json 里保存的那个。
+  await harness.api.fetchProviderModels(LOCAL, {
+    providerId: "local",
+    draft: { api: "anthropic-messages", baseUrl: "http://draft" },
+  });
+  const draftCommand = harness.control.commands.at(-1);
+  assert.equal(draftCommand?.provider, undefined);
+  assert.deepEqual(draftCommand?.draft, {
+    api: "anthropic-messages",
+    baseUrl: "http://draft",
+    apiKey: "sk-saved",
+    headers: { "x-saved": "1" },
+  });
+
+  const tested = await harness.api.testProvider(
+    LOCAL,
+    { providerId: "local", draft: { api: "openai-completions", baseUrl: "http://draft" } },
+    "m1",
+  );
+  assert.deepEqual(tested, { ok: true, latencyMs: 7 });
+  const testCommand = harness.control.commands.at(-1);
+  assert.equal(testCommand?.type, "test_provider");
+  assert.equal(testCommand?.modelId, "m1");
+  assert.deepEqual(testCommand?.draft, {
+    api: "openai-completions",
+    baseUrl: "http://draft",
+    apiKey: "sk-saved",
+    headers: { "x-saved": "1" },
+  });
+
+  // 草稿里的密钥优先（支持 $ENV 写法）
+  await harness.api.fetchProviderModels(LOCAL, {
+    providerId: "local",
+    draft: { api: "openai-completions", baseUrl: "http://draft", apiKey: "$DRAFT_KEY" },
+  });
+  assert.equal(
+    (harness.control.commands.at(-1)?.draft as { apiKey?: string } | undefined)?.apiKey,
+    "$DRAFT_KEY",
+  );
+
+  await expectNekError(
+    async () =>
+      await harness.api.fetchProviderModels(LOCAL, {
+        providerId: "missing",
+        draft: { api: "openai-completions", baseUrl: "http://draft" },
+      }),
+    "validation",
+  );
+  await expectNekError(async () => await harness.api.fetchProviderModels(LOCAL, { providerId: "" }), "validation");
+});
+
+test("the local target reports the machine host name", async () => {
+  const host = createLocalNekConfigTargetHost({
+    executor: createMemoryNekConfigHostExecutor({ home: HOME, agentDir: AGENT_DIR, files: {} }),
+    locator: { locate: async () => Promise.reject(new NekLocatorError("not_found", "missing")) } as never,
+  });
+  const [local] = await host.listTargets();
+  assert.equal(local?.hostname, os.hostname());
+  assert.equal(local?.nek.state, "not_installed");
 });

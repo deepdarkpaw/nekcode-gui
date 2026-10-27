@@ -7,7 +7,8 @@ import type {
   NekRpcCommandType,
   NekRpcResponseDataFor,
 } from "@zcode/shared/nek-protocol";
-import { AGENT_DIR, LOCAL, createHarness } from "./nekConfigApiHarness.js";
+import { AGENT_DIR, LOCAL, PROJECT, PROJECT_DIR, createHarness } from "./nekConfigApiHarness.js";
+import type { NekReloadOutcome } from "../src/nek-config-api/index.js";
 import type { NekConfigSessionHandle } from "../src/nek-config-api/index.js";
 
 /**
@@ -197,4 +198,82 @@ test("mcp status and actions use the running session process", async () => {
   );
   assert.deepEqual(await harness.api.getMcpStatus(LOCAL), [status]);
   assert.deepEqual(await harness.api.mcpServerAction(LOCAL, "filesystem", "reconnect"), status);
+});
+
+test("watch events carry the scope of the file that changed", async () => {
+  const projectPreset = join(PROJECT_DIR, "agents", "project-reviewer.md");
+  const harness = createHarness({
+    localFiles: {
+      [MODELS_PATH]: modelsText("http://a"),
+      [projectPreset]: "---\nname: project-reviewer\ndescription: x\n---\n\nBody.\n",
+    },
+    pollSeconds: 1,
+  });
+  const changes: Array<{ file: string; revision: string; scope: string }> = [];
+  const unsubscribe = harness.api.watch(LOCAL, (change) => changes.push(change), PROJECT);
+  // 等第一轮扫描建立基线。
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  harness.local.setFile(MODELS_PATH, modelsText("http://global"));
+  harness.local.setFile(projectPreset, "---\nname: project-reviewer\ndescription: y\n---\n\nBody.\n");
+  await new Promise((resolve) => setTimeout(resolve, 1400));
+  unsubscribe();
+
+  const scopes = new Map(changes.map((change) => [change.file, change.scope]));
+  assert.equal(scopes.get(MODELS_PATH), "global");
+  assert.equal(scopes.get(projectPreset), "project");
+});
+
+test("our own project writes are published with the project scope", async () => {
+  const projectMcp = join(PROJECT_DIR, "mcp.json");
+  const harness = createHarness({
+    localFiles: {
+      [join(AGENT_DIR, "mcp.json")]: JSON.stringify({
+        mcpServers: { docs: { url: "https://docs" } },
+      }),
+      [projectMcp]: JSON.stringify({ mcpServers: { docs: { enabled: true } } }),
+    },
+  });
+  const changes: Array<{ file: string; revision: string; scope: string }> = [];
+  const unsubscribe = harness.api.watch(LOCAL, (change) => changes.push(change), PROJECT);
+  const before = await harness.api.readMcpConfig(LOCAL, "project", PROJECT);
+  await harness.api.setMcpServerOverride(
+    LOCAL,
+    "docs",
+    { enabled: false },
+    { revision: before.revision, scope: "project", cwd: PROJECT },
+  );
+  unsubscribe();
+  const written = changes.find((change) => change.file === projectMcp);
+  assert.ok(written, "project mcp.json write is published");
+  assert.equal(written.scope, "project");
+});
+
+test("a failing automatic reload is reported through onReloadResult", async () => {
+  const harness = createHarness({ localFiles: { [SETTINGS_PATH]: "{}" }, autoReload: true });
+  harness.sessions.push(
+    session({
+      key: "crashed",
+      call: (async () => {
+        throw new Error("stdin closed");
+      }) as NekConfigSessionHandle["call"],
+    }),
+  );
+  const results: NekReloadOutcome[] = [];
+  const unsubscribe = harness.api.onReloadResult(LOCAL, (result) => results.push(result));
+
+  const read = await harness.api.readSettings(LOCAL, "global");
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { defaultModel: "a/b" },
+    { revision: read.revision },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  unsubscribe();
+
+  assert.equal(results.length, 1, "one notification per automatic reload");
+  assert.equal(results[0]?.reloaded, 0);
+  assert.equal(results[0]?.failures[0]?.sessionKey, "crashed");
+  assert.match(results[0]?.failures[0]?.message ?? "", /stdin closed/);
 });

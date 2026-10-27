@@ -202,3 +202,41 @@ test("copying onto the same target is rejected", async () => {
   );
   assert.match(error.message, /same target/);
 });
+
+test("copy returns a per-item result instead of throwing midway", async () => {
+  const control = new FakeControlClient();
+  const harness = baseHarness();
+  harness.useControl(control);
+  setTimeout(() => control.failLogin("consent required on the target"), 0);
+  const result = await harness.api.copy(LOCAL, REMOTE, {
+    ...selection,
+    logins: ["anthropic"],
+  }, {});
+  const byKey = new Map(result.items.map((item) => [item.key, item]));
+  assert.equal(byKey.get("provider:local-proxy")?.status, "copied");
+  assert.equal(byKey.get("provider:shared")?.status, "skipped");
+  assert.equal(byKey.get("mcpServer:filesystem")?.status, "skipped");
+  assert.equal(byKey.get("defaults:defaults")?.status, "skipped");
+  assert.equal(byKey.get("compaction:compaction")?.status, "skipped");
+  // 登录项失败不影响其他项的结果。
+  const login = byKey.get("login:anthropic");
+  assert.ok(login);
+  assert.equal(login.status, "failed");
+  assert.match(login.error ?? "", /consent required/);
+});
+
+test("copy marks an empty settings source as skipped with a reason", async () => {
+  const harness = createHarness({
+    localFiles: { [localSettings]: JSON.stringify({ theme: "dark" }) },
+    remoteFiles: { [remoteSettings]: JSON.stringify({}) },
+  });
+  const result = await harness.api.copy(
+    LOCAL,
+    REMOTE,
+    { providers: [], logins: [], mcpServers: [], defaults: true, compaction: false },
+    {},
+  );
+  assert.deepEqual(result.items, [
+    { key: "defaults:defaults", status: "skipped", error: "the source has nothing to copy" },
+  ]);
+});
