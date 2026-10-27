@@ -43,7 +43,7 @@ export type {
   NekConfigTargetHost,
   NekReloadOutcome,
 } from "./runtime.js";
-export { NekConfigRuntime, targetKeyOf } from "./runtime.js";
+export { NekConfigRuntime, nekConfigApiConfigFromRuntime, targetKeyOf } from "./runtime.js";
 export { ABSENT_REVISION, encodeRevision, sameRevision } from "./revision.js";
 export type { NekHostStat, NekRevisionParts } from "./revision.js";
 export { NEK_SETTINGS_DEFAULTS, COMPACTION_CONTENT_DEFAULTS } from "./settingsDefaults.js";

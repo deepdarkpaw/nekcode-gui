@@ -53,6 +53,24 @@ export interface NekConfigApiConfig {
   autoReload?: boolean;
 }
 
+/**
+ * 从 GUI 运行参数（`config/config.yaml`）里取设置中心需要的值。
+ *
+ * 只取真正属于 GUI 的开关：轮询间隔来自 `remote.configPollSeconds`（远程目标每 N 秒 stat 一次），
+ * 自动重载默认开启、可由 host 关掉。
+ */
+export function nekConfigApiConfigFromRuntime(
+  runtime: { remote?: { configPollSeconds?: number } },
+  overrides: NekConfigApiConfig = {},
+): NekConfigApiConfig {
+  return {
+    ...(runtime.remote?.configPollSeconds !== undefined
+      ? { remoteConfigPollSeconds: runtime.remote.configPollSeconds }
+      : {}),
+    ...overrides,
+  };
+}
+
 export interface NekConfigApiLogger {
   warn: (...args: unknown[]) => void;
   debug?: (...args: unknown[]) => void;

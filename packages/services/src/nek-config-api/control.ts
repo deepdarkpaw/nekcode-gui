@@ -48,10 +48,6 @@ interface ControlProcess extends NekPooledProcess {
   client: RpcClient;
 }
 
-function isRpcClient(value: unknown): value is RpcClient {
-  return typeof value === "object" && value !== null && "call" in value;
-}
-
 function unavailable(error: unknown): Error {
   if (error instanceof NekLocatorError) {
     switch (error.code) {
@@ -78,6 +74,7 @@ export async function createNekControlClient(options: {
 }): Promise<NekControlClient> {
   const { executor, logger } = options;
   let structuredHandler: NekStructuredHandler | undefined;
+  const authListeners = new Set<(record: NekAuthEventRecord) => void>();
   const pool = new NekProcessPool<ControlProcess>({
     createSessionProcess: async () => {
       throw nekUnavailable("control pool does not manage session processes");
@@ -97,6 +94,10 @@ export async function createNekControlClient(options: {
             structuredHandler ? await structuredHandler(request, signal) : undefined,
         },
       });
+      // 崩溃重启后换的是新进程，订阅者留在这一层，所以重新接一次 auth_event。
+      client.onAuthEvent((record) => {
+        for (const listener of authListeners) listener(record);
+      });
       return {
         client,
         dispose: async () => {
@@ -108,22 +109,26 @@ export async function createNekControlClient(options: {
     logger,
   });
 
-  const control = await pool.ensureControl().catch((error: unknown) => {
+  await pool.ensureControl().catch((error: unknown) => {
     void pool.dispose();
     throw unavailable(error);
   });
-  if (!isRpcClient(control.client)) {
-    void pool.dispose();
-    throw nekUnavailable("the control process handle has no RPC client");
-  }
   return {
-    call: async (command) => control.client.call(command),
-    onAuthEvent: (listener) => control.client.onAuthEvent(listener),
-    respondExtensionUi: (response) => control.client.respondExtensionUi(response),
+    // 每次调用都取当前进程：控制进程崩过之后，退避重启出来的新进程会接上。
+    call: async (command) => (await pool.ensureControl()).client.call(command),
+    onAuthEvent: (listener) => {
+      authListeners.add(listener);
+      return () => {
+        authListeners.delete(listener);
+      };
+    },
+    respondExtensionUi: (response) => pool.control?.client.respondExtensionUi(response),
     setStructuredHandler: (handler) => {
       structuredHandler = handler;
     },
     close: async () => {
+      authListeners.clear();
+      structuredHandler = undefined;
       await pool.dispose();
     },
   };
