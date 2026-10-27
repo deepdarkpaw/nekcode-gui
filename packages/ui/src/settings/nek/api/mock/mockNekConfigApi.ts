@@ -20,7 +20,7 @@ import {
 import { mockError } from "./mockMachine.js";
 import * as mcp from "./mockMcp.js";
 import * as models from "./mockModels.js";
-import { MOCK_BUILTIN_TOOLS } from "./mockSeed.js";
+import { MOCK_BUILTIN_TOOLS } from "./mockBuiltinTools.js";
 import * as settings from "./mockSettings.js";
 
 export type { MockNekConfigApiOptions } from "./mockNekConfigApiBase.js";
