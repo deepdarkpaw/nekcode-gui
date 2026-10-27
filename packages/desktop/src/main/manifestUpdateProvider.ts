@@ -20,8 +20,11 @@ const ELECTRON_MANIFEST_API_PATH = "/api/v1/releases/electron/manifest";
 const MANIFEST_ACCEPT_HEADER = "application/x-yaml,text/yaml,text/plain,*/*";
 
 interface ManifestUpdateProviderOptions extends CustomPublishOptions {
-  /** 自有更新源 origin；更新源归属见 .agents/specs/update-source-ownership.md，不接受上游缺省值。 */
-  endpointOrigin: string;
+  /**
+   * 自有更新源 origin；不接受上游缺省值。类型上可选只为满足 electron-updater 的
+   * `CustomPublishOptions` 构造签名，缺失时构造即报错。
+   */
+  endpointOrigin?: string;
   manifestUrl?: string;
   releasePlatform?: string;
   releaseChannel?: ElectronReleaseChannel;
@@ -174,6 +177,7 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
   private readonly options: ManifestUpdateProviderOptions;
   private readonly releasePlatform: string;
   private readonly linuxExtensions: readonly string[] | null;
+  private readonly endpointOrigin: string;
   private resolveBaseUrl: URL;
 
   constructor(
@@ -182,10 +186,15 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
     runtimeOptions: ProviderRuntimeOptions,
   ) {
     super(runtimeOptions);
+    const endpointOrigin = options.endpointOrigin?.trim();
+    if (!endpointOrigin) {
+      throw new Error("Update origin is not configured; refusing to check for updates.");
+    }
     this.options = options;
+    this.endpointOrigin = endpointOrigin;
     this.linuxExtensions = getLinuxUpdateExtensions(updater);
     this.releasePlatform = options.releasePlatform?.trim() || getElectronReleasePlatform();
-    this.resolveBaseUrl = new URL(normalizeZCodeEndpointOrigin(options.endpointOrigin));
+    this.resolveBaseUrl = new URL(normalizeZCodeEndpointOrigin(endpointOrigin));
   }
 
   override get isUseMultipleRangeRequest(): boolean {
@@ -233,7 +242,7 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
 
   private async resolveEndpointOrigin(): Promise<string> {
     // 未配置自有更新源时直接报错：静默回退上游会把客户端更新成官方 ZCode 安装包。
-    const resolved = (await this.options.resolveEndpointOrigin?.()) ?? this.options.endpointOrigin;
+    const resolved = (await this.options.resolveEndpointOrigin?.()) ?? this.endpointOrigin;
     return normalizeZCodeEndpointOrigin(resolved);
   }
 
