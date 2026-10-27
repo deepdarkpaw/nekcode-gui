@@ -3400,13 +3400,11 @@ const zhCN: Record<string, string> = {
   // ---- 自动化 / Automations ----
   // Automations 同时包含定时任务和闲时任务，顶层入口不能误用其中一个子类型的名称。
   "workspace.openScheduledSettings": "自动化",
-  "settings.automations.title": "自动化",
-  "settings.automations.betaBadge": "Beta",
   "offPeak.sidebar.groupTitle": "闲时任务",
   "modelSelection.invalidated.fallback":
     "原来的模型选择已失效，已切换到当前默认模型，请确认后继续。",
   "modelSelection.invalidated.reselect": "原来的模型选择已失效，请重新选择模型。",
-  "automations.runs.openSessionFailed": "目标项目当前未连接，无法打开该会话",
+  "workspace.openSessionFailed": "目标项目当前未连接，无法打开该会话",
   "scheduledPreview.keepAwakeEnabled": "已开启保持唤醒",
   "scheduledPreview.keepAwakeDisabled": "已关闭保持唤醒",
   "scheduledPreview.toast.running": "正在运行“{title}”…",

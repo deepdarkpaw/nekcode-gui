@@ -3599,14 +3599,12 @@ const enUS: Record<string, string> = {
   "taskList.offPeakTaskLabel": "Idle-time task",
   "taskGroup.cronGroupName": "Scheduled tasks",
   "workspace.openScheduledSettings": "Automations",
-  "settings.automations.title": "Automations",
-  "settings.automations.betaBadge": "Beta",
   "offPeak.sidebar.groupTitle": "Idle-time tasks",
   "modelSelection.invalidated.fallback":
     "The previous model selection is no longer available. Switched to the current default; review it before continuing.",
   "modelSelection.invalidated.reselect":
     "The previous model selection is no longer available. Choose a model again.",
-  "automations.runs.openSessionFailed":
+  "workspace.openSessionFailed":
     "The target project is not connected, so this session cannot be opened.",
   "scheduledPreview.keepAwakeEnabled": "Keep awake enabled",
   "scheduledPreview.keepAwakeDisabled": "Keep awake disabled",

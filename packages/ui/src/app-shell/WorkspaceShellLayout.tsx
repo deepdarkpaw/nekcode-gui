@@ -802,16 +802,16 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           },
         });
         if (!workspaceResult.accepted) {
-          logger.warn("[automations] 运行历史目标远程 workspace 未连接，保留当前页面", {
+          logger.warn("[task-nav] 目标远程 workspace 未连接，保留当前页面", {
             sessionId: taskId,
             workspaceIdentity: targetWorkspaceIdentity,
             workspacePath: targetWorkspacePath,
           });
-          toast(intl.formatMessage({ id: "automations.runs.openSessionFailed" }));
+          toast(intl.formatMessage({ id: "workspace.openSessionFailed" }));
           return;
         }
         if (workspaceResult.openedLocalTab) {
-          logger.info("[automations] 为运行历史会话补开本地 workspace tab", {
+          logger.info("[task-nav] 为目标会话补开本地 workspace tab", {
             sessionId: taskId,
             workspacePath: targetWorkspacePath,
           });
