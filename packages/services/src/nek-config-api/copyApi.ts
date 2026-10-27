@@ -17,7 +17,7 @@ import type {
 import { editModelsSnapshot, readModelsSnapshot } from "./modelsDocument.js";
 import { mcpPath, modelsPath, settingsPath } from "./paths.js";
 import { patchSettingsDocument, readSettingsDocument } from "./settingsDocument.js";
-import { readRawMcpServers, serializeMcpServers } from "./mcpApi.js";
+import { readRawMcpServers, serializeMcpServers } from "./mcpDocument.js";
 import { writeTextDocument } from "./documents.js";
 import type { NekConfigRuntime } from "./runtime.js";
 import { validationError } from "./errors.js";

@@ -20,16 +20,22 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 import {
-  NEK_MCP_OVERRIDE_KEYS,
   NEK_MCP_SERVER_NAME_PATTERN,
   nekMcpHttpServerSchema,
   nekMcpOverrideSchema,
   nekMcpStdioServerSchema,
   parseWithSchema,
 } from "../nek-agent/config/schemas.js";
-import { parseJsonMapping, readTextDocument, writeTextDocument } from "./documents.js";
+import { writeTextDocument } from "./documents.js";
 import { conflict, fieldErrorsOf, validationError } from "./errors.js";
-import type { NekConfigHostExecutor } from "./hostExecutor.js";
+import {
+  isFullServer,
+  MCP_OVERRIDE_KEYS,
+  overrideKeysOf,
+  readMcpServerFile,
+  serializeMcpServers,
+} from "./mcpDocument.js";
+import type { RawMcpServers } from "./mcpDocument.js";
 import { mcpPath } from "./paths.js";
 import type { NekConfigRuntime, NekConfigSessionHandle } from "./runtime.js";
 
@@ -83,47 +89,6 @@ export interface NekMcpGroup {
   ) => Promise<NekMcpServerStatus>;
 }
 
-export type RawMcpServers = Record<string, Record<string, unknown>>;
-
-function isFullServer(config: Record<string, unknown>): boolean {
-  return config.command !== undefined || config.url !== undefined || config.type !== undefined;
-}
-
-function overrideKeysOf(config: Record<string, unknown>): string[] {
-  return Object.keys(config).filter(
-    (key) => !(NEK_MCP_OVERRIDE_KEYS as readonly string[]).includes(key),
-  );
-}
-
-function readServers(path: string, text: string | null): RawMcpServers {
-  if (text === null || text.trim() === "") return {};
-  const parsed = parseJsonMapping(path, text);
-  const servers = parsed.mcpServers;
-  if (servers === undefined) return {};
-  if (!isPlainObject(servers)) {
-    throw validationError(`${path}: "mcpServers" must be an object`, {
-      mcpServers: "must be an object",
-    });
-  }
-  const result: RawMcpServers = {};
-  for (const [name, value] of Object.entries(servers)) {
-    if (isPlainObject(value)) result[name] = value;
-  }
-  return result;
-}
-
-async function readServerFile(
-  executor: NekConfigHostExecutor,
-  path: string,
-): Promise<{ revision: string; servers: RawMcpServers }> {
-  const document = await readTextDocument(executor, path);
-  return { revision: document.revision, servers: readServers(path, document.content) };
-}
-
-function serializeServers(servers: RawMcpServers): string {
-  return `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`;
-}
-
 const NAME_FIELD = { name: "letters, digits, underscore and dash" } as const;
 
 /** 按 transport 选 schema 并校验；失败抛字段级错误。 */
@@ -161,7 +126,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
   return {
     readMcpConfig: async (target, scope, cwd) => {
       const { context, path } = paths(target, scope, cwd);
-      const own = await readServerFile(context.executor, path);
+      const own = await readMcpServerFile(context.executor, path);
       const diagnostics: NekConfigDiagnostic[] = [];
       if (scope === "global") {
         return {
@@ -178,7 +143,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
         };
       }
       const globalPath = mcpPath(context.layout, "global");
-      const global = await readServerFile(context.executor, globalPath).catch(
+      const global = await readMcpServerFile(context.executor, globalPath).catch(
         (error: unknown): { revision: string; servers: RawMcpServers } => {
           diagnostics.push({
             file: globalPath,
@@ -200,7 +165,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
           diagnostics.push({
             file: path,
             severity: "error",
-            message: `server "${name}": an override can only set ${NEK_MCP_OVERRIDE_KEYS.join(", ")}`,
+            message: `server "${name}": an override can only set ${MCP_OVERRIDE_KEYS.join(", ")}`,
           });
         }
         if (!base) {
@@ -229,10 +194,9 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
       if (scope === "project") {
         const extra = overrideKeysOf(config);
         if (extra.length > 0) {
-          throw validationError(
-            `project mcp.json can only set ${NEK_MCP_OVERRIDE_KEYS.join(", ")}`,
-            { config: `unexpected keys: ${extra.join(", ")}` },
-          );
+          throw validationError(`project mcp.json can only set ${MCP_OVERRIDE_KEYS.join(", ")}`, {
+            config: `unexpected keys: ${extra.join(", ")}`,
+          });
         }
       }
       const value =
@@ -240,7 +204,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
           ? validateOverrideConfig(entry.name, config)
           : validateServerConfig(entry.name, config);
       const { context, path } = paths(target, scope, options.cwd);
-      const current = await readServerFile(context.executor, path);
+      const current = await readMcpServerFile(context.executor, path);
       if (current.revision !== options.revision) throw conflict(path);
       const previousName = entry.previousName;
       if (entry.name !== previousName && current.servers[entry.name]) {
@@ -249,14 +213,18 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
       const servers: RawMcpServers = { ...current.servers };
       if (previousName && previousName !== entry.name) delete servers[previousName];
       servers[entry.name] = value as unknown as Record<string, unknown>;
-      const revision = await writeTextDocument(context.executor, path, serializeServers(servers));
+      const revision = await writeTextDocument(
+        context.executor,
+        path,
+        serializeMcpServers(servers),
+      );
       runtime.publishWrite(target, [{ path, revision }]);
       return { revision };
     },
 
     setMcpServerOverride: async (target, name, override, options) => {
       const { context, path } = paths(target, options.scope, options.cwd);
-      const current = await readServerFile(context.executor, path);
+      const current = await readMcpServerFile(context.executor, path);
       if (current.revision !== options.revision) throw conflict(path);
       if (options.scope === "global") {
         if (!current.servers[name]) {
@@ -264,7 +232,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
         }
       } else {
         const globalPath = mcpPath(context.layout, "global");
-        const global = await readServerFile(context.executor, globalPath);
+        const global = await readMcpServerFile(context.executor, globalPath);
         if (!global.servers[name]) {
           throw validationError(
             `server "${name}" is not defined globally; a project entry can only override it`,
@@ -274,28 +242,36 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
       }
       const merged = { ...current.servers[name], ...(override as Record<string, unknown>) };
       const servers: RawMcpServers = { ...current.servers, [name]: merged };
-      const revision = await writeTextDocument(context.executor, path, serializeServers(servers));
+      const revision = await writeTextDocument(
+        context.executor,
+        path,
+        serializeMcpServers(servers),
+      );
       runtime.publishWrite(target, [{ path, revision }]);
       return { revision };
     },
 
     deleteMcpServer: async (target, scope, name, options) => {
       const { context, path } = paths(target, scope, options.cwd);
-      const current = await readServerFile(context.executor, path);
+      const current = await readMcpServerFile(context.executor, path);
       if (current.revision !== options.revision) throw conflict(path);
       if (!current.servers[name]) {
         throw validationError(`unknown MCP server "${name}"`, { name: "unknown" });
       }
       const servers: RawMcpServers = { ...current.servers };
       delete servers[name];
-      const revision = await writeTextDocument(context.executor, path, serializeServers(servers));
+      const revision = await writeTextDocument(
+        context.executor,
+        path,
+        serializeMcpServers(servers),
+      );
       runtime.publishWrite(target, [{ path, revision }]);
       return { revision };
     },
 
     previewMcpImport: async (target, scope, json, cwd) => {
       const { context, path } = paths(target, scope, cwd);
-      const existing = await readServerFile(context.executor, path);
+      const existing = await readMcpServerFile(context.executor, path);
       const preview: NekMcpImportPreview = { servers: [], errors: [] };
       let parsed: unknown;
       try {
@@ -386,16 +362,4 @@ function validateOverrideConfig(name: string, config: Record<string, unknown>): 
     throw validationError(`invalid MCP override "${name}"`, fieldErrorsOf(validated.issues));
   }
   return validated.data as unknown as NekMcpServerConfig;
-}
-
-/** 供复制到远程使用：读某作用域的全部 server（不合并）。 */
-export async function readRawMcpServers(
-  executor: NekConfigHostExecutor,
-  path: string,
-): Promise<RawMcpServers> {
-  return (await readServerFile(executor, path)).servers;
-}
-
-export function serializeMcpServers(servers: RawMcpServers): string {
-  return serializeServers(servers);
 }
