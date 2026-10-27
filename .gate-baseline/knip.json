@@ -514,7 +514,23 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000DEFAULT_OAUTH_CALLBACK_PORTS",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000DockerBackend",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000REMOTE_DEPLOY_LOCK_DIR",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000RemoteReconnectStateMachine",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000SSHHostKeyStore",
       "count": 1
     },
     {
@@ -522,11 +538,75 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000acquireRemoteDeployLock",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000buildNekInstallCommand",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000buildRemoteDeployLockScript",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000computeHostKeyFingerprint",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000computeSshConfigHost",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000computeSshConfigHostFromFile",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000connectSshProxyJump",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000createSSHHostVerifier",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000deployServer",
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000detectRemoteNek",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000formatHostKeyRejectionError",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000forwardLocalPortToRemote",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000getSSHKnownHostsPath",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000installRemoteNek",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000isWSLAvailable",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000listKnownHosts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000listSshConfigHosts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000listSshConfigHostsFromFile",
       "count": 1
     },
     {
@@ -542,11 +622,27 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000readSshConfig",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000removeKnownHost",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/server/src/remote/index.ts\u0000wrapStdioStream",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/server/src/remote/localTarGz.ts\u0000extractTarGzArchive",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/nekRemote.ts\u0000buildNekInstallCommand",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/nekRemote.ts\u0000summarizeRemoteStderr",
       "count": 1
     },
     {
@@ -563,6 +659,26 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/server/src/remote/sshAuth.ts\u0000SSH_READY_TIMEOUT_MS",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/sshConfig.ts\u0000listSshConfigHostsFromFile",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/sshConfig.ts\u0000readSshConfig",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/sshKnownHosts.ts\u0000listKnownHosts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/sshKnownHosts.ts\u0000removeKnownHost",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/server/src/remote/sshPortForward.ts\u0000DEFAULT_OAUTH_CALLBACK_PORTS",
       "count": 1
     },
     {
@@ -726,6 +842,14 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/index/nekSessionIndexStorage.ts\u0000emptyNekSessionIndex",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/index/nekSessionIndexStorage.ts\u0000normalizeNekSessionIndex",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-agent/nekLocator.ts\u0000createNekLocatorDeps",
       "count": 1
     },
@@ -739,6 +863,10 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/nek-agent/nekLocator.ts\u0000validateNekGuiInfo",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/nekRpcProcess.ts\u0000buildNekRpcArgs",
       "count": 1
     },
     {
@@ -2822,10 +2950,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/services/src/nek-agent/nekRpcProcess.ts\u0000packages/services/src/nek-agent/nekRpcProcess.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/services/src/providers/api/apiEndpoints.ts\u0000packages/services/src/providers/api/apiEndpoints.ts",
       "count": 1
     },
@@ -3170,7 +3294,15 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/server/src/remote/create-backend.ts\u0000CreateRemoteBackendOptions",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/server/src/remote/handshake.ts\u0000HandshakeResult",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000CreateRemoteBackendOptions",
       "count": 1
     },
     {
@@ -3186,7 +3318,51 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000HostKeyConfirmation",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000InstallNekOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000InstallNekResult",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000KnownHostEntry",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000LocalPortForwardHandle",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000ReconnectClock",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000RemoteDeployLockHandle",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000RemoteEnvironment",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000RemoteNekCheckResult",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000RemoteNekStatus",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000RemoteReconnectOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000RemoteReconnectState",
       "count": 1
     },
     {
@@ -3202,11 +3378,51 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000SSHConfigConnectionOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000SSHForwardOutClient",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000SSHJumpClient",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000SSHJumpClientFactory",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000StdioStream",
       "count": 1
     },
     {
       "key": "knip\u0000types\u0000packages/server/src/remote/index.ts\u0000WSLDistro",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/nekRemote.ts\u0000InstallNekOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/nekRemote.ts\u0000InstallNekResult",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/nekRemote.ts\u0000RemoteNekCheckOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/nekRemote.ts\u0000RemoteNekCheckResult",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/nekRemote.ts\u0000RemoteNekStatus",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/reconnectStateMachine.ts\u0000RemoteReconnectOptions",
       "count": 1
     },
     {
@@ -3250,7 +3466,35 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshAuth.ts\u0000SSHAuthResolution",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshAuth.ts\u0000SSHAuthResolutionInput",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshAuth.ts\u0000SSHConnectConfigInput",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshConfig.ts\u0000SSHConfigConnectionOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshConfig.ts\u0000SSHJumpClient",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshConfig.ts\u0000SSHJumpClientFactory",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/server/src/remote/sshKnownHosts.ts\u0000HostKeyVerdict",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshKnownHosts.ts\u0000KnownHostEntry",
       "count": 1
     },
     {
@@ -3259,6 +3503,14 @@
     },
     {
       "key": "knip\u0000types\u0000packages/server/src/remote/sshKnownHosts.ts\u0000SSHHostKeyStoreOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshKnownHosts.ts\u0000VerifyHostKeyOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/server/src/remote/sshPortForward.ts\u0000SSHForwardOutClient",
       "count": 1
     },
     {
@@ -3378,6 +3630,14 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/index/nekSessionIndexStorage.ts\u0000JsonNekSessionIndexStorageOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/index/nekSessionIndexSyncer.ts\u0000NekSessionIndexSyncerOptions",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/services/src/nek-agent/jsonl.ts\u0000NekJsonlDecoderOptions",
       "count": 1
     },
@@ -3438,6 +3698,14 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/nekRpcProcess.ts\u0000NekRpcProcessArgsOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/nekRpcProcess.ts\u0000NekRpcProcessOptions",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/services/src/nek-agent/nekStderrRing.ts\u0000NekStderrRingOptions",
       "count": 1
     },
@@ -3459,6 +3727,18 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/nek-agent/projection/nekRows.ts\u0000NekPlanPreviewDetails",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/service/types.ts\u0000NekLoadedSessionData",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/service/types.ts\u0000NekModelSelection",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/service/types.ts\u0000NekSessionMetadata",
       "count": 1
     },
     {
