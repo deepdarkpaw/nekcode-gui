@@ -1,3 +1,4 @@
+export { createNekAgentServiceAdapter } from "./factory.js";
 export { NekAgentServiceAdapter } from "./nekAgentServiceAdapter.js";
 export type {
   NekAgentServiceAdapterApi,
