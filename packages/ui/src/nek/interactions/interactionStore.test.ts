@@ -144,6 +144,66 @@ describe("NekInteractionStore", () => {
     expect(store.getState().sessions["session-a"]?.widgets).toEqual({});
   });
 
+  it("FF-4/FF-5: setTitle clears on empty and set_editor_text emits replacement", () => {
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "title-1",
+      method: "setTitle",
+      title: "Build",
+    });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "title-2",
+      method: "setTitle",
+      title: "",
+    });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "text-1",
+      method: "set_editor_text",
+      text: "prefill",
+    });
+    expect(store.getState().sessions["session-a"]?.titleOverride).toBeUndefined();
+    expect(effects).toEqual([
+      { kind: "setTitle", id: "title-1", title: "Build" },
+      { kind: "setTitle", id: "title-2", title: "" },
+      { kind: "replaceComposerText", id: "text-1", text: "prefill" },
+    ]);
+  });
+
+  it("FF-2: status keys are bounded and evict the oldest key", () => {
+    for (let index = 0; index < 33; index += 1) {
+      store.getState().handleFireAndForget("session-a", {
+        type: "extension_ui_request",
+        id: `status-${index}`,
+        method: "setStatus",
+        statusKey: `key-${index}`,
+        statusText: String(index),
+      });
+    }
+    const statuses = store.getState().sessions["session-a"]?.statuses ?? {};
+    expect(Object.keys(statuses)).toHaveLength(32);
+    expect(statuses["key-0"]).toBeUndefined();
+    expect(statuses["key-32"]).toBe("32");
+  });
+
+  it("FF-3: widgets are bounded to 16 keys and 50 lines with truncation metadata", () => {
+    for (let index = 0; index < 17; index += 1) {
+      store.getState().handleFireAndForget("session-a", {
+        type: "extension_ui_request",
+        id: `widget-${index}`,
+        method: "setWidget",
+        widgetKey: `key-${index}`,
+        widgetLines: Array.from({ length: 51 }, (_, line) => `${index}-${line}`),
+      });
+    }
+    const widgets = store.getState().sessions["session-a"]?.widgets ?? {};
+    expect(Object.keys(widgets)).toHaveLength(16);
+    expect(widgets["key-0"]).toBeUndefined();
+    expect(widgets["key-16"]).toMatchObject({ truncated: true, lines: expect.any(Array) });
+    expect(widgets["key-16"]?.lines).toHaveLength(50);
+  });
+
   it("cleans the shared deadline ticker after the last request closes", () => {
     store.getState().enqueue("session-a", inputRequest("a", 2_000));
     store.getState().cancelByUser("session-a", "a");
