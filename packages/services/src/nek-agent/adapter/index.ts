@@ -5,6 +5,7 @@ export type {
   NekConversationResyncParams,
   NekConversationSubscribeParams,
   NekConversationUnsubscribeParams,
+  NekSessionBinding,
   NekSessionCommandEnvelope,
   NekSessionsIndexSubscribeParams,
   NekWorkspaceConfigSubscribeParams,

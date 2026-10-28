@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Emitter, type Event } from "@zcode/rpc";
 import type {
   NekAgentMessage,
@@ -19,17 +18,8 @@ import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
-import { toNekImages } from "./attachmentImages.js";
-import {
-  acceptedCommand,
-  asRecord,
-  makeSubscriptionId,
-  makeWireFrame,
-  readString,
-  sessionMapKey,
-  unsupportedCommand,
-  workspaceKey,
-} from "./frameHelpers.js";
+import { acceptedCommand, makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "./frameHelpers.js";
+import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { NekAgentServiceTopics } from "./nekAgentServiceTopics.js";
 import type {
   NekAgentServiceAdapterApi,
@@ -37,17 +27,11 @@ import type {
   NekConversationResyncParams,
   NekConversationSubscribeParams,
   NekConversationUnsubscribeParams,
+  NekSessionBinding,
   NekSessionCommandEnvelope,
   NekWorkspaceConfigSubscribeParams,
   NekWorkspaceTarget,
 } from "./types.js";
-
-interface SessionBinding {
-  target: NekWorkspaceTarget;
-  sessionKey: string;
-  sessionId: string;
-  sessionPath?: string;
-}
 
 interface ConversationSubscription {
   id: string;
@@ -59,15 +43,6 @@ interface ConversationSubscription {
 }
 
 const MAX_BINDINGS = 5_000;
-const THOUGHT_LEVELS: readonly NekThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
 
 /**
  * 把 NekAgentService 接到现有 ZCode v4 host 面。
@@ -78,7 +53,7 @@ const THOUGHT_LEVELS: readonly NekThinkingLevel[] = [
 export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
   readonly service: NekAgentService;
   private readonly topics: NekAgentServiceTopics;
-  private readonly bindings = new Map<string, SessionBinding>();
+  private readonly bindings = new Map<string, NekSessionBinding>();
   private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
   private readonly conversationEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
 
@@ -86,7 +61,10 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     this.service = new NekAgentService(options);
     const syncer =
       options.sessionIndexSyncer ??
-      new NekSessionIndexSyncer({ storage: new MemoryNekSessionIndexStorage(), listSessions: async (input) => await this.service.listSessions(input) });
+      new NekSessionIndexSyncer({
+        storage: new MemoryNekSessionIndexStorage(),
+        listSessions: async (input) => await this.service.listSessions(input),
+      });
     this.topics = new NekAgentServiceTopics(
       this.service,
       (target) => this.resolveSessionKey(target),
@@ -119,10 +97,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return result;
   }
 
-  async resumeSession(input: {
-    workspacePath: string;
-    sessionPath: string;
-  }): Promise<NekSessionResult> {
+  async resumeSession(input: { workspacePath: string; sessionPath: string }): Promise<NekSessionResult> {
     const target = { workspacePath: input.workspacePath };
     const result = await this.service.resumeSession({
       sessionPath: input.sessionPath,
@@ -148,9 +123,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return this.service.conversationSnapshot(binding.sessionKey);
   }
 
-  async readSessionMessages(
-    target: NekWorkspaceTarget & { sessionId: string },
-  ): Promise<NekAgentMessage[]> {
+  async readSessionMessages(target: NekWorkspaceTarget & { sessionId: string }): Promise<NekAgentMessage[]> {
     const binding = this.requireBinding(target, target.sessionId);
     return await this.service.readSessionMessages(binding.sessionKey);
   }
@@ -173,13 +146,12 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
       ordinal: 0,
       detach: () => {},
     };
-    const detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
+    subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
       firstFrame ??= frame;
       const mapped = makeWireFrame({ ...frame, topic }, id, ++ordinal, first ? "initial" : "online");
       first = false;
       this.conversationEmitter(subscription.workspaceKey).fire(mapped);
     });
-    subscription.detach = detach;
     subscription.ordinal = ordinal;
     this.conversationSubscriptions.set(id, subscription);
     return {
@@ -230,7 +202,9 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return await this.topics.resyncSessionsIndexV4(input);
   }
 
-  async unsubscribeSessionsIndexV4(input: Parameters<NekAgentServiceTopics["unsubscribeSessionsIndexV4"]>[0]): Promise<void> {
+  async unsubscribeSessionsIndexV4(
+    input: Parameters<NekAgentServiceTopics["unsubscribeSessionsIndexV4"]>[0],
+  ): Promise<void> {
     await this.topics.unsubscribeSessionsIndexV4(input);
   }
 
@@ -246,7 +220,9 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return await this.topics.resyncWorkspaceConfigV4(input);
   }
 
-  async unsubscribeWorkspaceConfigV4(input: Parameters<NekAgentServiceTopics["unsubscribeWorkspaceConfigV4"]>[0]): Promise<void> {
+  async unsubscribeWorkspaceConfigV4(
+    input: Parameters<NekAgentServiceTopics["unsubscribeWorkspaceConfigV4"]>[0],
+  ): Promise<void> {
     await this.topics.unsubscribeWorkspaceConfigV4(input);
   }
 
@@ -258,77 +234,17 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     target: NekWorkspaceTarget;
     envelope: NekSessionCommandEnvelope;
   }): Promise<CommandAck> {
-    const { envelope } = input;
-    const payload = asRecord(envelope.payload) ?? {};
-    if (envelope.type === "createSession") return await this.createFromCommand(input.target, envelope, payload);
-    if (!envelope.sessionId) return unsupportedCommand(envelope, "sessionId is required");
-    const binding = this.requireBinding(input.target, envelope.sessionId);
-    const revision = this.service.conversationSnapshot(binding.sessionKey).revision;
-    switch (envelope.type) {
-      case "sendText": {
-        await this.applySelection(binding.sessionKey, payload);
-        const images = await toNekImages(payload.attachments);
-        const requestedDelivery = readString(payload, "requestedDelivery");
-        const result = await this.service.sendPrompt({
-          sessionKey: binding.sessionKey,
-          message: readString(payload, "text") ?? "",
-          ...(images ? { images } : {}),
-          ...(requestedDelivery === "queue" ? { streamingBehavior: "follow_up" as const } : {}),
-        });
-        return acceptedCommand(envelope, revision, {
-          type: "inputAccepted",
-          delivery: result.disposition === "started" ? "startNow" : "queue",
-          inputId: envelope.commandId,
-        });
-      }
-      case "sendGoalCommand": {
-        await this.applySelection(binding.sessionKey, payload);
-        const result = await this.service.sendPrompt({
-          sessionKey: binding.sessionKey,
-          message: readString(payload, "text") ?? "",
-        });
-        return acceptedCommand(envelope, revision, {
-          type: "inputAccepted",
-          delivery: result.disposition === "started" ? "startNow" : "queue",
-          inputId: envelope.commandId,
-        });
-      }
-      case "stop":
-        await this.service.abort(binding.sessionKey);
-        return acceptedCommand(envelope, revision);
-      case "compact":
-        await this.service.compact({ sessionKey: binding.sessionKey });
-        return acceptedCommand(envelope, revision);
-      case "switchModelConfig":
-        await this.service.setModel({
-          sessionKey: binding.sessionKey,
-          provider: readString(payload, "provider") ?? "",
-          modelId: readString(payload, "model") ?? "",
-        });
-        await this.setThoughtFromPayload(binding.sessionKey, payload);
-        return acceptedCommand(envelope, revision);
-      case "switchCollaborationMode":
-        await this.setModeFromPayload(binding.sessionKey, payload);
-        return acceptedCommand(envelope, revision);
-      case "setFollowupMode":
-        await this.service.setFollowUpMode(
-          binding.sessionKey,
-          readString(payload, "mode") === "guide" ? "all" : "one-at-a-time",
-        );
-        return acceptedCommand(envelope, revision);
-      case "renameSession":
-        await this.service.renameSession({
-          sessionKey: binding.sessionKey,
-          name: readString(payload, "title") ?? "",
-        });
-        return acceptedCommand(envelope, revision);
-      case "deleteSession":
-        await this.service.deleteSession({ sessionKey: binding.sessionKey });
-        this.bindings.delete(sessionMapKey(input.target, envelope.sessionId));
-        return acceptedCommand(envelope, revision);
-      default:
-        return unsupportedCommand(envelope, "the corresponding nek RPC does not exist");
-    }
+    return await sendConversationCommand(
+      {
+        service: this.service,
+        createSession: async (request) => await this.createSession(request),
+        requireBinding: (target, sessionId) => this.requireBinding(target, sessionId),
+        removeBinding: (target, sessionId) => {
+          this.bindings.delete(sessionMapKey(target, sessionId));
+        },
+      },
+      input,
+    );
   }
 
   async queryConversationCommandsV4(input: {
@@ -337,9 +253,10 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     clock?: true;
   }): Promise<CommandsQueryResult> {
     if (input.clock) {
+      const now = Date.now();
       return {
         results: input.commands.map((key) => ({ key, result: "unknown" as const })),
-        clock: { instanceId: `nek:${workspaceKey(input.target)}`, receivedAt: Date.now(), sentAt: Date.now() },
+        clock: { instanceId: `nek:${workspaceKey(input.target)}`, receivedAt: now, sentAt: now },
       };
     }
     for (const command of input.commands) {
@@ -369,75 +286,6 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return candidate?.sessionKey;
   }
 
-  private async createFromCommand(
-    target: NekWorkspaceTarget,
-    envelope: NekSessionCommandEnvelope,
-    payload: Record<string, unknown>,
-  ): Promise<CommandAck> {
-    const firstInput = asRecord(payload.firstInput);
-    const config = asRecord(payload.config);
-    const model = asRecord(firstInput?.modelSelection ?? config?.modelSelection);
-    const result = await this.createSession({
-      workspacePath: target.workspacePath,
-      ...(model
-        ? {
-            model: {
-              provider: readString(model, "provider") ?? "",
-              modelId: readString(model, "modelId") ?? "",
-            },
-          }
-        : {}),
-      ...(readString(config ?? {}, "thought") ? { thinking: this.thoughtLevel(readString(config ?? {}, "thought")) } : {}),
-      ...(readString(config ?? {}, "mode") ? { mode: this.mode(readString(config ?? {}, "mode")) } : {}),
-    });
-    if (firstInput) {
-      await this.service.sendPrompt({
-        sessionKey: result.sessionKey,
-        message: readString(firstInput, "text") ?? "",
-        images: await toNekImages(firstInput.attachments),
-      });
-    }
-    return acceptedCommand(envelope, result.conversation.revision, {
-      type: "createSession",
-      sessionId: result.sessionId,
-      ...(firstInput ? { input: { delivery: "startNow", inputId: envelope.commandId } } : {}),
-    });
-  }
-
-  private async applySelection(sessionKey: string, payload: Record<string, unknown>): Promise<void> {
-    const model = asRecord(payload.modelSelection);
-    if (model) {
-      await this.service.setModel({
-        sessionKey,
-        provider: readString(model, "provider") ?? "",
-        modelId: readString(model, "modelId") ?? "",
-      });
-    }
-    const mode = readString(payload, "mode");
-    if (mode) await this.setModeFromPayload(sessionKey, payload);
-  }
-
-  private async setModeFromPayload(sessionKey: string, payload: Record<string, unknown>): Promise<void> {
-    await this.service.setMode({ sessionKey, mode: this.mode(readString(payload, "mode")) });
-  }
-
-  private async setThoughtFromPayload(sessionKey: string, payload: Record<string, unknown>): Promise<void> {
-    await this.service.setThinkingLevel({
-      sessionKey,
-      level: this.thoughtLevel(readString(payload, "thought")),
-    });
-  }
-
-  private mode(value: string | undefined): NekMode {
-    if (value === "agent" || value === "plan") return value;
-    throw new Error(`invalid nek mode: ${value ?? "missing"}`);
-  }
-
-  private thoughtLevel(value: string | undefined): NekThinkingLevel {
-    if (value && THOUGHT_LEVELS.includes(value as NekThinkingLevel)) return value as NekThinkingLevel;
-    throw new Error(`invalid nek thinking level: ${value ?? "missing"}`);
-  }
-
   private bind(target: NekWorkspaceTarget, result: NekSessionResult): void {
     if (this.bindings.size >= MAX_BINDINGS) throw new Error(`nek session binding limit exceeded (${MAX_BINDINGS})`);
     this.bindings.set(sessionMapKey(target, result.sessionId), {
@@ -448,7 +296,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     });
   }
 
-  private requireBinding(target: NekWorkspaceTarget, sessionId: string): SessionBinding {
+  private requireBinding(target: NekWorkspaceTarget, sessionId: string): NekSessionBinding {
     const direct = this.bindings.get(sessionMapKey(target, sessionId));
     if (direct) return direct;
     const binding = [...this.bindings.values()].find(
@@ -460,7 +308,8 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
   }
 
   private assertSubscriptionCapacity(): void {
-    if (this.conversationSubscriptions.size >= 128) throw new Error("nek conversation subscription limit exceeded (128)");
+    if (this.conversationSubscriptions.size >= 128)
+      throw new Error("nek conversation subscription limit exceeded (128)");
   }
 
   private conversationEmitter(workspace: string): Emitter<ConversationTopicWireCandidate> {

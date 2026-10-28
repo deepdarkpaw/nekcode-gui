@@ -52,6 +52,13 @@ export interface NekWorkspaceConfigSubscribeParams extends NekWorkspaceTarget {
   subscriberScope?: string;
 }
 
+export interface NekSessionBinding {
+  target: NekWorkspaceTarget;
+  sessionKey: string;
+  sessionId: string;
+  sessionPath?: string;
+}
+
 export interface NekSessionCommandEnvelope {
   commandId: string;
   clientId: string;
