@@ -122,7 +122,10 @@ export function useAskQuestionController({
     {
       successFeedbackMs: 0,
       onSuccess: () => {
-        dispatch({ type: "close", reason: operationRef.current === "dismiss" ? "cancelled" : "completed" });
+        dispatch({
+          type: "close",
+          reason: operationRef.current === "dismiss" ? "cancelled" : "completed",
+        });
       },
       onError: (error) => {
         dispatch({
@@ -144,11 +147,19 @@ export function useAskQuestionController({
 
   const focusActive = useCallback(
     (nextState: AskQuestionState) => {
-      const active = getAskQuestionActiveForDraft(payload, nextState.questionIndex, nextState.drafts);
+      const active = getAskQuestionActiveForDraft(
+        payload,
+        nextState.questionIndex,
+        nextState.drafts,
+      );
       const question = payload.questions[nextState.questionIndex];
       dispatch({ type: "setActive", active });
       focus.setTarget(
-        active < 0 ? "card" : active === (question?.options.length ?? 0) ? "other" : `option:${active}`,
+        active < 0
+          ? "card"
+          : active === (question?.options.length ?? 0)
+            ? "other"
+            : `option:${active}`,
       );
     },
     [focus.setTarget, payload],
@@ -269,6 +280,10 @@ export function useAskQuestionController({
     (event: ReactKeyboardEvent) => {
       const question = payload.questions[state.questionIndex];
       if (!question) return;
+      const caret =
+        event.target instanceof HTMLTextAreaElement
+          ? caretLinePosition(event.target)
+          : { onFirstLine: false, onLastLine: false };
       const keyCommand = resolveAskQuestionKey({
         key: event.key,
         shiftKey: event.shiftKey,
@@ -284,8 +299,8 @@ export function useAskQuestionController({
         questionIndex: state.questionIndex,
         canSubmit: answered && priorAnswered,
         otherValue: currentDraft?.other ?? "",
-        caretOnFirstLine: true,
-        caretOnLastLine: true,
+        caretOnFirstLine: caret.onFirstLine,
+        caretOnLastLine: caret.onLastLine,
       });
       if (!keyCommand) return;
       event.preventDefault();
@@ -305,14 +320,22 @@ export function useAskQuestionController({
       previous: {
         visible: payload.questions.length > 1,
         enabled: !pending && state.questionIndex > 0,
-        ...(pending ? { disabledReason: disabled } : state.questionIndex <= 0 ? { disabledReason: firstReason } : {}),
+        ...(pending
+          ? { disabledReason: disabled }
+          : state.questionIndex <= 0
+            ? { disabledReason: firstReason }
+            : {}),
         pending: false,
         run: goPrevious,
       },
       next: {
         visible: payload.questions.length > 1 && !lastQuestion,
         enabled: !pending && answered,
-        ...(pending ? { disabledReason: disabled } : !answered ? { disabledReason: needAnswerReason } : {}),
+        ...(pending
+          ? { disabledReason: disabled }
+          : !answered
+            ? { disabledReason: needAnswerReason }
+            : {}),
         pending: false,
         run: goNext,
       },
@@ -338,7 +361,22 @@ export function useAskQuestionController({
         run: runDismiss,
       },
     };
-  }, [actionError, answered, busyReason, firstReason, goNext, goPrevious, lastQuestion, needAnswerReason, payload.questions.length, pending, priorAnswered, runDismiss, runPrimary, state.questionIndex]);
+  }, [
+    actionError,
+    answered,
+    busyReason,
+    firstReason,
+    goNext,
+    goPrevious,
+    lastQuestion,
+    needAnswerReason,
+    payload.questions.length,
+    pending,
+    priorAnswered,
+    runDismiss,
+    runPrimary,
+    state.questionIndex,
+  ]);
 
   return {
     view: {
@@ -352,7 +390,9 @@ export function useAskQuestionController({
       locked: pending,
       attention: Boolean(isQueueHead && !shouldTakeFocus(activeElement)),
       queueLength,
-      primaryLabelId: lastQuestion ? "nek.interaction.question.submit" : "nek.interaction.question.next",
+      primaryLabelId: lastQuestion
+        ? "nek.interaction.question.submit"
+        : "nek.interaction.question.next",
       dismissHintId: "nek.interaction.question.dismissHint",
       ...(state.notice ? { notice: state.notice } : {}),
     },

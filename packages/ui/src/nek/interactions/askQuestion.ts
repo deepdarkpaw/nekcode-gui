@@ -1,8 +1,5 @@
 /** Pure AQ answer validation and wire-result construction. */
-import type {
-  NekAskQuestionPayload,
-  NekAskQuestionResult,
-} from "@zcode/shared/nek-protocol";
+import type { NekAskQuestionPayload, NekAskQuestionResult } from "@zcode/shared/nek-protocol";
 
 export interface AskQuestionDraft {
   questionId: string;

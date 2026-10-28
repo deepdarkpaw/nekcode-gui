@@ -31,7 +31,9 @@ export type AskQuestionEvent =
   | { type: "close"; reason: Exclude<AskQuestionClosedReason, "cancelledByHost"> }
   | { type: "hostCancel" };
 
-function createDrafts(payload: NekAskQuestionPayload): Readonly<Record<string, AskQuestionDraftState>> {
+function createDrafts(
+  payload: NekAskQuestionPayload,
+): Readonly<Record<string, AskQuestionDraftState>> {
   return Object.fromEntries(
     payload.questions.map((question) => [question.id, { selected: [], other: "" }]),
   );
@@ -52,9 +54,14 @@ function questionAt(payload: NekAskQuestionPayload, index: number) {
   return payload.questions[index];
 }
 
-function currentDraft(state: AskQuestionState, payload: NekAskQuestionPayload): AskQuestionDraftState {
+function currentDraft(
+  state: AskQuestionState,
+  payload: NekAskQuestionPayload,
+): AskQuestionDraftState {
   const question = questionAt(payload, state.questionIndex);
-  return question ? state.drafts[question.id] ?? { selected: [], other: "" } : { selected: [], other: "" };
+  return question
+    ? (state.drafts[question.id] ?? { selected: [], other: "" })
+    : { selected: [], other: "" };
 }
 
 function withCurrentDraft(
@@ -77,21 +84,33 @@ export function reduceAskQuestion(
   switch (event.type) {
     case "selectOption": {
       const question = questionAt(payload, state.questionIndex);
-      if (!question || !question.options.some((option) => option.id === event.optionId)) return state;
+      if (!question || !question.options.some((option) => option.id === event.optionId))
+        return state;
       const draft = currentDraft(state, payload);
       if (question.allow_multiple) {
         const selected = draft.selected.includes(event.optionId)
           ? draft.selected.filter((id) => id !== event.optionId)
           : [...draft.selected, event.optionId];
-        return withCurrentDraft({ ...state, active: question.options.findIndex((option) => option.id === event.optionId) }, payload, {
-          ...draft,
-          selected,
-        });
+        return withCurrentDraft(
+          {
+            ...state,
+            active: question.options.findIndex((option) => option.id === event.optionId),
+          },
+          payload,
+          {
+            ...draft,
+            selected,
+          },
+        );
       }
-      return withCurrentDraft({ ...state, active: question.options.findIndex((option) => option.id === event.optionId) }, payload, {
-        selected: [event.optionId],
-        other: "",
-      });
+      return withCurrentDraft(
+        { ...state, active: question.options.findIndex((option) => option.id === event.optionId) },
+        payload,
+        {
+          selected: [event.optionId],
+          other: "",
+        },
+      );
     }
     case "setOther": {
       const question = questionAt(payload, state.questionIndex);
@@ -103,7 +122,12 @@ export function reduceAskQuestion(
       });
     }
     case "setQuestion": {
-      if (!Number.isInteger(event.index) || event.index < 0 || event.index >= payload.questions.length) return state;
+      if (
+        !Number.isInteger(event.index) ||
+        event.index < 0 ||
+        event.index >= payload.questions.length
+      )
+        return state;
       return { ...state, questionIndex: event.index };
     }
     case "setActive": {
