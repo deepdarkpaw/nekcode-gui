@@ -33,14 +33,10 @@ export function buildSwitchModeResult(approved: boolean): SwitchModeResult {
   return { approved };
 }
 
-export function buildStructuredResponse(
-  id: string,
-  result: unknown,
-): NekStructuredUiResponse {
+export function buildStructuredResponse(id: string, result: unknown): NekStructuredUiResponse {
   return { type: "extension_ui_response", id, result };
 }
 
 export function buildCancelledStructuredResponse(id: string): NekStructuredUiResponse {
   return { type: "extension_ui_response", id, cancelled: true };
 }
-

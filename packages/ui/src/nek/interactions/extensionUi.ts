@@ -10,26 +10,26 @@ export type NekExtensionUiRequestKind = "dialog" | "structured" | "fire-and-forg
 
 export type NekExtensionUiEffect =
   | {
-      kind: "notify";
+      kind: "toast";
       id: string;
+      level: "info" | "warning" | "error";
       message: string;
-      notifyType: "info" | "warning" | "error";
     }
   | {
-      kind: "status";
+      kind: "setStatus";
       id: string;
       statusKey: string;
       statusText?: string;
     }
   | {
-      kind: "widget";
+      kind: "setWidget";
       id: string;
       widgetKey: string;
       widgetLines?: string[];
       widgetPlacement: "aboveEditor" | "belowEditor";
     }
-  | { kind: "title"; id: string; title: string }
-  | { kind: "editor-text"; id: string; text: string };
+  | { kind: "setTitle"; id: string; title: string }
+  | { kind: "replaceComposerText"; id: string; text: string };
 
 export function isNekExtensionUiDialogRequest(
   request: NekExtensionUiRequest,
@@ -66,7 +66,7 @@ export function classifyNekExtensionUiRequest(
   if (isNekStructuredUiRequest(request)) return "structured";
   if (isNekExtensionUiDialogRequest(request)) return "dialog";
   if (isNekExtensionUiFireAndForgetRequest(request)) return "fire-and-forget";
-  throw new Error(`Unsupported extension UI method: ${String(request.method)}.`);
+  throw new Error("Unsupported extension UI method.");
 }
 
 /** Convert a fire-and-forget wire request to a stable store event. */
@@ -76,30 +76,30 @@ export function toNekExtensionUiEffect(
   switch (request.method) {
     case "notify":
       return {
-        kind: "notify",
+        kind: "toast",
         id: request.id,
         message: request.message,
-        notifyType: request.notifyType ?? "info",
+        level: request.notifyType ?? "info",
       };
     case "setStatus":
       return {
-        kind: "status",
+        kind: "setStatus",
         id: request.id,
         statusKey: request.statusKey,
         ...(request.statusText === undefined ? {} : { statusText: request.statusText }),
       };
     case "setWidget":
       return {
-        kind: "widget",
+        kind: "setWidget",
         id: request.id,
         widgetKey: request.widgetKey,
         ...(request.widgetLines === undefined ? {} : { widgetLines: [...request.widgetLines] }),
         widgetPlacement: request.widgetPlacement ?? "aboveEditor",
       };
     case "setTitle":
-      return { kind: "title", id: request.id, title: request.title };
+      return { kind: "setTitle", id: request.id, title: request.title };
     case "set_editor_text":
-      return { kind: "editor-text", id: request.id, text: request.text };
+      return { kind: "replaceComposerText", id: request.id, text: request.text };
   }
 }
 
