@@ -75,6 +75,8 @@ export { createSettingService } from "./setting/settingService.js";
 export { createCredentialService } from "./credential/credentialService.js";
 export { createBroadcastService } from "./broadcast/broadcastService.js";
 export { createZCodeAgentService } from "./zcode-agent/zcodeAgentService.js";
+export { NekAgentServiceAdapter } from "./nek-agent/adapter/index.js";
+export type { NekAgentServiceAdapterOptions } from "./nek-agent/adapter/index.js";
 export { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
 export { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
 export {

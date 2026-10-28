@@ -1,4 +1,4 @@
-import type { Event, IDisposable } from "@zcode/rpc";
+import type { Event } from "@zcode/rpc";
 import type {
   CommandsQueryResult,
   ConversationTopicWireCandidate,
@@ -10,7 +10,6 @@ import type {
   V4WorkspaceConfigSubscribeResult,
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
-import type { NekAgentService } from "../service/nekAgentService.js";
 import type { NekAgentServiceOptions } from "../service/types.js";
 
 export interface NekAgentServiceAdapterOptions extends NekAgentServiceOptions {
@@ -120,5 +119,3 @@ export interface NekSubscriptionHandle {
   readonly onFrame: (frame: NekV4Frame, deliveryKind: "initial" | "online" | "recovery") => void;
 }
 
-export type NekAdapterDisposable = IDisposable;
-export type NekAdapterService = NekAgentService;
