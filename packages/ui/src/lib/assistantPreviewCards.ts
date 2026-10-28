@@ -15,7 +15,6 @@ import {
   type AssistantPreviewFileSubtitleId,
 } from "@/lib/assistantFileReferences.js";
 import { decodeFilePathUriEscapes, getPathLeaf, toFileUrl } from "@/lib/path.js";
-import type { CodeViewerSource } from "@/lib/codeViewer.js";
 
 export {
   extractAssistantFileReferences,
@@ -29,11 +28,6 @@ export type {
 
 export const ASSISTANT_PREVIEW_CARD_CANDIDATE_LIMIT = CONVERSATION_PREVIEW_CARD_CANDIDATE_LIMIT;
 export const ASSISTANT_PREVIEW_CARD_VISIBLE_LIMIT = CONVERSATION_PREVIEW_CARD_VISIBLE_LIMIT;
-
-export interface AssistantPreviewCardsAutoOpenRequest {
-  key: string;
-  sources: CodeViewerSource[];
-}
 
 export type AssistantPreviewCard =
   | {

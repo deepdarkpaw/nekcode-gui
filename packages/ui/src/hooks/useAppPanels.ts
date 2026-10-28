@@ -27,7 +27,6 @@ import {
   openPlanDetailSidePane,
   activateDeveloperToolsSidePane,
   openCodeViewerSidePane,
-  openCodeViewerSidePanes,
   activateGitSidePane,
   getActiveSidePaneTab,
   getVisibleSidePaneTabs,
@@ -286,21 +285,6 @@ export function useAppPanels(options: {
           activeTab?.type === "code-viewer" ? (activeTab.source.path ?? "none") : "none";
         logger.info(
           `[App] 切换右侧面板 mode=code-viewer workspace=${workspaceAbsPath} title=${source.title} path=${activePath} tabs=${next.tabs.length}`,
-        );
-        return next;
-      });
-    },
-    [commitOpenedSidePaneState, revealSidePaneForCurrentOwner, workspaceAbsPath],
-  );
-
-  const handleOpenCodeViewers = useCallback(
-    (sources: readonly CodeViewerSource[]) => {
-      if (sources.length === 0) return;
-      revealSidePaneForCurrentOwner();
-      commitOpenedSidePaneState((current) => {
-        const next = openCodeViewerSidePanes(current, sources, sidePaneOwnerIdRef.current, 0);
-        logger.info(
-          `[App] 批量打开右侧预览 workspace=${workspaceAbsPath} sources=${sources.length} tabs=${next.tabs.length}`,
         );
         return next;
       });
@@ -830,7 +814,6 @@ export function useAppPanels(options: {
     isSidebarVisible,
     // 回调
     handleOpenCodeViewer,
-    handleOpenCodeViewers,
     handleOpenBrowserUrl,
     handleToggleGit,
     handleOpenGit,

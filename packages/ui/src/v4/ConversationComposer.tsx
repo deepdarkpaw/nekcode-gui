@@ -141,10 +141,6 @@ import {
   serializeComposerPromptContexts,
 } from "@/v4/composer/composerPromptContexts.js";
 import { useCodeCommentContexts } from "@/v4/composer/useCodeCommentContexts.js";
-import { usePptxElementReferences } from "@/v4/composer/usePptxElementReferences.js";
-import { PptxElementReferenceChip } from "@/v4/composer/PptxElementReferenceChip.js";
-import { useOpenPptxElementReference } from "@/v4/composer/useOpenPptxElementReference.js";
-import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { useConversationSelectionReferences } from "@/v4/composer/useConversationSelectionReferences.js";
 import { ConversationBackgroundWorkTrigger } from "@/v4/composer/ConversationBackgroundWorkTrigger.js";
 import {
@@ -433,7 +429,6 @@ interface ConversationComposerProps {
   onDismissError?: () => void;
   /** 无可用模型横幅的恢复动作；由 SessionPane 注入壳层导航，组件不直接操作 tab。 */
   onOpenModelSettings?: () => void;
-  onOpenCodeViewer?: (source: CodeViewerSource) => void;
   /**
    * 是否监听全局「加入对话」事件（workspace file tree / 画板按钮）。
    * 分屏时仅 primary pane 监听，避免一次点击插入两份。
@@ -507,7 +502,6 @@ function ConversationComposerImpl({
   error,
   onDismissError,
   onOpenModelSettings,
-  onOpenCodeViewer,
   listenAddToChatEvents = true,
   externalTextInsertRequest = null,
   onExternalTextInsertApplied,
@@ -683,24 +677,6 @@ function ConversationComposerImpl({
   });
   const hasAttachments = attachmentsApi.hasAttachments;
   const {
-    references: pptxElementReferences,
-    hasReferences: hasPptxElementReferences,
-    removeReference: removePptxElementReference,
-    clearReferences: clearPptxElementReferences,
-  } = usePptxElementReferences({
-    workspacePath,
-    workspaceIdentity,
-    remoteSessionId,
-    listenAddToChatEvents: listenAddToChatEvents && !disabled,
-    scopeId: draftScopeId,
-  });
-  const openPptxElementReference = useOpenPptxElementReference({
-    workspacePath,
-    workspaceIdentity,
-    remoteSessionId,
-    onOpenCodeViewer,
-  });
-  const {
     references: conversationSelectionReferences,
     limitReason: conversationSelectionLimitReason,
     removeReference: removeConversationSelectionReference,
@@ -839,7 +815,6 @@ function ConversationComposerImpl({
           textRef.current.length > 0 ||
           attachmentsApi.attachments.length > 0 ||
           codeCommentContexts.length > 0 ||
-          pptxElementReferences.length > 0 ||
           conversationSelectionReferences.length > 0,
         inputApi: inputApiRef.current,
         request: composerRestoreRequest,
@@ -880,7 +855,6 @@ function ConversationComposerImpl({
     scheduleDraftPersist,
     sessionId,
     updateText,
-    pptxElementReferences.length,
     workspaceKey,
   ]);
 
@@ -1056,14 +1030,12 @@ function ConversationComposerImpl({
     hasText ||
     hasAttachments ||
     hasCodeCommentContexts ||
-    hasPptxElementReferences ||
     hasConversationSelectionReferences ||
     Boolean(pendingShareContext);
   const hasComposerDraftContent =
     text.length > 0 ||
     hasAttachments ||
     hasCodeCommentContexts ||
-    hasPptxElementReferences ||
     hasConversationSelectionReferences ||
     Boolean(pendingShareContext);
   useEffect(() => {
@@ -1104,8 +1076,6 @@ function ConversationComposerImpl({
       const hasPendingAttachments = attachmentsApi.attachments.length > 0;
       const currentCodeCommentContexts = getCodeCommentContexts();
       const hasPendingCodeCommentContexts = currentCodeCommentContexts.length > 0;
-      const currentPptxElementReferences = pptxElementReferences;
-      const hasPendingPptxElementReferences = currentPptxElementReferences.length > 0;
       const currentConversationSelections = conversationSelectionReferences;
       const hasPendingConversationSelections = currentConversationSelections.length > 0;
       const submittedShareContext = pendingShareContext;
@@ -1120,7 +1090,6 @@ function ConversationComposerImpl({
         (!trimmed &&
           !hasPendingAttachments &&
           !hasPendingCodeCommentContexts &&
-          !hasPendingPptxElementReferences &&
           !hasPendingConversationSelections &&
           !submittedShareContext) ||
         pendingRef.current ||
@@ -1204,7 +1173,7 @@ function ConversationComposerImpl({
 
           return;
         }
-        // 外部上下文不走协议附件；按 selection -> code comment -> web -> PPTX 的固定尾块顺序
+        // 外部上下文不走协议附件；按 selection -> code comment 的固定尾块顺序
         // 序列化，历史 user row 才能按相反顺序无损解析并隐藏内部 prompt block。
         //
         // 分享 handover 不在这里序列化：share URL 块纯粹是 renderer 自产自销（CLI/shared
@@ -1214,13 +1183,11 @@ function ConversationComposerImpl({
         const promptText = serializeComposerPromptContexts(trimmed, {
           codeComments: currentCodeCommentContexts,
           conversationSelections: currentConversationSelections,
-          pptxElements: currentPptxElementReferences,
         });
         const contextAttachmentCount =
           countComposerPromptContexts({
             codeComments: currentCodeCommentContexts,
             conversationSelections: currentConversationSelections,
-            pptxElements: currentPptxElementReferences,
           }) + (submittedShareContext ? 1 : 0);
         if (trimmed) {
           promptHistoryBeforeSend = readPromptHistoryEntries(workspacePath);
@@ -1300,9 +1267,6 @@ function ConversationComposerImpl({
         attachmentsApi.clearAttachments(submittedAttachmentIds);
         // 与附件相同，只移除本次冻结的引用；等待期间新加入的引用属于下一条消息。
         currentCodeCommentContexts.forEach(removeCodeCommentContext);
-        currentPptxElementReferences.forEach((reference) =>
-          removePptxElementReference(reference.id),
-        );
         currentConversationSelections.forEach((reference) =>
           removeConversationSelectionReference(reference.id),
         );
@@ -1335,12 +1299,10 @@ function ConversationComposerImpl({
 
       removeCodeCommentContext,
       removeConversationSelectionReference,
-      removePptxElementReference,
       sessionId,
       snapshotDraftOfEditor,
       updateText,
       updateComposerContent,
-      pptxElementReferences,
       workspaceIdentity,
       workspacePath,
     ],
@@ -1527,7 +1489,6 @@ function ConversationComposerImpl({
     if (
       composerAttachments.length === 0 &&
       codeCommentContexts.length === 0 &&
-      pptxElementReferences.length === 0 &&
       conversationSelectionReferences.length === 0
     ) {
       return null;
@@ -1793,9 +1754,7 @@ function ConversationComposerImpl({
             })}
           </Attachments>
         ) : null}
-        {codeCommentContexts.length > 0 ||
-        pptxElementReferences.length > 0 ||
-        conversationSelectionReferences.length > 0 ? (
+        {codeCommentContexts.length > 0 || conversationSelectionReferences.length > 0 ? (
           <div
             className="flex max-w-full flex-wrap items-center gap-2"
             data-composer-context-attachments-row="true"
@@ -1804,12 +1763,6 @@ function ConversationComposerImpl({
               comments={codeCommentContexts}
               onRemove={removeCodeCommentContext}
               onRemoveAll={clearCodeCommentContexts}
-            />
-            <PptxElementReferenceChip
-              references={pptxElementReferences}
-              onOpen={onOpenCodeViewer ? openPptxElementReference : undefined}
-              onRemove={removePptxElementReference}
-              onRemoveAll={clearPptxElementReferences}
             />
             <ConversationSelectionReferenceChip
               references={conversationSelectionReferences}
@@ -1825,7 +1778,6 @@ function ConversationComposerImpl({
     attachmentsApi,
     clearCodeCommentContexts,
     clearConversationSelectionReferences,
-    clearPptxElementReferences,
     codeCommentContexts,
     composerAttachments,
     composerMediaPreviewItems,
@@ -1834,12 +1786,8 @@ function ConversationComposerImpl({
     locale,
     removeCodeCommentContext,
     removeConversationSelectionReference,
-    removePptxElementReference,
     conversationSelectionReferences,
     pendingShareContext,
-    pptxElementReferences,
-    onOpenCodeViewer,
-    openPptxElementReference,
   ]);
 
   // 发送/停止控制簇（对齐旧 ChatViewComposer.submitControlNode 结构：
@@ -2064,10 +2012,7 @@ function ConversationComposerImpl({
           allowSubmitWhenEmpty={
             // 发送按钮已把代码评论视为可发送上下文，但这里曾漏掉同一状态，
             // 导致空文本仅附代码评论时 Enter 被编辑器判为空，必须改点发送按钮。
-            hasCodeCommentContexts ||
-            hasAttachments ||
-            hasPptxElementReferences ||
-            hasConversationSelectionReferences
+            hasCodeCommentContexts || hasAttachments || hasConversationSelectionReferences
           }
           enterSubmits={enterSubmits}
           onModifiedSubmit={modifiedEnterSubmits ? handleModifiedEditorSubmit : undefined}

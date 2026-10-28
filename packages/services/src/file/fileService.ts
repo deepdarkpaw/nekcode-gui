@@ -3,13 +3,7 @@ import type { Dirent } from "node:fs";
 import { mkdir, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, relative, sep } from "node:path";
-import type {
-  FileBinaryPreview,
-  FileEntry,
-  FileMediaPreview,
-  FileTextSlice,
-  WorkspaceFileEntry,
-} from "@zcode/shared";
+import type { FileEntry, FileMediaPreview, FileTextSlice, WorkspaceFileEntry } from "@zcode/shared";
 import { getMediaPreviewFormat } from "@zcode/shared";
 import { packWorkspaceFileEntries } from "@zcode/shared/workspaceFileEntriesCodec";
 import type { IFileService, WorkspaceFileSearchParams } from "./file.js";
@@ -35,8 +29,6 @@ const DEFAULT_MEDIA_PREVIEW_BYTES = 4 * 1024 * 1024;
 const MAX_MEDIA_PREVIEW_BYTES = 8 * 1024 * 1024;
 const DEFAULT_BINARY_READ_BYTES = 256 * 1024;
 const MAX_BINARY_READ_BYTES = 1024 * 1024;
-const DEFAULT_BINARY_PREVIEW_BYTES = 25 * 1024 * 1024;
-const MAX_BINARY_PREVIEW_BYTES = 25 * 1024 * 1024;
 const FILE_EXISTENCE_CACHE_TTL_MS = 60_000;
 const FILE_EXISTENCE_CACHE_MAX_ENTRIES = 100;
 const FILE_EXISTENCE_BATCH_LIMIT = 15;
@@ -69,12 +61,6 @@ function clampBinaryReadLength(length?: number) {
     ? Math.trunc(length ?? DEFAULT_BINARY_READ_BYTES)
     : DEFAULT_BINARY_READ_BYTES;
   return Math.min(Math.max(safeLength, 1), MAX_BINARY_READ_BYTES);
-}
-function clampBinaryPreviewBytes(length?: number) {
-  const safeLength = Number.isFinite(length)
-    ? Math.trunc(length ?? DEFAULT_BINARY_PREVIEW_BYTES)
-    : DEFAULT_BINARY_PREVIEW_BYTES;
-  return Math.min(Math.max(safeLength, 1), MAX_BINARY_PREVIEW_BYTES);
 }
 function inferMediaTypeFromPath(path: string): string {
   return (
@@ -560,28 +546,6 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
       return {
         path: params.path,
         mediaType: inferMediaTypeFromPath(params.path),
-        dataBase64: content.toString("base64"),
-        totalBytes: fileStat.size,
-      };
-    },
-    async readBinaryPreview(params: {
-      path: string;
-      maxBytes?: number;
-    }): Promise<FileBinaryPreview> {
-      const fileStat = await stat(params.path);
-      if (!fileStat.isFile()) {
-        throw new Error(`Path is not a file: ${params.path}`);
-      }
-      const maxBytes = clampBinaryPreviewBytes(params.maxBytes);
-      if (fileStat.size > maxBytes) {
-        throw new Error(`File is too large to preview: ${params.path}`);
-      }
-      // Office 解析器需要完整的 ZIP / OLE 字节，不能复用文本分块读取。
-      // 这里在 service 层先做 25 MB 硬上限，再以 base64 跨 RPC 返回，
-      // 保持 desktop、Web 和远程 workspace 使用同一文件读取边界。
-      const content = await readFile(params.path);
-      return {
-        path: params.path,
         dataBase64: content.toString("base64"),
         totalBytes: fileStat.size,
       };

@@ -156,13 +156,6 @@ import type {
   ConversationFileChangesRequestOptions,
   ConversationRowRenderContext,
 } from "@/v4/conversationRowContext.js";
-import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
-import {
-  advanceAssistantPreviewPptxAutoOpenGate,
-  createAssistantPreviewPptxAutoOpenGateState,
-  resolveLatestCompletedAssistantPreviewTurn,
-  type AssistantPreviewPptxAutoOpenTarget,
-} from "@/v4/assistantPreviewPptxAutoOpen.js";
 import { shouldResyncForStaleAuthority } from "@/v4/staleAuthorityRecovery.js";
 import { createCommandEnvelope } from "@/v4/commandFactory.js";
 import { createConfigCommandBarrier } from "@/v4/configCommandBarrier.js";
@@ -280,7 +273,6 @@ export interface SessionPaneProps {
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onOpenBrowserUrl?: (url: string) => void;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
-  onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
@@ -446,7 +438,6 @@ export function SessionPane({
   onOpenGitReview,
   onOpenBrowserUrl,
     onOpenCodeViewer,
-  onAutoOpenAssistantPptx,
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
@@ -942,21 +933,8 @@ export function SessionPane({
 
   // 稳定回调读取的最新值经 ref 透传，避免回调依赖高频变化的 snapshot/文本。
   const snapshotRef = useRef<ConversationSnapshot | null>(snapshot);
-  const autoOpenedAssistantPptxKeysRef = useRef<Set<string>>(new Set());
-  const assistantPreviewPptxGateRef = useRef(createAssistantPreviewPptxAutoOpenGateState());
-  const [assistantPreviewPptxAutoOpenTarget, setAssistantPreviewPptxAutoOpenTarget] =
-    useState<AssistantPreviewPptxAutoOpenTarget | null>(null);
   const autoLoadIncompleteTurnCursorRef = useRef<string | null>(null);
   snapshotRef.current = snapshot;
-  const handleAutoOpenAssistantPptx = useCallback(
-    (request: AssistantPreviewCardsAutoOpenRequest) => {
-      if (!onAutoOpenAssistantPptx || request.sources.length === 0) return;
-      if (autoOpenedAssistantPptxKeysRef.current.has(request.key)) return;
-      autoOpenedAssistantPptxKeysRef.current.add(request.key);
-      onAutoOpenAssistantPptx(request);
-    },
-    [onAutoOpenAssistantPptx],
-  );
   const composerDraftStateRef = useRef({ hasContent: false, busy: false });
   const [queueEditOperation, setQueueEditOperation] = useState<{
     queueItemId: string;
@@ -1024,34 +1002,6 @@ export function SessionPane({
     workspaceIdentity,
     workspacePath,
   ]);
-  useEffect(() => {
-    const scopeKey = `${workspaceKey}\u0000${sessionId ?? "draft"}`;
-    const enabled = Boolean(onAutoOpenAssistantPptx && focused && sessionId);
-    const result = advanceAssistantPreviewPptxAutoOpenGate(assistantPreviewPptxGateRef.current, {
-      enabled,
-      scopeKey,
-      logEpoch: snapshot?.logEpoch,
-      phase: snapshot?.control.phase,
-      completedTurn: resolveLatestCompletedAssistantPreviewTurn(snapshot?.rows.window ?? []),
-    });
-    assistantPreviewPptxGateRef.current = result.state;
-    if (result.target !== undefined) {
-      setAssistantPreviewPptxAutoOpenTarget(result.target);
-    }
-  }, [
-    focused,
-    onAutoOpenAssistantPptx,
-    sessionId,
-    snapshot?.control.phase,
-    snapshot?.logEpoch,
-    snapshot?.rows.window,
-    workspaceKey,
-  ]);
-  useEffect(() => {
-    // 防止切换 workspace/session/logEpoch 后沿用旧 key；key 本身已隔离，清理仅是
-    // 生命周期边界，避免长时间 workbench 中 Set 随会话数增长。
-    autoOpenedAssistantPptxKeysRef.current.clear();
-  }, [sessionId, snapshot?.logEpoch, workspaceKey]);
   const composerTextInsertRequest = useZCodeSessionStore(
     (store) => store.getWorkspaceState(workspacePath, workspaceIdentity).composerTextInsertRequest,
   );
@@ -1796,8 +1746,6 @@ export function SessionPane({
       onNavigateToRow: handleNavigateToRow,
       onOpenBrowserUrl,
             onOpenCodeViewer,
-      onAutoOpenAssistantPptx: handleAutoOpenAssistantPptx,
-      assistantPreviewPptxAutoOpenTarget,
       onOpenFileLink,
       onOpenSubagentSession: onOpenSubagentSession ? handleOpenSubagentSession : undefined,
       onOpenPlanDetail: onOpenPlanDetail ? handleOpenPlanDetail : undefined,
@@ -1829,8 +1777,6 @@ export function SessionPane({
       handleNavigateToRow,
       onOpenBrowserUrl,
             onOpenCodeViewer,
-      handleAutoOpenAssistantPptx,
-      assistantPreviewPptxAutoOpenTarget,
       onOpenFileLink,
       onOpenSubagentSession,
       handleOpenSubagentSession,
@@ -3827,7 +3773,6 @@ export function SessionPane({
       error={composerError}
       onDismissError={handleDismissComposerError}
       onOpenModelSettings={handleOpenModelSettings}
-      onOpenCodeViewer={onOpenCodeViewer}
       suppressGoalCommands={selectionSideChat}
       appSlashCommands={appSlashCommands}
       onDropTargetControllerChange={handleDropTargetControllerChange}

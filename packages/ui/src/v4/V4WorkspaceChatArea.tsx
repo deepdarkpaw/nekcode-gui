@@ -7,7 +7,6 @@ import type {
   ZCodeTaskChangeSummary,
 } from "@zcode/shared";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type {
   OpenScopedSubagentSideTabRequest,
@@ -96,7 +95,6 @@ interface V4WorkspaceChatAreaProps {
   onPaneActiveSessionChange?: (scope: PaneWorkspaceScope, sessionId: string) => void;
   onOpenBrowserUrl?: (url: string) => void;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
-  onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
@@ -151,7 +149,6 @@ export function V4WorkspaceChatArea({
   onPaneActiveSessionChange,
   onOpenBrowserUrl,
   onOpenCodeViewer,
-  onAutoOpenAssistantPptx,
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
@@ -270,7 +267,6 @@ export function V4WorkspaceChatArea({
       onOpenGitReview,
       onOpenBrowserUrl,
       onOpenCodeViewer,
-      onAutoOpenAssistantPptx,
       onOpenFileLink,
       onOpenSubagentSession,
       onOpenBackgroundBash,
@@ -309,7 +305,6 @@ export function V4WorkspaceChatArea({
       onOpenGitReview,
       onOpenBrowserUrl,
       onOpenCodeViewer,
-      onAutoOpenAssistantPptx,
       onOpenFileLink,
       onOpenSubagentSession,
       onOpenBackgroundBash,

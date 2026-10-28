@@ -33,7 +33,6 @@ interface ConversationTurnRowProps {
   deferAssistantActions?: boolean;
   assistantCopyText?: string;
   assistantPreviewCards?: AssistantPreviewCard[];
-  assistantPreviewCardsAutoOpenKey?: string;
   assistantCodeCommentCards?: AssistantCodeCommentCard[];
   assistantCodeCommentProjectionEnabled?: boolean;
   reasoningContentVariant?: "default" | "nested";
@@ -52,7 +51,6 @@ export function ConversationTurnRow({
   deferAssistantActions,
   assistantCopyText,
   assistantPreviewCards,
-  assistantPreviewCardsAutoOpenKey,
   assistantCodeCommentCards,
   assistantCodeCommentProjectionEnabled,
   reasoningContentVariant,
@@ -71,7 +69,6 @@ export function ConversationTurnRow({
       deferAssistantActions={deferAssistantActions}
       assistantCopyText={assistantCopyText}
       assistantPreviewCards={assistantPreviewCards}
-      assistantPreviewCardsAutoOpenKey={assistantPreviewCardsAutoOpenKey}
       assistantCodeCommentCards={assistantCodeCommentCards}
       assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
       reasoningContentVariant={reasoningContentVariant}

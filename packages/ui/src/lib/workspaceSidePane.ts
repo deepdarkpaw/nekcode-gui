@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Side pane tab 状态集中维护 Git/CodeViewer/终端/工作流等面板的打开、复用、关闭和排序规则；拆分需要同步迁移现有内存恢复逻辑。 */
 import { createUuid } from "@zcode/shared";
-import { inferMediaPreview, isPptxPreviewPath, type CodeViewerSource } from "@/lib/codeViewer.js";
+import { inferMediaPreview, type CodeViewerSource } from "@/lib/codeViewer.js";
 import { normalizeCodeViewerSource } from "@/lib/codeViewerSource.js";
 
 export interface GitSidePaneTab {
@@ -422,23 +422,17 @@ function getCodeViewerTabSourceKey(source: CodeViewerSource): string | null {
     ? source.workspaceIdentity.trim()
     : (source.workspacePath ?? "");
   const scopedKeyPrefix = workspaceScope ? `${workspaceScope}:` : "";
-  // 文件树把 PPTX 表示为通用 `file` source，引用反向打开则使用带导航意图的
-  // `pptx` source。旧 key 直接包含 source.type，导致同一 workspace 路径被拆成两个 tab。
-  // source type 只是入口表示，不是文件身份；这里只归一 PPTX，避免扩大其它预览类型的语义。
   const resourceType =
-    source.type === "pptx" || (source.type === "file" && isPptxPreviewPath(source.path))
-      ? "pptx"
-      : source.type === "media" || (source.type === "file" && inferMediaPreview(source.path))
-        ? "media"
-        : source.type;
+    source.type === "media" || (source.type === "file" && inferMediaPreview(source.path))
+      ? "media"
+      : source.type;
 
   if (
     source.type === "file" ||
     source.type === "code-review" ||
     source.type === "image" ||
     source.type === "media" ||
-    source.type === "pdf" ||
-    source.type === "pptx"
+    source.type === "pdf"
   ) {
     return `${scopedKeyPrefix}${resourceType}:${source.path}`;
   }
@@ -672,52 +666,6 @@ export function openCodeViewerSidePane(
     current,
     matchedTab ? { ...matchedTab, source: nextTab.source } : nextTab,
   );
-}
-
-/**
- * 一次性打开一组代码预览 Tab。
- *
- * 自动打开生成产物时不能逐张调用 openCodeViewerSidePane：逐张提交会让右侧
- * 面板经历多次中间状态，并且最后一张会意外成为 active。这里复用单文件
- * 的 sourceKey/owner 规则批量收口，最后按调用方指定的顺序激活一张 Tab。
- */
-export function openCodeViewerSidePanes(
-  current: WorkspaceSidePaneState | null,
-  sources: readonly CodeViewerSource[],
-  ownerTaskId?: string | null,
-  activeIndex = 0,
-): WorkspaceSidePaneState {
-  if (sources.length === 0) {
-    return current ?? { tabs: [], activeTabId: "" };
-  }
-
-  let next: WorkspaceSidePaneState | null = current;
-  const openedTabIds: string[] = [];
-  const seenSourceKeys = new Set<string>();
-
-  for (const source of sources) {
-    const normalizedSource = normalizeCodeViewerSource(source);
-    const sourceKey = getCodeViewerTabSourceKey(normalizedSource);
-    // sourceKey 是 workspace-scoped 的稳定身份；同一批次重复路径只打开一次。
-    if (sourceKey !== null && seenSourceKeys.has(sourceKey)) continue;
-    if (sourceKey !== null) seenSourceKeys.add(sourceKey);
-
-    next = openCodeViewerSidePane(next, normalizedSource, ownerTaskId);
-    const activeTab = getActiveSidePaneTab(next);
-    if (activeTab?.type === "code-viewer") {
-      openedTabIds.push(activeTab.id);
-    }
-  }
-
-  if (!next || openedTabIds.length === 0) {
-    return next ?? { tabs: [], activeTabId: "" };
-  }
-
-  const safeIndex = Math.min(Math.max(activeIndex, 0), openedTabIds.length - 1);
-  return {
-    ...next,
-    activeTabId: openedTabIds[safeIndex]!,
-  };
 }
 
 export function activateGitSidePane(

@@ -3,7 +3,6 @@
 // theme / codePreviewSettings 在宿主（SessionPane）处取，向下走稳定 props。
 import type { CodePreviewSettings } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type { Theme } from "@/useTheme.js";
 import type { ModelSelectionView } from "@zcode/services";
@@ -70,10 +69,6 @@ export interface ConversationRowRenderContext {
   onOpenBrowserUrl?: (url: string) => void;
   /** Assistant Preview Cards：Markdown/文件卡片预览入口，由 app shell 注入 code viewer 行为。 */
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
-  /** Desktop 完成态 PPTX：由 shell 原子创建多个右侧 Preview Tab。 */
-  onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
-  /** 当前 renderer 观察到 running → completedSuccess 后，锁定到具体 turn。 */
-  assistantPreviewPptxAutoOpenTarget?: { turnId: string; key: string } | null;
   /** Assistant markdown 本地文件链接入口：由 shell 统一 stat 后分流到预览或文件树。 */
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
