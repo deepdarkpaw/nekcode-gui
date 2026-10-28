@@ -314,6 +314,9 @@ export function useAskQuestionController({
   const needAnswerReason = reason("nek.interaction.question.needAnswer");
   const firstReason = reason("nek.interaction.question.firstQuestion");
   const actionError = asyncAction.state.status === "error" ? asyncAction.state.message : undefined;
+  const operation = operationRef.current;
+  const primaryPending = pending && operation === "submit";
+  const dismissPending = pending && operation === "dismiss";
   const actions = useMemo<AskQuestionController["actions"]>(() => {
     const disabled = pending ? busyReason : undefined;
     return {
@@ -347,8 +350,8 @@ export function useAskQuestionController({
           : !answered || !priorAnswered
             ? { disabledReason: needAnswerReason }
             : {}),
-        pending,
-        ...(actionError && operationRef.current === "submit" ? { error: actionError } : {}),
+        pending: primaryPending,
+        ...(actionError && operation === "submit" ? { error: actionError } : {}),
         primary: true,
         run: runPrimary,
       },
@@ -356,8 +359,8 @@ export function useAskQuestionController({
         visible: true,
         enabled: !pending,
         ...(pending ? { disabledReason: disabled } : {}),
-        pending,
-        ...(actionError && operationRef.current === "dismiss" ? { error: actionError } : {}),
+        pending: dismissPending,
+        ...(actionError && operation === "dismiss" ? { error: actionError } : {}),
         run: runDismiss,
       },
     };
@@ -370,10 +373,13 @@ export function useAskQuestionController({
     goPrevious,
     lastQuestion,
     needAnswerReason,
+    operation,
     payload.questions.length,
     pending,
+    primaryPending,
     priorAnswered,
     runDismiss,
+    dismissPending,
     runPrimary,
     state.questionIndex,
   ]);
