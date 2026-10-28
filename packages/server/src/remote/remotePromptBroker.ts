@@ -5,8 +5,10 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import type { HostKeyConfirmation } from "./sshKnownHosts.js";
 
-const DEFAULT_PROMPT_TIMEOUT_MS = 60_000;
+const DEFAULT_PROMPT_TIMEOUT_MS = 120_000;
 let nextPromptId = 0;
+
+export type RemotePromptCancellationReason = "timeout" | "aborted" | "disconnected" | "superseded";
 
 export interface RemotePromptClock {
   setTimeout(callback: () => void, delayMs: number): unknown;
@@ -26,20 +28,8 @@ export interface RemotePromptBrokerOptions {
   timeoutMs?: number;
   clock?: RemotePromptClock;
   idFactory?: () => string;
-}
-
-export class RemotePromptBusyError extends Error {
-  constructor(connectionId: string) {
-    super(`Remote prompt already pending for connection ${connectionId}`);
-    this.name = "RemotePromptBusyError";
-  }
-}
-
-export class RemotePromptProtocolError extends Error {
-  constructor(kind: RemotePromptRequest["kind"]) {
-    super(`Invalid response for remote ${kind} prompt`);
-    this.name = "RemotePromptProtocolError";
-  }
+  /** Server has no shared logger module; callers can inject their structured warning sink. */
+  onWarning?: (message: string) => void;
 }
 
 interface PendingPrompt {
@@ -86,6 +76,7 @@ export class RemotePromptBroker {
   private readonly timeoutMs: number;
   private readonly clock: RemotePromptClock;
   private readonly idFactory: () => string;
+  private readonly onWarning: (message: string) => void;
   private pending: PendingPrompt | null = null;
   private rendererConnected = true;
 
@@ -100,6 +91,7 @@ export class RemotePromptBroker {
     }
     this.clock = options.clock ?? systemClock;
     this.idFactory = options.idFactory ?? (() => defaultPromptId(this.connectionId));
+    this.onWarning = options.onWarning ?? ((message) => console.warn(message));
 
     this.confirmHostKey = (confirmation, signal) =>
       this.prompt(
@@ -117,7 +109,7 @@ export class RemotePromptBroker {
         (response) => {
           if (isCancelledResponse(response)) return false;
           if (!("accepted" in response)) {
-            throw new RemotePromptProtocolError("host_key");
+            throw new Error("invalid host_key response");
           }
           return response.accepted;
         },
@@ -135,7 +127,7 @@ export class RemotePromptBroker {
         (response) => {
           if (isCancelledResponse(response)) return undefined;
           if (!("value" in response)) {
-            throw new RemotePromptProtocolError("passphrase");
+            throw new Error("invalid passphrase response");
           }
           return response.value;
         },
@@ -154,7 +146,7 @@ export class RemotePromptBroker {
         (response) => {
           if (isCancelledResponse(response)) return undefined;
           if (!("value" in response)) {
-            throw new RemotePromptProtocolError("password");
+            throw new Error("invalid password response");
           }
           return response.value;
         },
@@ -173,7 +165,23 @@ export class RemotePromptBroker {
   /** Ends all pending callbacks when the renderer transport disappears. */
   rendererDidDisconnect(): void {
     this.rendererConnected = false;
-    this.cancelPendingPrompt();
+    this.cancelPendingPrompt("disconnected");
+  }
+
+  /** Emits the security notification used when known-host verification detects a changed key. */
+  notifyHostKeyChanged(input: {
+    host: string;
+    port: number;
+    keyType: string;
+    oldFingerprint: string;
+    newFingerprint: string;
+  }): void {
+    this.emit({
+      id: this.idFactory(),
+      connectionId: this.connectionId,
+      kind: "host_key_changed",
+      ...input,
+    });
   }
 
   /** Alias for lifecycle adapters that call the broker's teardown `dispose`. */
@@ -181,15 +189,20 @@ export class RemotePromptBroker {
     this.rendererDidDisconnect();
   }
 
-  /**
-   * Delivers a renderer answer. `false` means the id is stale or belongs to a
-   * different prompt; invalid answers throw and leave the prompt pending until
-   * the renderer corrects it or the configured timeout closes it.
-   */
+  /** Delivers a renderer answer; stale and duplicate ids are ignored. */
   respondRemotePrompt(id: string, response: RemotePromptResponse): boolean {
     const pending = this.pending;
     if (!pending || pending.request.id !== id) return false;
-    const value = pending.decode(response);
+    let value: unknown;
+    try {
+      value = pending.decode(response);
+    } catch {
+      this.onWarning(
+        `Invalid response for remote ${pending.request.kind} prompt; treating as cancel`,
+      );
+      this.cancelPendingPrompt("aborted");
+      return true;
+    }
     this.clearPending(pending);
     pending.resolve(value);
     return true;
@@ -202,7 +215,7 @@ export class RemotePromptBroker {
     decode: (response: RemotePromptResponse) => T,
   ): Promise<T> {
     if (!this.rendererConnected || signal?.aborted) return Promise.resolve(fallback);
-    if (this.pending) return Promise.reject(new RemotePromptBusyError(this.connectionId));
+    if (this.pending) this.cancelPendingPrompt("superseded");
 
     return new Promise<T>((resolve, reject) => {
       const pending: PendingPrompt = {
@@ -214,9 +227,12 @@ export class RemotePromptBroker {
         timer: undefined,
       };
       pending.abortSignal = signal;
-      pending.abortHandler = () => this.cancelPendingPrompt();
+      pending.abortHandler = () => this.cancelPendingPrompt("aborted");
       this.pending = pending;
-      pending.timer = this.clock.setTimeout(() => this.cancelPendingPrompt(), this.timeoutMs);
+      pending.timer = this.clock.setTimeout(
+        () => this.cancelPendingPrompt("timeout"),
+        this.timeoutMs,
+      );
       if (signal) signal.addEventListener("abort", pending.abortHandler, { once: true });
 
       try {
@@ -228,12 +244,12 @@ export class RemotePromptBroker {
     });
   }
 
-  private cancelPendingPrompt(): void {
+  private cancelPendingPrompt(reason: RemotePromptCancellationReason): void {
     const pending = this.pending;
     if (!pending) return;
     this.clearPending(pending);
     try {
-      this.emit({ id: pending.request.id });
+      this.emit({ id: pending.request.id, reason });
     } finally {
       pending.resolve(pending.fallback);
     }

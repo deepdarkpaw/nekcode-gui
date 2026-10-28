@@ -49,9 +49,8 @@ export {
 } from "./remoteReconnectAdapter.js";
 export {
   RemotePromptBroker,
-  RemotePromptBusyError,
-  RemotePromptProtocolError,
   type RemotePromptBrokerOptions,
+  type RemotePromptCancellationReason,
   type RemotePromptClock,
 } from "./remotePromptBroker.js";
 export {
