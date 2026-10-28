@@ -3,20 +3,14 @@ import type {
   NekProviderView,
 } from "@zcode/shared/nek-protocol";
 
-const USABLE_AUTH_KINDS = new Set<NekAuthProviderStatus["kind"]>(["oauth", "api_key", "env"]);
-
-/** OAuth 过期或刷新失败不能让第二步误判为已完成。 */
+/** 只有 OAuth 登录成功才算订阅登录完成；API key 由服务商配置判断。 */
 export function isUsableNekAuthStatus(status: NekAuthProviderStatus): boolean {
-  return status.state === "ok" && USABLE_AUTH_KINDS.has(status.kind);
+  return status.kind === "oauth" && status.state === "ok";
 }
 
-/** 服务商必须有请求地址、凭据和至少一个模型，才算可以直接继续。 */
+/** models.json 中存在有效请求地址的服务商即可让用户继续配置。 */
 export function isUsableNekProvider(provider: NekProviderView): boolean {
-  return (
-    provider.baseUrl.trim() !== "" &&
-    provider.models.length > 0 &&
-    provider.apiKey.kind !== "none"
-  );
+  return provider.baseUrl.trim() !== "";
 }
 
 export function isOnboardingAccountComplete(input: {

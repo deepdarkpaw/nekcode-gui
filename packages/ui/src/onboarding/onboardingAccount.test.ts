@@ -50,6 +50,6 @@ describe("onboarding account completion", () => {
   it("AC-4/AC-6: incomplete state selects loginAnthropic and carries the need reason in controller policy", () => {
     const view = createOnboardingAccountView([], [], false);
     expect(view.primaryActionId).toBe("loginAnthropic");
-    expect(isUsableNekProvider(provider({ kind: "none" }))).toBe(false);
+    expect(isUsableNekProvider({ ...provider({ kind: "none" }), baseUrl: "" })).toBe(false);
   });
 });

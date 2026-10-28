@@ -21,6 +21,7 @@ import { useOnboardingWorkspaceController } from "./onboardingWorkspaceControlle
 export type OnboardingPrimaryActionId =
   | "install"
   | "update"
+  | "recheck"
   | "loginAnthropic"
   | "pickLocal"
   | "next";
