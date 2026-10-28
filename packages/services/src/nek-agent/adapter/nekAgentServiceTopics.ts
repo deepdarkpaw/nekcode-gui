@@ -1,12 +1,10 @@
 import { Emitter, type Event } from "@zcode/rpc";
 import type {
   NekModel,
-  NekRpcSessionState,
   NekRpcSlashCommand,
   NekSessionSummary,
 } from "@zcode/shared/nek-protocol";
 import type {
-  ConversationTopicFrame,
   SessionsIndexSnapshot,
   SessionsIndexTopicFrame,
   SessionsIndexTopicWireCandidate,

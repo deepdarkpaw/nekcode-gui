@@ -18,7 +18,7 @@ import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
-import { acceptedCommand, makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "./frameHelpers.js";
+import { makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "./frameHelpers.js";
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { NekAgentServiceTopics } from "./nekAgentServiceTopics.js";
 import type {
