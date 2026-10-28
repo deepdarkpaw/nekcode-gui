@@ -2,17 +2,8 @@ import type { NekMode, NekThinkingLevel } from "@zcode/shared/nek-protocol";
 import type { CommandAck } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionResult } from "../service/types.js";
 import { toNekImages } from "./attachmentImages.js";
-import {
-  acceptedCommand,
-  asRecord,
-  readString,
-  unsupportedCommand,
-} from "./frameHelpers.js";
-import type {
-  NekSessionBinding,
-  NekSessionCommandEnvelope,
-  NekWorkspaceTarget,
-} from "./types.js";
+import { acceptedCommand, asRecord, readString, unsupportedCommand } from "./frameHelpers.js";
+import type { NekSessionBinding, NekSessionCommandEnvelope, NekWorkspaceTarget } from "./types.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 
 const THOUGHT_LEVELS: readonly NekThinkingLevel[] = [
@@ -43,7 +34,8 @@ export async function sendConversationCommand(
 ): Promise<CommandAck> {
   const { envelope } = input;
   const payload = asRecord(envelope.payload) ?? {};
-  if (envelope.type === "createSession") return await createFromCommand(context, input.target, envelope, payload);
+  if (envelope.type === "createSession")
+    return await createFromCommand(context, input.target, envelope, payload);
   if (!envelope.sessionId) return unsupportedCommand(envelope, "sessionId is required");
   const binding = context.requireBinding(input.target, envelope.sessionId);
   const revision = context.service.conversationSnapshot(binding.sessionKey).revision;

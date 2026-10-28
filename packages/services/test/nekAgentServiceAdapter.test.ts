@@ -83,7 +83,9 @@ function fakeProcess(kind: "control" | "session"): {
       } else if (command.type === "prompt") {
         data = { disposition: "started" };
       }
-      stdout.write(`${JSON.stringify({ id: command.id, type: "response", command: command.type, success: true, data })}\n`);
+      stdout.write(
+        `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: true, data })}\n`,
+      );
     }
   });
   let exited = false;
@@ -134,7 +136,10 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
     const frames: unknown[] = [];
     const event = adapter.onDynamicConversationFrame(target);
     const disposable = event((frame) => frames.push(frame));
-    const subscription = await adapter.subscribeConversationV4({ ...target, sessionId: created.sessionId });
+    const subscription = await adapter.subscribeConversationV4({
+      ...target,
+      sessionId: created.sessionId,
+    });
     assert.equal(subscription.ack.mode, "snapshot");
     assert.equal(frames.length, 1);
     await assert.rejects(
@@ -151,7 +156,10 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
       }),
       /仅支持图片/u,
     );
-    await adapter.unsubscribeConversationV4({ ...target, subscriptionId: subscription.ack.subscriptionId });
+    await adapter.unsubscribeConversationV4({
+      ...target,
+      subscriptionId: subscription.ack.subscriptionId,
+    });
     disposable.dispose();
   } finally {
     await adapter.dispose();

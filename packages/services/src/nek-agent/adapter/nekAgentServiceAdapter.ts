@@ -55,7 +55,10 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
   private readonly topics: NekAgentServiceTopics;
   private readonly bindings = new Map<string, NekSessionBinding>();
   private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
-  private readonly conversationEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
+  private readonly conversationEmitters = new Map<
+    string,
+    Emitter<ConversationTopicWireCandidate>
+  >();
 
   constructor(options: NekAgentServiceAdapterOptions) {
     this.service = new NekAgentService(options);
@@ -73,7 +76,9 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     );
   }
 
-  async initialize(target: NekWorkspaceTarget): Promise<{ available: boolean; workspaceKey: string }> {
+  async initialize(
+    target: NekWorkspaceTarget,
+  ): Promise<{ available: boolean; workspaceKey: string }> {
     if (!target.workspacePath) throw new Error("workspacePath is required");
     return { available: true, workspaceKey: workspaceKey(target) };
   }
@@ -97,7 +102,10 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return result;
   }
 
-  async resumeSession(input: { workspacePath: string; sessionPath: string }): Promise<NekSessionResult> {
+  async resumeSession(input: {
+    workspacePath: string;
+    sessionPath: string;
+  }): Promise<NekSessionResult> {
     const target = { workspacePath: input.workspacePath };
     const result = await this.service.resumeSession({
       sessionPath: input.sessionPath,
@@ -118,12 +126,16 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return result;
   }
 
-  async readSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<ConversationSnapshot> {
+  async readSession(
+    input: NekWorkspaceTarget & { sessionId: string },
+  ): Promise<ConversationSnapshot> {
     const binding = this.requireBinding(input, input.sessionId);
     return this.service.conversationSnapshot(binding.sessionKey);
   }
 
-  async readSessionMessages(target: NekWorkspaceTarget & { sessionId: string }): Promise<NekAgentMessage[]> {
+  async readSessionMessages(
+    target: NekWorkspaceTarget & { sessionId: string },
+  ): Promise<NekAgentMessage[]> {
     const binding = this.requireBinding(target, target.sessionId);
     return await this.service.readSessionMessages(binding.sessionKey);
   }
@@ -148,7 +160,12 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     };
     subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
       firstFrame ??= frame;
-      const mapped = makeWireFrame({ ...frame, topic }, id, ++ordinal, first ? "initial" : "online");
+      const mapped = makeWireFrame(
+        { ...frame, topic },
+        id,
+        ++ordinal,
+        first ? "initial" : "online",
+      );
       first = false;
       this.conversationEmitter(subscription.workspaceKey).fire(mapped);
     });
@@ -164,7 +181,9 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     };
   }
 
-  async resyncConversationV4(input: NekConversationResyncParams): Promise<V4ConversationResyncResult> {
+  async resyncConversationV4(
+    input: NekConversationResyncParams,
+  ): Promise<V4ConversationResyncResult> {
     const subscription = this.conversationSubscriptions.get(input.subscriptionId);
     if (!subscription) throw new Error(`unknown conversation subscription ${input.subscriptionId}`);
     const snapshot = this.service.conversationSnapshot(subscription.sessionKey);
@@ -180,7 +199,9 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     this.conversationEmitter(subscription.workspaceKey).fire(
       makeWireFrame(frame, subscription.id, subscription.ordinal, "recovery"),
     );
-    return { ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch } };
+    return {
+      ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch },
+    };
   }
 
   async unsubscribeConversationV4(input: NekConversationUnsubscribeParams): Promise<void> {
@@ -194,11 +215,15 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return this.conversationEmitter(workspaceKey(target)).event;
   }
 
-  async subscribeSessionsIndexV4(input: Parameters<NekAgentServiceTopics["subscribeSessionsIndexV4"]>[0]) {
+  async subscribeSessionsIndexV4(
+    input: Parameters<NekAgentServiceTopics["subscribeSessionsIndexV4"]>[0],
+  ) {
     return await this.topics.subscribeSessionsIndexV4(input);
   }
 
-  async resyncSessionsIndexV4(input: Parameters<NekAgentServiceTopics["resyncSessionsIndexV4"]>[0]) {
+  async resyncSessionsIndexV4(
+    input: Parameters<NekAgentServiceTopics["resyncSessionsIndexV4"]>[0],
+  ) {
     return await this.topics.resyncSessionsIndexV4(input);
   }
 
@@ -216,7 +241,9 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return await this.topics.subscribeWorkspaceConfigV4(input);
   }
 
-  async resyncWorkspaceConfigV4(input: Parameters<NekAgentServiceTopics["resyncWorkspaceConfigV4"]>[0]) {
+  async resyncWorkspaceConfigV4(
+    input: Parameters<NekAgentServiceTopics["resyncWorkspaceConfigV4"]>[0],
+  ) {
     return await this.topics.resyncWorkspaceConfigV4(input);
   }
 
@@ -287,7 +314,8 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
   }
 
   private bind(target: NekWorkspaceTarget, result: NekSessionResult): void {
-    if (this.bindings.size >= MAX_BINDINGS) throw new Error(`nek session binding limit exceeded (${MAX_BINDINGS})`);
+    if (this.bindings.size >= MAX_BINDINGS)
+      throw new Error(`nek session binding limit exceeded (${MAX_BINDINGS})`);
     this.bindings.set(sessionMapKey(target, result.sessionId), {
       target,
       sessionKey: result.sessionKey,
@@ -301,9 +329,11 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     if (direct) return direct;
     const binding = [...this.bindings.values()].find(
       (candidate) =>
-        candidate.target.workspacePath === target.workspacePath && candidate.sessionId === sessionId,
+        candidate.target.workspacePath === target.workspacePath &&
+        candidate.sessionId === sessionId,
     );
-    if (!binding) throw new Error(`nek session ${sessionId} is not open in ${target.workspacePath}`);
+    if (!binding)
+      throw new Error(`nek session ${sessionId} is not open in ${target.workspacePath}`);
     return binding;
   }
 

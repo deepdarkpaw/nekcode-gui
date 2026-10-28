@@ -11,9 +11,7 @@ export function createNekAgentServiceAdapter(
   options: NekAgentServiceAdapterOptions & { locator?: NekLocator },
 ): NekAgentServiceAdapter {
   const { locator, ...serviceOptions } = options;
-  let infoPromise = serviceOptions.guiInfo
-    ? Promise.resolve(serviceOptions.guiInfo)
-    : undefined;
+  let infoPromise = serviceOptions.guiInfo ? Promise.resolve(serviceOptions.guiInfo) : undefined;
   const locate = async () => {
     infoPromise ??= (locator ?? new NekLocator()).locate().then((result) => result.info);
     return await infoPromise;

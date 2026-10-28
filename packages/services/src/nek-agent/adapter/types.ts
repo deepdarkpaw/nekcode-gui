@@ -83,24 +83,34 @@ export interface NekAgentServiceAdapterApi {
     workspacePath: string;
     sessionPath: string;
   }): Promise<import("../service/types.js").NekSessionResult>;
-  listSessions(target: NekWorkspaceTarget): Promise<import("@zcode/shared/nek-protocol").NekSessionSummary[]>;
+  listSessions(
+    target: NekWorkspaceTarget,
+  ): Promise<import("@zcode/shared/nek-protocol").NekSessionSummary[]>;
   closeSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean>;
-  readSession(
-    input: NekWorkspaceTarget & { sessionId: string },
-  ): Promise<ConversationSnapshot>;
-  readSessionMessages(target: NekWorkspaceTarget & { sessionId: string }): Promise<import("@zcode/shared/nek-protocol").NekAgentMessage[]>;
-  subscribeConversationV4(input: NekConversationSubscribeParams): Promise<V4ConversationSubscribeResult>;
+  readSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<ConversationSnapshot>;
+  readSessionMessages(
+    target: NekWorkspaceTarget & { sessionId: string },
+  ): Promise<import("@zcode/shared/nek-protocol").NekAgentMessage[]>;
+  subscribeConversationV4(
+    input: NekConversationSubscribeParams,
+  ): Promise<V4ConversationSubscribeResult>;
   resyncConversationV4(input: NekConversationResyncParams): Promise<V4ConversationResyncResult>;
   unsubscribeConversationV4(input: NekConversationUnsubscribeParams): Promise<void>;
   onDynamicConversationFrame(target: NekWorkspaceTarget): Event<ConversationTopicWireCandidate>;
-  subscribeSessionsIndexV4(input: NekSessionsIndexSubscribeParams): Promise<V4SessionsIndexSubscribeResult>;
+  subscribeSessionsIndexV4(
+    input: NekSessionsIndexSubscribeParams,
+  ): Promise<V4SessionsIndexSubscribeResult>;
   resyncSessionsIndexV4(input: NekConversationResyncParams): Promise<V4ConversationResyncResult>;
   unsubscribeSessionsIndexV4(input: NekConversationUnsubscribeParams): Promise<void>;
   onDynamicSessionsIndexFrame(target: NekWorkspaceTarget): Event<SessionsIndexTopicWireCandidate>;
-  subscribeWorkspaceConfigV4(input: NekWorkspaceConfigSubscribeParams): Promise<V4WorkspaceConfigSubscribeResult>;
+  subscribeWorkspaceConfigV4(
+    input: NekWorkspaceConfigSubscribeParams,
+  ): Promise<V4WorkspaceConfigSubscribeResult>;
   resyncWorkspaceConfigV4(input: NekConversationResyncParams): Promise<V4ConversationResyncResult>;
   unsubscribeWorkspaceConfigV4(input: NekConversationUnsubscribeParams): Promise<void>;
-  onDynamicWorkspaceConfigFrame(target: NekWorkspaceTarget): Event<WorkspaceConfigTopicWireCandidate>;
+  onDynamicWorkspaceConfigFrame(
+    target: NekWorkspaceTarget,
+  ): Event<WorkspaceConfigTopicWireCandidate>;
   sendConversationCommandV4(input: {
     target: NekWorkspaceTarget;
     envelope: NekSessionCommandEnvelope;
@@ -125,4 +135,3 @@ export interface NekSubscriptionHandle {
   readonly dispose: () => void;
   readonly onFrame: (frame: NekV4Frame, deliveryKind: "initial" | "online" | "recovery") => void;
 }
-
