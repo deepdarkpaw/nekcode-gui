@@ -1,19 +1,32 @@
-/**
- * 首次引导的纯状态机。
- *
- * 状态机只拥有步骤游标与步骤状态；安装、登录、工作区选择等副作用由调用方执行。
- */
+/** 首次引导 FL：纯 reducer，不发请求、不读时钟、不碰 DOM。 */
 
 export const ONBOARDING_STEPS = ["nek", "account", "workspace"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
-export type OnboardingStepStatus = "pending" | "completed" | "skipped";
-export type OnboardingFlowStatus = "active" | "completed" | "skipped";
+export type OnboardingStepStatus = "pending" | "done" | "skipped";
+export type OnboardingSelection =
+  | { kind: "local"; path: string }
+  | { kind: "remote"; connectionId: string; path: string; label: string };
 
 export interface OnboardingFlowState {
   currentStep: OnboardingStep;
+  furthest: OnboardingStep;
   steps: Readonly<Record<OnboardingStep, OnboardingStepStatus>>;
-  status: OnboardingFlowStatus;
+  installing: boolean;
+  selection: OnboardingSelection | null;
+  closed: boolean;
+  completed: boolean;
 }
+
+export type OnboardingFlowEvent =
+  | { type: "reset"; startStep?: OnboardingStep }
+  | { type: "setStepDone"; step: OnboardingStep; done: boolean }
+  | { type: "setInstalling"; installing: boolean }
+  | { type: "setSelection"; selection: OnboardingSelection | null }
+  | { type: "back" }
+  | { type: "skip" }
+  | { type: "next" }
+  | { type: "jumpTo"; step: OnboardingStep }
+  | { type: "close" };
 
 const STEP_INDEX: Readonly<Record<OnboardingStep, number>> = {
   nek: 0,
@@ -21,96 +34,102 @@ const STEP_INDEX: Readonly<Record<OnboardingStep, number>> = {
   workspace: 2,
 };
 
-function statusWith(
+function nextStep(step: OnboardingStep): OnboardingStep | null {
+  return ONBOARDING_STEPS[STEP_INDEX[step] + 1] ?? null;
+}
+
+function previousStep(step: OnboardingStep): OnboardingStep | null {
+  return ONBOARDING_STEPS[STEP_INDEX[step] - 1] ?? null;
+}
+
+function isBeforeOrAt(a: OnboardingStep, b: OnboardingStep): boolean {
+  return STEP_INDEX[a] <= STEP_INDEX[b];
+}
+
+function withStep(
   state: OnboardingFlowState,
   step: OnboardingStep,
   status: OnboardingStepStatus,
 ): OnboardingFlowState {
+  return { ...state, steps: { ...state.steps, [step]: status } };
+}
+
+function moveForward(state: OnboardingFlowState): OnboardingFlowState {
+  const next = nextStep(state.currentStep);
+  if (!next) return { ...state, completed: true };
   return {
     ...state,
-    steps: { ...state.steps, [step]: status },
+    currentStep: next,
+    furthest: isBeforeOrAt(state.furthest, next) ? next : state.furthest,
   };
 }
 
 export function createOnboardingFlowState(
-  currentStep: OnboardingStep = "nek",
+  startStep: OnboardingStep = "nek",
 ): OnboardingFlowState {
   return {
-    currentStep,
+    currentStep: startStep,
+    furthest: startStep,
     steps: { nek: "pending", account: "pending", workspace: "pending" },
-    status: "active",
+    installing: false,
+    selection: null,
+    closed: false,
+    completed: false,
   };
 }
 
-export function advanceOnboardingStep(state: OnboardingFlowState): OnboardingFlowState {
-  if (state.status !== "active") {
-    return state;
-  }
-
-  const marked = statusWith(state, state.currentStep, "completed");
-  const index = STEP_INDEX[state.currentStep];
-  const next = ONBOARDING_STEPS[index + 1];
-  if (!next) {
-    return { ...marked, status: "completed" };
-  }
-  return { ...marked, currentStep: next };
-}
-
-export function skipOnboardingStep(state: OnboardingFlowState): OnboardingFlowState {
-  if (state.status !== "active") {
-    return state;
-  }
-
-  const marked = statusWith(state, state.currentStep, "skipped");
-  const index = STEP_INDEX[state.currentStep];
-  const next = ONBOARDING_STEPS[index + 1];
-  if (!next) {
-    return { ...marked, status: "skipped" };
-  }
-  return { ...marked, currentStep: next };
-}
-
-export function backOnboardingStep(state: OnboardingFlowState): OnboardingFlowState {
-  const previous = ONBOARDING_STEPS[STEP_INDEX[state.currentStep] - 1];
-  return previous ? { ...state, currentStep: previous } : state;
-}
-
-/** 只允许跳回已经处理过的步骤，不能越过当前步骤向前跳。 */
-export function goToOnboardingStep(
+export function reduceOnboardingFlow(
   state: OnboardingFlowState,
-  step: OnboardingStep,
+  event: OnboardingFlowEvent,
 ): OnboardingFlowState {
-  const targetIndex = STEP_INDEX[step];
-  const currentIndex = STEP_INDEX[state.currentStep];
-  if (targetIndex > currentIndex || state.steps[step] === "pending") {
+  if (state.closed || state.completed) {
+    return event.type === "reset" ? createOnboardingFlowState(event.startStep) : state;
+  }
+  if (state.installing && ["back", "skip", "next", "jumpTo", "close"].includes(event.type)) {
     return state;
   }
-  return { ...state, currentStep: step };
+  switch (event.type) {
+    case "reset":
+      return createOnboardingFlowState(event.startStep);
+    case "setInstalling":
+      return event.installing === state.installing ? state : { ...state, installing: event.installing };
+    case "setStepDone": {
+      const current = state.steps[event.step];
+      const nextStatus = event.done ? "done" : current === "skipped" ? "skipped" : "pending";
+      return current === nextStatus ? state : withStep(state, event.step, nextStatus);
+    }
+    case "setSelection": {
+      const done = event.selection !== null;
+      const next = withStep(state, "workspace", done ? "done" : "pending");
+      return next.selection === event.selection ? state : { ...next, selection: event.selection };
+    }
+    case "back": {
+      const previous = previousStep(state.currentStep);
+      return previous ? { ...state, currentStep: previous } : state;
+    }
+    case "jumpTo":
+      return STEP_INDEX[event.step] <= STEP_INDEX[state.furthest] ? { ...state, currentStep: event.step } : state;
+    case "skip":
+      if (state.steps[state.currentStep] === "done") return state;
+      if (state.currentStep === "workspace") return { ...state, completed: true };
+      return moveForward(withStep(state, state.currentStep, "skipped"));
+    case "next":
+      if (state.steps[state.currentStep] !== "done") return state;
+      return moveForward(state);
+    case "close":
+      return { ...state, closed: true };
+  }
 }
 
-/** 用户从引导入口直接退出时使用；显式区分于完成全部步骤。 */
-export function skipOnboardingFlow(state: OnboardingFlowState): OnboardingFlowState {
-  return {
-    ...state,
-    status: "skipped",
-    steps: { nek: "skipped", account: "skipped", workspace: "skipped" },
-  };
+export function firstIncompleteStep(done: Readonly<Record<OnboardingStep, boolean>>): OnboardingStep {
+  if (!done.nek) return "nek";
+  if (!done.account) return "account";
+  return "workspace";
 }
 
-export function completeOnboardingFlow(state: OnboardingFlowState): OnboardingFlowState {
-  return {
-    ...statusWith(state, state.currentStep, "completed"),
-    status: "completed",
-  };
-}
-
-export function isOnboardingFlowFinished(state: OnboardingFlowState): boolean {
-  return state.status !== "active";
-}
-
-export function isOnboardingStepVisited(
+export function isOnboardingStepDone(
   state: OnboardingFlowState,
   step: OnboardingStep,
 ): boolean {
-  return state.steps[step] !== "pending";
+  return state.steps[step] === "done";
 }

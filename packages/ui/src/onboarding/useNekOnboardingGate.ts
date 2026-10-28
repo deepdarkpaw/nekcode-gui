@@ -1,37 +1,47 @@
 import { useCallback, useEffect, useState } from "react";
-import type { NekLocalStatus } from "@zcode/shared/nek-protocol";
+import type { NekOnboardingState } from "@zcode/shared/nek-protocol";
 import { useNekHostApi } from "@/settings/nek/api/NekSettingsContext.js";
 import type { INekSettingsHostApi } from "@/settings/nek/api/hostApi.js";
+import type { OnboardingStep } from "./onboardingFlow.js";
 
 export interface OnboardingGateSnapshot {
-  onboardingComplete: boolean;
-  localNek: NekLocalStatus;
+  completedAt?: string;
+  dismissedAt?: string;
 }
 
 export type NekOnboardingGateState =
   | { status: "loading"; retry: () => void }
   | {
-      status: "ready";
-      needsOnboarding: boolean;
-      onboardingComplete: boolean;
-      localNek: NekLocalStatus;
-      markComplete: () => Promise<void>;
+      status: "show" | "hide";
+      error?: Error;
+      completedAt?: string;
+      dismissedAt?: string;
       retry: () => void;
-    }
-  | { status: "error"; error: Error; retry: () => void };
+      persist: (patch: Partial<NekOnboardingState>) => Promise<void>;
+    };
 
+/** GT-1/GT-2：只看引导记录，不因本机 nek 不可用自动弹出。 */
 export function shouldShowNekOnboarding(snapshot: OnboardingGateSnapshot): boolean {
-  return !snapshot.onboardingComplete || snapshot.localNek.state !== "ready";
+  return snapshot.completedAt === undefined && snapshot.dismissedAt === undefined;
 }
 
 export async function readNekOnboardingGate(
-  api: Pick<INekSettingsHostApi, "readOnboardingComplete" | "detectLocalNek">,
+  api: Pick<INekSettingsHostApi, "getOnboardingState">,
 ): Promise<OnboardingGateSnapshot> {
-  const [onboardingComplete, localNek] = await Promise.all([
-    api.readOnboardingComplete(),
-    api.detectLocalNek(),
-  ]);
-  return { onboardingComplete, localNek };
+  return await api.getOnboardingState();
+}
+
+export interface OnboardingStartInput {
+  checking: boolean;
+  done: Readonly<Record<OnboardingStep, boolean>>;
+}
+
+/** GT-3/FL-2：显式打开时总是打开，起始步骤由第一个未完成步骤决定。 */
+export function openOnboarding(input: OnboardingStartInput): { open: true; step: OnboardingStep } {
+  if (input.checking || !input.done.nek) return { open: true, step: "nek" };
+  if (!input.done.account) return { open: true, step: "account" };
+  if (!input.done.workspace) return { open: true, step: "workspace" };
+  return { open: true, step: "workspace" };
 }
 
 function asError(error: unknown): Error {
@@ -54,37 +64,33 @@ export function useNekOnboardingGate(): NekOnboardingGateState {
     let cancelled = false;
     void readNekOnboardingGate(api)
       .then((next) => {
-        if (!cancelled) {
-          setSnapshot(next);
-        }
+        if (!cancelled) setSnapshot(next);
       })
       .catch((cause: unknown) => {
-        if (!cancelled) {
-          setError(asError(cause));
-        }
+        if (!cancelled) setError(asError(cause));
       });
     return () => {
       cancelled = true;
     };
   }, [api, refreshToken]);
 
-  const markComplete = useCallback(async () => {
-    await api.writeOnboardingComplete(true);
-    setSnapshot((current) => (current ? { ...current, onboardingComplete: true } : current));
-  }, [api]);
+  const persist = useCallback(
+    async (patch: Partial<NekOnboardingState>) => {
+      await api.setOnboardingState(patch);
+      setSnapshot((current) => (current ? { ...current, ...patch } : current));
+    },
+    [api],
+  );
 
-  if (error) {
-    return { status: "error", error, retry };
-  }
   if (!snapshot) {
-    return { status: "loading", retry };
+    return error
+      ? { status: "hide", error, retry, persist }
+      : { status: "loading", retry };
   }
   return {
-    status: "ready",
-    needsOnboarding: shouldShowNekOnboarding(snapshot),
-    onboardingComplete: snapshot.onboardingComplete,
-    localNek: snapshot.localNek,
-    markComplete,
+    status: shouldShowNekOnboarding(snapshot) ? "show" : "hide",
+    ...snapshot,
     retry,
+    persist,
   };
 }

@@ -9,7 +9,8 @@ import type {
   NekHostFingerprint,
   NekInstallOptions,
   NekInstallResult,
-  NekLocalStatus,
+  NekLocalDetection,
+  NekOnboardingState,
   NekRemoteHost,
   NekUpdateCheck,
 } from "@zcode/shared/nek-protocol";
@@ -20,7 +21,8 @@ export type {
   NekHostFingerprint,
   NekInstallOptions,
   NekInstallResult,
-  NekLocalStatus,
+  NekLocalDetection,
+  NekOnboardingState,
   NekRemoteHost,
   NekUpdateCheck,
 };

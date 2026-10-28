@@ -400,8 +400,25 @@ export interface NekInstallOptions {
 }
 
 export type NekInstallResult =
-  | { ok: true; version: string }
-  | { ok: false; message: string; manualCommand: string };
+  | { ok: true; version: string; cancelled?: false; manualCommand?: never }
+  | { ok: false; cancelled: boolean; message: string; manualCommand: string };
+
+export type NekLocalDetection =
+  | { status: "ready"; version: string; path: string; protocolVersion: number }
+  | { status: "not_installed" }
+  | {
+      status: "incompatible";
+      version: string;
+      path: string;
+      protocolVersion: number;
+      requiredProtocolVersion: number;
+    }
+  | { status: "failed"; message: string };
+
+export interface NekOnboardingState {
+  completedAt?: string;
+  dismissedAt?: string;
+}
 
 export interface NekUpdateCheck {
   current: string;
@@ -414,20 +431,6 @@ export interface NekAppInfo {
   platform: string;
   logsDir: string;
 }
-
-/** 本机 nek 的安装与 GUI RPC 协议兼容性。 */
-export type NekLocalStatus =
-  | { state: "ready"; path: string; version: string; protocolVersion: number }
-  | { state: "not_installed"; path?: string }
-  | {
-      state: "incompatible";
-      path: string;
-      version: string;
-      protocolVersion: number;
-      requiredProtocolVersion: number;
-      message: string;
-    }
-  | { state: "failed"; message: string };
 
 export interface INekSettingsHostApi {
   listHosts(): Promise<NekRemoteHost[]>;
@@ -453,21 +456,15 @@ export interface INekSettingsHostApi {
   openExternal(url: string): Promise<void>;
   copyText(text: string): Promise<void>;
   getAppInfo(): Promise<NekAppInfo>;
-  /** 读取 GUI 数据目录中的首次引导完成标记。 */
-  readOnboardingComplete(): Promise<boolean>;
-  /** 写入 GUI 数据目录中的首次引导完成标记。 */
-  writeOnboardingComplete(completed: boolean): Promise<void>;
-  /** 检测本机 nek；不会把失败误报为未安装。 */
-  detectLocalNek(): Promise<NekLocalStatus>;
-  /** 安装或更新本机 nek，并通过回调流式返回日志。 */
+  detectLocalNek(): Promise<NekLocalDetection>;
   installLocalNek(
     options: NekInstallOptions,
     onLog: (line: string) => void,
   ): Promise<NekInstallResult>;
-  /** 取消本机当前进行中的安装或更新。 */
   cancelLocalInstall(): Promise<void>;
-  /** 打开系统目录选择器，取消时返回 null。 */
-  selectDirectory(): Promise<string | null>;
+  pickDirectory(): Promise<string | null>;
+  getOnboardingState(): Promise<NekOnboardingState>;
+  setOnboardingState(patch: Partial<NekOnboardingState>): Promise<void>;
   checkNekUpdate(target: NekConfigTarget): Promise<NekUpdateCheck>;
   runNekUpdate(
     target: NekConfigTarget,
