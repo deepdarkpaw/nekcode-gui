@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type {
   RemotePasswordPrompt,
   RemotePassphrasePrompt,
@@ -29,6 +29,39 @@ export interface CredentialKeyInput {
   nativeEvent?: { isComposing?: boolean; keyCode?: number };
 }
 
+export interface CredentialPromptState {
+  value: string;
+  revealed: boolean;
+  closed: boolean;
+}
+
+export type CredentialPromptEvent =
+  | { type: "setValue"; value: string }
+  | { type: "toggleReveal" }
+  | { type: "close" };
+
+export const INITIAL_CREDENTIAL_PROMPT_STATE: CredentialPromptState = {
+  value: "",
+  revealed: false,
+  closed: false,
+};
+
+export function reduceCredentialPrompt(
+  state: CredentialPromptState,
+  event: CredentialPromptEvent,
+): CredentialPromptState {
+  switch (event.type) {
+    case "setValue":
+      return state.value === event.value ? state : { ...state, value: event.value };
+    case "toggleReveal":
+      return { ...state, revealed: !state.revealed };
+    case "close":
+      return state.closed && state.value === "" && !state.revealed
+        ? state
+        : { value: "", revealed: false, closed: true };
+  }
+}
+
 export interface CredentialPromptControllerProps {
   open: boolean;
   prompt: CredentialPrompt;
@@ -57,22 +90,25 @@ export function useCredentialPromptController({
   onClose,
   activeElement,
 }: CredentialPromptControllerProps) {
-  const [value, setValue] = useState("");
-  const [revealed, setRevealed] = useState(false);
+  const [interactionState, dispatch] = useReducer(
+    reduceCredentialPrompt,
+    INITIAL_CREDENTIAL_PROMPT_STATE,
+  );
+  const value = interactionState.value;
+  const revealed = interactionState.revealed;
+  const setValue = useCallback((nextValue: string) => dispatch({ type: "setValue", value: nextValue }), []);
   const busyRef = useRef(false);
   const focusRestore = useFocusRestore(open);
   const focus = useRemoteInteractionFocus(open, "input", activeElement, prompt.id);
 
   useEffect(() => {
     if (!open) {
-      setValue("");
-      setRevealed(false);
+      dispatch({ type: "close" });
     }
   }, [open]);
 
   const close = useCallback(() => {
-    setValue("");
-    setRevealed(false);
+    dispatch({ type: "close" });
     onClose();
     focusRestore.restoreFocus();
   }, [focusRestore, onClose]);
@@ -98,7 +134,7 @@ export function useCredentialPromptController({
   });
   const toggleReveal = useAsyncAction(
     async () => {
-      setRevealed((current) => !current);
+      dispatch({ type: "toggleReveal" });
     },
     { successFeedbackMs: 0 },
   );
@@ -117,6 +153,16 @@ export function useCredentialPromptController({
     const runner = action === "submit" ? submit.run : action === "cancel" ? cancel.run : toggleReveal.run;
     const disabledReason = enabled ? undefined : value.length === 0 && action === "submit" ? emptyReason : disabledReasonForBusy(submitBusy);
     return {
+      label: {
+        id:
+          action === "submit"
+            ? "remote.nek.credential.submit"
+            : action === "cancel"
+              ? "remote.nek.credential.cancel"
+              : revealed
+                ? "remote.nek.credential.hide"
+                : "remote.nek.credential.show",
+      },
       visible: true,
       enabled,
       ...(disabledReason ? { disabledReason } : {}),

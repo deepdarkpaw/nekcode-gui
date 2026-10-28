@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useReducer, useRef } from "react";
 import type { RemoteHostKeyChangedEvent } from "@zcode/shared/nek-protocol";
 import { useAsyncAction } from "@/hooks/useAsyncAction.js";
 import { useFocusRestore } from "@/hooks/useFocusRestore.js";
@@ -68,9 +68,14 @@ export function useHostKeyChangedController({
   activeElement,
 }: HostKeyChangedControllerProps) {
   const busyRef = useRef(false);
+  const [, dispatch] = useReducer(
+    reduceHostKeyChanged,
+    INITIAL_HOST_KEY_CHANGED_STATE,
+  );
   const focusRestore = useFocusRestore(open);
   const focus = useRemoteInteractionFocus(open, "close", activeElement, notification.id);
   const close = useCallback(() => {
+    dispatch({ type: "close" });
     onClose();
     focusRestore.restoreFocus();
   }, [focusRestore, onClose]);
@@ -97,6 +102,9 @@ export function useHostKeyChangedController({
     const runner = action === "close" ? closeAction.run : manageAction.run;
     const enabled = !busy;
     return {
+      label: {
+        id: action === "close" ? "remote.nek.hostKeyChanged.close" : "remote.nek.hostKeyChanged.manageHosts",
+      },
       visible: true,
       enabled,
       ...(enabled ? {} : { disabledReason }),
