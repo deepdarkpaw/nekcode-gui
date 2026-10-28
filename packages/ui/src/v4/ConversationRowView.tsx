@@ -105,8 +105,6 @@ import {
   serializeComposerPromptContexts,
 } from "@/v4/composer/composerPromptContexts.js";
 import { ConversationSelectionReferenceChip } from "@/v4/composer/ConversationSelectionReferenceChip.js";
-import { PptxElementReferenceChip } from "@/v4/composer/PptxElementReferenceChip.js";
-import { useOpenPptxElementReference } from "@/v4/composer/useOpenPptxElementReference.js";
 import { ConversationFileRewindDialog } from "@/v4/ConversationFileRewindDialog.js";
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
@@ -252,8 +250,6 @@ interface ConversationRowViewProps {
   assistantCopyText?: string;
   /** Assistant Preview Cards 只由 TurnGroup 为轮尾 terminal assistant text 计算后下发。 */
   assistantPreviewCards?: AssistantPreviewCard[];
-  /** 仅当前 renderer 观察到 running -> complete 时下发的一次性自动打开身份。 */
-  assistantPreviewCardsAutoOpenKey?: string;
   /** Assistant code-comment cards 只由 TurnGroup 为轮尾终态 assistant text 计算后下发。 */
   assistantCodeCommentCards?: AssistantCodeCommentCard[];
   /** 由 TurnGroup 统一裁决整轮正文是否隐藏 code-comment 协议原文。 */
@@ -898,7 +894,6 @@ const UserInputRowView = memo(function UserInputRowView({
         });
   const visibleText = parsedShareContext.visibleContent;
   const codeCommentContexts = parsedPrompt.codeComments;
-  const pptxElementReferences = parsedPrompt.pptxElements;
   const conversationSelections = parsedPrompt.conversationSelections;
   const hasAttachments = (row.attachments?.length ?? 0) > 0;
   const hasMediaAttachments =
@@ -913,18 +908,9 @@ const UserInputRowView = memo(function UserInputRowView({
   const hasVisibleText = visibleText.trim().length > 0;
   // nudge 轮整条都是引擎文本：正文为空但气泡仍要画，里面只有那一枚披露。
   const hasBubble = hasVisibleText || epilogue !== undefined;
-  const hasContextReferences =
-    codeCommentContexts.length > 0 ||
-    pptxElementReferences.length > 0 ||
-    conversationSelections.length > 0;
+  const hasContextReferences = codeCommentContexts.length > 0 || conversationSelections.length > 0;
   const hasAttachmentArea = hasAttachments || hasContextReferences;
   const hasAttachmentPills = hasFileAttachments || hasContextReferences;
-  const openPptxElementReference = useOpenPptxElementReference({
-    workspacePath: context.workspacePath,
-    workspaceIdentity: context.workspaceIdentity,
-    remoteSessionId: context.workspaceRemoteSessionId,
-    onOpenCodeViewer: context.onOpenCodeViewer,
-  });
 
   useEffect(() => {
     if (!editing) {
@@ -1075,22 +1061,6 @@ const UserInputRowView = memo(function UserInputRowView({
                         }))
                       }
                     />
-                    <PptxElementReferenceChip
-                      references={editPromptContexts.pptxElements}
-                      onOpen={context.onOpenCodeViewer ? openPptxElementReference : undefined}
-                      onRemove={(id) =>
-                        setEditPromptContexts((current) => ({
-                          ...current,
-                          pptxElements: current.pptxElements.filter((item) => item.id !== id),
-                        }))
-                      }
-                      onRemoveAll={() =>
-                        setEditPromptContexts((current) => ({
-                          ...current,
-                          pptxElements: [],
-                        }))
-                      }
-                    />
                     <ConversationSelectionReferenceChip
                       references={editPromptContexts.conversationSelections}
                       onRemove={(id) =>
@@ -1203,11 +1173,6 @@ const UserInputRowView = memo(function UserInputRowView({
                 />
               ) : null}
               <CodeCommentAttachmentChip comments={codeCommentContexts} contentAlign="end" />
-              <PptxElementReferenceChip
-                references={pptxElementReferences}
-                contentAlign="end"
-                onOpen={context.onOpenCodeViewer ? openPptxElementReference : undefined}
-              />
               <ConversationSelectionReferenceChip
                 references={conversationSelections}
                 contentAlign="end"
@@ -1431,7 +1396,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
   deferActions,
   copyText,
   previewCards,
-  previewCardsAutoOpenKey,
   codeCommentCards,
   codeCommentProjectionEnabled,
 }: {
@@ -1444,7 +1408,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
   deferActions?: boolean;
   copyText?: string;
   previewCards?: AssistantPreviewCard[];
-  previewCardsAutoOpenKey?: string;
   codeCommentCards?: AssistantCodeCommentCard[];
   codeCommentProjectionEnabled?: boolean;
 }) {
@@ -1507,8 +1470,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
             onOpenBrowserUrl={context.onOpenBrowserUrl}
             onOpenCodeViewer={context.onOpenCodeViewer}
             onOpenFileLink={context.onOpenFileLink}
-            autoOpenPptxKey={previewCardsAutoOpenKey}
-            onAutoOpenPptx={context.onAutoOpenAssistantPptx}
           />
         </div>
       ) : null}
@@ -1910,7 +1871,6 @@ function ConversationRowViewImpl({
   deferAssistantActions,
   assistantCopyText,
   assistantPreviewCards,
-  assistantPreviewCardsAutoOpenKey,
   assistantCodeCommentCards,
   assistantCodeCommentProjectionEnabled,
   reasoningContentVariant,
@@ -1939,7 +1899,6 @@ function ConversationRowViewImpl({
           deferActions={deferAssistantActions}
           copyText={assistantCopyText}
           previewCards={assistantPreviewCards}
-          previewCardsAutoOpenKey={assistantPreviewCardsAutoOpenKey}
           codeCommentCards={assistantCodeCommentCards}
           codeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
         />

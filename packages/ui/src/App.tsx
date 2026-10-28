@@ -68,7 +68,6 @@ import {
 } from "@/lib/closeActiveContext.js";
 import { usePaneLayoutStore } from "@/v4/paneLayoutStore.js";
 import { useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
-import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import { startMemoryDiagnosticsLogger } from "@/lib/memoryDiagnostics.js";
 
 const EMPTY_RECONNECTING_REMOTE_WORKSPACE_LOGS_BY_WORKSPACE_KEY: NonNullable<
@@ -198,7 +197,6 @@ export function App({
     setIsSidePaneCollapsed,
     isSidebarVisible,
     handleOpenCodeViewer,
-    handleOpenCodeViewers,
     handleOpenBrowserUrl,
     handleToggleGit,
     handleOpenGit,
@@ -530,15 +528,6 @@ export function App({
       }
     },
     [handleOpenCodeViewer, workspaceReadOnlyReason],
-  );
-  const handleAutoOpenAssistantPptx = useCallback(
-    (request: AssistantPreviewCardsAutoOpenRequest) => {
-      if (!isDesktop || workspaceReadOnlyReason) {
-        return;
-      }
-      handleOpenCodeViewers(request.sources);
-    },
-    [handleOpenCodeViewers, isDesktop, workspaceReadOnlyReason],
   );
   const projectName = getPathLeaf(workspaceAbsPath);
   const handleOpenTaskFind = useCallback(() => {
@@ -1058,7 +1047,6 @@ export function App({
         handleToggleSidePane={handleToggleSidePane}
         handleOpenBrowserUrl={handleOpenBrowserUrl}
         handleOpenCodeViewer={handleOpenCodeViewerIfWritable}
-        handleAutoOpenAssistantPptx={handleAutoOpenAssistantPptx}
         handleOpenSubagentSession={handleOpenSubagentSession}
         handleOpenBackgroundBash={handleOpenBackgroundBash}
         handleOpenSubagentDirectory={handleOpenSubagentDirectory}

@@ -1,5 +1,5 @@
 import type { MarkdownSelectionTarget } from "@/lib/conversationSelectionReference.js";
-/* eslint-disable max-lines -- PreviewPane 当前同时承载文件读取、图片与 Office 预览、markdown/code 渲染和顶部路径面包屑；后续需按 header/body 边界继续拆分。 */
+/* eslint-disable max-lines -- PreviewPane 当前同时承载文件读取、图片与 PDF 预览、markdown/code 渲染和顶部路径面包屑；后续需按 header/body 边界继续拆分。 */
 import {
   Fragment,
   type CSSProperties,
@@ -22,29 +22,26 @@ import {
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button.js";
-import { toast } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
-import type { FileBinaryPreview, FileMediaPreview, FileTextSlice } from "@zcode/shared";
+import type { FileMediaPreview, FileTextSlice } from "@zcode/shared";
 import { TID_PREVIEW_PANE } from "@zcode/shared";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { usePptxFileWatch } from "@/hooks/usePptxFileWatch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { usePdfViewerLabels, usePptxViewerLabels } from "@/hooks/usePreviewViewerLabels.js";
+import { usePdfViewerLabels } from "@/hooks/usePreviewViewerLabels.js";
 import {
   FILE_VIEWER_MAX_TEXT_BYTES,
   createDiffSourceFilePreviewSource,
+  decodeBase64ToArrayBuffer,
   inferImageMediaType,
   inferMediaPreview,
   isPdfPreviewPath,
-  isPptxPreviewPath,
   type CodeViewerSource,
   type MediaCodeViewerSource,
 } from "@/lib/codeViewer.js";
 import type { PdfViewerSource } from "@/components/ui/pdf-viewer.js";
 import { normalizeCodeViewerSource } from "@/lib/codeViewerSource.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
-import { getPathLeaf, isAbsoluteFilePath } from "@/lib/path.js";
-import { decodeBase64ToArrayBuffer, getOfficeFilePreviewKind } from "@/lib/officeFilePreview.js";
+import { getPathLeaf } from "@/lib/path.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useFileContextActions } from "@/hooks/useFileContextActions.js";
 import { useWorkspaceOpenInEditorTarget } from "@/hooks/useWorkspaceOpenInEditorTarget.js";
@@ -74,11 +71,6 @@ import {
 } from "@/lib/codeCommentContext.js";
 import { getWorkspaceFileRelativePath } from "@/workspace-file-tree/model.js";
 import { resolveWorkspaceEditorSelection } from "@/lib/workspaceEditorSelection.js";
-import {
-  assertPptxPreviewDataComplete,
-  isPptxPreviewIncompleteFileError,
-  readPptxPreviewData,
-} from "@/lib/pptxPreviewData.js";
 
 interface CodeViewerBreadcrumbData {
   rootLabel: string | null;
@@ -134,65 +126,6 @@ function isPreviewPaneMissingFileError(error: unknown): boolean {
   return /\bENOENT\b/i.test(message) || /no such file or directory/i.test(message);
 }
 
-function shouldToastPptxReferenceFileMissing(
-  source: CodeViewerSource | null,
-  error: unknown,
-): boolean {
-  return (
-    source?.type === "pptx" &&
-    source.referenceNavigation !== undefined &&
-    isPreviewPaneMissingFileError(error)
-  );
-}
-
-function isPreviewPaneFileTooLargeError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /file is too large to preview/i.test(message);
-}
-
-function getPreviewPaneSafeErrorMessage(error: unknown, sourcePath: string): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (!isAbsoluteFilePath(sourcePath)) {
-    return message;
-  }
-
-  const sourceLeaf = getPathLeaf(sourcePath);
-  const pathVariants = new Set([
-    sourcePath,
-    sourcePath.replace(/\\/g, "/"),
-    sourcePath.replace(/\//g, "\\"),
-  ]);
-
-  let safeMessage = message;
-  for (const pathVariant of pathVariants) {
-    if (pathVariant !== sourceLeaf) {
-      safeMessage = safeMessage.split(pathVariant).join(sourceLeaf);
-    }
-  }
-  return safeMessage;
-}
-
-function resolvePptxPreviewReadErrorMessage(
-  error: unknown,
-  options: {
-    sourcePath: string;
-    fileMissingMessage: string;
-    legacyFileTooLargeMessage: string;
-    incompleteFileMessage: string;
-  },
-): string {
-  if (isPreviewPaneMissingFileError(error)) {
-    return options.fileMissingMessage;
-  }
-  if (isPreviewPaneFileTooLargeError(error)) {
-    return options.legacyFileTooLargeMessage;
-  }
-  if (isPptxPreviewIncompleteFileError(error)) {
-    return options.incompleteFileMessage;
-  }
-  return getPreviewPaneSafeErrorMessage(error, options.sourcePath);
-}
-
 function readPreviewPaneScrollMetrics(
   container: Pick<HTMLElement, "scrollHeight" | "scrollTop"> | null,
 ) {
@@ -241,11 +174,6 @@ function getFileImageMediaType(path?: string): string | null {
 const PDF_RANGE_CHUNK_BYTES = 256 * 1024;
 // 小 PDF 直接循环拉全量（少量往返、渲染路径最简单）；超过阈值交给 pdf.js range 按需分段加载。
 const PDF_FULL_READ_MAX_BYTES = 2 * 1024 * 1024;
-const PPTX_MAX_FILE_BYTES = 64 * 1024 * 1024;
-
-function isPptxPreviewFileTooLarge(size: number): boolean {
-  return size > PPTX_MAX_FILE_BYTES;
-}
 
 function PreviewPaneDeferredHeavyContent({ style }: { style?: CSSProperties }) {
   return (
@@ -339,34 +267,8 @@ function resolvePreviewPanePdfSource(
   };
 }
 
-function resolvePreviewPanePptxSource(
-  source: CodeViewerSource | null,
-): Extract<CodeViewerSource, { type: "pptx" }> | null {
-  if (!source) {
-    return null;
-  }
-
-  if (source.type === "pptx") {
-    return source;
-  }
-
-  if (source.type !== "file" || !isPptxPreviewPath(source.path)) {
-    return null;
-  }
-
-  return {
-    ...source,
-    type: "pptx",
-  };
-}
-
 function shouldShowPreviewPaneHeaderDivider(source: CodeViewerSource | null): boolean {
-  return Boolean(
-    resolvePreviewPanePdfSource(source) ||
-    resolvePreviewPanePptxSource(source) ||
-    resolvePreviewPaneMediaSource(source) ||
-    (source?.type === "file" && getOfficeFilePreviewKind(source.path)),
-  );
+  return Boolean(resolvePreviewPanePdfSource(source) || resolvePreviewPaneMediaSource(source));
 }
 
 function isPlainCodeSource(source: CodeViewerSource | null): boolean {
@@ -383,10 +285,8 @@ function isPlainCodeSource(source: CodeViewerSource | null): boolean {
       !isMarkdownFilePath(source.path) &&
       !isSvgFilePath(source.path) &&
       !getFileImageMediaType(source.path) &&
-      // PDF、Office 和 PPTX 走专用只读预览，没有源码视图，也不该出现自动换行开关。
-      !isPdfPreviewPath(source.path) &&
-      !getOfficeFilePreviewKind(source.path) &&
-      !isPptxPreviewPath(source.path)
+      // PDF 走专用只读预览，没有源码视图，也不该出现自动换行开关。
+      !isPdfPreviewPath(source.path)
     );
   }
 
@@ -514,7 +414,7 @@ export function PreviewPane({
     matchedOpenContext.isRemoteWorkspace,
   );
   const fileActions = useFileContextActions();
-  const { fileService, fileWatcherService, mediaPreviewService } = useWorkspaceServices(
+  const { fileService, mediaPreviewService } = useWorkspaceServices(
     sourceWorkspacePath,
     source?.workspaceRemoteSessionId,
     source?.workspaceIdentity,
@@ -539,12 +439,6 @@ export function PreviewPane({
   } | null>(null);
   const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
   const [pdfViewerSource, setPdfViewerSource] = useState<PdfViewerSource | null>(null);
-  const [officePreview, setOfficePreview] = useState<FileBinaryPreview | null>(null);
-  const [loadingOfficePreview, setLoadingOfficePreview] = useState(false);
-  const [loadingPptxPreview, setLoadingPptxPreview] = useState(false);
-  const [pptxPreviewData, setPptxPreviewData] = useState<ArrayBuffer | null>(null);
-  const [validatedPptxReferenceNavigationRequestId, setValidatedPptxReferenceNavigationRequestId] =
-    useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [installedEditors, setInstalledEditors] = useState<EditorInfo[]>([]);
   const [preferredEditorId] = useState<string | null>(() => readLastSelectedEditorId());
@@ -566,18 +460,7 @@ export function PreviewPane({
   const imageSource = useMemo(() => resolvePreviewPaneImageSource(source), [source]);
   const mediaSource = useMemo(() => resolvePreviewPaneMediaSource(source), [source]);
   const pdfSource = useMemo(() => resolvePreviewPanePdfSource(source), [source]);
-  const officePreviewKind = useMemo(
-    () => (source?.type === "file" ? getOfficeFilePreviewKind(source.path) : null),
-    [source],
-  );
-  const pptxSource = useMemo(() => resolvePreviewPanePptxSource(source), [source]);
   const showDocumentHeaderDivider = shouldShowPreviewPaneHeaderDivider(source);
-  const pptxSourcePath = pptxSource?.path ?? null;
-  const pptxReferenceNavigation = pptxSource?.referenceNavigation ?? null;
-  const { ready: pptxFileWatchReady, reloadGeneration: pptxReloadGeneration } = usePptxFileWatch({
-    filePath: pptxSourcePath,
-    fileWatcherService,
-  });
   const diffFilePreviewSource = useMemo(
     () =>
       source?.type === "patch" || source?.type === "multi-file-diff"
@@ -589,8 +472,6 @@ export function PreviewPane({
     (source?.type === "file" || source?.type === "code-review") &&
     !imageSource &&
     !pdfSource &&
-    !officePreviewKind &&
-    !pptxSource &&
     !mediaSource
       ? source
       : null;
@@ -659,10 +540,7 @@ export function PreviewPane({
     }),
     [intl],
   );
-  // PDF / PPTX 的标签与 dwf 的 workflow-artifact tab 共用一份（见该 hook 的注释）：
-  // 两个 labels 接口都是必填全字段，各写一份漏的不会是类型错误，而是一句没翻译的文案。
   const pdfViewerLabels = usePdfViewerLabels();
-  const pptxViewerLabels = usePptxViewerLabels();
 
   useEffect(() => {
     let disposed = false;
@@ -1238,194 +1116,6 @@ export function PreviewPane({
     };
   }, [fileService, pdfSource, intl]);
 
-  useEffect(() => {
-    let disposed = false;
-
-    if (!officePreviewKind || source?.type !== "file") {
-      setOfficePreview(null);
-      setLoadingOfficePreview(false);
-      return () => {
-        disposed = true;
-      };
-    }
-
-    setLoadingOfficePreview(true);
-    setOfficePreview(null);
-    setError(null);
-
-    void fileService
-      .readBinaryPreview({ path: source.path })
-      .then((result) => {
-        if (!disposed) {
-          setOfficePreview(result);
-        }
-      })
-      .catch((previewError: unknown) => {
-        if (disposed) {
-          return;
-        }
-
-        logger.error("[PreviewPane] 读取 Office 文件预览失败", {
-          path: source.path,
-          error: previewError instanceof Error ? previewError.message : String(previewError),
-        });
-        setError(
-          isPreviewPaneMissingFileError(previewError)
-            ? intl.formatMessage({ id: "codeViewer.fileMissing" })
-            : isPreviewPaneFileTooLargeError(previewError)
-              ? intl.formatMessage({ id: "codeViewer.officeTooLarge" })
-              : previewError instanceof Error
-                ? previewError.message
-                : String(previewError),
-        );
-      })
-      .finally(() => {
-        if (!disposed) {
-          setLoadingOfficePreview(false);
-        }
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [fileService, intl, officePreviewKind, source]);
-
-  useEffect(() => {
-    const navigation = pptxReferenceNavigation;
-    if (!navigation || !pptxSourcePath) {
-      setValidatedPptxReferenceNavigationRequestId(null);
-      return;
-    }
-    let disposed = false;
-    setValidatedPptxReferenceNavigationRequestId(null);
-    void fileService
-      .stat({ path: pptxSourcePath })
-      .then(() => {
-        if (!disposed) {
-          setValidatedPptxReferenceNavigationRequestId(navigation.requestId);
-        }
-      })
-      .catch((navigationError: unknown) => {
-        if (!disposed && shouldToastPptxReferenceFileMissing(pptxSource, navigationError)) {
-          toast(
-            intl.formatMessage({
-              id: "chat.pptxElements.previewFileMissing",
-            }),
-          );
-        }
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [fileService, intl, pptxReferenceNavigation, pptxSource, pptxSourcePath]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    if (!pptxSourcePath) {
-      setPptxPreviewData(null);
-      setLoadingPptxPreview(false);
-      return () => {
-        disposed = true;
-      };
-    }
-
-    if (!pptxFileWatchReady) {
-      setPptxPreviewData(null);
-      setLoadingPptxPreview(true);
-      setError(null);
-      return () => {
-        disposed = true;
-      };
-    }
-
-    setLoadingPptxPreview(true);
-    setPptxPreviewData(null);
-    setError(null);
-
-    const path = pptxSourcePath;
-    void (async () => {
-      const fileStat = await fileService.stat({ path });
-      if (disposed) {
-        return;
-      }
-
-      if (typeof fileStat.size !== "number") {
-        // 兼容旧远端：旧 Host 没有 size/range 能力，只能使用现有 8MB base64 通道。
-        const preview = await fileService.readMediaPreview({ path });
-        if (!disposed) {
-          setPptxPreviewData(decodeBase64ToArrayBuffer(preview.dataBase64));
-        }
-        return;
-      }
-
-      if (isPptxPreviewFileTooLarge(fileStat.size)) {
-        setError(intl.formatMessage({ id: "codeViewer.pptx.fileTooLarge" }));
-        return;
-      }
-
-      const data = await readPptxPreviewData({
-        fileSize: fileStat.size,
-        readRange: (offset, length) => fileService.readFileRange({ path, offset, length }),
-        isDisposed: () => disposed,
-      });
-      if (disposed || !data) {
-        return;
-      }
-
-      // 文件可能在分段读取期间被替换成另一个大小不同的版本；再次 stat 可以阻止把旧版本的
-      // 前缀当作完整 PPTX 解析。相同大小的内容替换仍需 Host 提供 fingerprint 才能检测，暂不扩展现有协议。
-      const currentFileStat = await fileService.stat({ path });
-      if (disposed) {
-        return;
-      }
-      assertPptxPreviewDataComplete({
-        expectedBytes: fileStat.size,
-        actualBytes: data.byteLength,
-        observedFileSize: currentFileStat.size,
-      });
-
-      setPptxPreviewData(data);
-    })()
-      .catch((previewError: unknown) => {
-        if (disposed) {
-          return;
-        }
-
-        if (isPptxPreviewIncompleteFileError(previewError)) {
-          logger.warn("[PreviewPane] PPTX 文件读取不完整，已阻止解析残缺数据", {
-            path,
-            expectedBytes: previewError.expectedBytes,
-            actualBytes: previewError.actualBytes,
-            observedFileSize: previewError.observedFileSize,
-          });
-        } else {
-          logger.error(`[PreviewPane] 读取 PPTX 预览失败 path=${path}:`, previewError);
-        }
-        // 旧 Host 的 8MB base64 通道会把绝对路径拼进英文超限错误；原样展示既误导
-        // 用户又泄漏远端目录。这里保留真实的 8MB 兼容边界，并对其它错误只展示文件名。
-        setError(
-          resolvePptxPreviewReadErrorMessage(previewError, {
-            sourcePath: path,
-            fileMissingMessage: intl.formatMessage({ id: "codeViewer.fileMissing" }),
-            legacyFileTooLargeMessage: intl.formatMessage({
-              id: "codeViewer.pptx.legacyFileTooLarge",
-            }),
-            incompleteFileMessage: intl.formatMessage({ id: "codeViewer.pptx.incomplete" }),
-          }),
-        );
-      })
-      .finally(() => {
-        if (!disposed) {
-          setLoadingPptxPreview(false);
-        }
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [fileService, intl, pptxFileWatchReady, pptxReloadGeneration, pptxSourcePath]);
-
   const handlePreviewContentScroll = useCallback(() => {
     rememberScrollMetrics();
   }, [rememberScrollMetrics]);
@@ -1695,7 +1385,6 @@ export function PreviewPane({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          {/* 第一期 PPTX 明确为只读预览，不展示任何编辑入口。 */}
           <Button
             type="button"
             size="icon-md"
@@ -1729,7 +1418,7 @@ export function PreviewPane({
       <div className="min-h-0 flex-1">
         {renderHeavyContent ? (
           <PreviewPaneContent
-            source={pptxSource ?? imageSource ?? pdfSource ?? mediaSource ?? source}
+            source={imageSource ?? pdfSource ?? mediaSource ?? source}
             filePreview={filePreview}
             fileTooLarge={fileTooLarge}
             loadingInitial={loadingInitial}
@@ -1743,32 +1432,6 @@ export function PreviewPane({
             loadingPdfPreview={loadingPdfPreview}
             pdfViewerSource={pdfViewerSource}
             pdfViewerLabels={pdfViewerLabels}
-            loadingOfficePreview={loadingOfficePreview}
-            officePreview={officePreview}
-            officePreviewKind={officePreviewKind}
-            loadingPptxPreview={loadingPptxPreview}
-            pptxPreviewData={pptxPreviewData}
-            pptxViewerLabels={pptxViewerLabels}
-            pptxReferenceSource={
-              pptxSource && sourceWorkspacePath
-                ? {
-                    workspacePath: sourceWorkspacePath,
-                    ...(pptxSource.workspaceIdentity
-                      ? { workspaceIdentity: pptxSource.workspaceIdentity }
-                      : {}),
-                    ...(pptxSource.workspaceRemoteSessionId
-                      ? { remoteSessionId: pptxSource.workspaceRemoteSessionId }
-                      : {}),
-                    sourcePath: pptxSource.path,
-                    sourceTitle: pptxSource.title,
-                  }
-                : null
-            }
-            pptxReferenceNavigation={pptxReferenceNavigation}
-            pptxReferenceNavigationReady={
-              pptxReferenceNavigation !== null &&
-              validatedPptxReferenceNavigationRequestId === pptxReferenceNavigation.requestId
-            }
             error={error}
             codePreviewSettings={codePreviewSettings}
             codeTheme={codeTheme}

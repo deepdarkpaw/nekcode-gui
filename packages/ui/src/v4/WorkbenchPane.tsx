@@ -21,7 +21,6 @@ import type {
 import { cn } from "@/components/lib/utils.js";
 import { useServices } from "@/hooks/useServices.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type {
   OpenScopedSubagentSideTabRequest,
@@ -273,7 +272,6 @@ export interface WorkbenchShellBinding {
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onOpenBrowserUrl?: (url: string) => void;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
-  onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
@@ -577,7 +575,6 @@ export function WorkbenchLeafPane({
           onOpenGitReview={shouldUseShellStatusPanel ? shell.onOpenGitReview : undefined}
           onOpenBrowserUrl={shell.onOpenBrowserUrl}
           onOpenCodeViewer={shell.onOpenCodeViewer}
-          onAutoOpenAssistantPptx={shell.onAutoOpenAssistantPptx}
           onOpenFileLink={shell.onOpenFileLink}
           onOpenSubagentSession={shell.onOpenSubagentSession}
           onOpenBackgroundBash={shell.onOpenBackgroundBash}

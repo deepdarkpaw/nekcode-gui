@@ -1,5 +1,4 @@
 export type {
-  FileBinaryPreview,
   FileEntry,
   FileMediaPreview,
   FileStat,

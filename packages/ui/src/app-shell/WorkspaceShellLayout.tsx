@@ -261,7 +261,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleToggleSidePane,
   handleOpenBrowserUrl,
   handleOpenCodeViewer,
-  handleAutoOpenAssistantPptx,
   handleOpenSubagentSession,
   handleOpenBackgroundBash,
   handleOpenSubagentDirectory,
@@ -1522,9 +1521,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             onPaneActiveSessionChange={handlePaneActiveSessionChange}
                             onOpenBrowserUrl={handleOpenBrowserUrl}
                             onOpenCodeViewer={handleOpenCodeViewer}
-                            onAutoOpenAssistantPptx={
-                              isDesktop ? handleAutoOpenAssistantPptx : undefined
-                            }
                             onOpenBackgroundBash={handleOpenBackgroundBash}
                             onOpenSubagentSession={handleOpenSubagentSession}
                             onOpenSubagentDirectory={handleOpenSubagentDirectory}

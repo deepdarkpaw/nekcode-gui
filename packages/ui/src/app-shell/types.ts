@@ -14,7 +14,6 @@ import type {
 import type { IServiceAccessor } from "@zcode/services";
 import type { RecentClosedSidePaneTab } from "@/hooks/useAppPanels.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
-import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type {
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
@@ -208,7 +207,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   handleToggleSidePane: () => void;
   handleOpenBrowserUrl: (url: string) => void;
   handleOpenCodeViewer: (source: CodeViewerSource) => void;
-  handleAutoOpenAssistantPptx: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   handleOpenBackgroundBash: (request: OpenBackgroundBashSideTabRequest) => void;
   handleOpenSubagentSession: (request: OpenScopedSubagentSideTabRequest) => void;
   handleOpenSubagentDirectory: (

@@ -336,7 +336,6 @@ function ConversationWorkSegmentFlow({
   editWorkspaceRewindAvailability,
   assistantCopyText,
   assistantPreviewCards,
-  assistantPreviewCardsAutoOpenKey,
   assistantCodeCommentCards,
   assistantCodeCommentProjectionEnabled,
   canForkLatestAssistant,
@@ -352,7 +351,6 @@ function ConversationWorkSegmentFlow({
   editWorkspaceRewindAvailability: EditWorkspaceRewindAvailability;
   assistantCopyText?: string;
   assistantPreviewCards: AssistantPreviewCard[];
-  assistantPreviewCardsAutoOpenKey?: string;
   assistantCodeCommentCards: AssistantCodeCommentCard[];
   assistantCodeCommentProjectionEnabled: boolean;
   canForkLatestAssistant: boolean;
@@ -435,9 +433,6 @@ function ConversationWorkSegmentFlow({
               deferAssistantActions={item.latest}
               assistantCopyText={item.latest ? assistantCopyText : undefined}
               assistantPreviewCards={item.latest ? assistantPreviewCards : undefined}
-              assistantPreviewCardsAutoOpenKey={
-                item.latest ? assistantPreviewCardsAutoOpenKey : undefined
-              }
               assistantCodeCommentCards={item.latest ? assistantCodeCommentCards : undefined}
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
             />
@@ -478,7 +473,6 @@ function ConversationTurnFlow({
   assistantCopyText,
   assistantCodeCommentCards,
   assistantCodeCommentProjectionEnabled,
-  assistantPreviewCardsAutoOpenKey,
   shareSelectionToggle,
   shareSelectionRowId,
 }: {
@@ -492,7 +486,6 @@ function ConversationTurnFlow({
   assistantCopyText?: string;
   assistantCodeCommentCards: AssistantCodeCommentCard[];
   assistantCodeCommentProjectionEnabled: boolean;
-  assistantPreviewCardsAutoOpenKey?: string;
   shareSelectionToggle?: ReactNode;
   shareSelectionRowId?: number;
 }) {
@@ -583,7 +576,6 @@ function ConversationTurnFlow({
           editWorkspaceRewindAvailability={editWorkspaceRewindAvailability}
           assistantCopyText={assistantCopyText}
           assistantPreviewCards={assistantPreviewCards}
-          assistantPreviewCardsAutoOpenKey={assistantPreviewCardsAutoOpenKey}
           assistantCodeCommentCards={assistantCodeCommentCards}
           assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
           canForkLatestAssistant={canForkLatestAssistant}
@@ -626,7 +618,6 @@ function ConversationBackgroundResultWork({
   assistantCopyText,
   assistantCodeCommentCards,
   assistantCodeCommentProjectionEnabled,
-  assistantPreviewCardsAutoOpenKey,
 }: {
   unit: ConversationTurnRenderUnit;
   apiRetry: ApiRetryState | null;
@@ -637,7 +628,6 @@ function ConversationBackgroundResultWork({
   assistantCopyText?: string;
   assistantCodeCommentCards: AssistantCodeCommentCard[];
   assistantCodeCommentProjectionEnabled: boolean;
-  assistantPreviewCardsAutoOpenKey?: string;
 }) {
   const hasHistory = unit.assistantHistoryRows.length > 0;
   const hasFollowing = unit.assistantFollowingRows.length > 0;
@@ -693,7 +683,6 @@ function ConversationBackgroundResultWork({
           deferAssistantActions
           assistantCopyText={assistantCopyText}
           assistantPreviewCards={assistantPreviewCards}
-          assistantPreviewCardsAutoOpenKey={assistantPreviewCardsAutoOpenKey}
           assistantCodeCommentCards={assistantCodeCommentCards}
           assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
         />
@@ -737,7 +726,6 @@ function ConversationTurnGroupImpl({
     [context, firstReasoningRowId],
   );
   const latestAssistantTextRow = unit.latestAssistantTextRow;
-  const assistantPreviewPptxAutoOpenTarget = context.assistantPreviewPptxAutoOpenTarget;
   const codeCommentCardsEnabled = useAssistantCodeCommentFeatureEnabled();
   const assistantCodeCommentProjectionEnabled =
     codeCommentCardsEnabled &&
@@ -925,11 +913,6 @@ function ConversationTurnGroupImpl({
                 assistantCopyText={assistantCopyText}
                 assistantCodeCommentCards={assistantCodeCommentCards}
                 assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
-                assistantPreviewCardsAutoOpenKey={
-                  assistantPreviewPptxAutoOpenTarget?.turnId === unit.turnId
-                    ? assistantPreviewPptxAutoOpenTarget.key
-                    : undefined
-                }
               />
             </>
           ) : (
@@ -946,11 +929,6 @@ function ConversationTurnGroupImpl({
               assistantCopyText={assistantCopyText}
               assistantCodeCommentCards={assistantCodeCommentCards}
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
-              assistantPreviewCardsAutoOpenKey={
-                assistantPreviewPptxAutoOpenTarget?.turnId === unit.turnId
-                  ? assistantPreviewPptxAutoOpenTarget.key
-                  : undefined
-              }
             />
           )}
           {!isOfficeMode && unit.header?.fileChanges ? (

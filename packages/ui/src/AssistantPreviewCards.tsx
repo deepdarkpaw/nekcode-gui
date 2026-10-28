@@ -6,7 +6,6 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   type AssistantPreviewCard,
   type AssistantPreviewCardFileStatService,
-  type AssistantPreviewCardsAutoOpenRequest,
   getAssistantPreviewCardFilePath,
 } from "@/lib/assistantPreviewCards.js";
 import {
@@ -43,29 +42,6 @@ function buildAssistantPreviewCardFileSource(
   };
 }
 
-function buildAssistantPreviewPptxAutoOpenRequest(
-  visibleCards: readonly AssistantPreviewCard[],
-  baseKey: string,
-  scope: {
-    workspacePath?: string;
-    workspaceIdentity?: string;
-    workspaceRemoteSessionId?: string;
-  },
-): AssistantPreviewCardsAutoOpenRequest | null {
-  const pptxCards = visibleCards.filter(
-    (card): card is Extract<AssistantPreviewCard, { type: "file" }> =>
-      card.type === "file" && card.kind === "pptx",
-  );
-  if (pptxCards.length === 0) return null;
-
-  return {
-    // stat 结果对应的最终卡片签名必须进入一次性 key；同一 turn 的候选若晚到，
-    // 不会把旧的校验投影误当成已经消费的新结果。
-    key: JSON.stringify([baseKey, getAssistantPreviewCardsValidationSignature(pptxCards)]),
-    sources: pptxCards.map((card) => buildAssistantPreviewCardFileSource(card, scope)),
-  };
-}
-
 interface AssistantPreviewCardsProps {
   cards: AssistantPreviewCard[];
   workspacePath?: string;
@@ -74,9 +50,6 @@ interface AssistantPreviewCardsProps {
   onOpenBrowserUrl?: (url: string) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
-  /** Desktop 完成态生成产物：批量打开本轮已通过校验的 PPTX。 */
-  autoOpenPptxKey?: string;
-  onAutoOpenPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
 }
 
 /** 本地 file:// 网页卡片按文件卡片渲染并在代码查看器中打开。 */
@@ -177,8 +150,6 @@ export function AssistantPreviewCards({
   onOpenBrowserUrl,
   onOpenFileLink,
   onOpenCodeViewer,
-  autoOpenPptxKey,
-  onAutoOpenPptx,
 }: AssistantPreviewCardsProps) {
   const { intl } = useZCodeIntl();
   const { visibleCards, settled } = useAssistantPreviewCardValidation(cards, {
@@ -186,29 +157,6 @@ export function AssistantPreviewCards({
     workspaceIdentity,
     workspaceRemoteSessionId,
   });
-
-  useEffect(() => {
-    if (!settled || !autoOpenPptxKey || !onAutoOpenPptx) return;
-
-    const request = buildAssistantPreviewPptxAutoOpenRequest(visibleCards, autoOpenPptxKey, {
-      workspacePath,
-      workspaceIdentity,
-      workspaceRemoteSessionId,
-    });
-    if (!request) return;
-
-    // 自动打开只能消费最终可见卡片；这样与 15 个候选、10 张上限和 Host stat
-    // 完全同源，不会打开卡片中并不存在的文件。
-    onAutoOpenPptx(request);
-  }, [
-    autoOpenPptxKey,
-    onAutoOpenPptx,
-    settled,
-    visibleCards,
-    workspaceIdentity,
-    workspacePath,
-    workspaceRemoteSessionId,
-  ]);
 
   if (!settled || visibleCards.length === 0) {
     return null;

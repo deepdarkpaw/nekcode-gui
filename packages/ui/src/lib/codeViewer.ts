@@ -89,19 +89,6 @@ export interface PdfCodeViewerSource extends CodeViewerWorkspaceScope {
   path: string;
 }
 
-export interface PptxCodeViewerSource extends CodeViewerWorkspaceScope {
-  type: "pptx";
-  title: string;
-  path: string;
-  referenceNavigation?: PptxReferencePreviewNavigation;
-}
-
-export interface PptxReferencePreviewNavigation {
-  requestId: string;
-  pageIndex: number;
-  expectedSourceFingerprint: string;
-}
-
 export type CodeViewerSource =
   | FileCodeViewerSource
   | CodeReviewCodeViewerSource
@@ -110,8 +97,7 @@ export type CodeViewerSource =
   | MultiFileDiffCodeViewerSource
   | ImageCodeViewerSource
   | MediaCodeViewerSource
-  | PdfCodeViewerSource
-  | PptxCodeViewerSource;
+  | PdfCodeViewerSource;
 
 const EXTENSION_TO_LANGUAGE: Record<string, BundledLanguage> = {
   bash: "bash",
@@ -321,11 +307,14 @@ export function isPdfPreviewPath(path?: string): boolean {
   return getPathLeaf(path).toLowerCase().endsWith(".pdf");
 }
 
-export function isPptxPreviewPath(path?: string): boolean {
-  if (!path) {
-    return false;
+/** RPC 二进制预览以 base64 传输，媒体预览需要还原成 Blob 可用的字节缓冲。 */
+export function decodeBase64ToArrayBuffer(dataBase64: string): ArrayBuffer {
+  const binary = atob(dataBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
   }
-  return getPathLeaf(path).toLowerCase().endsWith(".pptx");
+  return bytes.buffer;
 }
 
 function isUsableDiffFileTarget(target: string | null | undefined): target is string {

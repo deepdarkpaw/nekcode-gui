@@ -51,12 +51,6 @@ export interface FileMediaPreview {
   totalBytes: number;
 }
 
-export interface FileBinaryPreview {
-  path: string;
-  dataBase64: string;
-  totalBytes: number;
-}
-
 export interface WorkspaceFileEntry {
   name: string;
   path: string;

@@ -8,32 +8,21 @@ import {
   parsePromptConversationSelections,
   type ConversationSelectionDisplayReference,
 } from "@/lib/conversationSelectionReference.js";
-import {
-  buildPromptWithPptxElementReferences,
-  parsePromptPptxElementReferences,
-  type PptxElementReference,
-} from "@/lib/pptxElementReference.js";
 
 interface ComposerPromptContexts {
   codeComments: readonly CodeCommentComposerAttachment[];
   conversationSelections: readonly ConversationSelectionDisplayReference[];
-  pptxElements: readonly PptxElementReference[];
 }
 
 export function countComposerPromptContexts(contexts: {
   codeComments: readonly unknown[];
   conversationSelections: readonly unknown[];
-  pptxElements: readonly unknown[];
 }) {
-  return (
-    contexts.codeComments.length +
-    contexts.conversationSelections.length +
-    contexts.pptxElements.length
-  );
+  return contexts.codeComments.length + contexts.conversationSelections.length;
 }
 
 /**
- * 三类 context parser 都只识别 prompt 尾块，因此序列化顺序和解析顺序必须严格相反。
+ * context parser 都只识别 prompt 尾块，因此序列化顺序和解析顺序必须严格相反。
  */
 export function serializeComposerPromptContexts(
   text: string,
@@ -43,8 +32,7 @@ export function serializeComposerPromptContexts(
     text,
     contexts.conversationSelections,
   );
-  const withCodeComments = buildPromptWithCodeComments(withSelections, contexts.codeComments);
-  return buildPromptWithPptxElementReferences(withCodeComments, contexts.pptxElements);
+  return buildPromptWithCodeComments(withSelections, contexts.codeComments);
 }
 
 export function parseComposerPromptContexts(
@@ -54,15 +42,12 @@ export function parseComposerPromptContexts(
   visibleContent: string;
   codeComments: CodeCommentComposerAttachment[];
   conversationSelections: readonly ConversationSelectionDisplayReference[];
-  pptxElements: PptxElementReference[];
 } {
-  const pptx = parsePromptPptxElementReferences(content);
-  const code = parsePromptCodeComments(pptx.visibleContent, workspace);
+  const code = parsePromptCodeComments(content, workspace);
   const selections = parsePromptConversationSelections(code.visibleContent);
   return {
     visibleContent: selections.visibleContent,
     codeComments: code.codeCommentAttachments,
     conversationSelections: selections.references,
-    pptxElements: pptx.pptxElementReferences,
   };
 }

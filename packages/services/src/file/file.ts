@@ -1,5 +1,4 @@
 import type {
-  FileBinaryPreview,
   FileEntry,
   FileMediaPreview,
   FileStat,
@@ -40,7 +39,6 @@ export interface IFileService {
    * 嵌套在对象字段里会退化成 JSON+base64。EOF 时返回短数组。
    */
   readFileRange(params: { path: string; offset: number; length: number }): Promise<Uint8Array>;
-  readBinaryPreview(params: { path: string; maxBytes?: number }): Promise<FileBinaryPreview>;
   /**
    * workspace 文件索引的列式打包长度（字符数）。与 listWorkspaceFilesRange 配对，
    * 调用方按长度分块拉取（见 fetchWorkspaceFileEntriesPacked）。
