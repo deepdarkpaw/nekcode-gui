@@ -3260,6 +3260,7 @@ const zhCN: Record<string, string> = {
   "shortcuts.action.gui.settings.open": "打开设置",
   "shortcuts.action.app.editor.external": "打开大编辑器",
   "shortcuts.action.gui.commandPalette.open": "命令面板",
+  "shortcuts.action.gui.interaction.focus": "聚焦待回答的请求",
   "shortcuts.action.note.followUp": "nek 在 Windows 终端默认 Ctrl+Q；桌面端统一为 Alt+Enter",
   "shortcuts.action.note.dequeue": "nek 在 Windows 终端默认 Alt+Q；桌面端统一为 Alt+↑",
   "shortcuts.action.note.sessionNew": "nek 终端未绑定默认键；桌面端沿用 Ctrl+N 惯例",

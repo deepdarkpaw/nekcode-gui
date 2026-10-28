@@ -3448,6 +3448,7 @@ const enUS: Record<string, string> = {
   "shortcuts.action.gui.settings.open": "Open settings",
   "shortcuts.action.app.editor.external": "Open large editor",
   "shortcuts.action.gui.commandPalette.open": "Command palette",
+  "shortcuts.action.gui.interaction.focus": "Focus pending request",
   "shortcuts.action.note.followUp":
     "nek defaults to Ctrl+Q in Windows terminals; the desktop app uses Alt+Enter",
   "shortcuts.action.note.dequeue":
