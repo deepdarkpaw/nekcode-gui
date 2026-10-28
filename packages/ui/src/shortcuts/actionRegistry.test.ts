@@ -104,6 +104,7 @@ describe("nek action registry", () => {
       "gui.settings.open": "Ctrl+,",
       "app.editor.external": "Ctrl+G",
       "gui.commandPalette.open": "Ctrl+K",
+      "gui.interaction.focus": "Alt+I",
     });
   });
 
