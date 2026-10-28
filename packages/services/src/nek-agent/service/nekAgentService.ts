@@ -231,6 +231,57 @@ export class NekAgentService
     return record ? this.publicSession(record) : undefined;
   }
 
+  /** 读取会话快照，不启动会话进程，也不获取会话锁。 */
+  async readSessionSnapshot(sessionPath: string): Promise<NekSessionSnapshot> {
+    const control = await this.pool.ensureControl();
+    const snapshot = await control.client.call({ type: "read_session_snapshot", sessionPath });
+    if (!isNekSessionSnapshot(snapshot)) throw new Error("nek returned an invalid session snapshot");
+    return snapshot;
+  }
+
+  /** 读取当前会话的消息；只读快照不会重新获取锁。 */
+  async readSessionMessages(sessionKey: string): Promise<NekAgentMessage[]> {
+    const record = this.requireRecord(sessionKey);
+    if (record.readonly) return (record.snapshot?.messages ?? []) as NekAgentMessage[];
+    return await this.withLease(record, async () => {
+      return (await this.commandTarget(sessionKey, false).client.call({ type: "get_messages" })).messages;
+    });
+  }
+
+  async getState(sessionKey: string): Promise<NekRpcSessionState> {
+    return await this.withSession(sessionKey, async () => {
+      return await this.commandTarget(sessionKey, false).client.call({ type: "get_state" });
+    });
+  }
+
+  async getAvailableModels(sessionKey: string): Promise<NekModel[]> {
+    return await this.withSession(sessionKey, async () => {
+      return (await this.commandTarget(sessionKey, false).client.call({ type: "get_available_models" }))
+        .models;
+    });
+  }
+
+  async getNekState(sessionKey: string): Promise<NekState | undefined> {
+    return await this.withSession(sessionKey, async () => {
+      const result = await this.commandTarget(sessionKey, false).client.call({
+        type: "extension_call",
+        method: "nek.get_state",
+      });
+      return isNekState(result.result) ? result.result : undefined;
+    });
+  }
+
+  async setFollowUpMode(sessionKey: string, mode: "all" | "one-at-a-time"): Promise<void> {
+    await this.withSession(sessionKey, async () => {
+      await this.commandTarget(sessionKey, true).client.call({ type: "set_follow_up_mode", mode });
+    });
+  }
+
+  /** 交互层收到应答后调用；响应仍由会话 RPC 客户端写回 nek。 */
+  respondExtensionUi(sessionKey: string, response: NekExtensionUiResponse): void {
+    this.commandTarget(sessionKey, true).client.respondExtensionUi(response);
+  }
+
   commandContext(): NekAgentCommandContext {
     return {
       writableTarget: (sessionKey) => this.commandTarget(sessionKey, true),
