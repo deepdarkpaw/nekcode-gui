@@ -28,9 +28,6 @@ export const zcodeSyntheticUserMessageSourceSchema = z.enum([
   "todo_reminder",
   // ToolSearch 首次发现公告（S6）：运行时注入的模型可读通知，与 contracts 词表同源。
   "tool_search_announcement",
-  // 中枢直接启动工作流的启动轮 source；与 contracts 的
-  // SYNTHETIC_USER_MESSAGE_SOURCES 保持同一词表，否则 v3 mapper 收窄该 source 会 tsc 失败。
-  "workflow_launch",
   "shared_context",
 ]);
 export const zcodeWorkspaceRefSchema = z
@@ -43,12 +40,6 @@ export const zcodeWorkspaceRefSchema = z
   .strict();
 export const zcodePermissionDecisionSchema = z.enum(["allow", "deny", "escalate", "modify"]);
 export const zcodePermissionRuleBehaviorSchema = z.enum(["allow", "deny", "ask"]);
-/**
- * workflow 运行确认窗第三选项「Refine」（拒绝并附修改意见）的稳定 optionId。
- * CLI 侧 v4 投影合成选项、broker 应答映射与 GUI 特判共用同一常量；
- * 该选项只在 v4 链路投放。
- */
-export const WORKFLOW_REFINE_PERMISSION_OPTION_ID = "workflowRefine";
 export const zcodePermissionRuleValueSchema = z
   .object({
     toolName: nonEmptyString,
@@ -84,26 +75,17 @@ export const zcodeSessionKindSchema = z.enum([
   "interactive",
   "fork",
   "selection_side_chat",
-  "workflow_parent",
-  "workflow_child",
   "subagent_child",
-  "nested_workflow_child",
 ]);
-// 修复根因：原先各入口只识别 `subagent_child`，导致 workflow_child /
-// nested_workflow_child 能被旧标签页继续输入，也使辅助会话的父归属规则漏掉工作流子会话。
 // 唯一实现供协议/服务两侧共用；Rust `domain::session_kind` 保持同一值域。
-export const READONLY_AGENT_SESSION_KINDS = [
-  "subagent_child",
-  "workflow_child",
-  "nested_workflow_child",
-] as const;
+export const READONLY_AGENT_SESSION_KINDS = ["subagent_child"] as const;
 
-/** Agent / 工作流驱动的子会话对用户只读；selection_side_chat 仍可输入。 */
+/** Agent 驱动的子会话对用户只读；selection_side_chat 仍可输入。 */
 export function isReadonlyAgentSessionKind(kind: string | undefined): boolean {
   return (READONLY_AGENT_SESSION_KINDS as readonly string[]).includes(kind ?? "");
 }
 
-/** 辅助会话 = 只读三种 + selection_side_chat；fork/workflow_parent 是独立任务，不沿父链改归属。 */
+/** 辅助会话 = 只读子会话 + selection_side_chat；fork 是独立任务，不沿父链改归属。 */
 export function isAuxiliarySessionKind(kind: string | undefined): boolean {
   return isReadonlyAgentSessionKind(kind) || kind === "selection_side_chat";
 }

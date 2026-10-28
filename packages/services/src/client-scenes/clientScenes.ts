@@ -45,7 +45,7 @@ export interface ClientSceneItem {
   on_finish?: string | null;
   /** Lucide canonical 图标名（kebab-case）。 */
   img?: string | null;
-  /** 兼容保留字段；当前首页与 Automations 图标不消费。 */
+  /** 兼容保留字段；当前首页图标不消费。 */
   imgs?: {
     cn?: string;
     en?: string;

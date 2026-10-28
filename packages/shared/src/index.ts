@@ -108,7 +108,6 @@ export * from "./zcode-agent-policy.js";
 export * from "./zcode-media-policy.js";
 export * from "./media-preview.js";
 export * from "./runtimeEnv.js";
-export * from "./dynamic-workflow-feature.js";
 export * from "./markdown-artifact-images.js";
 export * from "./serviceAuthority.js";
 export * from "./server-remote.js";
@@ -120,7 +119,6 @@ export interface ICredentialStore {
 }
 
 export * from "./test-ids.js";
-export * from "./test-ids-workflow.js";
 export * from "./channels.js";
 export * from "./storage.js";
 export * from "./oauth.js";
@@ -174,7 +172,6 @@ export type {
 } from "./platform.js";
 export type { ZCodeTaskCreateResult } from "./zcode-task-types.js";
 export * from "./zcode-task-types.js";
-export * from "./automation-types.js";
 export * from "./off-peak-types.js";
 export * from "./background-task-control-merge.js";
 export * from "./background-task-controls.js";

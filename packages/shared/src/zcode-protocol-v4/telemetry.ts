@@ -47,8 +47,7 @@ const turnStartedFactSchema = z
     kind: z.literal("turn.started"),
     executionKind: z.enum(["agent", "controlOnly"]).optional(),
     inputSource: zcodeSyntheticUserMessageSourceSchema.optional(),
-    // `workflow`：dynamic-workflow run 的完成 / 提问通知唤起的独立轮。
-    backgroundSource: z.enum(["bash", "subagent", "workflow"]).optional(),
+    backgroundSource: z.enum(["bash", "subagent"]).optional(),
     offPeakRunType: z.enum(["init", "resume"]).optional(),
     taskTrigger: z.enum(["schedule", "manual"]).optional(),
     scheduledAt: timestampSchema.optional(),
@@ -182,28 +181,6 @@ const subagentLifecycleFactSchema = z
   })
   .strict();
 
-/**
- * 动态工作流子代理的归属事实。由父会话的 workflow run 进度事件派生：
- * - `actor-spawned`：一个子代理会话诞生。`childSessionId` 是 driver 生成的子会话 id，
- *   `sourceCommandId`（基字段）是该 run 的启动输入 id——子代理 step 挂在它下面。
- * - `run-settled`：run 结算即该 run 全部子代理的终态（子代理会话活到 run dispose）。
- *   `status` 是 run 的终态；`stopReason` 只在 `stopped` 时在场。
- * 只带 id 与状态，不带脚本、prompt、结果正文。
- */
-const workflowLifecycleFactSchema = z
-  .object({
-    ...factBaseFields,
-    kind: z.literal("workflow.lifecycle"),
-    phase: z.enum(["actor-spawned", "run-settled"]),
-    runId: z.string().min(1),
-    toolCallId: z.string().min(1).optional(),
-    agentId: z.string().min(1).optional(),
-    childSessionId: z.string().min(1).optional(),
-    status: z.enum(["completed", "errored", "stopped"]).optional(),
-    stopReason: z.enum(["user", "model", "provider", "interrupted", "superseded"]).optional(),
-  })
-  .strict();
-
 const turnTerminalFactSchema = z
   .object({
     ...factBaseFields,
@@ -216,8 +193,6 @@ const turnTerminalFactSchema = z
     errorRetryable: z.boolean().optional(),
     turnPhase: z.string().optional(),
     backgroundSubagentResultConsumed: z.boolean().optional(),
-    /** 本轮消费过 dynamic-workflow run 的通知（完成 / 提问）；`agent_composition` 的 wf 维度。 */
-    workflowResultConsumed: z.boolean().optional(),
   })
   .strict();
 
@@ -246,39 +221,17 @@ const compactionTerminalFactSchema = z
  * CLI 经 `v4/telemetry/event` 上送的实时会话事实，供桌面埋点与运行中会话统计消费。
  * 每个分支都 strict，避免新增 runtime 字段时把 prompt、工具输入或 provider URL 意外外带。
  */
-const conversationTelemetryFactRuntimeSchema = z
-  .discriminatedUnion("kind", [
-    turnStartedFactSchema,
-    modelRequestStatusFactSchema,
-    streamChunkFactSchema,
-    toolLifecycleFactSchema,
-    permissionLifecycleFactSchema,
-    usageDeltaFactSchema,
-    subagentLifecycleFactSchema,
-    workflowLifecycleFactSchema,
-    turnTerminalFactSchema,
-    compactionTerminalFactSchema,
-  ])
-  .superRefine((fact, context) => {
-    // discriminatedUnion 的成员必须是裸 ZodObject，按 phase 的条件必填只能写在这里。
-    if (
-      fact.kind === "workflow.lifecycle" &&
-      fact.phase === "actor-spawned" &&
-      (!fact.agentId || !fact.childSessionId)
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "actor-spawned requires agentId and childSessionId",
-      });
-    }
-    if (fact.kind === "workflow.lifecycle" && fact.phase === "run-settled" && !fact.status) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "run-settled requires status",
-        path: ["status"],
-      });
-    }
-  });
+const conversationTelemetryFactRuntimeSchema = z.discriminatedUnion("kind", [
+  turnStartedFactSchema,
+  modelRequestStatusFactSchema,
+  streamChunkFactSchema,
+  toolLifecycleFactSchema,
+  permissionLifecycleFactSchema,
+  usageDeltaFactSchema,
+  subagentLifecycleFactSchema,
+  turnTerminalFactSchema,
+  compactionTerminalFactSchema,
+]);
 
 export type ConversationTelemetryFact = z.infer<typeof conversationTelemetryFactRuntimeSchema>;
 export const conversationTelemetryFactSchema = conversationTelemetryFactRuntimeSchema;

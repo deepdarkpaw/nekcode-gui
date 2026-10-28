@@ -16,7 +16,6 @@ import {
   IFileWatcherService,
   IModelSelectionService,
   IProviderSettingsService,
-  ICodingPlanSubscriptionService,
   IClientScenesService,
   ISkillsService,
   ISkillSyncService,
@@ -34,11 +33,9 @@ import {
   createSettingService,
   createCredentialService,
   createBroadcastService,
-  createNodeApiClient,
   createHostApiNetworkTransport,
   registerHostApiNetworkTransportForDispose,
   createSettingsSyncService,
-  createCodingPlanSubscriptionService,
   createClientScenesService,
   createServiceLogger,
   createSubagentsService,
@@ -80,13 +77,7 @@ export function createRemoteWorkspaceServiceCollection(params: {
       caCertPath: settings.httpProxyCaCertPath,
     };
   });
-  const localApiClient = createNodeApiClient({
-    fetchImpl: hostApiNetworkTransport.fetch,
-  });
   const localBroadcastService = createBroadcastService(params.parentPort);
-  const localCodingPlanSubscriptionService = createCodingPlanSubscriptionService({
-    apiClient: localApiClient,
-  });
   const conversationShareService = new ConversationShareService({
     zcodeAgentService: params.connectionServices.zcodeAgentService,
     artifactSource: createRemoteConversationShareArtifactSource(
@@ -230,7 +221,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
     // 必须直接读取远端 Registry，不能继续显示 Desktop 本地 Provider。
     .register(IModelSelectionService, params.connectionServices.modelSelectionService)
     .register(IProviderSettingsService, params.connectionServices.providerSettingsService)
-    .register(ICodingPlanSubscriptionService, localCodingPlanSubscriptionService)
     .register(IClientScenesService, createClientScenesService())
     // 远端 workspace 的项目级 skills/plugins/commands 位于 SSH/Docker 文件系统。
     // 这里必须透出远端服务，避免本机服务拿远端 workspacePath 去本机目录扫描。

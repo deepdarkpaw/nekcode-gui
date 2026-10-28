@@ -298,7 +298,7 @@ test("create a draft then upload assets; never publish it", async () => {
   assert.notEqual(notesIndex, -1);
   assert.equal(
     calls[1][notesIndex + 1],
-    "To be, or not to be, that is the question.\n\n生存还是毁灭，这是一个问题。\n\n— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》\n\nProducts: ZCodium Exp uses the default TS runtime; ZCodium Rust is experimental and uses the default Rust runtime.\n\nFeatures: workflow Holes; mobile replayable realtime; scoped upstream 3.15.1 sync. Manual platform acceptance is not complete.\n\nmacOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.",
+    "To be, or not to be, that is the question.\n\n生存还是毁灭，这是一个问题。\n\n— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》\n\nProducts: ZCodium Exp uses the default TS runtime; ZCodium Rust is experimental and uses the default Rust runtime.\n\nFeatures: mobile replayable realtime; scoped upstream 3.15.1 sync. Manual platform acceptance is not complete.\n\nmacOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.",
   );
   assert.equal(calls[2][2], "upload");
   assert.ok(calls[2].includes("--clobber"));

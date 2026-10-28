@@ -36,14 +36,13 @@ export interface ChromiumProcessMetricSample {
 
 /**
  * 角色归属的 pid 快照。renderer 必须区分主窗口与 `<webview>` guest，
- * host 与 scheduler 的 utilityProcess pid 由各自 spawn 点登记。
+ * host 的 utilityProcess pid 由各自 spawn 点登记。
  */
 export interface ChromiumProcessRolePids {
   mainPid: number;
   mainWindowRendererPids: ReadonlySet<number>;
   guestRendererPids: ReadonlySet<number>;
   hostPids: ReadonlySet<number>;
-  schedulerPids: ReadonlySet<number>;
 }
 
 export interface ChromiumRoleAggregate {
@@ -93,9 +92,6 @@ function classifyChromiumProcessRole(
   }
   if (pids.hostPids.has(sample.pid)) {
     return "host";
-  }
-  if (pids.schedulerPids.has(sample.pid)) {
-    return "scheduler";
   }
   return "chromium_other";
 }

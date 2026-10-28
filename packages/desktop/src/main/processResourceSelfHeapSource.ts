@@ -1,7 +1,7 @@
 /**
- * host 与 scheduler 自采 heap 的样本来源（注册表第三行）。
+ * host 自采 heap 的样本来源（注册表第三行）。
  *
- * 两个 utilityProcess 各自每 60 秒读一次 `process.memoryUsage()` 与 `process.cpuUsage()`，
+ * host utilityProcess 每 60 秒读一次 `process.memoryUsage()` 与 `process.cpuUsage()`，
  * 经 parentPort 把样本送到 main，由消息分发点调用这里的 `ingestXxx` 存下最近一次读数；
  * 下一个 10 秒 tick 把它并进同角色的完整样本，成为 `heap_used_kb_mean` / `heap_used_kb_peak`。
  *
@@ -17,8 +17,7 @@ import type { ProcessResourceSampleSource } from "./processResourceSampleSources
 const pendingHeapUsedKb = new Map<ProcessResourceRole, number>();
 
 /**
- * 摄入口按 `unknown` 收：host 走 host 响应 schema、scheduler 走 main 里没有统一校验的私有协议，
- * 两条传输链路在这里合成同一个信任边界，校验只有这一处。
+ * 摄入口按 `unknown` 收：校验只有这一处。
  * 非法消息（字段缺失、类型错误、夹带多余字段）直接丢弃，不抛错。
  */
 function ingest(role: ProcessResourceRole, raw: unknown): void {
@@ -32,10 +31,6 @@ function ingest(role: ProcessResourceRole, raw: unknown): void {
 
 export function ingestHostSelfResourceSample(raw: unknown): void {
   ingest("host", raw);
-}
-
-export function ingestSchedulerSelfResourceSample(raw: unknown): void {
-  ingest("scheduler", raw);
 }
 
 export const selfHeapProcessResourceSampleSource: ProcessResourceSampleSource = {

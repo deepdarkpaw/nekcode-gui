@@ -29,7 +29,6 @@ import { errorAttributionSchema } from "../zcode-protocol-v4/snapshot.js";
 export * from "../background-bash-output.js";
 export * from "../process-diagnostic.js";
 import { integratedTerminalShellSelectionSchema } from "../validationAppSettings.js";
-import { zcodeTaskModeSchema } from "../zcode-task-mode-schema.js";
 import {
   zcodeSyntheticUserMessageSourceSchema as legacyZcodeSyntheticUserMessageSourceSchema,
   zcodeDeliveryKindSchema,
@@ -102,146 +101,6 @@ export const zcodeNodeReplImageToolResultDisplaySchema = z
   })
   .strict();
 
-// 同理：CreateWorkflow 的类型检查诊断也是 display 通道，必须在协议边界限长，
-// 避免大量诊断把 continuous/replayable 消息扩成无界载荷。
-// causalityGraph 在工具输出边界已限长，这里镜像同一组上界（与 v4 rows 保持一致）。
-// 图的词汇表刻意很小：step 卡片 + actor 车道 + 一种箭头（runs after，`back` 只标回边）+
-// 返回物标记。分析器的 kind / certainty / exact / region 不进载荷。
-// 名字只在运行时成形（`` agent(`研究员${i + 1}`) ``）时静态能拿到的形状：第一个洞之前的
-// 字面量（head）与最后一个洞之后的字面量（tail）。至少一个在场，两者都已 trim 且含实义字符。
-// Bug 修复：这两个字段随 0a8b059f40 落进 contracts 与 v4 镜像，v3 这份漏改——.strict()
-// 之下带插值名的工作流会让整个 display 验证失败、图整块消失，所以这里必须与 v4 逐字段对齐。
-const zcodeWorkflowNamePatternSchema = z
-  .object({
-    head: z.string().min(1).max(128).optional(),
-    tail: z.string().min(1).max(128).optional(),
-  })
-  .strict();
-
-// 一条边 = runs after；step 边与阶段边同形，`back` 只标循环回边。
-const zcodeWorkflowEdgeSchema = z
-  .object({
-    from: z.string().min(1).max(64),
-    to: z.string().min(1).max(64),
-    back: z.literal(true).optional(),
-  })
-  .strict();
-
-const zcodeCreateWorkflowCausalityGraphDisplaySchema = z
-  .object({
-    steps: z
-      .array(
-        z
-          .object({
-            id: z.string().min(1).max(64),
-            kind: z.enum(["ask", "world-read"]),
-            label: z.string().min(1).max(128),
-            // 内联 `agent()` receiver 让 label 落到兜底串时，那个名字的静态形状。
-            labelPattern: zcodeWorkflowNamePatternSchema.optional(),
-            line: z.number().int().positive().optional(),
-            column: z.number().int().positive().optional(),
-            lane: z.string().min(1).max(64),
-            lanes: z.array(z.string().min(1).max(64)).max(32).optional(),
-            // 展开自的站点 id，只出现在 may-set 车道展开的拷贝上（实时叠加的关联键）；
-            // 加字段是 additive 的，不带它的旧载荷照常通过 .strict()。
-            source: z.string().min(1).max(64).optional(),
-            // 作者用 `phase("…")` 标记划入的阶段。
-            // 与图的 phases / phaseEdges / exits 同进同退：全在场或全缺席。
-            phase: z.string().min(1).max(64).optional(),
-            repeat: z.enum(["stack", "serial"]).optional(),
-          })
-          .strict(),
-      )
-      .max(64),
-    lanes: z
-      .array(
-        z
-          .object({
-            id: z.string().min(1).max(64),
-            name: z.string().min(1).max(128).optional(),
-            // `name` 缺席而 agent() 首参是带洞的模板串时的静态形状；与 name 互斥。
-            namePattern: zcodeWorkflowNamePatternSchema.optional(),
-            line: z.number().int().positive().optional(),
-            column: z.number().int().positive().optional(),
-          })
-          .strict(),
-      )
-      .max(32),
-    // 参与者与交接；镜像 v4。
-    participants: z
-      .array(
-        z
-          .object({
-            id: z.string().min(1).max(64),
-            phase: z.string().min(1).max(64),
-            lane: z.string().min(1).max(64),
-            steps: z.array(z.string().min(1).max(64)).min(1).max(64),
-            member: z
-              .object({ index: z.number().int().nonnegative(), of: z.number().int().positive() })
-              .strict()
-              .optional(),
-            many: z.literal(true).optional(),
-          })
-          .strict(),
-      )
-      .max(64),
-    handoffs: z
-      .array(
-        zcodeWorkflowEdgeSchema
-          .extend({ types: z.array(z.string().min(1).max(128)).min(1).max(8).optional() })
-          .strict(),
-      )
-      .max(256),
-    // 阶段词汇表：作者施加的分组结构，主画面以它为节点。与 phaseEdges / exits / Step.phase
-    // 全有或全无——零标记脚本全缺席，UI 据此退回 step/车道视图。零成员阶段也在表里。
-    // `unphased` 无 name，显示名由 UI 本地化。
-    phases: z
-      .array(
-        z
-          .object({
-            id: z.string().min(1).max(64),
-            name: z.string().min(1).max(128).optional(),
-            line: z.number().int().positive().optional(),
-            column: z.number().int().positive().optional(),
-            // 进入本阶段时还在跑的其他阶段（它们的 strand 尚未 join），阶段表序，不含自己，
-            // 为空时缺席。是节点事实而不是边——控制没有从那里转移过来，所以不进 phaseEdges。
-            // 时间轴据此把相邻阶段折成一条分叉的「带」，侧栏迷你轨道画成双线段。
-            alongside: z.array(z.string().min(1).max(64)).min(1).max(32).optional(),
-          })
-          .strict(),
-      )
-      .max(32)
-      .optional(),
-    phaseEdges: z.array(zcodeWorkflowEdgeSchema).max(128).optional(),
-    // 控制流可在其后正常完成的阶段（阶段视图的「阶段 → 返回物」箭头）；组内可为空数组。
-    exits: z.array(z.string().min(1).max(64)).max(32).optional(),
-    sink: z.array(z.string().min(1).max(64)).max(64).optional(),
-    truncated: z.boolean().optional(),
-  })
-  .strict();
-
-export const zcodeCreateWorkflowToolResultDisplaySchema = z
-  .object({
-    kind: z.literal("create_workflow"),
-    ok: z.boolean(),
-    errorCount: z.number().int().nonnegative(),
-    diagnostics: z
-      .array(
-        z
-          .object({
-            line: z.number().int().nonnegative(),
-            column: z.number().int().nonnegative(),
-            code: z.number().int().nonnegative(),
-            message: z.string().min(1).max(2_048),
-          })
-          .strict(),
-      )
-      .max(100),
-    causalityGraph: zcodeCreateWorkflowCausalityGraphDisplaySchema.optional(),
-    truncated: z.boolean().optional(),
-  })
-  .strict();
-
 const zcodeToolResultObjectSchema = jsonObjectSchema.superRefine((result, context) => {
   const display = result.display;
   if (typeof display !== "object" || display === null || Array.isArray(display)) {
@@ -250,7 +109,6 @@ const zcodeToolResultObjectSchema = jsonObjectSchema.superRefine((result, contex
   const kind = (display as Record<string, unknown>).kind;
   const schemaByKind: Record<string, z.ZodTypeAny> = {
     node_repl_images: zcodeNodeReplImageToolResultDisplaySchema,
-    create_workflow: zcodeCreateWorkflowToolResultDisplaySchema,
     bash_output: bashOutputDisplaySchema,
   };
   const schema = typeof kind === "string" ? schemaByKind[kind] : undefined;
@@ -1105,7 +963,7 @@ export const zcodeTurnStartedEventPayloadSchema = z
     attachments: z.array(jsonObjectSchema).optional(),
   })
   .strict();
-const zcodeTurnSteerSourceSchema = z.enum(["plan_approval_feedback", "workflow_refine_feedback"]);
+const zcodeTurnSteerSourceSchema = z.enum(["plan_approval_feedback"]);
 const zcodeTurnSteerCommandKindSchema = z.enum(["sendText", "sendGoalCommand", "compact"]);
 const zcodeTurnSteerDeliverySchema = z.enum(["queue", "guide"]);
 
@@ -1490,8 +1348,6 @@ export const zcodeSessionCreateParamsSchema = z
     toolAllowlist: z.array(nonEmptyString).optional(),
     toolDenylist: z.array(nonEmptyString).optional(),
     importedHistory: zcodeSessionImportHistorySchema.optional(),
-    // Host 裁决动态工作流工具策略，缺省不下发 = 不注册（fail-closed）。
-    dynamicWorkflowEnabled: z.boolean().optional(),
   })
   .strict();
 export type ZCodeSessionCreateParams = z.infer<typeof zcodeSessionCreateParamsSchema>;
@@ -1506,8 +1362,6 @@ export const zcodeSessionResumeParamsSchema = z
     // 冷恢复重建 runtime 时必须沿用 create 的工具面约束（否则会绕过 allow/deny）。
     toolAllowlist: z.array(nonEmptyString).optional(),
     toolDenylist: z.array(nonEmptyString).optional(),
-    // 与 create 同语义；resume 不带会导致冷恢复丢工作流工具簇。
-    dynamicWorkflowEnabled: z.boolean().optional(),
   })
   .strict();
 export type ZCodeSessionResumeParams = z.infer<typeof zcodeSessionResumeParamsSchema>;
@@ -1651,7 +1505,6 @@ export const zcodeSessionSendParamsSchema = z
     attachments: z.array(jsonObjectSchema).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
     expectedProviderRevision: nonEmptyString.optional(),
-    automationId: nonEmptyString.optional(),
     toolDenylist: z.array(nonEmptyString).optional(),
   })
   .strict()
@@ -2075,28 +1928,6 @@ export type ZCodeWorkspaceUpdateInteractionPreferencesResult = z.infer<
   typeof zcodeWorkspaceUpdateInteractionPreferencesResultSchema
 >;
 
-// 动态工作流灰度门禁：workspace 级事实，
-// Host→CLI 同步；旧 CLI method-not-found → Host 降级忽略。
-export const zcodeWorkspaceUpdateDynamicWorkflowPolicyParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    enabled: z.boolean(),
-  })
-  .strict();
-export type ZCodeWorkspaceUpdateDynamicWorkflowPolicyParams = z.infer<
-  typeof zcodeWorkspaceUpdateDynamicWorkflowPolicyParamsSchema
->;
-
-export const zcodeWorkspaceUpdateDynamicWorkflowPolicyResultSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    enabled: z.boolean(),
-  })
-  .strict();
-export type ZCodeWorkspaceUpdateDynamicWorkflowPolicyResult = z.infer<
-  typeof zcodeWorkspaceUpdateDynamicWorkflowPolicyResultSchema
->;
-
 export const zcodePermissionRequestParamsSchema = z
   .object({
     requestId: nonEmptyString,
@@ -2193,435 +2024,6 @@ export type ZCodeSkillsReferenceCatalogResult = z.infer<
   typeof zcodeSkillsReferenceCatalogResultSchema
 >;
 
-// ── 已保存工作流的 GUI 中枢──
-// workspace 级、无会话的五个方法，照 skills/referenceCatalog 的先例：每次调用现扫
-// `<cwd>/.zcodium/workflows/`（挂载时快照会漏掉手改的文件）。形状与 @zcode/contracts 的
-// saved-workflow.ts 逐字对齐——依赖方向是 contracts → shared，所以这里结构化地再声明一遍，
-// 而不是 import；两边的 strict 形状由 bootstrap 侧的协议测试互相钉住。
-export const zcodeSavedWorkflowArgTypeSchema = z.enum(["string", "number", "boolean", "json"]);
-export type ZCodeSavedWorkflowArgType = z.infer<typeof zcodeSavedWorkflowArgTypeSchema>;
-export const zcodeSavedWorkflowArgDeclarationSchema = z
-  .object({
-    type: zcodeSavedWorkflowArgTypeSchema,
-    description: z.string().optional(),
-    required: z.boolean().optional(),
-    default: z.unknown().optional(),
-  })
-  .strict();
-export type ZCodeSavedWorkflowArgDeclaration = z.infer<
-  typeof zcodeSavedWorkflowArgDeclarationSchema
->;
-export const zcodeSavedWorkflowArgsDeclarationSchema = z.record(
-  z.string(),
-  zcodeSavedWorkflowArgDeclarationSchema,
-);
-export type ZCodeSavedWorkflowArgsDeclaration = z.infer<
-  typeof zcodeSavedWorkflowArgsDeclarationSchema
->;
-export const zcodeSavedWorkflowMetaSchema = z
-  .object({
-    description: nonEmptyString,
-    whenToUse: nonEmptyString.optional(),
-    args: zcodeSavedWorkflowArgsDeclarationSchema.optional(),
-  })
-  .strict();
-export type ZCodeSavedWorkflowMeta = z.infer<typeof zcodeSavedWorkflowMetaSchema>;
-// 作用域两档：项目档落 `<cwd>/.zcodium/workflows/`、全局档落 agent 机器的 `~/.zcodium/workflows/`。作用域由文件所在目录推得，frontmatter 不存 scope。
-export const zcodeSavedWorkflowScopeSchema = z.enum(["project", "global"]);
-export type ZCodeSavedWorkflowScope = z.infer<typeof zcodeSavedWorkflowScopeSchema>;
-export const zcodeSavedWorkflowEntrySchema = z
-  .object({
-    name: nonEmptyString,
-    description: z.string(),
-    whenToUse: z.string().optional(),
-    args: zcodeSavedWorkflowArgsDeclarationSchema.optional(),
-    scope: zcodeSavedWorkflowScopeSchema,
-    path: nonEmptyString,
-  })
-  .strict();
-export type ZCodeSavedWorkflowEntry = z.infer<typeof zcodeSavedWorkflowEntrySchema>;
-export const zcodeSavedWorkflowInvalidEntrySchema = z
-  .object({ path: nonEmptyString, reason: nonEmptyString })
-  .strict();
-export type ZCodeSavedWorkflowInvalidEntry = z.infer<typeof zcodeSavedWorkflowInvalidEntrySchema>;
-/** 名字非法 / 未找到 / frontmatter 坏 / 读错——与 core store 的 resolve 失败四态逐字对应。 */
-export const zcodeSavedWorkflowFailureReasonSchema = z.enum([
-  "invalid_name",
-  "not_found",
-  "parse_error",
-  "read_error",
-]);
-export type ZCodeSavedWorkflowFailureReason = z.infer<typeof zcodeSavedWorkflowFailureReasonSchema>;
-const zcodeSavedWorkflowFailureSchema = z
-  .object({
-    ok: z.literal(false),
-    reason: zcodeSavedWorkflowFailureReasonSchema,
-    detail: z.string().optional(),
-  })
-  .strict();
-
-export const zcodeWorkflowsListParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    // 缺省即 `project`（本项目档）。给 `global` 时改扫本机 `~/.zcodium/workflows/`；此时 `workspace`
-    // 仍必填，但只是**载体运行时**——协议处理器对全局档不读它的路径。
-    scope: zcodeSavedWorkflowScopeSchema.optional(),
-  })
-  .strict();
-export type ZCodeWorkflowsListParams = z.infer<typeof zcodeWorkflowsListParamsSchema>;
-export const zcodeWorkflowsListResultSchema = z
-  .object({
-    workflows: z.array(zcodeSavedWorkflowEntrySchema),
-    invalid: z.array(zcodeSavedWorkflowInvalidEntrySchema),
-    // 扫过的目录（本地绝对路径），即使目录还不存在也回：GUI 的文件监听靠它 watch。
-    dir: nonEmptyString,
-  })
-  .strict();
-export type ZCodeWorkflowsListResult = z.infer<typeof zcodeWorkflowsListResultSchema>;
-
-export const zcodeWorkflowsGetParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    name: nonEmptyString,
-    // 缺省 `project`；`global` 时只查本机全局根。`workspace` 语义同 list（全局档只当载体）。
-    scope: zcodeSavedWorkflowScopeSchema.optional(),
-  })
-  .strict();
-export type ZCodeWorkflowsGetParams = z.infer<typeof zcodeWorkflowsGetParamsSchema>;
-export const zcodeWorkflowsGetResultSchema = z.union([
-  z
-    .object({
-      ok: z.literal(true),
-      name: nonEmptyString,
-      path: nonEmptyString,
-      scope: zcodeSavedWorkflowScopeSchema,
-      meta: zcodeSavedWorkflowMetaSchema,
-      /** 脚本本体（frontmatter 之后逐字节），即被类型检查与执行的那一份。 */
-      script: z.string(),
-    })
-    .strict(),
-  zcodeSavedWorkflowFailureSchema,
-]);
-export type ZCodeWorkflowsGetResult = z.infer<typeof zcodeWorkflowsGetResultSchema>;
-
-export const zcodeWorkflowsUpdateMetaParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    name: nonEmptyString,
-    meta: zcodeSavedWorkflowMetaSchema,
-    // 缺省 `project`；`global` 时只写本机全局根那一份。`workspace` 语义同 list。
-    scope: zcodeSavedWorkflowScopeSchema.optional(),
-  })
-  .strict();
-export type ZCodeWorkflowsUpdateMetaParams = z.infer<typeof zcodeWorkflowsUpdateMetaParamsSchema>;
-export const zcodeWorkflowsUpdateMetaResultSchema = z.union([
-  z.object({ ok: z.literal(true), path: nonEmptyString }).strict(),
-  zcodeSavedWorkflowFailureSchema,
-]);
-export type ZCodeWorkflowsUpdateMetaResult = z.infer<typeof zcodeWorkflowsUpdateMetaResultSchema>;
-
-export const zcodeWorkflowsDeleteParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    name: nonEmptyString,
-    // 缺省 `project`；`global` 时按 scope 选根删除（不再写死 roots[0]）。`workspace` 语义同 list。
-    scope: zcodeSavedWorkflowScopeSchema.optional(),
-  })
-  .strict();
-export type ZCodeWorkflowsDeleteParams = z.infer<typeof zcodeWorkflowsDeleteParamsSchema>;
-export const zcodeWorkflowsDeleteResultSchema = z.union([
-  z.object({ ok: z.literal(true), path: nonEmptyString }).strict(),
-  zcodeSavedWorkflowFailureSchema,
-]);
-export type ZCodeWorkflowsDeleteResult = z.infer<typeof zcodeWorkflowsDeleteResultSchema>;
-
-export const ZCODE_WORKFLOWS_RUNS_MAX_LIMIT = 50;
-export const zcodeWorkflowsRunsParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    /** 只要这个名字的 run（`dwf_run.name` 字面等值）；缺省即本项目全部 run。 */
-    name: nonEmptyString.optional(),
-    limit: z.number().int().min(1).max(ZCODE_WORKFLOWS_RUNS_MAX_LIMIT),
-    // 缺省 `project`：只查 `dwf_run.cwd === workspacePath` 的 run。`global` 时**不**按 cwd 过滤，
-    // 跨所有项目取该名字的运行历史（全局工作流在任何项目里跑，历史因此跨 cwd）；结果行带 `cwd`
-    // 供 GUI 标项目。`workspace` 语义同 list（全局档只当载体）。
-    scope: zcodeSavedWorkflowScopeSchema.optional(),
-  })
-  .strict();
-export type ZCodeWorkflowsRunsParams = z.infer<typeof zcodeWorkflowsRunsParamsSchema>;
-// 三终态词汇：errored = 脚本之错，stopped = 被停下（可恢复）。
-export const zcodeSavedWorkflowRunStatusSchema = z.enum([
-  "pending",
-  "running",
-  "completed",
-  "errored",
-  "stopped",
-]);
-export type ZCodeSavedWorkflowRunStatus = z.infer<typeof zcodeSavedWorkflowRunStatusSchema>;
-export const zcodeSavedWorkflowRunStopReasonSchema = z.enum([
-  "user",
-  "model",
-  "provider",
-  "interrupted",
-  "superseded",
-]);
-export const zcodeSavedWorkflowRunSchema = z
-  .object({
-    runId: nonEmptyString,
-    name: z.string().optional(),
-    status: zcodeSavedWorkflowRunStatusSchema,
-    // `status === "stopped"` 才在场。
-    stopReason: zcodeSavedWorkflowRunStopReasonSchema.optional(),
-    createdAt: z.number(),
-    updatedAt: z.number(),
-    spentTokens: z.number(),
-    /** 发起它的会话与 CreateWorkflow 工具调用：有这两个才能从中枢打开实例详情。老行可缺。 */
-    parentSessionId: z.string().optional(),
-    toolCallId: z.string().optional(),
-    args: z.record(z.string(), z.unknown()).optional(),
-    // 实际运行的项目目录（`dwf_run.cwd`）。全局档的 `workflows/runs` 跨 cwd 查询，GUI 用它给
-    // 每行标项目；项目档变体里它恒等于 workspacePath，GUI 可忽略。老行可缺。
-    cwd: z.string().optional(),
-    // 这次运行发布的**用户面产物**：中枢的运行历史行在
-    // 状态词之后画一串 kind chips，详情页头部的「最近产物」条取最近一次 completed run 的这一份。
-    // ⚠ 术语：这里的 artifact 是脚本经 `artifact.*` 发布给用户看的产出，不是脚本的顶层返回值。
-    // 只带 chip 画得下的字段（≤ 8 件，取最新版的元数据）；字节与条目经 v4 查询按需读。
-    // optional，照上面 `cwd` 的先例：老 CLI 不发，少一个键是退化不是错误。
-    artifacts: z
-      .array(
-        z
-          .object({
-            id: nonEmptyString,
-            kind: z.enum(["file", "markdown", "chart", "table", "metrics", "board"]),
-            title: z.string().optional(),
-            version: z.number(),
-            contentType: z.string().optional(),
-          })
-          .strict(),
-      )
-      .max(8)
-      .optional(),
-  })
-  .strict();
-export type ZCodeSavedWorkflowRun = z.infer<typeof zcodeSavedWorkflowRunSchema>;
-export const zcodeWorkflowsRunsResultSchema = z
-  .object({
-    runs: z.array(zcodeSavedWorkflowRunSchema),
-    /** 为真时才在场：还有更多 run 没进这一页（多取一条判定，不是 length === limit）。 */
-    truncated: z.literal(true).optional(),
-  })
-  .strict();
-export type ZCodeWorkflowsRunsResult = z.infer<typeof zcodeWorkflowsRunsResultSchema>;
-
-// workflows/move：把本机全局根的同名文件搬到 `workspace` 项目根。**只此一向**：项目→全局不是搬文件而是模型的概括（「提升为
-// 全局」在该项目开新会话、经 SaveWorkflow 另存），所以没有 `to` 参数。同机同用户，rename 优先、EXDEV
-// 回落 copy+unlink；逐字节搬，不改内容（frontmatter 不存 scope）；`move` 不覆盖——目标已存在即拒绝
-// （覆盖是 SaveWorkflow 经确认窗才有的动作，不变式 7）。`workspace` 既是载体运行时也是目标项目。
-export const zcodeWorkflowsMoveParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    name: nonEmptyString,
-  })
-  .strict();
-export type ZCodeWorkflowsMoveParams = z.infer<typeof zcodeWorkflowsMoveParamsSchema>;
-export const zcodeWorkflowsMoveResultSchema = z.union([
-  z
-    .object({
-      ok: z.literal(true),
-      /** 源落点路径（全局根，搬走前）。 */
-      from: nonEmptyString,
-      /** 目标落点路径（项目根，搬到处）。 */
-      to: nonEmptyString,
-    })
-    .strict(),
-  z
-    .object({
-      ok: z.literal(false),
-      // target_exists：目标档已有同名（move 不覆盖）；not_found：源档没有这个名字；
-      // read_error / write_error：搬运时的 I/O 失败；invalid_name：名字先验没过。
-      reason: z.enum(["invalid_name", "not_found", "target_exists", "read_error", "write_error"]),
-      path: z.string().optional(),
-      detail: z.string().optional(),
-    })
-    .strict(),
-]);
-export type ZCodeWorkflowsMoveResult = z.infer<typeof zcodeWorkflowsMoveResultSchema>;
-
-export const zcodeAutomationScheduleRuleSchema = z
-  .object({
-    unit: z.enum(["minute", "hourly", "daily", "weekly", "monthly", "yearly"]),
-    interval: z.number().int().positive(),
-    hour: z.number().int().min(0).max(23),
-    minute: z.number().int().min(0).max(59),
-    anchorAt: z.number().int(),
-    weekdays: z.array(z.number().int().min(0).max(6)).optional(),
-    monthDays: z.array(z.number().int().min(1).max(31)).optional(),
-    /** yearly 用：1-12 人类月份。缺省回退 anchorAt 的月份（兼容未写该字段的旧记录）。 */
-    months: z.array(z.number().int().min(1).max(12)).optional(),
-    monthlyMode: z.enum(["date", "weekday"]).optional(),
-  })
-  .strict();
-export type ZCodeAutomationScheduleRuleProtocol = z.infer<typeof zcodeAutomationScheduleRuleSchema>;
-
-/** 会话侧长间隔周期 carrier 的 unit 枚举（与 scheduleRule.unit 同集）。 */
-export const zcodeAutomationIntervalUnitSchema = z.enum([
-  "minute",
-  "hourly",
-  "daily",
-  "weekly",
-  "monthly",
-  "yearly",
-]);
-
-export const zcodeAutomationProtocolSchema = z
-  .object({
-    automationId: nonEmptyString,
-    title: z.string(),
-    cronExpr: nonEmptyString,
-    prompt: nonEmptyString,
-    modelSelection: modelSelectionSchema.optional(),
-    mode: zcodeTaskModeSchema.optional(),
-    targetTaskId: nonEmptyString.optional(),
-    enabled: z.boolean(),
-    lifecycleStatus: z.enum(["active", "completed", "failed", "paused"]),
-    nextRunAt: timestampMsSchema.optional(),
-    lastRunAt: timestampMsSchema.optional(),
-    runCount: z.number().int().nonnegative(),
-    recurring: z.boolean(),
-    maxRuns: z.number().int().positive().optional(),
-    // 自定义重复规则；缺省时调度回退到解析 cronExpr。会话卡片必须读到本字段才能展示
-    // cron 无法表达的真实间隔（如每50小时、每40天，兼容 cronExpr 只是 0 * * * *）。
-    scheduleRule: zcodeAutomationScheduleRuleSchema.optional(),
-  })
-  .strict();
-export type ZCodeAutomationProtocol = z.infer<typeof zcodeAutomationProtocolSchema>;
-
-export const zcodeAutomationCreateParamsSchema = z
-  .object({
-    title: z.string().optional(),
-    cronExpr: nonEmptyString,
-    relativeDelayMinutes: z.number().int().positive().max(525_600).optional(),
-    prompt: nonEmptyString,
-    modelSelection: modelSelectionSchema.optional(),
-    mode: zcodeTaskModeSchema.optional(),
-    targetTaskId: nonEmptyString.optional(),
-    recurring: z.boolean().optional(),
-    maxRuns: z.number().int().positive().optional(),
-    // 会话侧自定义重复 carrier：每 N 分钟/小时/天/周/月/年均通过此字段归一化为权威 scheduleRule，
-    // cronExpr 仅作合法兼容展示。
-    intervalUnit: zcodeAutomationIntervalUnitSchema.optional(),
-    interval: z.number().int().min(1).max(200).optional(),
-  })
-  .strict()
-  // intervalUnit 与 interval 必须配对提交（只传一个无法确定真实间隔）。
-  .refine((input) => (input.intervalUnit === undefined) === (input.interval === undefined), {
-    message: "intervalUnit and interval must be set together",
-    path: ["interval"],
-  })
-  // 周期 carrier 与一次性相对延迟语义冲突，禁止同传。
-  .refine((input) => input.intervalUnit === undefined || input.relativeDelayMinutes === undefined, {
-    message: "intervalUnit cannot combine with a relative delayMinutes",
-    path: ["intervalUnit"],
-  })
-  .refine((input) => input.intervalUnit === undefined || input.recurring !== false, {
-    message: "intervalUnit is a recurring carrier and cannot combine with recurring=false",
-    path: ["recurring"],
-  })
-  .refine((input) => input.intervalUnit === undefined || input.maxRuns === undefined, {
-    message: "intervalUnit is a recurring carrier and cannot combine with maxRuns",
-    path: ["maxRuns"],
-  });
-export type ZCodeAutomationCreateProtocolParams = z.infer<typeof zcodeAutomationCreateParamsSchema>;
-
-export const zcodeAutomationCreateResultSchema = z
-  .object({ automation: zcodeAutomationProtocolSchema })
-  .strict();
-export type ZCodeAutomationCreateProtocolResult = z.infer<typeof zcodeAutomationCreateResultSchema>;
-
-export const zcodeAutomationUpdateParamsSchema = z
-  .object({
-    automationId: nonEmptyString,
-    title: nonEmptyString.optional(),
-    cronExpr: nonEmptyString.optional(),
-    prompt: nonEmptyString.optional(),
-    recurring: z.boolean().optional(),
-    maxRuns: z.number().int().positive().nullable().optional(),
-    // 会话侧自定义重复 carrier（同 create 侧语义）。
-    intervalUnit: zcodeAutomationIntervalUnitSchema.optional(),
-    interval: z.number().int().min(1).max(200).optional(),
-  })
-  .strict()
-  .refine(
-    (input) =>
-      input.title !== undefined ||
-      input.cronExpr !== undefined ||
-      input.prompt !== undefined ||
-      input.recurring !== undefined ||
-      input.maxRuns !== undefined ||
-      input.intervalUnit !== undefined,
-    { message: "automation update requires at least one field" },
-  )
-  .refine((input) => input.maxRuns !== null || input.recurring === true, {
-    message: "clearing maxRuns requires recurring=true",
-    path: ["maxRuns"],
-  })
-  .refine((input) => input.recurring !== true || typeof input.maxRuns !== "number", {
-    message: "recurring=true cannot be combined with a numeric maxRuns",
-    path: ["maxRuns"],
-  })
-  // intervalUnit 与 interval 必须配对提交（同 create 侧语义）。
-  .refine((input) => (input.intervalUnit === undefined) === (input.interval === undefined), {
-    message: "intervalUnit and interval must be set together",
-    path: ["interval"],
-  })
-  .refine((input) => input.intervalUnit === undefined || input.recurring !== false, {
-    message: "intervalUnit is a recurring carrier and cannot combine with recurring=false",
-    path: ["recurring"],
-  })
-  .refine(
-    (input) =>
-      input.intervalUnit === undefined ||
-      input.maxRuns === undefined ||
-      (input.maxRuns === null && input.recurring === true),
-    {
-      message:
-        "intervalUnit is a recurring carrier and only allows maxRuns=null with recurring=true",
-      path: ["maxRuns"],
-    },
-  );
-export type ZCodeAutomationUpdateProtocolParams = z.infer<typeof zcodeAutomationUpdateParamsSchema>;
-export const zcodeAutomationUpdateResultSchema = z
-  .object({ automation: zcodeAutomationProtocolSchema })
-  .strict();
-export type ZCodeAutomationUpdateProtocolResult = z.infer<typeof zcodeAutomationUpdateResultSchema>;
-
-export const zcodeAutomationListParamsSchema = z.object({}).strict();
-export type ZCodeAutomationListProtocolParams = z.infer<typeof zcodeAutomationListParamsSchema>;
-export const zcodeAutomationListResultSchema = z
-  .object({ automations: z.array(zcodeAutomationProtocolSchema) })
-  .strict();
-export type ZCodeAutomationListProtocolResult = z.infer<typeof zcodeAutomationListResultSchema>;
-
-export const zcodeAutomationCheckTaskBindingParamsSchema = z
-  .object({ targetTaskId: nonEmptyString })
-  .strict();
-export type ZCodeAutomationCheckTaskBindingProtocolParams = z.infer<
-  typeof zcodeAutomationCheckTaskBindingParamsSchema
->;
-export const zcodeAutomationCheckTaskBindingResultSchema = z
-  .object({ bound: z.boolean() })
-  .strict();
-export type ZCodeAutomationCheckTaskBindingProtocolResult = z.infer<
-  typeof zcodeAutomationCheckTaskBindingResultSchema
->;
-
-export const zcodeAutomationDeleteParamsSchema = z
-  .object({ automationId: nonEmptyString })
-  .strict();
-export type ZCodeAutomationDeleteProtocolParams = z.infer<typeof zcodeAutomationDeleteParamsSchema>;
-export const zcodeAutomationDeleteResultSchema = z.object({ deleted: z.boolean() }).strict();
-export type ZCodeAutomationDeleteProtocolResult = z.infer<typeof zcodeAutomationDeleteResultSchema>;
-
 export const zcodeProtocolMethods = {
   runtimeCapabilities: "runtime/capabilities",
   sessionCreate: "session/create",
@@ -2662,8 +2064,6 @@ export const zcodeProtocolMethods = {
   workspaceHookTrustGrant: "workspace/hooks/trustGrant",
   // 进程级 Account Provider Config 与 workspace 运行目录分离。
   workspaceUpdateInteractionPreferences: "workspace/updateInteractionPreferences",
-  // 动态工作流工具策略按 workspace 同步。
-  workspaceUpdateDynamicWorkflowPolicy: "workspace/updateDynamicWorkflowPolicy",
   // LLM 执行面在 CLI，直连不可行；消费仅 services 内部
   // （commit message），待 v4 workspace 查询/命令面覆盖后移除。
   workspaceGenerateText: "workspace/generateText",
@@ -2671,19 +2071,6 @@ export const zcodeProtocolMethods = {
   providerTestModelConnectivity: "provider/testModelConnectivity",
   mcpList: "mcp/list",
   skillsReferenceCatalog: "skills/referenceCatalog",
-  // 已保存工作流的 GUI 中枢：workspace 级、无会话。
-  workflowsList: "workflows/list",
-  workflowsGet: "workflows/get",
-  workflowsUpdateMeta: "workflows/updateMeta",
-  workflowsDelete: "workflows/delete",
-  workflowsRuns: "workflows/runs",
-  // 在项目档 / 全局档之间移动同名文件。
-  workflowsMove: "workflows/move",
-  automationCreate: "automation/create",
-  automationUpdate: "automation/update",
-  automationCheckTaskBinding: "automation/checkTaskBinding",
-  automationList: "automation/list",
-  automationDelete: "automation/delete",
   // ZCode Protocol 对 agent 只暴露 session-first 方法；task 是 UI 投影概念，不能泄露进协议方法名。
   // @deprecated：host 已改走 v4/conversation/usage。
   sessionUsage: "session/usage",

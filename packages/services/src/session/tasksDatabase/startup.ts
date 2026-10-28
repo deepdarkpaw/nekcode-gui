@@ -7,7 +7,6 @@ const { DatabaseSync } = createRequire(import.meta.url)(
   "node:sqlite",
 ) as typeof import("node:sqlite");
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
-import { AutomationRepo } from "#src/session/automationRepo.js";
 import {
   runTasksDatabaseMigrations,
   inspectTasksMigrationKind,
@@ -100,7 +99,7 @@ export async function prepareTasksIndexStorage(
   }
   if (cleanupFailed) throw cleanupError;
   markTasksStorageMigrated(path);
-  const repos = [new TaskIndexRepo(path, LOCK_WAIT_MS), new AutomationRepo(path, LOCK_WAIT_MS)];
+  const repos = [new TaskIndexRepo(path, LOCK_WAIT_MS)];
   try {
     // 这些是原本就在初始化时执行的修复，不创建新的迁移或改变已有事务边界。
     for (const repo of repos) await repo.ensureReady();

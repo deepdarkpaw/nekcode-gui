@@ -4,7 +4,6 @@ import { tsImport } from "tsx/esm/api";
 import { loadComponentCallback } from "./fixtures/component-callback.mjs";
 
 const pane = "packages/ui/src/v4/SessionPane.tsx";
-const automation = "packages/ui/src/settings/AutomationEditView.tsx";
 const selection = Object.freeze({
   providerId: "fixture-api",
   modelId: "fixture-model",
@@ -120,46 +119,4 @@ test("side conversation delegates model inheritance to its parent Host and keeps
       childSessionId: "child",
     },
   ]);
-});
-
-test("automation save and run preserve the selected model and original validation boundaries", async () => {
-  for (const scenario of ["save", "run-now", "invalid", "missing-workspace", "failed"]) {
-    const saved = [],
-      events = [];
-    const callback = await loadComponentCallback(automation, "submitAutomation", {
-      recommendStartPlan: forbidden,
-      saving: false,
-      requestRequiredFieldValidation: () => scenario !== "invalid",
-      canSubmit: true,
-      modelSelection: { current: "fixture-model" },
-      model: "fixture-model",
-      thoughtLevelRef: { current: "high" },
-      thoughtLevel: "high",
-      modeRef: { current: "build" },
-      buildSubmitInput: () => ({ name: "Fixture automation", modelSelection: selection }),
-      editing: null,
-      changedFields: ["model"],
-      selectedWorkspace:
-        scenario === "missing-workspace"
-          ? null
-          : { workspacePath: "/fixture/workspace", workspaceIdentity: "fixture-remote" },
-      onSubmit: async (input) => {
-        saved.push(input);
-        events.push("save");
-        return scenario !== "failed";
-      },
-      onBack: () => events.push("back"),
-    });
-    const ok = await callback({
-      validationSource: scenario === "run-now" ? "run-now" : "save",
-      returnToList: scenario !== "run-now",
-    });
-    assert.equal(ok, scenario === "save" || scenario === "run-now");
-    assert.equal(saved.length, scenario === "invalid" || scenario === "missing-workspace" ? 0 : 1);
-    if (saved.length) {
-      assert.equal(saved[0].input.modelSelection, selection);
-      assert.equal(saved[0].workspaceIdentity, "fixture-remote");
-    }
-    assert.deepEqual(events, scenario === "save" ? ["save", "back"] : saved.length ? ["save"] : []);
-  }
 });

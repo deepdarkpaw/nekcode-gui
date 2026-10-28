@@ -52,7 +52,6 @@ import {
   type ZCodeAssistantMessageFeedback,
   type ZCodeBackgroundTaskControlItem,
   type ZCodeBackgroundTaskNotificationInfo,
-  type ZCodeBackgroundTurnAttribution,
   type ZCodeCancelTaskCommandResult,
   type ZCodeConfigOption,
   type ZCodeContextCompactionTimelineMeta,
@@ -120,7 +119,6 @@ import type {
   ZCodeTaskTerminalOutcome,
 } from "../session/zcodeTaskService.js";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
-import { AUTOMATION_MUTATION_TOOL_NAMES } from "#src/zcode-agent/automationToolPolicy.js";
 import type { ISettingService } from "#src/setting/setting.js";
 import type {
   SessionMessageDeliveryResult,
@@ -289,29 +287,6 @@ export function createZCodeTaskServiceAdapter(
     );
   }
 
-  function resolvePromptToolDenylist(params: {
-    automationId?: string;
-    toolDenylist?: string[];
-  }): string[] | undefined {
-    const toolDenylist = new Set(params.toolDenylist);
-    // 持久化的 cronAutomationId 不能当成当前 turn 的执行身份，否则定时任务
-    // 跑过一次后，用户在同一会话主动修改调度也永久看不到 CronUpdate。权限必须只看本轮
-    // automationId；cronAutomationId 仅保留任务归属和 UI 展示语义。
-    if (params.automationId) {
-      for (const toolName of AUTOMATION_MUTATION_TOOL_NAMES) {
-        toolDenylist.add(toolName);
-      }
-    }
-    return toolDenylist.size > 0 ? [...toolDenylist] : undefined;
-  }
-
-  function turnAttributionOf(
-    params: ZCodeBackgroundTurnAttribution,
-  ): ZCodeBackgroundTurnAttribution {
-    if (params.automationId) return { automationId: params.automationId };
-    return {};
-  }
-
   function configuredMcpServers(
     servers: ZCodeAgentMcpServer[] | undefined,
   ): ZCodeAgentMcpServer[] | undefined {
@@ -365,7 +340,7 @@ export function createZCodeTaskServiceAdapter(
       logReason?: string;
       modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
       modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
-    } & ZCodeBackgroundTurnAttribution,
+    },
   ): Promise<void> {
     const startedAt = Date.now();
     notifySyncerSession(target);
@@ -387,7 +362,7 @@ export function createZCodeTaskServiceAdapter(
       workspacePath: target.workspacePath,
     });
     try {
-      const promptToolDenylist = resolvePromptToolDenylist(params);
+      const promptToolDenylist = params.toolDenylist;
       if (params.attachments?.length) {
         // 遗留（附件命令面）：v4 sendText 的 attachments 是 attachmentRef 引用模型，
         // 上传/寄存命令面尚未建模（CLI 侧 fork-edit-retry.ts 同款裁决“附件命令面后续”）。
@@ -408,7 +383,6 @@ export function createZCodeTaskServiceAdapter(
           // 附件回退只改变载荷传输，不得丢掉本次已解析的模型或执行范围。
           modelSelection: params.modelSelection,
           modelExecution: params.modelExecution,
-          ...turnAttributionOf(params),
           toolDenylist: promptToolDenylist,
           ...(params.clientMode ? { clientMode: params.clientMode } : {}),
         });
@@ -430,7 +404,6 @@ export function createZCodeTaskServiceAdapter(
               heldQueueDisposition: "keepQueueAndSend",
               ...(params.modelSelection ? { modelSelection: params.modelSelection } : {}),
               ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
-              ...turnAttributionOf(params),
               ...(promptToolDenylist ? { toolDisallowlist: promptToolDenylist } : {}),
             },
             sessionId: target.taskId,
@@ -605,9 +578,6 @@ export function createZCodeTaskServiceAdapter(
         messageId: runningCommand.commandId,
         content: runningCommand.content,
         attachments: runningCommand.attachments,
-        ...turnAttributionOf(
-          runningCommand.automationId ? { automationId: runningCommand.automationId } : {},
-        ),
         // v4 sendText 信封保留手机提交端 clientId（pendingCommands 展示与幂等表按提交端区分）。
         clientId: runningCommand.clientId,
         logReason: "host-command-drain",
@@ -1881,7 +1851,6 @@ export function createZCodeTaskServiceAdapter(
         messageId: params.messageId,
         content: params.content,
         attachments: params.attachments,
-        ...turnAttributionOf(params),
         toolDenylist: params.toolDenylist,
         clientId: params.clientId,
         clientMode: params.clientMode,
@@ -1919,9 +1888,6 @@ export function createZCodeTaskServiceAdapter(
         type: "send_prompt",
         content: params.content,
         attachments: params.attachments,
-        // manual run / 手机 replayable 的 prompt 可能先进入 host command queue；
-        // 若这里丢 automationId，drain 时会按普通用户输入发送，CronCreate 会重新暴露。
-        automationId: params.automationId,
       };
       const key = taskKey(params);
       runtimeCommands.set(key, [...(runtimeCommands.get(key) ?? []), command]);
@@ -5631,9 +5597,7 @@ function stringArray(value: unknown): string[] {
 }
 
 function turnSteerSourceValue(value: unknown): ZCodeTurnSteerSource | undefined {
-  return value === "plan_approval_feedback" || value === "workflow_refine_feedback"
-    ? value
-    : undefined;
+  return value === "plan_approval_feedback" ? value : undefined;
 }
 
 function turnSteerCommandKindValue(value: unknown): ZCodeTurnSteerCommandKind | undefined {

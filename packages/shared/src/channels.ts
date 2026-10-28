@@ -76,8 +76,6 @@ export const ServiceChannels = {
   ModelSelection: "model-selection",
   /** 远端 Environment 内部 Provider Provisioning target */
   ProviderProvisioningTarget: "provider-provisioning-target",
-  /** Coding Plan 订阅购买服务 */
-  CodingPlanSubscription: "coding-plan-subscription",
   /** ZCode 客户端场景配置服务 */
   ClientScenes: "client-scenes",
   /** Skills 管理服务 */
@@ -343,8 +341,6 @@ export const HostMessageTypes = {
   SessionMessageDeliver: "session-message-deliver",
   /** main → host：把 session message 投递结果回写到源 session */
   SessionMessageDeliveryResult: "session-message-delivery-result",
-  /** main → host：定时任务到点派发；会话内 cron 复用 targetTaskId，历史未绑定任务才建 session */
-  CronRun: "cron-run",
   /** main → host：本地视频 canonical path 授权结果 */
   LocalMediaPreviewPathAuthorizeResult: "local-media-preview-path-authorize-result",
   /** main → host：要求 Host 现读本地 Source，并同步指定 Remote Environment。 */
@@ -417,10 +413,6 @@ export const HostResponseTypes = {
   SessionRouteAnnounce: "session-route-announce",
   /** host → main：目标 host 完成本地 session message 投递 */
   SessionMessageDeliverResult: "session-message-deliver-result",
-  /** host → main：定时任务派发结果（成功回填 taskId/sessionId，失败带 transient/permanent） */
-  CronRunResult: "cron-run-result",
-  /** host → main：manual run 已落库，请立即唤醒 scheduler 认领派发 */
-  CronSchedulerWakeRequest: "cron-scheduler-wake-request",
   /** host → main：请求授权 Agent 已精确校验的本地视频路径 */
   LocalMediaPreviewPathAuthorizeRequest: "local-media-preview-path-authorize-request",
   /** host → main：本地 Provisioning Source 成功持久化。 */

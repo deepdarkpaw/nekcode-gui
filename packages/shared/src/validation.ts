@@ -6,7 +6,6 @@ import { PROCESS_RESOURCE_CLI_LANES } from "./processResourceTelemetry.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { zcodeProviderSchema } from "./providers.js";
 import { zcodeAgentProviderSchema } from "./zcode-agent-policy.js";
-import { modelSelectionSchema } from "./model-selection.js";
 import { zcodeProcessDiagnosticSchema } from "./process-diagnostic.js";
 import { providerProvisioningTriggerSchema } from "./provider-provisioning.js";
 import {
@@ -306,20 +305,6 @@ export const hostSessionMessageDeliveryResultMessageSchema = z.object({
   result: sessionMessageDeliveryResultSchema,
 });
 
-// main → host：定时任务到点派发。会话内 cron 带 targetTaskId 时直接 sendPrompt 到当前会话；
-// 历史未绑定任务才 fallback createTask + sendPrompt 建 session。
-export const hostCronRunMessageSchema = z.object({
-  type: z.literal("cron-run"),
-  automationId: nonEmptyStringSchema,
-  runId: nonEmptyStringSchema,
-  workspacePath: nonEmptyStringSchema,
-  workspaceIdentity: z.string().optional(),
-  prompt: nonEmptyStringSchema,
-  targetTaskId: nonEmptyStringSchema.optional(),
-  modelSelection: modelSelectionSchema.optional(),
-  mode: z.string().optional(),
-});
-
 export const hostLocalMediaPreviewPathAuthorizeResultMessageSchema = z
   .object({
     type: z.literal("local-media-preview-path-authorize-result"),
@@ -374,7 +359,6 @@ export const hostIncomingMessageSchema = z.discriminatedUnion("type", [
   hostTaskOwnerCommandResultMessageSchema,
   hostSessionMessageDeliverMessageSchema,
   hostSessionMessageDeliveryResultMessageSchema,
-  hostCronRunMessageSchema,
   hostLocalMediaPreviewPathAuthorizeResultMessageSchema,
   hostProviderProvisioningExecuteMessageSchema,
 ]);
@@ -674,23 +658,6 @@ export const hostSessionMessageDeliverResultResponseSchema = z.object({
   result: sessionMessageDeliveryResultSchema,
 });
 
-// host → main：定时任务派发结果。ok=已成功创建 session 且 prompt 已发出。
-export const hostCronRunResultResponseSchema = z.object({
-  type: z.literal("cron-run-result"),
-  runId: nonEmptyStringSchema,
-  ok: z.boolean(),
-  taskId: z.string().optional(),
-  sessionId: z.string().optional(),
-  error: z.string().optional(),
-  failureKind: z.enum(["transient", "permanent"]).optional(),
-});
-
-// host → main：manual run 落库后的 scheduler 唤醒请求；业务数据仍由 scheduler 从 sqlite 读取。
-export const hostCronSchedulerWakeRequestResponseSchema = z.object({
-  type: z.literal("cron-scheduler-wake-request"),
-  automationId: nonEmptyStringSchema,
-});
-
 export const hostLocalMediaPreviewPathAuthorizeRequestResponseSchema = z
   .object({
     type: z.literal("local-media-preview-path-authorize-request"),
@@ -800,8 +767,6 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostNetworkTelemetryBatchResponseSchema,
   hostProviderProvisioningSourceChangedResponseSchema,
   hostProviderProvisioningExecutionResultResponseSchema,
-  hostCronRunResultResponseSchema,
-  hostCronSchedulerWakeRequestResponseSchema,
 ]);
 
 export const zcodeTaskPersistStatusSchema = z.enum(["running", "completed", "error"]);

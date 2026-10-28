@@ -2871,7 +2871,7 @@ const enUS: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipAgent": "Open running agents",
   "chat.composer.backgroundWorks.tooltipMixed": "Open running terminals and agents",
   "chat.composer.backgroundWorks.ariaLabel":
-    "Open running background tasks: {bashCount} Bash, {workflowCount} workflow, {subagentCount} Subagent, {count} total",
+    "Open running background tasks: {bashCount} Bash, {subagentCount} Subagent, {count} total",
   "chat.summaryPanel.goalIterationValue": "Iteration {count}",
   "chat.summaryPanel.todoGoalIterationGroup": "Iteration {count}",
   "chat.summaryPanel.todoSessionGroup": "Session",
@@ -3096,12 +3096,6 @@ const enUS: Record<string, string> = {
   "chat.toolCall.workflow.models.truncated": "Not all models are shown",
   // ── Escalation tool cards ──
   // escalate：子代理把阻塞问题升级给主代理，停驻等答案。asking 相可能持续很久，措辞要平静。
-  "chat.toolCall.workflow.escalate.asking": "Asking the main agent",
-  "chat.toolCall.workflow.escalate.asked": "Asked the main agent",
-  "chat.toolCall.workflow.escalate.question": "Question",
-  "chat.toolCall.workflow.escalate.context": "Context",
-  "chat.toolCall.workflow.escalate.answer": "Answer",
-  "chat.toolCall.workflow.escalate.fallbackName": "Question",
   "chat.toolCall.todo.updating": "Updating todos",
   "chat.toolCall.todo.updated": "Updated todo",
   "chat.toolCall.search.find": "Find",
@@ -3397,7 +3391,6 @@ const enUS: Record<string, string> = {
   "taskList.cronTaskLabel": "Scheduled task",
   "taskList.offPeakTaskLabel": "Idle-time task",
   "taskGroup.cronGroupName": "Scheduled tasks",
-  "workspace.openScheduledSettings": "Automations",
   "offPeak.sidebar.groupTitle": "Idle-time tasks",
   "modelSelection.invalidated.fallback":
     "The previous model selection is no longer available. Switched to the current default; review it before continuing.",
@@ -3405,11 +3398,6 @@ const enUS: Record<string, string> = {
     "The previous model selection is no longer available. Choose a model again.",
   "workspace.openSessionFailed":
     "The target project is not connected, so this session cannot be opened.",
-  "scheduledPreview.keepAwakeEnabled": "Keep awake enabled",
-  "scheduledPreview.keepAwakeDisabled": "Keep awake disabled",
-  "scheduledPreview.toast.running": "Running “{title}”…",
-  "scheduledPreview.toast.view": "View",
-  "scheduledPreview.addSchedule": "Add schedule",
   // 交互原语（components/ui、shortcuts/nekActions）
   "ui.relativeTime.justNow": "Just now",
   "ui.relativeTime.minutesAgo": "{count} min ago",

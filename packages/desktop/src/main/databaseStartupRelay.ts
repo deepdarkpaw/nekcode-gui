@@ -10,18 +10,10 @@ import { createDatabaseStartupDiagnostics } from "./databaseStartupTelemetry.js"
 import { recordDesktopDiagnostic } from "./localDiagnosticSink.js";
 const reportDatabaseStartupState = createDatabaseStartupDiagnostics(recordDesktopDiagnostic);
 
-let localStorageReady = false;
 let quit: (() => void) | undefined;
 export function configureDatabaseStartupQuit(handler: () => void): void {
   quit = handler;
 }
-const readyListeners = new Set<() => void>();
-/** Main 只按 Host ready 调度既有 scheduler，不拥有迁移状态或账本。 */
-export function onLocalDatabaseStartupReady(listener: () => void): void {
-  if (localStorageReady) listener();
-  else readyListeners.add(listener);
-}
-
 const windowBindings = new WeakMap<BrowserWindow, () => void>();
 const hostStartupIds = new WeakMap<UtilityProcess, string>();
 export function getDatabaseStartupPortPayload(
@@ -54,11 +46,6 @@ export function bindDatabaseStartupRelay(
       reportDatabaseStartupState(state);
     } catch {
       /* 遥测故障不阻断启动。 */
-    }
-    if (state.phase === "ready" && !localStorageReady) {
-      localStorageReady = true;
-      for (const listener of readyListeners) listener();
-      readyListeners.clear();
     }
   };
   const receive = (state: DatabaseStartupState) => {

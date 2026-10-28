@@ -20,7 +20,7 @@ const RELEASE_MESSAGE_HEADING =
 const RELEASE_PRODUCT_SUMMARY = `Products: ${desktopProductIdentities.production.productName} uses the default TS runtime; ${desktopProductIdentities.preview.productName} is experimental and uses the default Rust runtime.`;
 const RELEASE_MESSAGE_BODY =
   `${RELEASE_PRODUCT_SUMMARY}\n\n` +
-  "Features: workflow Holes; mobile replayable realtime; scoped upstream 3.15.1 sync. Manual platform acceptance is not complete.\n\n" +
+  "Features: mobile replayable realtime; scoped upstream 3.15.1 sync. Manual platform acceptance is not complete.\n\n" +
   "macOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.";
 // electron-builder 按发行格式改写 ${arch}，必须匹配实际产物而非统一猜测 x64。
 // macOS 同时发 arm64 与 x64（Intel），两者各自在原生 runner 上构建（macos-15 /

@@ -10,6 +10,14 @@ export const ZCODE_AGENT_CA_CERT_ENV_KEY = "ZCODE_AGENT_CA_CERT";
 export const ZCODE_TOOL_ENV_PASSTHROUGH_ENV_KEY = "ZCODE_TOOL_ENV_PASSTHROUGH_JSON";
 /** 本地桌面呈现提示开关；0 关闭，未设置时由 Host 类型决定。 */
 export const ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV = "ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED";
+/**
+ * Remote runtime 环境透传名单里的一个键。
+ *
+ * `packages/server/src/remote/connect.ts` 的 `REMOTE_RUNTIME_ENV_KEYS` 逐字引用它，把 Desktop Main
+ * 写定的取值原样转发给 SSH/WSL/Docker 远端 Host。远端这份名单本轮不在裁剪范围内，常量因此留下；
+ * 本地已无任何读写点。
+ */
+export const ZCODE_DYNAMIC_WORKFLOW_MODE_ENV = "ZCODE_DYNAMIC_WORKFLOW_MODE";
 export type ZCodeRuntimeEnv = "development" | "production" | "test";
 
 type EnvRecord = Record<string, string | undefined>;

@@ -375,7 +375,6 @@ const zcodeTaskRuntimeCommandSchema = z.discriminatedUnion("type", [
       type: z.literal("send_prompt"),
       content: z.string(),
       attachments: z.array(zcodePromptAttachmentSchema).optional(),
-      automationId: nonEmptyString.optional(),
     })
     .strict(),
 ]);

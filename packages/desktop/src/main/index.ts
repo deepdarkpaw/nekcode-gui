@@ -29,10 +29,7 @@ import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyUserDataRootMigration.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
 import { powerSaveBlocker } from "electron";
-import {
-  onLocalDatabaseStartupReady,
-  configureDatabaseStartupQuit,
-} from "./databaseStartupRelay.js";
+import { configureDatabaseStartupQuit } from "./databaseStartupRelay.js";
 import {
   createLocalMediaPreviewPathRegistry,
   installLocalMediaPreviewProtocol,
@@ -139,7 +136,6 @@ import {
   loadWindow,
   spawnHostProcess,
 } from "./desktopHostProcess.js";
-import { spawnCronScheduler, type CronSchedulerHandle } from "./desktopCronScheduler.js";
 import {
   clearWorkspaceDeepLinkStateForWindow,
   handleDeepLink,
@@ -230,7 +226,6 @@ let currentApplicationLocale: Locale = DEFAULT_LOCALE;
 let closeToTrayOnWindows = true;
 // keep-awake：全局开关 keepAwakeWhileRunning。打开后主进程持有
 // powerSaveBlocker("prevent-app-suspension")，阻止系统闲置休眠（防不了合盖/手动睡眠）。
-// 不再绑定闲时任务活跃计数——设置页「常规」与 Automations 入口镜像同一配置。
 let keepAwakeWhileRunning = false;
 let powerSaveBlockerId: number | null = null;
 function reconcileKeepAwakeBlocker(): void {
@@ -340,22 +335,6 @@ const windowUnreadCountMap = new Map<number, number>();
 const windowHostProcessMap = new Map<number, ElectronUtilityProcess>();
 const hostRunningTaskCountMap = new Map<ElectronUtilityProcess, number>();
 
-// 常驻 cron scheduler 进程句柄；app ready 后拉起，退出前销毁。
-let cronScheduler: CronSchedulerHandle | null = null;
-// host → main 的定时任务派发结果，转交给 scheduler 结算。经模块变量转发以避免 spawn 顺序耦合。
-function forwardCronRunResult(
-  result: Parameters<CronSchedulerHandle["handleCronRunResult"]>[0],
-): void {
-  cronScheduler?.handleCronRunResult(result);
-}
-function wakeCronScheduler(automationId: string): void {
-  cronScheduler?.wake(automationId);
-}
-// 选一个本地 host 执行派发：本期本地 workspace 由任一本地窗口 host 的 createTask 按 path 拉起/复用 agent。
-function resolveCronDispatchHost(): ElectronUtilityProcess | null {
-  const first = windowHostProcessMap.values().next();
-  return first.done ? null : first.value;
-}
 const disposingHostProcessTimers = new WeakMap<
   ElectronUtilityProcess,
   ReturnType<typeof setTimeout>
@@ -585,9 +564,6 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
     activeAppShutdownKind === "update-install" ? "update_install" : "app_quit",
   );
 
-  const cronSchedulerToDispose = cronScheduler;
-  cronScheduler = null;
-
   const hostProcesses = [
     ...new Set([...windowHostProcessMap.values(), ...listDisposingHostProcesses()]),
   ];
@@ -596,15 +572,6 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   );
 
   appQuitPreparationInFlight = Promise.all([
-    // 旧流程先等待 Cron 的 1.5s deadline，再启动 Host timer，导致声明的
-    // 4.5s/9s 退出总预算被串行放大。两类 owner 无关闭依赖，统一并行进入同一屏障。
-    (async () => {
-      try {
-        await cronSchedulerToDispose?.dispose();
-      } catch (error) {
-        logger.warn(`[app-quit] cron scheduler dispose failed (${reason}):`, error);
-      }
-    })(),
     // remote session、attachment 和 transport 都由窗口 Host 持有；这里先清理
     // Main 的请求关联，再由下方每窗口唯一 Host 的 shutdown barrier 释放真实连接与 Agent。
     remoteSessionManager.disposeAllAndWaitForAppShutdown(reason),
@@ -1232,8 +1199,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onAgentProcessReady: recordAgentProcessReady,
           onAgentProcessSpawned: recordAgentProcessStarted,
           onMcpTelemetry: (message) => recordMcpDiagnostic(message.event),
-          onCronRunResult: forwardCronRunResult,
-          onCronSchedulerWakeRequested: wakeCronScheduler,
           authorizeLocalMediaPreviewPath: localMediaPreviewPathRegistry.authorize,
         },
         {
@@ -1380,22 +1345,9 @@ app.whenReady().then(async () => {
     // 读取失败不影响启动，使用默认 homedir
   }
 
-  // scheduler 也会打开 tasks-index；等 Host 完成统一准备，避免在启动页出现前抢先迁移。
   configureDatabaseStartupQuit(() => {
     markExplicitQuit("database-startup-exit");
     app.quit();
-  });
-  onLocalDatabaseStartupReady(() => {
-    try {
-      cronScheduler = spawnCronScheduler({
-        hostProcessLocalEnv,
-        logger,
-        resolveDispatchHost: resolveCronDispatchHost,
-        // keep-awake 已改为纯设置驱动；计数上报保留给后续诊断/配额用途，不再联动 blocker。
-      });
-    } catch (error) {
-      logger.error("[cron-scheduler] failed to spawn scheduler process:", error);
-    }
   });
 
   if (process.platform === "win32") {

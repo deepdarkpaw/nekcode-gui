@@ -1758,46 +1758,6 @@ export class TaskIndexRepo {
     return rows.map((row) => row.task_id);
   }
 
-  /**
-   * 列出某条 automation 产生的所有 cron session（用于 automation 详情展开、关联查询）。
-   * 走 cron_automation_id 索引列，只返回未删除的 session，按创建时间倒序。
-   */
-  async listSessionsByAutomation(automationId: string): Promise<ZCodeTaskMeta[]> {
-    await this.ensureReady();
-    const rows = this.getDatabase()
-      .prepare(
-        `SELECT
-          workspace_key,
-          workspace_path,
-          workspace_identity,
-          task_id,
-          title,
-          task_status,
-          provider,
-          mode,
-          model,
-          migration_source,
-          forked_from_task_id,
-          cron_automation_id,
-          off_peak_task_id,
-          created_at,
-          updated_at,
-          unread_at,
-          pinned,
-          archived,
-          deleted,
-          title_overridden,
-          searchable_text,
-          meta_json
-        FROM tasks
-        WHERE cron_automation_id = @automation_id
-          AND deleted = 0
-        ORDER BY created_at DESC, task_id DESC`,
-      )
-      .all({ automation_id: automationId }) as unknown as TaskIndexRow[];
-    return rows.map(rowToMeta);
-  }
-
   async queryTaskList(
     params: ZCodeTaskListQuery & { provider?: ZCodeProvider },
   ): Promise<ZCodeTaskListResult> {

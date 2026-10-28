@@ -6,13 +6,11 @@ import type { ConnectOptions } from "@zcode/server/remote";
 import { listSSHConfigAliasesFromLocalConfig } from "@zcode/services/node";
 import {
   ZCODE_APP_VERSION_ENV,
-  ZCODE_DYNAMIC_WORKFLOW_MODE_ENV,
   ZCODE_ENV,
   ZCODE_PRODUCT_FLAVOR,
   ZCODE_RUNTIME_ENV_KEY,
   ZCODE_VERSION,
   buildZCodeToolEnvPassthroughEnv,
-  normalizeDynamicWorkflowMode,
   pickProductEndpointEnv,
   readProductEndpointEnv,
   resolveRuntimeZCodeEndpointOrigin,
@@ -142,7 +140,6 @@ export function migrateRuntimeUserDataDir(logger: RuntimeUserDataMigrationLogger
 // e2e 如果再用 app.setPath 覆盖 userData/sessionData，端口文件会被写到另一个目录，
 // 导致 Electron 已启动但 WebDriver session 一直创建失败。测试态打开该开关后保留 Chromedriver 的目录。
 export const hostModulePath = join(import.meta.dirname, "../host/index.js");
-export const schedulerModulePath = join(import.meta.dirname, "../scheduler/index.js");
 export function getCredentialsDir() {
   return getAppConfigDir();
 }
@@ -335,49 +332,7 @@ function resolveWindowsAppInstallDirForDataBaseDirGuard(
   return win32.dirname(trimmedResourcesPath);
 }
 
-/**
- * Dynamic Workflow 灰度的本地覆盖按构建档位分三层
- *
- *   - 未打包 dev：透传 shell 里的合法取值，方便手工切档；非法值直接丢弃而不是转发给 Host，
- *     Host 因此不必再判一次来源；
- *   - 打包 preview：固定写入 `alwaysOn`，忽略 shell，preview 用户始终拥有该功能；
- *   - 打包 production：不写入，且继承值必须被删除，否则本机环境变量就能自行打开灰度。
- * Main 是唯一决策者：对这个键只有「写」和「删」两种动作，绝不原样透传，
- * Host 端的 resolveDynamicWorkflowClientConfig 才能无条件相信读到的值。
- */
-function resolveDynamicWorkflowModeHostEnv(options: {
-  inheritedValue: string | undefined;
-  isPackaged: boolean;
-  isPreview: boolean;
-}): Record<string, string> {
-  if (!options.isPackaged) {
-    const mode = normalizeDynamicWorkflowMode(options.inheritedValue);
-    return mode ? { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: mode } : {};
-  }
-  if (options.isPreview) {
-    return { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: "alwaysOn" };
-  }
-  return {};
-}
-
-/**
- * buildHostProcessEnv 的产品身份决定项。生产调用不传，默认取真实打包状态；
- * 单测可显式注入，从而在不启动 Electron 的前提下验证真实 env 接线。
- */
-export interface BuildHostProcessEnvOptions {
-  isPackaged?: boolean;
-}
-
-export function buildHostProcessEnv(
-  hostProcessLocalEnv: Record<string, string>,
-  options: BuildHostProcessEnvOptions = {},
-) {
-  // 上游拆除 Helper 链路时删除了本声明，但漏删下方
-  // resolveDynamicWorkflowModeHostEnv({ isPackaged: packagedDesktop }) 处的引用，
-  // 打包产物启动即抛 ReferenceError: packagedDesktop is not defined，
-  // 主进程启动链断裂、host 进程不再 spawn，窗口卡在启动页（startup_status_timeout）。
-  // 补回声明；isElectronAppPackaged 的 import 本文件本就存在。
-  const packagedDesktop = options.isPackaged ?? isElectronAppPackaged();
+export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>) {
   const dataBaseDir = getDataBaseDir();
   const rawInheritedEnv = {
     ...hostProcessLocalEnv,
@@ -388,15 +343,6 @@ export function buildHostProcessEnv(
     ...sanitizeZCodeRuntimeEnv(rawInheritedEnv),
     ...buildZCodeToolEnvPassthroughEnv(rawInheritedEnv),
   });
-  const dynamicWorkflowModeHostEnv = resolveDynamicWorkflowModeHostEnv({
-    inheritedValue: rawInheritedEnv[ZCODE_DYNAMIC_WORKFLOW_MODE_ENV],
-    isPackaged: packagedDesktop,
-    isPreview: isPreviewPackagedRuntime,
-  });
-  // 三层里有两层不写这个键，空对象无法覆盖 inheritedEnv，所以先无条件删掉继承值再按决策 spread 回去。
-  // 少了这一行，production 包和 dev 的非法取值都会原样穿透到 Host。
-  delete inheritedEnv[ZCODE_DYNAMIC_WORKFLOW_MODE_ENV];
-
   return {
     ...inheritedEnv,
     // ZCode 运行时不再使用 NODE_ENV；它会被用户 shell、包管理器和测试框架复用。
@@ -405,8 +351,6 @@ export function buildHostProcessEnv(
     // 显式注入编译期产品身份，保证主进程与 host 的身份语义一致；地址独立解析。
     // inheritedEnv 从 .env 通用变量补齐 ZCode/ZAI 链接，未覆盖时统一使用线上默认值。
     ZCODE_ENV,
-    // Dynamic Workflow 灰度的本地覆盖：Main 决策后写入，production 包为空对象（继承值已在上面删除）。
-    ...dynamicWorkflowModeHostEnv,
     // 模型请求默认 header 由 agent 进程构造，过去只继承 shell env 导致桌面启动时拿不到 app 版本。
     // 这里从 main 进程显式下发，agent 子进程继承 host env 后即可稳定写入请求 header。
     [ZCODE_APP_VERSION_ENV]: ZCODE_VERSION,

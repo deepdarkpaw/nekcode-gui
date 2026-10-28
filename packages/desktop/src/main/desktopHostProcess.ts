@@ -165,17 +165,6 @@ export function spawnHostProcess(
     onAgentProcessReady?: (event: HostAgentProcessReadyResponse) => void;
     onAgentProcessSpawned?: (event: HostAgentProcessSpawnedResponse) => void;
     onMcpTelemetry?: (event: HostMcpTelemetryResponse) => void;
-    /** host → main：定时任务派发结果，转交给 cron scheduler 结算调度状态机。 */
-    onCronRunResult?: (result: {
-      runId: string;
-      ok: boolean;
-      taskId?: string;
-      sessionId?: string;
-      error?: string;
-      failureKind?: "transient" | "permanent";
-    }) => void;
-    /** host 中 manual run 落库后请求 main 立即唤醒 scheduler。 */
-    onCronSchedulerWakeRequested?: (automationId: string) => void;
     /** Host 已完成附件授权后，由 Main 将本地视频 realpath 加入精确协议授权集合。 */
     authorizeLocalMediaPreviewPath?: (path: string) => Promise<string>;
   },
@@ -345,23 +334,6 @@ export function spawnHostProcess(
 
     if (result.data.type === HostResponseTypes.AgentProcessException) {
       dependencies.onAgentProcessException?.(result.data);
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.CronRunResult) {
-      dependencies.onCronRunResult?.({
-        runId: result.data.runId,
-        ok: result.data.ok,
-        taskId: result.data.taskId,
-        sessionId: result.data.sessionId,
-        error: result.data.error,
-        failureKind: result.data.failureKind,
-      });
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.CronSchedulerWakeRequest) {
-      dependencies.onCronSchedulerWakeRequested?.(result.data.automationId);
       return;
     }
 

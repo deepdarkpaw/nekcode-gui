@@ -187,8 +187,6 @@ export function normalizeZCodeTaskMode(
   }
 }
 
-/** 本轮定时任务归因，不改变历史会话所属关系。 */
-export type ZCodeBackgroundTurnAttribution = { automationId?: string };
 /** 当前 workspace 下任务的运行时状态 */
 export type ZCodeTaskRuntimeStatus =
   | "idle"
@@ -468,7 +466,7 @@ export type ZCodeStreamEvent = (
   | TaskStreamMirrorBatch
   | ZCodeTaskSnapshotUpdated
 ) & { inputId?: InputId };
-export type ZCodeTurnSteerSource = "plan_approval_feedback" | "workflow_refine_feedback";
+export type ZCodeTurnSteerSource = "plan_approval_feedback";
 export type ZCodeTurnSteerCommandKind = "sendText" | "sendGoalCommand" | "compact";
 export interface ZCodeTurnSteerQueued {
   type: "turn_steer_queued";
@@ -969,8 +967,6 @@ export interface ZCodeTaskSendPromptCommand extends ZCodeTaskRuntimeCommandBase 
   type: "send_prompt";
   content: string;
   attachments?: ZCodePromptAttachment[];
-  /** 定时任务派发的 host command 必须保留 automation 上下文，避免队列 drain 后重新暴露 CronCreate。 */
-  automationId?: string;
 }
 export type ZCodeTaskRuntimeCommand = ZCodeTaskSendPromptCommand;
 export interface TaskStreamMirrorBatch {

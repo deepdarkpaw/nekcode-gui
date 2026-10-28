@@ -144,17 +144,6 @@ export function isMainApplicationWindowWebContents(webContentsId: number): boole
   return mainApplicationWindowWebContentsIds.has(webContentsId);
 }
 
-/** cron scheduler 的 utilityProcess，由 spawn 点登记。 */
-const schedulerProcesses = new Set<ElectronUtilityProcess>();
-
-export function registerSchedulerProcess(child: ElectronUtilityProcess): void {
-  schedulerProcesses.add(child);
-}
-
-export function unregisterSchedulerProcess(child: ElectronUtilityProcess): void {
-  schedulerProcesses.delete(child);
-}
-
 function collectUtilityProcessPids(children: Iterable<ElectronUtilityProcess>): Set<number> {
   const pids = new Set<number>();
   for (const child of children) {
@@ -168,7 +157,7 @@ function collectUtilityProcessPids(children: Iterable<ElectronUtilityProcess>): 
 /**
  * 当前各进程角色的 pid 快照，供资源遥测按 process_role 拆分使用
  *
- * getAppMetrics 不直接给 renderer / host / scheduler 的角色，需结合
+ * getAppMetrics 不直接给 renderer / host 的角色，需结合
  * BrowserWindow / webContents / utilityProcess 注册表才能可靠归类。
  */
 export function collectChromiumProcessRolePids(): ChromiumProcessRolePids {
@@ -198,7 +187,6 @@ export function collectChromiumProcessRolePids(): ChromiumProcessRolePids {
     mainWindowRendererPids,
     guestRendererPids,
     hostPids: collectUtilityProcessPids(hostProcesses.values()),
-    schedulerPids: collectUtilityProcessPids(schedulerProcesses),
   };
 }
 

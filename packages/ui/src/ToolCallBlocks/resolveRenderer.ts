@@ -8,7 +8,6 @@
 import { EditToolCallBlock } from "@/ToolCallBlocks/renderers/edit.js";
 import { AgentToolCallBlock } from "@/ToolCallBlocks/renderers/agent.js";
 import { ChangesGroupToolCallBlock } from "@/ToolCallBlocks/renderers/changes-group.js";
-import { EscalateToolCallBlock } from "@/ToolCallBlocks/renderers/escalate.js";
 import { ExploreToolCallBlock } from "@/ToolCallBlocks/renderers/explore.js";
 import { ExecuteToolCallBlock } from "@/ToolCallBlocks/renderers/execute.js";
 import { ExecuteGroupToolCallBlock } from "@/ToolCallBlocks/renderers/execute-group.js";
@@ -50,10 +49,6 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
   // 兜底卡会把模型面那段以 providerId 开头的 `<models>` 文本原样摊进聊天区。
   if (matchesToolName(context.toolCallNode.toolCall, "listmodels")) {
     return ListModelsToolCallBlock;
-  }
-
-  if (matchesToolName(context.toolCallNode.toolCall, "escalate")) {
-    return EscalateToolCallBlock;
   }
 
   // 宿主 Node REPL 也通过 MCP 注册，因此同样带有 mcp_tool presentation。

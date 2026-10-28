@@ -31,7 +31,6 @@ import {
   ServiceCollection,
   IFileService,
   IMediaPreviewService,
-  IModelSelectionService,
   ISettingService,
   IWindowControllerService,
   IConversationShareService,
@@ -46,7 +45,6 @@ import {
   createLocalServices,
   disposeServiceResources,
   disposeServiceResourcesAndWait,
-  AutomationRepo,
   createServiceLogger,
   createHostApiNetworkTransport,
   createSettingService,
@@ -63,18 +61,12 @@ import {
   buildRemoteEnvironmentKey,
   isRemoteWorkspaceIdentity,
   resolveWorkspaceKey,
-  formatModelPickerValue,
   type ZCodePromptAttachment,
   type ZCodeStreamEvent,
   type ZCodeTaskMeta,
   type TaskStreamMirrorableEvent,
   type TraceId,
-  type ZCodeTaskMode,
   type WindowHostAttachmentScope,
-  type ZCodeAutomation,
-  type ZCodeAutomationRun,
-  type ZCodeAutomationRunOutcome,
-  type ModelSelection,
 } from "@zcode/shared";
 import {
   parseHostIncomingMessageEvent,
@@ -109,12 +101,6 @@ import { runHostShutdownPhases, type HostShutdownResult } from "./hostShutdownPh
 import { initializeHostApiNetworkTransportOwner } from "./hostInitialization.js";
 import { createHostUncaughtExceptionHandler } from "./hostUncaughtExceptionGuard.js";
 import {
-  recordCronRunOutcomeBestEffort,
-  startManualClaimHeartbeat,
-  settleCronRunTerminalOutcome,
-  settleManualDispatchFailureBestEffort,
-} from "./cronRunLifecycle.js";
-import {
   createRemotePromptAttachmentSessionService,
   createRemotePromptAttachmentTaskService,
   materializeRemotePromptAttachments,
@@ -127,7 +113,6 @@ import {
   type WindowRemoteConnectionHandle,
 } from "./windowRemoteConnectionRegistry.js";
 import { createWindowHostControllerRuntime } from "./windowHostControllerService.js";
-import { resolveAutomationSubmissionModelSelection } from "./automationModelSelection.js";
 import { createRemoteConnectionProgressContext } from "@zcode/server/remote/remoteConnectionProgressContext.js";
 import { startHostSelfResourceTelemetry } from "./hostSelfResourceTelemetry.js";
 type RemoteBackendHostConnection = RemoteConnection & {
@@ -253,337 +238,6 @@ const logger = {
   warn: (...args: unknown[]) => writeHostLog("warn", ...args),
   error: (...args: unknown[]) => writeHostLog("error", ...args),
 };
-
-const cronAutomationRepo = new AutomationRepo();
-const cronRunSubscriptions = new Map<string, { dispose(): void }>();
-
-interface CronRunDispatchRequest {
-  automationId: string;
-  runId: string;
-  prompt: string;
-  targetTaskId?: string;
-  modelSelection?: ModelSelection;
-  mode?: ZCodeTaskMode;
-  workspacePath: string;
-  workspaceIdentity?: string;
-}
-
-function resolveAutomationTargetServices(request: {
-  workspacePath: string;
-  workspaceIdentity?: string;
-}): ServiceCollection {
-  const remoteSession = windowRemoteConnectionRegistry.findSessionForWorkspace(request);
-  if (remoteSession) {
-    if (!remoteSession.workspaceIdentity) {
-      throw new Error("Automation 目标 Remote Host 缺少 workspaceIdentity");
-    }
-    return windowRemoteConnectionRegistry.resolveScopedServices({
-      kind: "remote",
-      remoteSessionId: remoteSession.remoteSessionId,
-      workspacePath: request.workspacePath,
-      workspaceIdentity: remoteSession.workspaceIdentity,
-    });
-  }
-  // 远程 Automation 找不到目标 logical session 时，旧派发会静默落到 Local Host，
-  // 从而使用本地模型首选与 Registry。远程身份只能失败，不能跨 Environment fallback。
-  if (request.workspaceIdentity && isRemoteWorkspaceIdentity(request.workspaceIdentity)) {
-    throw new Error("Automation 目标 Remote Host 当前不可用");
-  }
-  if (!activeServices) {
-    throw new Error("Local Host services are not initialized.");
-  }
-  return activeServices;
-}
-
-function cronRunSubscriptionKey(taskId: string, traceId: TraceId): string {
-  return `${taskId}\u0000${traceId}`;
-}
-
-function parseCronRunScheduledAt(runId: string, automationId: string): number | null {
-  const prefix = `${automationId}:`;
-  if (!runId.startsWith(prefix)) return null;
-  const value = Number(runId.slice(prefix.length).split(":")[0]);
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
-}
-
-function markCronRunOutcome(params: {
-  runId: string;
-  automationId: string;
-  workspaceKey: string;
-  scheduledAt: number | null;
-  trigger: "schedule" | "manual";
-  outcome: ZCodeAutomationRunOutcome;
-  error?: string;
-}): void {
-  void recordCronRunOutcomeBestEffort({
-    ...params,
-    repo: cronAutomationRepo,
-    logWarn: (message, error) => logger.warn(message, error),
-  });
-}
-
-function disposeCronRunSubscription(key: string): void {
-  const disposable = cronRunSubscriptions.get(key);
-  if (!disposable) return;
-  cronRunSubscriptions.delete(key);
-  disposable.dispose();
-}
-
-async function applyCronRunConfigToExistingTask(params: {
-  zcodeTaskService: IZCodeTaskService;
-  taskId: string;
-  traceId: TraceId;
-  modelSelection?: ModelSelection;
-  mode?: string;
-}): Promise<void> {
-  let thoughtAppliedWithModel = false;
-  let modeAppliedWithModel = false;
-  if (params.modelSelection) {
-    await params.zcodeTaskService.setAutomationSessionConfig({
-      taskId: params.taskId,
-      traceId: params.traceId,
-      modelSelection: params.modelSelection,
-      thoughtLevel: params.modelSelection.options?.reasoningLevel,
-      mode: params.mode?.trim() as ZCodeTaskMode | undefined,
-    });
-    thoughtAppliedWithModel = true;
-    modeAppliedWithModel = true;
-  }
-  if (!modeAppliedWithModel && params.mode?.trim()) {
-    await params.zcodeTaskService.setConfigOption({
-      taskId: params.taskId,
-      traceId: params.traceId,
-      configId: "mode",
-      value: params.mode.trim(),
-    });
-  }
-  if (!thoughtAppliedWithModel && params.modelSelection?.options?.reasoningLevel) {
-    await params.zcodeTaskService.setConfigOption({
-      taskId: params.taskId,
-      traceId: params.traceId,
-      configId: "thought_level",
-      value: params.modelSelection.options.reasoningLevel,
-    });
-  }
-}
-
-function trackCronRunOutcome(params: {
-  zcodeTaskService: IZCodeTaskService;
-  taskId: string;
-  traceId: TraceId;
-  workspacePath: string;
-  workspaceIdentity?: string;
-  runId: string;
-  automationId: string;
-  workspaceKey: string;
-  scheduledAt: number | null;
-  trigger: "schedule" | "manual";
-}): void {
-  const key = cronRunSubscriptionKey(params.taskId, params.traceId);
-  disposeCronRunSubscription(key);
-  markCronRunOutcome({ ...params, outcome: "running" });
-  const disposable = params.zcodeTaskService.onDynamicTaskTerminalOutcome(params.taskId)(
-    (result) => {
-      if (result.inputId !== params.traceId) return;
-      void settleCronRunTerminalOutcome({
-        ...params,
-        outcome: result.outcome,
-        error: result.error,
-        repo: cronAutomationRepo,
-        logWarn: (message, error) => logger.warn(message, error),
-      });
-      // 定时任务在后台完成后统一置为未读，真正打开 task 时再由导航链路清除。
-      void params.zcodeTaskService.setTaskUnread({
-        taskId: params.taskId,
-        workspacePath: params.workspacePath,
-        ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
-        unread: true,
-      });
-      disposeCronRunSubscription(key);
-    },
-  );
-  const claimHeartbeat =
-    params.trigger === "manual"
-      ? startManualClaimHeartbeat({
-          ...params,
-          repo: cronAutomationRepo,
-          logWarn: (message, error) => logger.warn(message, error),
-        })
-      : null;
-  cronRunSubscriptions.set(key, {
-    dispose() {
-      claimHeartbeat?.dispose();
-      disposable.dispose();
-    },
-  });
-}
-
-/**
- * 把一次 cron/manual run 直接提交给当前 host 的 V4 task service。
- * 会话内 automation 可能绑定到未激活 session，必须先恢复再应用保存的运行参数。
- */
-async function dispatchCronRun(request: CronRunDispatchRequest): Promise<{
-  taskId: string;
-  sessionId: string;
-}> {
-  const targetServices = resolveAutomationTargetServices(request);
-  const zcodeTaskService = targetServices.getOptional(IZCodeTaskService);
-  if (!zcodeTaskService) {
-    throw new Error("ZCode task service is not initialized.");
-  }
-  const modelSelectionService = targetServices.getOptional(IModelSelectionService);
-  if (!modelSelectionService) {
-    throw new Error("目标 Host Model Selection service is not initialized.");
-  }
-  // 长期配置是原意图；首次派发在目标 Host 解析后固定。已有 run 必须直接复用，
-  // 不能因账号变化或本次 Registry 读取失败重新解释历史执行选择。
-  const existingRun = await cronAutomationRepo.getRun(request.runId);
-  const resolvedSubmissionModelSelection = await resolveAutomationSubmissionModelSelection({
-    selection: request.modelSelection,
-    fixedSelection: existingRun?.modelSelection,
-    modelSelectionService,
-    // Repo 已在读取前完成离线导入；不再为迁移绕行 Agent/账号服务。
-    // 未迁入或损坏的新值仍由此入口明确拒绝，不能当成跟随 Workspace。
-    readSelection: () =>
-      cronAutomationRepo.getModelSelectionForDispatch(
-        request.automationId,
-        resolveWorkspaceKey(request),
-      ),
-  });
-  const submissionModelSelection = await cronAutomationRepo.fixRunModelSelection(
-    request.runId,
-    resolvedSubmissionModelSelection,
-  );
-  let trackedKey: string | null = null;
-  const workspaceKey = resolveWorkspaceKey(request);
-  const trigger = request.runId.includes(":manual:") ? "manual" : "schedule";
-  const scheduledAt = parseCronRunScheduledAt(request.runId, request.automationId);
-  try {
-    const task = request.targetTaskId
-      ? { taskId: request.targetTaskId }
-      : await zcodeTaskService.createTask({
-          workspacePath: request.workspacePath,
-          workspaceIdentity: request.workspaceIdentity,
-          model: formatModelPickerValue(submissionModelSelection),
-          mode: request.mode,
-          thoughtLevel: submissionModelSelection.options?.reasoningLevel,
-          automationId: request.automationId,
-        });
-    // 未绑定会话时不能沿用 createTask 的 session trace 作为首条 prompt trace：
-    // CLI 无法从 inputId 还原 manual/schedule admission。
-    // 建会话 trace 与执行 runId 是两种身份；两条派发路径的 prompt 都必须统一使用 runId。
-    const promptTraceId = request.runId as TraceId;
-    if (request.targetTaskId) {
-      // 绑定会话在 app 重启或切换 workspace 后通常不处于 active；旧实现直接
-      // setConfig/sendPrompt 会立即报 Session is not active，看起来像「立即运行」没有触发。
-      await zcodeTaskService.resumeTask({
-        taskId: task.taskId,
-        workspacePath: request.workspacePath,
-        workspaceIdentity: request.workspaceIdentity,
-        model: formatModelPickerValue(submissionModelSelection),
-        thoughtLevel: submissionModelSelection.options?.reasoningLevel,
-        automationId: request.automationId,
-      });
-      await applyCronRunConfigToExistingTask({
-        zcodeTaskService,
-        taskId: task.taskId,
-        traceId: promptTraceId,
-        modelSelection: submissionModelSelection,
-        mode: request.mode,
-      });
-    }
-    trackedKey = cronRunSubscriptionKey(task.taskId, promptTraceId);
-    trackCronRunOutcome({
-      zcodeTaskService,
-      taskId: task.taskId,
-      traceId: promptTraceId,
-      workspacePath: request.workspacePath,
-      workspaceIdentity: request.workspaceIdentity,
-      runId: request.runId,
-      automationId: request.automationId,
-      workspaceKey,
-      scheduledAt,
-      trigger,
-    });
-    await zcodeTaskService.sendPrompt({
-      taskId: task.taskId,
-      traceId: promptTraceId,
-      content: request.prompt,
-      clientMode: "desktop-continuous",
-      automationId: request.automationId,
-    });
-    return { taskId: task.taskId, sessionId: task.taskId };
-  } catch (error) {
-    if (trackedKey) disposeCronRunSubscription(trackedKey);
-    markCronRunOutcome({
-      runId: request.runId,
-      automationId: request.automationId,
-      workspaceKey,
-      scheduledAt,
-      trigger,
-      outcome: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-}
-
-async function dispatchManualAutomationRun(params: {
-  automation: ZCodeAutomation;
-  run: ZCodeAutomationRun;
-}): Promise<void> {
-  logger.info(
-    `direct manual automation dispatch started automation=${params.automation.automationId} runId=${params.run.runId}`,
-  );
-  let result: Awaited<ReturnType<typeof dispatchCronRun>>;
-  try {
-    result = await dispatchCronRun({
-      automationId: params.automation.automationId,
-      runId: params.run.runId,
-      prompt: params.automation.prompt,
-      targetTaskId: params.automation.targetTaskId,
-      modelSelection: params.run.modelSelection ?? params.automation.modelSelection,
-      mode: params.automation.mode,
-      workspacePath: params.automation.workspacePath,
-      workspaceIdentity: params.automation.workspaceIdentity,
-    });
-  } catch (error) {
-    logger.warn(
-      `direct manual automation dispatch failed automation=${params.automation.automationId} runId=${params.run.runId}:`,
-      error,
-    );
-    await settleManualDispatchFailureBestEffort({
-      repo: cronAutomationRepo,
-      automationId: params.automation.automationId,
-      runId: params.run.runId,
-      workspaceKey: params.automation.workspaceKey,
-      scheduledAt: params.run.scheduledAt ?? null,
-      trigger: "manual",
-      dispatchError: error,
-      logWarn: (message, releaseError) => logger.warn(message, releaseError),
-    });
-    throw error;
-  }
-
-  try {
-    await cronAutomationRepo.markManualRunDispatched({
-      runId: params.run.runId,
-      sessionId: result.sessionId,
-      dispatchedAt: Date.now(),
-    });
-  } catch (error) {
-    // prompt 已经 accepted/queued，台账和累计次数回写失败不能伪装成派发失败并提前释放锁；
-    // 真实终态仍由 trackCronRunOutcome 收口，避免同一 automation 重复排队。
-    logger.warn(
-      `回写 manual automation dispatched 状态与运行次数失败 automation=${params.automation.automationId} runId=${params.run.runId}`,
-      error,
-    );
-  }
-  // sendPrompt ACK 可能只表示进入 busy queue；manual claim 必须保留到对应 turn 终态。
-  logger.info(
-    `direct manual automation dispatch accepted automation=${params.automation.automationId} runId=${params.run.runId} taskId=${result.taskId}`,
-  );
-}
 
 // Node warning 不是远端连接失败，改成结构化 warn，避免默认 stderr 被误染成 error。
 process.on("warning", (warning) => logger.warn(`${warning.name}: ${warning.message}`));
@@ -1665,10 +1319,6 @@ async function disposeHostResources(reason: string): Promise<HostShutdownResult>
     disposeLocalResourceTelemetry();
     disposeAttachedServicePorts();
     windowHostControllerRuntime.dispose();
-    for (const key of Array.from(cronRunSubscriptions.keys())) {
-      disposeCronRunSubscription(key);
-    }
-    cronAutomationRepo.close();
 
     if (activeSessionRealtimePort) {
       activeSessionRealtimePort.dispose();
@@ -1728,10 +1378,6 @@ function disposeHostResourcesBestEffort(reason: string): void {
   disposeLocalResourceTelemetry();
   disposeAttachedServicePorts();
   windowHostControllerRuntime.dispose();
-  for (const key of Array.from(cronRunSubscriptions.keys())) {
-    disposeCronRunSubscription(key);
-  }
-  cronAutomationRepo.close();
   void windowRemoteConnectionRegistry.dispose();
 
   if (activeServices) {
@@ -1834,42 +1480,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     } else {
       pending.reject(new Error(msg.error ?? "本地视频预览路径授权失败"));
     }
-    return;
-  }
-
-  if (msg.type === HostMessageTypes.CronRun) {
-    if (databaseStartup?.coordinator.snapshot.phase !== "ready") {
-      parentPort.postMessage({
-        type: HostResponseTypes.CronRunResult,
-        runId: msg.runId,
-        ok: false,
-        error: "Local database startup is not ready",
-        failureKind: "transient",
-      });
-      return;
-    }
-    void (async () => {
-      try {
-        const dispatchResult = await dispatchCronRun({
-          ...msg,
-          mode: msg.mode as ZCodeTaskMode | undefined,
-        });
-        parentPort.postMessage({
-          type: HostResponseTypes.CronRunResult,
-          runId: msg.runId,
-          ok: true,
-          ...dispatchResult,
-        });
-      } catch (error) {
-        parentPort.postMessage({
-          type: HostResponseTypes.CronRunResult,
-          runId: msg.runId,
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-          failureKind: "transient",
-        });
-      }
-    })();
     return;
   }
 
@@ -2272,7 +1882,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
                   request,
                 });
               },
-              onAutomationManualRunRequested: dispatchManualAutomationRun,
               onProviderProvisioningSourceChanged: (trigger) => {
                 parentPort?.postMessage({
                   type: HostResponseTypes.ProviderProvisioningSourceChanged,

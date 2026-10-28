@@ -32,7 +32,6 @@ import type {
   ZCodeTaskTokenUsageResult,
   ZCodePermissionResponse,
   ModelSelection,
-  ZCodeBackgroundTurnAttribution,
 } from "@zcode/shared";
 import type {
   SessionMessageDeliveryResult,
@@ -239,26 +238,24 @@ export interface IZCodeTaskService {
   }): Promise<ZCodeTaskCreateResult>;
 
   /** 发送 prompt 到指定 task */
-  sendPrompt(
-    params: {
-      taskId: string;
-      remoteSessionId?: string;
-      traceId: TraceId;
-      queryId?: string;
-      messageId?: string;
-      content: string;
-      attachments?: ZCodePromptAttachment[];
-      clientId?: string;
-      clientLabel?: string;
-      clientMode?: ZCodeTaskClientMode;
-      /** 当前 turn 额外隐藏的工具；与 session/automation 自带的工具隔离规则合并。 */
-      toolDenylist?: string[];
-      /** 标准模型选择；闲时任务同样经 Registry / ModelFactory 创建 Model。 */
-      modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
-      /** 单次执行约束与动态鉴权；仅 idle start-now 接受，不进入普通队列。 */
-      modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
-    } & ZCodeBackgroundTurnAttribution,
-  ): Promise<void>;
+  sendPrompt(params: {
+    taskId: string;
+    remoteSessionId?: string;
+    traceId: TraceId;
+    queryId?: string;
+    messageId?: string;
+    content: string;
+    attachments?: ZCodePromptAttachment[];
+    clientId?: string;
+    clientLabel?: string;
+    clientMode?: ZCodeTaskClientMode;
+    /** 当前 turn 额外隐藏的工具；与 session/automation 自带的工具隔离规则合并。 */
+    toolDenylist?: string[];
+    /** 标准模型选择；闲时任务同样经 Registry / ModelFactory 创建 Model。 */
+    modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
+    /** 单次执行约束与动态鉴权；仅 idle start-now 接受，不进入普通队列。 */
+    modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
+  }): Promise<void>;
 
   deliverSessionMessage(
     request: SessionMessageSendRequested,

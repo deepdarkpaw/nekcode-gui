@@ -2695,7 +2695,7 @@ const zhCN: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipAgent": "打开运行中的智能体",
   "chat.composer.backgroundWorks.tooltipMixed": "打开运行中的终端与智能体",
   "chat.composer.backgroundWorks.ariaLabel":
-    "打开运行中的后台任务：Bash {bashCount} 个，工作流 {workflowCount} 个，子智能体 {subagentCount} 个，共 {count} 个",
+    "打开运行中的后台任务：Bash {bashCount} 个，子智能体 {subagentCount} 个，共 {count} 个",
   "chat.summaryPanel.goalIterationValue": "第 {count} 次迭代",
   "chat.summaryPanel.todoGoalIterationGroup": "第 {count} 轮迭代",
   "chat.summaryPanel.todoSessionGroup": "整个会话",
@@ -2918,12 +2918,6 @@ const zhCN: Record<string, string> = {
   "chat.toolCall.workflow.models.truncated": "未显示全部模型",
   // ── 升级问答工具卡 ──
   // escalate：子代理把阻塞问题升级给主代理，停驻等答案。asking 相可能持续很久，措辞要平静。
-  "chat.toolCall.workflow.escalate.asking": "正在询问主代理",
-  "chat.toolCall.workflow.escalate.asked": "已询问主代理",
-  "chat.toolCall.workflow.escalate.question": "问题",
-  "chat.toolCall.workflow.escalate.context": "背景",
-  "chat.toolCall.workflow.escalate.answer": "答复",
-  "chat.toolCall.workflow.escalate.fallbackName": "问题",
   "chat.toolCall.todo.updating": "正在更新待办",
   "chat.toolCall.todo.updated": "已更新待办",
   "chat.toolCall.search.find": "查找",
@@ -3209,19 +3203,11 @@ const zhCN: Record<string, string> = {
   "forms.validation.agentSystemPromptHint": "定义子智能体的行为和能力",
   "forms.validation.fileExists": "文件 {fileName} 已存在",
 
-  // ---- 自动化 / Automations ----
-  // Automations 同时包含定时任务和闲时任务，顶层入口不能误用其中一个子类型的名称。
-  "workspace.openScheduledSettings": "自动化",
   "offPeak.sidebar.groupTitle": "闲时任务",
   "modelSelection.invalidated.fallback":
     "原来的模型选择已失效，已切换到当前默认模型，请确认后继续。",
   "modelSelection.invalidated.reselect": "原来的模型选择已失效，请重新选择模型。",
   "workspace.openSessionFailed": "目标项目当前未连接，无法打开该会话",
-  "scheduledPreview.keepAwakeEnabled": "已开启保持唤醒",
-  "scheduledPreview.keepAwakeDisabled": "已关闭保持唤醒",
-  "scheduledPreview.toast.running": "正在运行“{title}”…",
-  "scheduledPreview.toast.view": "查看",
-  "scheduledPreview.addSchedule": "添加计划",
   // 交互原语（components/ui、shortcuts/nekActions）
   "ui.relativeTime.justNow": "刚刚",
   "ui.relativeTime.minutesAgo": "{count} 分钟前",

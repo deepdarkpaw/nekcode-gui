@@ -143,7 +143,6 @@ export {
 } from "./storage/adapters/rootsResolver.js";
 export { createFsVolumeProbe } from "./storage/adapters/volumeProbe.js";
 export { runStorageScan } from "./storage/adapters/inProcessScanRunner.js";
-export { createCodingPlanSubscriptionService } from "./coding-plan-subscription/codingPlanSubscriptionService.js";
 export { createClientScenesService } from "./client-scenes/clientScenesService.js";
 export { createSkillsService } from "./skills/skillsService.js";
 export { createSkillSyncService } from "./skill-sync/skillSyncService.js";
@@ -165,7 +164,6 @@ export {
   createLocalConversationShareArtifactSource,
   createRemoteConversationShareArtifactSource,
 } from "./conversation-share/conversationShareArtifactSource.js";
-export { createNodeApiClient, NodeApiClient } from "./providers/api/nodeApiClient.js";
 export {
   createHostApiNetworkTransport,
   type HostApiNetworkTransport,
@@ -177,27 +175,9 @@ export {
   prepareRuntimeProcessEnvPatch,
 } from "./runtime-tools/runtimeCommandEnv.js";
 
-// 定时任务管理与 scheduler 共用同一套 node-only 存储和 cron 语义。
-export {
-  AutomationRepo,
-  DISPATCH_RETRY_BASE_MS,
-  DISPATCH_RETRY_CAP_MS,
-  DISPATCH_MAX_ATTEMPTS,
-  CLAIM_STALE_MS,
-  computeRetryAt,
-} from "./session/automationRepo.js";
-export { AutomationService, InvalidCronExprError } from "./session/automationService.js";
 // 本地任务文件变更摘要。
 export { buildTaskChangeSummary } from "./session/taskChangeSummary.js";
 export { createServiceLogger, type ServiceLogger } from "./logger/serviceLogger.js";
-export {
-  computeAutomationNextRunAt,
-  computeNextRunAt,
-  computeScheduleRuleNextRunAt,
-  isOneShotAutomation,
-  isValidCronExpr,
-} from "./session/automationCron.js";
-
 import { ServiceCollection } from "./collection.js";
 import { IFileService } from "./file/file.js";
 import { IMediaPreviewService } from "./media-preview/mediaPreview.js";
@@ -223,7 +203,6 @@ import {
 } from "./conversation-share/conversationShareService.js";
 import { createLocalConversationShareArtifactSource } from "./conversation-share/conversationShareArtifactSource.js";
 import { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
-import { ICodingPlanSubscriptionService } from "./coding-plan-subscription/codingPlanSubscription.js";
 import { IClientScenesService } from "./client-scenes/clientScenes.js";
 import { ISkillsService } from "./skills/skills.js";
 import { ISkillSyncService } from "./skill-sync/skillSync.js";
@@ -274,7 +253,6 @@ import {
 } from "./model-provider/providerProvisioningSource.js";
 import { createProviderProvisioningTarget } from "./model-provider/providerProvisioningTarget.js";
 import { IProviderProvisioningTargetService } from "./model-provider/providerProvisioning.js";
-import { createCodingPlanSubscriptionService } from "./coding-plan-subscription/codingPlanSubscriptionService.js";
 import { createClientScenesService } from "./client-scenes/clientScenesService.js";
 import { createSkillsService } from "./skills/skillsService.js";
 import { createSkillSyncService } from "./skill-sync/skillSyncService.js";
@@ -306,8 +284,6 @@ import {
   formatLogPrefix,
   type ServiceAuthorityMode,
   resolveRuntimeZCodeEndpointOrigin,
-  type ZCodeAutomation,
-  type ZCodeAutomationRun,
   ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
 } from "@zcode/shared";
 
@@ -388,11 +364,6 @@ export function createLocalServices(options: {
   forwardSessionMessageSendRequested?: (
     request: SessionMessageSendRequested,
   ) => Promise<void> | void;
-  /** desktop local host 在 manual run 落库后直接派发，不经过 scheduler 正常路径。 */
-  onAutomationManualRunRequested?: (params: {
-    automation: ZCodeAutomation;
-    run: ZCodeAutomationRun;
-  }) => Promise<void>;
   // 注入点：默认 resolver 已能覆盖 dev/桌面/SSH 远端三类形态；
   // 测试或特殊宿主想强制走自定义 binary/参数时从这里注入。
   zcodeAgentCommandResolver?: ZCodeAgentCommandResolver;
@@ -543,22 +514,15 @@ export function createLocalServices(options: {
   // 只要当前进程已经装配 Provider Runtime，就由该 Environment 自己的 Selection View
   // 决定执行就绪状态。Desktop-attached remote 也读取远端自己的本地模型配置。
   const modelSelectionReadinessSource = providerRuntime.modelSelection;
-  const codingPlanSubscriptionService = createCodingPlanSubscriptionService({ apiClient });
   const zcodeAgentService = createZCodeAgentService({
     ...(modelSelectionReadinessSource ? { modelSelectionReadinessSource } : {}),
     authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
-    // 动态工作流灰度：
-    // 这里不按 serviceAuthorityMode 裁剪——SSH/WSL/Docker 的 desktop-attached-remote Host
-    // 是它自己那些 workspace 的唯一裁决者，灰度开启时远程 workspace 同样提供工作流。
-    resolveDynamicWorkflowClientConfig: () =>
-      codingPlanSubscriptionService.getDynamicWorkflowClientConfig(),
     commandResolver: options?.zcodeAgentCommandResolver,
     presentationSurface: resolveZCodeAgentPresentationSurface({
       runtimeSurface: options?.agentRuntimeContext?.runtimeSurface,
       serviceAuthorityMode: options?.serviceAuthorityMode,
       desktopContextPromptEnabled,
     }),
-    onAutomationManualRunRequested: options?.onAutomationManualRunRequested,
     // createLocalServices 虽然暴露了 reporter 注入点，旧装配却没有继续传给
     // ZCodeAgentProcessManager，导致 host 永远不向 main 上报 Agent spawn/exit，进程监控器
     // 因而看不到实际运行的 Agent，也无法验证只读到可写升级是否复用同一进程。
@@ -697,7 +661,6 @@ export function createLocalServices(options: {
     .register(IZCodeSessionService, zcodeSessionService)
     .register(IConversationShareService, conversationShareService)
     .register(IFileWatcherService, createFileWatcherService())
-    .register(ICodingPlanSubscriptionService, codingPlanSubscriptionService)
     .register(IClientScenesService, createClientScenesService())
     .register(ISkillsService, skillsService)
     .register(ISkillSyncService, createSkillSyncService())

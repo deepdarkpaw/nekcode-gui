@@ -1110,27 +1110,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000AutomationService",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000CLAIM_STALE_MS",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000ConversationArchiveError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000DISPATCH_MAX_ATTEMPTS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000DISPATCH_RETRY_BASE_MS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000DISPATCH_RETRY_CAP_MS",
       "count": 1
     },
     {
@@ -1143,14 +1123,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000IProviderSettingsService",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000InvalidCronExprError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000NodeApiClient",
       "count": 1
     },
     {
@@ -1183,18 +1155,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000buildTaskChangeSummary",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000computeNextRunAt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000computeRetryAt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000computeScheduleRuleNextRunAt",
       "count": 1
     },
     {
@@ -1338,10 +1298,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000isValidCronExpr",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000parseFsFaultRulesFromEnvValue",
       "count": 1
     },
@@ -1411,50 +1367,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/runtime-tools/runtimeCommandEnv.ts\u0000prepareRuntimeProcessEnvPatch",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationCron.ts\u0000computeNextRunAt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationCron.ts\u0000computeScheduleRuleNextRunAt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationIntervalCarrier.ts\u0000InvalidAutomationIntervalCarrierError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationRepo.ts\u0000AutomationCreateLimitError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationRepo.ts\u0000CLAIM_STALE_MS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationRepo.ts\u0000DISPATCH_MAX_ATTEMPTS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationRepo.ts\u0000DISPATCH_RETRY_BASE_MS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationRepo.ts\u0000DISPATCH_RETRY_CAP_MS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationRepo.ts\u0000computeRetryAt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationService.ts\u0000InvalidAutomationIntervalCarrierError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/session/automationService.ts\u0000InvalidCronExprError",
       "count": 1
     },
     {
@@ -1622,14 +1534,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000SAVED_WORKFLOW_START_REJECTED_FAULT_PREFIX",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000WORKFLOW_RUN_RESUME_REJECTED_FAULT_PREFIX",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000commandQueryItemSchema",
       "count": 1
     },
@@ -1643,10 +1547,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000parseCommandEnvelope",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000savedWorkflowStartRejectionReasonSchema",
       "count": 1
     },
     {
@@ -1667,14 +1567,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/delta.ts\u0000statePatchSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/delta.ts\u0000workflowRunHeaderPatchSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/delta.ts\u0000workflowRunHeaderSchema",
       "count": 1
     },
     {
@@ -1719,46 +1611,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000turnWorkSegmentSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000workflowBlockedMetaSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000workflowLaunchMetaSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000workflowNotificationMetaSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000workflowSettingsAmendMetaSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SESSION_WORKFLOW_ACTIVITY_MAX_RUNS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000deriveSessionWorkflowActivity",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000isSessionWorkflowRunLive",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000sessionWorkflowPhaseStatusSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000sessionWorkflowPhaseSummarySchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000sessionWorkflowRunSummarySchema",
       "count": 1
     },
     {
@@ -1874,18 +1726,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4ConversationWorkflowRunEventsParamsSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4ConversationWorkflowRunSummarySchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000v4ConversationWorkflowRunsParamsSchema",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000workspaceConfigTopicWireFrameSchema",
       "count": 1
     },
@@ -1899,110 +1739,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/wire-reassembly.ts\u0000reassembleTopicWireFrames",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000v4ConversationWorkflowRunArtifactDataParamsSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000v4ConversationWorkflowRunArtifactReadParamsSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000v4ConversationWorkflowRunArtifactsParamsSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000workflowRunArtifactSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000workflowRunArtifactVersionSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-observation-display.ts\u0000WORKFLOW_RUN_OBSERVATION_STATUSES",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000workflowBlockedMetaSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000workflowSettingsAmendMetaSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000WORKFLOW_RUN_SETTINGS_REJECTED_FAULT_PREFIX",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000workflowRunSettingsRejectionReasonSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-caps.ts\u0000workflowRunStepCounts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-delta.ts\u0000WORKFLOW_RUN_HEADER_KEYS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-delta.ts\u0000diffWorkflowRunsState",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-delta.ts\u0000isCompleteWorkflowRunHeader",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-delta.ts\u0000jsonValueEqual",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-delta.ts\u0000workflowRunEntryKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-holes.ts\u0000readPhaseNames",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-legacy.ts\u0000clampWorkflowRunsForLegacy",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WORKFLOW_WORKSPACE_LIMITS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000v4ConversationWorkflowRunNodeResultParamsSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000v4ConversationWorkflowRunWorkspaceParamsSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeErrorSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeKindSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeStatusSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000workflowRunWorkspaceNodeSummarySchema",
       "count": 1
     },
     {
@@ -2934,14 +2670,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/desktop/src/scheduler/schedulerProtocol.d.ts\u0000packages/desktop/src/scheduler/schedulerProtocol.d.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/desktop/src/scheduler/schedulerProtocol.ts\u0000packages/desktop/src/scheduler/schedulerProtocol.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/server/src/hostCapability.ts\u0000packages/server/src/hostCapability.ts",
       "count": 1
     },
@@ -3199,10 +2927,6 @@
     },
     {
       "key": "knip\u0000files\u0000scripts/licenses.mjs\u0000scripts/licenses.mjs",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/desktop/src/main/desktopRuntimeEnv.ts\u0000BuildHostProcessEnvOptions",
       "count": 1
     },
     {
@@ -4298,10 +4022,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000SavedWorkflowStartRejectionReason",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/command.ts\u0000SharedContextRef",
       "count": 1
     },
@@ -4334,23 +4054,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/create-workflow-display.ts\u0000ToolCallCreateWorkflowCausalityGraph",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/create-workflow-display.ts\u0000ToolCallCreateWorkflowDisplay",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/delta.ts\u0000StatePatch",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/delta.ts\u0000WorkflowRunHeader",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/delta.ts\u0000WorkflowRunHeaderPatch",
       "count": 1
     },
     {
@@ -4391,34 +4095,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000TurnWorkSegment",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowBlockedMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowLaunchMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowNotificationMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/rows.ts\u0000WorkflowSettingsAmendMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SessionWorkflowPhaseStatus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SessionWorkflowPhaseSummary",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index-workflow-activity.ts\u0000SessionWorkflowRunSummary",
       "count": 1
     },
     {
@@ -4582,18 +4258,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4ConversationWorkflowRunEventsParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4ConversationWorkflowRunSummary",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000V4ConversationWorkflowRunsParams",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000WorkspaceConfigTopicWireFrame",
       "count": 1
     },
@@ -4607,102 +4271,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/wire-reassembly.ts\u0000ReassembleTopicWireFramesResult",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000V4ConversationWorkflowRunArtifactDataParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000V4ConversationWorkflowRunArtifactReadParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000V4ConversationWorkflowRunArtifactsParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000WorkflowRunArtifact",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-artifacts.ts\u0000WorkflowRunArtifactVersion",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000BackgroundResultOriginMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowBlockedMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowLaunchMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowNotificationMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-row-meta.ts\u0000WorkflowSettingsAmendMeta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000AmendWorkflowRunSettingsPayload",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-run-settings-command.ts\u0000WorkflowRunSettingsRejectionReason",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-caps.ts\u0000UnlistedInstanceEvent",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-eviction.ts\u0000WorkflowNodeSeating",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-reducer.ts\u0000WorkflowRunProgressEnvelope",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-tables.ts\u0000BoundedUpsert",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-runs-unlisted.ts\u0000WorkflowRunUnlistedDelta",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000V4ConversationWorkflowRunNodeResultParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000V4ConversationWorkflowRunWorkspaceParams",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WorkflowRunWorkspaceNode",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WorkflowRunWorkspaceNodeError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WorkflowRunWorkspaceNodeKind",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WorkflowRunWorkspaceNodeStatus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workflow-workspace.ts\u0000WorkflowRunWorkspaceNodeSummary",
       "count": 1
     },
     {
@@ -4771,14 +4339,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/shared.tsx\u0000RawToolCallFileSummary",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/shared.tsx\u0000WorkflowDraftPosition",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/ToolCallBlocks/shared.tsx\u0000WorkflowRunCardSummary",
       "count": 1
     },
     {
@@ -5094,10 +4654,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000unlisted\u0000scripts/ci/bundled-client-catalog.test.mjs\u0000croner",
-      "count": 1
-    },
-    {
       "key": "knip\u0000unlisted\u0000scripts/ci/conversation-archive.test.mjs\u0000yazl",
       "count": 1
     },
@@ -5134,14 +4690,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-automations-smoke.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-automations-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
       "key": "knip\u0000unlisted\u0000scripts/ci/local-context-smoke.mjs\u0000esbuild",
       "count": 1
     },
@@ -5163,10 +4711,6 @@
     },
     {
       "key": "knip\u0000unlisted\u0000scripts/ci/local-preferences-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-scheduler.test.mjs\u0000esbuild",
       "count": 1
     },
     {

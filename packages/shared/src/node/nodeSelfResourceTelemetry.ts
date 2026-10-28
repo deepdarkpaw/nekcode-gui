@@ -1,9 +1,8 @@
 /**
- * host 与 scheduler 两个 utilityProcess 自采 CPU / 内存的共用换算逻辑
+ * host utilityProcess 自采 CPU / 内存的换算逻辑
  *
  * 只做差分换算：不持有定时器、也不负责发送。host 复用内存诊断日志既有的 60 秒定时器，
- * scheduler 自己起唯一的一个 unref 定时器，两边都把同一次 `process.memoryUsage()` 读数
- * 交给这里换算成一条样本。零外部进程，只用进程内 API。
+ * 把同一次 `process.memoryUsage()` 读数交给这里换算成一条样本。零外部进程，只用进程内 API。
  */
 
 import { availableParallelism } from "node:os";
@@ -14,9 +13,6 @@ interface NodeCpuUsageSnapshot {
   user: number;
   system: number;
 }
-
-/** Node 进程自采周期：60 秒，与本地内存诊断日志同节拍。 */
-export const NODE_SELF_RESOURCE_SAMPLE_INTERVAL_MS = 60_000;
 
 export interface NodeSelfResourceSamplerOptions {
   readCpuUsage?: () => NodeCpuUsageSnapshot;
