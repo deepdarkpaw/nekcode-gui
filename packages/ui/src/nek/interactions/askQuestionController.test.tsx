@@ -31,7 +31,7 @@ describe("ask_question controller", () => {
         }),
       {
         wrapper: ({ children }: { children: ReactNode }) =>
-          createElement(ZCodeIntlProvider, { initialLocale: "zh-CN" }, children),
+          createElement(ZCodeIntlProvider, { initialLocale: "zh-CN", children }),
       },
     );
 
