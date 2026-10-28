@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
-import type { NekSessionSummary } from "@zcode/shared/nek-protocol";
+import type {
+  NekAgentMessage,
+  NekModel,
+  NekRpcSessionState,
+  NekSessionSnapshot,
+  NekSessionSummary,
+  NekState,
+} from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { NekExtensionUiResponse } from "@zcode/shared/nek-protocol";
 import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMethods.js";
 import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";

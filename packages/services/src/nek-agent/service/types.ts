@@ -4,6 +4,7 @@ import type {
   NekAgentMessage,
   NekGuiInfo,
   NekProjectTrust,
+  NekRpcEvent,
   NekRpcSessionState,
   NekSessionEntry,
   NekSessionSnapshot,
@@ -98,6 +99,11 @@ export type NekAgentServiceEvent =
       session: NekSession;
       previous: NekSessionPhase;
       state: NekSessionPhase;
+    }
+  | {
+      type: "rpc_event";
+      session: NekSession;
+      event: NekRpcEvent;
     }
   | { type: "process_exit"; session: NekSession; exit: NekRpcProcessExit }
   | { type: "resume_notice"; session: NekSession; message: "正在继续上次中断的回合" };

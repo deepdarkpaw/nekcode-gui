@@ -320,6 +320,7 @@ export abstract class NekAgentServiceRuntimeBase {
 
   protected handleEvent(record: NekSessionRecord, event: NekRpcEvent): void {
     record.projector?.handleEvent(event);
+    this.emit({ type: "rpc_event", session: this.publicSession(record), event });
     switch (event.type) {
       case "agent_start":
         this.pool.beginTurn(record.key);
