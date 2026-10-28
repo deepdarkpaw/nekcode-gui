@@ -15,6 +15,7 @@ import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentSe
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
 import {
   isNekSessionSnapshot,
+  isNekState,
   type NekAgentServiceOptions,
   type NekConversationListener,
   type NekMode,
