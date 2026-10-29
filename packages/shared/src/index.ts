@@ -24,6 +24,9 @@ export type {
   RemoteTargetSnapshot,
   RemoteWorkspaceSessionEntry,
   PersistedWorkspaceSessionEntry,
+  NekIpcRequest,
+  NekIpcEvent,
+  NekIpcError,
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
 export {

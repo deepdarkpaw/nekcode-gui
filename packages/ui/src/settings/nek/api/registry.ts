@@ -7,6 +7,7 @@ import type { INekSettingsHostApi } from "./hostApi.js";
 import type { NekSettingsApis } from "./NekSettingsContext.js";
 import { MockNekSettingsHostApi } from "./mock/mockHostApi.js";
 import { MockNekConfigApi } from "./mock/mockNekConfigApi.js";
+import { createDesktopNekSettingsApis } from "./ipcClient.js";
 
 let registered: NekSettingsApis | null = null;
 let mockApis: NekSettingsApis | null = null;
@@ -26,6 +27,11 @@ export function createMockNekSettingsApis(
 export function resolveNekSettingsApis(): NekSettingsApis {
   if (registered) {
     return registered;
+  }
+  const desktopApis = createDesktopNekSettingsApis();
+  if (desktopApis) {
+    registered = desktopApis;
+    return desktopApis;
   }
   mockApis ??= createMockNekSettingsApis();
   return mockApis;

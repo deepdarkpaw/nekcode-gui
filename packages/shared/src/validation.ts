@@ -51,6 +51,21 @@ export function formatZodError(error: z.ZodError): string {
 }
 
 export const nonEmptyStringSchema = z.string().trim().min(1);
+
+/** 通用 nek IPC 请求的运行时边界；具体参数仍由契约适配器逐方法校验。 */
+export const nekIpcRequestSchema = z
+  .object({
+    requestId: nonEmptyStringSchema.max(128),
+    operation: z.enum(["invoke", "subscribe", "unsubscribe"]),
+    method: z
+      .string()
+      .regex(/^[A-Za-z][A-Za-z0-9]*$/u)
+      .max(96),
+    args: z.array(z.unknown()).max(64),
+    event: z.literal("log").optional(),
+  })
+  .strict();
+
 export const stringArraySchema = z.array(z.string());
 export const credentialRecordSchema = z.record(z.string(), z.string());
 export const credentialKeySchema = nonEmptyStringSchema;
