@@ -17,7 +17,6 @@ import {
   bindingSnapshot,
   emptyEvent,
   emptyHello,
-  emptyRowsResult,
   legacySessionInfo,
   legacySnapshotFromResult,
   type LegacyCompactResult,
@@ -209,7 +208,30 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return;
     },
     setConnectionFlowStateV4: () => unsupported("setConnectionFlowStateV4"),
-    conversationRowsRangeV4: async (input) => emptyRowsResult(input),
+    async conversationRowsRangeV4(input) {
+      const sessionKey = target.resolveSessionKey(input, input.sessionId);
+      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const snapshot = target.service.conversationSnapshot(sessionKey);
+      const beforeRowId = input.beforeRowId;
+      const beforeIndex =
+        beforeRowId !== undefined
+          ? snapshot.rows.window.findIndex((row) => row.rowId === beforeRowId)
+          : -1;
+      const rows =
+        beforeRowId !== undefined
+          ? beforeIndex >= 0
+            ? snapshot.rows.window.slice(0, beforeIndex)
+            : []
+          : snapshot.rows.window;
+      const window = rows.slice(-input.limit);
+      return {
+        rows: window,
+        atSeq: snapshot.seq,
+        atRevision: snapshot.revision,
+        atLogEpoch: snapshot.logEpoch,
+        hasMore: window.length < rows.length,
+      };
+    },
     conversationPlansV4: async (input): Promise<V4ConversationPlansResult> => ({
       plans: [],
       atSeq: 0,
