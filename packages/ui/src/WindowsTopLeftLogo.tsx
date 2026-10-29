@@ -1,5 +1,5 @@
 import { cn } from "@/components/lib/utils.js";
-const zaiLogoUrl = new URL("../../../public/logo/icons/512x512.png", import.meta.url).href;
+const appLogoUrl = new URL("../../../public/logo/icons/512x512.png", import.meta.url).href;
 
 export function WindowsTopLeftLogo({
   className,
@@ -20,8 +20,8 @@ export function WindowsTopLeftLogo({
       )}
     >
       <img
-        src={zaiLogoUrl}
-        alt="ZCodium Exp"
+        src={appLogoUrl}
+        alt="nekcode"
         className={cn("pointer-events-none size-5 select-none", imageClassName)}
         draggable={false}
       />

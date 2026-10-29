@@ -1,7 +1,7 @@
 /**
- * nekcode-gui 自身的新增界面偏好（沿用 ZCodium 的 localStorage 偏好存储机制）：
+ * nekcode-gui 自身的新增界面偏好（沿用 nekcode 的 localStorage 偏好存储机制）：
  * 发送键、thinking 默认折叠、工具输出默认展开、Mermaid、分类系统通知、nek 动作快捷键覆盖。
- * 主题 / 字号 / 语言 / 通知总开关继续使用 ZCodium 现有的 store。
+ * 主题 / 字号 / 语言 / 通知总开关继续使用现有的 store。
  */
 import { create } from "zustand";
 import { readSafeLocalStorage, writeSafeLocalStorage } from "@/lib/browserEnvironment.js";
