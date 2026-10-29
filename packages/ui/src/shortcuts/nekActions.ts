@@ -29,7 +29,8 @@ export type NekActionId =
   | "app.session.new"
   | "gui.settings.open"
   | "app.editor.external"
-  | "gui.commandPalette.open";
+  | "gui.commandPalette.open"
+  | "gui.interaction.focus";
 
 /** 作用域：composer = 输入框聚焦时生效；global = 窗口级。 */
 export type NekActionScope = "composer" | "global";
@@ -169,6 +170,12 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+k"],
     legacyCommandId: "openCommandCenter",
+  },
+  {
+    id: "gui.interaction.focus",
+    category: "other",
+    scope: "global",
+    defaultBindings: ["Alt+i"],
   },
 ];
 
