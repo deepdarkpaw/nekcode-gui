@@ -29,10 +29,7 @@ async function files(directory) {
 }
 
 test("application dependencies contain no telemetry SDK or workspace package", async () => {
-  const paths = [
-    join(root, "package.json"),
-    ...(await files(join(root, "packages"))),
-  ];
+  const paths = [join(root, "package.json"), ...(await files(join(root, "packages")))];
   const found = [];
   for (const path of paths.filter((path) => basename(path) === "package.json")) {
     const manifest = JSON.parse(await readFile(path, "utf8"));
@@ -49,10 +46,7 @@ test("application dependencies contain no telemetry SDK or workspace package", a
 });
 
 test("product code cannot enable official or proprietary telemetry collectors", async () => {
-  const paths = [
-    ...(await files(join(root, "packages"))),
-    ...(await files(join(root, "scripts"))),
-  ];
+  const paths = [...(await files(join(root, "packages"))), ...(await files(join(root, "scripts")))];
   const forbidden =
     /(?:from\s+["']@arms\/|ZCODE_TELEMETRY_REPORT_ENDPOINT|ZCODE_ARMS_RUM_ENDPOINT|createTelemetryCore|getReportContext|reportTelemetryEvent|reportArmsCustomEvent)/;
   const found = [];

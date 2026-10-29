@@ -69,10 +69,7 @@ export function shouldRegisterService(
   return daemonRequested && !supervisorProcess;
 }
 
-export async function runServerCli(
-  argv: readonly string[],
-  io: CliIO = {},
-): Promise<number> {
+export async function runServerCli(argv: readonly string[], io: CliIO = {}): Promise<number> {
   const json = argv.includes("--json");
   try {
     const parsed = parseServerCliArguments(argv);

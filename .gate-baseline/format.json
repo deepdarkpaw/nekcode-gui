@@ -2,39 +2,7 @@
   "version": 1,
   "entries": [
     {
-      "key": "format\u0000dependencies/README.md",
-      "count": 1
-    },
-    {
-      "key": "format\u0000packages/desktop/src/host/hostDatabaseStartup.ts",
-      "count": 1
-    },
-    {
       "key": "format\u0000packages/server/src/remote/remoteAssetInstaller.ts",
-      "count": 1
-    },
-    {
-      "key": "format\u0000packages/shared/src/database-startup.ts",
-      "count": 1
-    },
-    {
-      "key": "format\u0000packages/zcode-server-cli/src/cli.ts",
-      "count": 1
-    },
-    {
-      "key": "format\u0000scripts/ci/no-telemetry.test.mjs",
-      "count": 1
-    },
-    {
-      "key": "format\u0000scripts/ci/offline-deploy.test.mjs",
-      "count": 1
-    },
-    {
-      "key": "format\u0000scripts/ci/remote-assets-smoke.mjs",
-      "count": 1
-    },
-    {
-      "key": "format\u0000scripts/native-search-tools-config.mjs",
       "count": 1
     }
   ]

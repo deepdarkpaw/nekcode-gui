@@ -17,8 +17,6 @@ const EXCLUDE_GLOBS = [
 const DEFAULT_GLOBS = [
   "packages/*/src/**/*.{ts,tsx,mts,cts}",
   "packages/*/test/**/*.{ts,tsx,mts,cts}",
-  "apps/*/src/**/*.{ts,tsx,mts,cts}",
-  "apps/*/test/**/*.{ts,tsx,mts,cts}",
   "harness/**/*.{ts,tsx,mts,cts}",
   ...EXCLUDE_GLOBS,
 ];

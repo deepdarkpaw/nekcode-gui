@@ -1,4 +1,7 @@
-import { getTasksIndexDatabasePath, markTasksStoragePrepared } from "@zcode/services/storage-startup";
+import {
+  getTasksIndexDatabasePath,
+  markTasksStoragePrepared,
+} from "@zcode/services/storage-startup";
 import type { DatabaseStartupState } from "@zcode/shared";
 import { DatabaseStartupCoordinator } from "./databaseStartupCoordinator.js";
 import { StartupDiskSampler } from "./startupDiskSampler.js";

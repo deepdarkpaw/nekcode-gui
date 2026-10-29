@@ -96,11 +96,7 @@ test(
     const firstUploads = uploads.length;
     assert.equal(await deploy(), false);
     assert.equal(uploads.length, firstUploads);
-    for (const relativePath of [
-      "node",
-      "build/Release/pty.node",
-      "tools/ripgrep/rg",
-    ]) {
+    for (const relativePath of ["node", "build/Release/pty.node", "tools/ripgrep/rg"]) {
       const before = uploads.length;
       await rm(installed(relativePath));
       await deploy();
