@@ -1,5 +1,9 @@
-const DEEP_LINK_SCHEME = "zcode";
-const DEEP_LINK_RE = /\bzcode:(?:\/\/|\/)?[^\s"'<>]+/i;
+import { NEKCODE_DEEP_LINK_SCHEME } from "../../scripts/desktop-product-identity.mjs";
+
+// scheme 与打包期 electron-builder 的 `protocols` 注册同源（desktop-product-identity.mjs），
+// 只维护一处，避免「安装包注册 nekcode、主进程只认 zcode」的静默失配。
+const DEEP_LINK_SCHEME = NEKCODE_DEEP_LINK_SCHEME;
+const DEEP_LINK_RE = new RegExp(String.raw`\b${DEEP_LINK_SCHEME}:(?:\/\/|\/)?[^\s"'<>]+`, "i");
 const WORKSPACE_OPEN_HOST = "workspace";
 const DEEP_LINK_ADDITIONAL_DATA_KEY = "deepLinkUrl";
 const OPEN_WORKSPACE_ADDITIONAL_DATA_KEY = "openWorkspacePath";

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { NEKCODE_DEEP_LINK_SCHEME } from "../../scripts/desktop-product-identity.mjs";
 import { installLinuxAppImageDesktopIconBestEffort } from "./desktopLinuxAppImageIcon.js";
 import {
   runXdgCommand,
@@ -10,8 +11,8 @@ import {
 
 // 条目 id 必须与 deb/rpm 安装的系统级条目同名（linuxPackageName），
 // 否则"系统级条目已存在就不写用户级"的抑制永远不生效，启动器里会同时出现两个图标。
-const DEFAULT_LINUX_DEEP_LINK_DESKTOP_ENTRY_ID = "zcodium";
-const LINUX_DEEP_LINK_MIME_TYPE = "x-scheme-handler/zcode";
+const DEFAULT_LINUX_DEEP_LINK_DESKTOP_ENTRY_ID = "nekcode";
+const LINUX_DEEP_LINK_MIME_TYPE = `x-scheme-handler/${NEKCODE_DEEP_LINK_SCHEME}`;
 // 归属标记：用于识别用户级条目是否由本应用写入。改名前的旧标记只用于清理遗留条目。
 const LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER = "Comment=ZCodium Desktop App";
 const LEGACY_LINUX_DEEP_LINK_DESKTOP_FILE = "zcode.desktop";

@@ -17,10 +17,10 @@ const RELEASE_MESSAGE_HEADING =
   "To be, or not to be, that is the question.\n\n" +
   "生存还是毁灭，这是一个问题。\n\n" +
   "— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》";
-const RELEASE_PRODUCT_SUMMARY = `Products: ${desktopProductIdentities.production.productName} uses the default TS runtime; ${desktopProductIdentities.preview.productName} is experimental and uses the default Rust runtime.`;
+const RELEASE_PRODUCT_SUMMARY = `Products: ${desktopProductIdentities.production.productName} is the production desktop app; ${desktopProductIdentities.preview.productName} is the preview-channel build and must not replace a production install.`;
 const RELEASE_MESSAGE_BODY =
   `${RELEASE_PRODUCT_SUMMARY}\n\n` +
-  "Features: mobile replayable realtime; scoped upstream 3.15.1 sync. Manual platform acceptance is not complete.\n\n" +
+  "Features: nek CLI parity through the GUI RPC channel. Manual platform acceptance is not complete.\n\n" +
   "macOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.";
 // electron-builder 按发行格式改写 ${arch}，必须匹配实际产物而非统一猜测 x64。
 // macOS 同时发 arm64 与 x64（Intel），两者各自在原生 runner 上构建（macos-15 /

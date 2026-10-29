@@ -3,7 +3,10 @@ import { isAbsolute, resolve } from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 import type { WebContents } from "electron";
 import { type Locale, PlatformChannels, ZCODE_PRODUCT_FLAVOR } from "@zcode/shared";
-import { desktopProductIdentities } from "../../scripts/desktop-product-identity.mjs";
+import {
+  NEKCODE_DEEP_LINK_SCHEME,
+  desktopProductIdentities,
+} from "../../scripts/desktop-product-identity.mjs";
 import { extractWorkspaceOpenPath, isWorkspaceOpenUrl } from "./desktopDeepLinkUrl.js";
 import { registerLinuxDeepLinkProtocol } from "./desktopLinuxDeepLinkRegistration.js";
 
@@ -233,7 +236,7 @@ export function registerDeepLinkProtocol(
   },
   options: { iconPath?: string } = {},
 ) {
-  const scheme = "zcode";
+  const scheme = NEKCODE_DEEP_LINK_SCHEME;
 
   if (process.defaultApp && process.argv.length >= 2) {
     const entry = resolve(process.argv[1]!);

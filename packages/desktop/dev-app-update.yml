@@ -1,6 +1,7 @@
-# 修复原因：显式开启开发态自动更新时 electron-updater 会读取 dev-app-update.yml 初始化下载缓存。
-# 服务端 manifest provider 仍负责返回真实安装包 URL；这里的 generic url 只作为本地配置占位。
-provider: generic
-url: http://localhost:8081
-useMultipleRangeRequest: false
-updaterCacheDirName: zcode-dev-updater
+# 开发态自动更新（ZCODE_AUTO_UPDATE_DEV=1）读取的 feed 配置：与安装包里 electron-builder
+# 生成的 app-update.yml 保持同一 provider 形态（GitHub Releases），避免开发态联调的更新链路
+# 和正式包走两套解析逻辑。owner/repo 用打包期默认值；联调别的仓库时改这里即可。
+provider: github
+owner: nekcode
+repo: nekcode-gui
+updaterCacheDirName: nekcode-dev-updater

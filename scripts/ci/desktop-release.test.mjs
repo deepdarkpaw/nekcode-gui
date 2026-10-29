@@ -65,9 +65,7 @@ test("artifact names accept the rolling prerelease build version", () => {
   const rolling = "3.14.4-20261009.258";
   // linux x64 的 AppImage 产物名用 x86_64（builder-util 的 getArtifactArchName 特例）。
   assert.ok(
-    artifactNames("linux", rolling, "x64", identity)[0].includes(
-      `ZCodium Exp-${rolling}-linux-x86_64`,
-    ),
+    artifactNames("linux", rolling, "x64", identity)[0].includes(`nekcode-${rolling}-linux-x86_64`),
   );
   assert.notEqual(
     artifactNames("linux", rolling, "x64", identity)[0],
@@ -277,12 +275,12 @@ test("draft title and notes describe both products without losing the required n
   const { run, calls } = githubMock();
   await publishDraft({ tag: "v3.14.0", repo: "owner/repo", files: ["/tmp/artifact"], run });
   const titleIndex = calls[1].indexOf("--title");
-  assert.equal(calls[1][titleIndex + 1], "ZCodium Exp + ZCodium Rust v3.14.0");
+  assert.equal(calls[1][titleIndex + 1], "nekcode + nekcode-preview v3.14.0");
   const notesIndex = calls[1].indexOf("--notes");
   assert.match(calls[1][notesIndex + 1], /^To be, or not to be/);
   assert.match(
     calls[1][notesIndex + 1],
-    /ZCodium Exp.*default TS runtime.*ZCodium Rust.*experimental.*default Rust runtime/s,
+    /nekcode is the production desktop app.*nekcode-preview is the preview-channel build/s,
   );
   assert.match(calls[1][notesIndex + 1], /unsigned/i);
   assert.match(calls[1][notesIndex + 1], /Manual platform acceptance is not complete/);
@@ -298,7 +296,7 @@ test("create a draft then upload assets; never publish it", async () => {
   assert.notEqual(notesIndex, -1);
   assert.equal(
     calls[1][notesIndex + 1],
-    "To be, or not to be, that is the question.\n\n生存还是毁灭，这是一个问题。\n\n— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》\n\nProducts: ZCodium Exp uses the default TS runtime; ZCodium Rust is experimental and uses the default Rust runtime.\n\nFeatures: mobile replayable realtime; scoped upstream 3.15.1 sync. Manual platform acceptance is not complete.\n\nmacOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.",
+    "To be, or not to be, that is the question.\n\n生存还是毁灭，这是一个问题。\n\n— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》\n\nProducts: nekcode is the production desktop app; nekcode-preview is the preview-channel build and must not replace a production install.\n\nFeatures: nek CLI parity through the GUI RPC channel. Manual platform acceptance is not complete.\n\nmacOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.",
   );
   assert.equal(calls[2][2], "upload");
   assert.ok(calls[2].includes("--clobber"));
@@ -312,11 +310,11 @@ test("rerun updates only a draft and refuses an already public release", async (
   assert.equal(draft.calls[2][2], "edit");
   assert.equal(
     draft.calls[2][draft.calls[2].indexOf("--title") + 1],
-    "ZCodium Exp + ZCodium Rust v3.14.0",
+    "nekcode + nekcode-preview v3.14.0",
   );
   const updatedNotes = draft.calls[2][draft.calls[2].indexOf("--notes") + 1];
-  assert.match(updatedNotes, /ZCodium Exp.*TS/);
-  assert.match(updatedNotes, /ZCodium Rust.*Rust/);
+  assert.match(updatedNotes, /nekcode is the production desktop app/);
+  assert.match(updatedNotes, /nekcode-preview is the preview-channel build/);
   assert.match(updatedNotes, /^Maintainer notes\n\n## Generated changes\n- Preserve this entry/);
   assert.equal(draft.calls[3][2], "upload");
   const published = githubMock([{ tagName: "v3.14.0", isDraft: false }]);
