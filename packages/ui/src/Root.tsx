@@ -728,7 +728,7 @@ function RootInner({
 
   if (isStartupRenderBlocked) {
     const loadingLabel = intl.formatMessage({ id: "common.loading" });
-    // HTML 启动壳已删除，门禁阻塞期由这一处静态 ZCodium 标记承接主题背景与品牌画面。
+    // HTML 启动壳已删除，门禁阻塞期由这一处静态 nekcode 标记承接主题背景与品牌画面。
     return (
       <RootShell>
         {rootModelSelectionErrorNode}

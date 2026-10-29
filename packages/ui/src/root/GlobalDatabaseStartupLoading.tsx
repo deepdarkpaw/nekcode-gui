@@ -7,7 +7,7 @@ import { ZCodeStartupLogoBadge } from "@/root/ZCodeStartupLogoBadge.js";
 /**
  * 数据库启动态容器。
  *
- * 数据库启动（大库可持续 6~8s）远早于 Root 启动门禁。这里必须直接渲染 ZCodium 品牌标记，
+ * 数据库启动（大库可持续 6~8s）远早于 Root 启动门禁。这里必须直接渲染 nekcode 品牌标记，
  * 否则从主窗口出现到数据库就绪这段只有纯色底、没有任何标记；等 RootStartupLoading 才亮出的
  * 图标看起来像闪了一下。标记复用 ZCodeStartupLogoBadge：与 Root 启动门禁是同一枚图标、
  * 同一 96px 尺寸，两段画面衔接时不会跳动。
