@@ -1,9 +1,16 @@
 import { join } from "node:path";
 import { access } from "node:fs/promises";
+import { ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME } from "@zcode/shared";
 import type { StdioStream } from "@zcode/server/remote/backend.js";
 import { quotePosixPathArg } from "@zcode/server/remote/posixShell.js";
 
-export const REMOTE_BASE = "~/.zcodium/server";
+/**
+ * 远端安装根：`~/.nek/gui-server`。
+ *
+ * 常量本身是 POSIX 相对路径（多段），这里用 `/` 拼上 `~`：远端家目录展开依赖远端
+ * shell 对 `~` 的处理，不能用本机 `path.join`（在 Windows 打包机上会得到 `\`）。
+ */
+export const REMOTE_BASE = `~/${ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME}`;
 
 export interface RemoteAssetDeployOptions {
   /** 取消当前连接初始化；不得继续写入远端 staging。 */

@@ -1,28 +1,42 @@
 /**
- * ZCodium 落盘命名空间的唯一来源。
+ * nekcode 落盘命名空间的唯一来源。
  *
- * ZCodium 与 ZCode 是独立软件，不共用数据目录：这里从 `.zcodium*` 改为 `.zcodium*`，
- * 且不做旧目录迁移（见 .agents/specs/zcodium-data-dir.md）。新增目录或文件名时必须
- * 引用这些常量，不要在业务代码里散落字面量，否则改名会再次漏改。
+ * 品牌改名后本产品占 `~/.nek/gui`，nek 自己的配置占 `~/.nek/agent`（由 nek 维护，
+ * GUI 只通过 `nekConfigService` 读写），两者同属 `~/.nek` 命名空间但互不覆盖。
+ * 新增目录或文件名时必须引用这些常量，不要在业务代码里散落字面量，否则改名会再次漏改。
  */
 
 /**
- * 用户级数据根目录名，默认 `~/.zcodium-exp`（可被 ZCODE_DATA_BASE_DIR 改写基路径）。
+ * 用户级数据根目录子路径，即 `~/.nek/gui`（可被 ZCODE_DATA_BASE_DIR 改写基路径）。
  *
- * Bugfix：ZCodium-project/ZCodium 的 #13/#17 正把用户级数据根收敛到 `~/.zcodium`，
- * 与本仓库自 f12f4ea 起持有的 `~/.zcodium` 必然相撞（两个产品会读写彼此的凭据、
- * 配置与会话）。本仓库让出 `~/.zcodium`，改占 `~/.zcodium-exp`；
- * 旧根名见 LEGACY_ZCODE_USER_DATA_DIR_NAME，仅用于一次性迁移。
+ * 该常量是多段相对路径：调用方一律用 `join(baseDir, ZCODE_USER_DATA_DIR_NAME)` 拼接，
+ * 由 `node:path` 负责把 `/` 归一化成平台分隔符，因此 Windows / macOS / Linux 都得到
+ * `<base>/.nek/gui`。不要用字符串加法（`base + "/" + NAME`）拼接，那会在 Windows 上
+ * 得到混用分隔符的路径。
  */
-export const ZCODE_USER_DATA_DIR_NAME = ".zcodium-exp";
+export const ZCODE_USER_DATA_DIR_NAME = ".nek/gui";
 
-/** 换名前用户级数据根目录名，仅用于一次性迁移，不再作为读写目标。 */
-export const LEGACY_ZCODE_USER_DATA_DIR_NAME = ".zcodium";
+/**
+ * 换名前用户级数据根目录子路径，仅用于一次性迁移，不再作为读写目标。
+ *
+ * 上一个身份（基于 ZCodium 的 `.zcodium-exp`）写入的数据在这里；更早的 `.zcodium`
+ * 已由上一版构建迁移进 `.zcodium-exp`，因此迁移链保持单跳即可覆盖全部存量用户。
+ */
+export const LEGACY_ZCODE_USER_DATA_DIR_NAME = ".zcodium-exp";
 
 /** 迁移成功后写在旧根内的标记文件，防止下次启动重复灌入。 */
-export const ZCODE_USER_DATA_MIGRATION_MARKER_FILE_NAME = ".migrated-to-zcodium-exp";
+export const ZCODE_USER_DATA_MIGRATION_MARKER_FILE_NAME = ".migrated-to-nek-gui";
 
-/** 用户级 App 配置子目录名，即 `~/.zcodium/v2`。 */
+/**
+ * 远端服务安装根目录子路径，即远端机器上的 `~/.nek/gui-server`。
+ *
+ * 远端部署把 gui-server、随包的 node 运行时与 native 资源都放进这个根
+ * （见 ARD §4 与 `packages/server/src/remote/deployShared.ts`）。同样是多段相对路径：
+ * 远端路径永远是 POSIX，拼接时必须用 `/` 或 `node:path/posix`，不能用本机 `path.join`。
+ */
+export const ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME = ".nek/gui-server";
+
+/** 用户级 App 配置子目录名，即 `~/.nek/gui/v2`。 */
 export const ZCODE_APP_CONFIG_SUBDIR_NAME = "v2";
 
 /** 工作区级配置目录名，即 `<workspace>/.zcodium`。 */

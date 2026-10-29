@@ -21,19 +21,41 @@ import {
 } from "../appDirNames.js";
 import { migrateLegacyUserDataRoot } from "./userDataRootMigration.js";
 
+function canCreateSymlink(target: string, linkPath: string): boolean {
+  try {
+    symlinkSync(target, linkPath);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EPERM" || code === "ENOSYS" || code === "EACCES") {
+      return false;
+    }
+    throw error;
+  }
+}
+
 describe("migrateLegacyUserDataRoot", () => {
   let baseDir: string;
   let legacyRoot: string;
   let nextRoot: string;
 
   beforeEach(() => {
-    baseDir = mkdtempSync(join(tmpdir(), "zcodium-data-root-"));
+    baseDir = mkdtempSync(join(tmpdir(), "nekcode-data-root-"));
     legacyRoot = join(baseDir, LEGACY_ZCODE_USER_DATA_DIR_NAME);
     nextRoot = join(baseDir, ZCODE_USER_DATA_DIR_NAME);
   });
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  // 目录名是产品身份的一部分：改名时这里先红，避免只改了常量却漏掉迁移两侧的形态。
+  it("新根是 ~/.nek/gui，旧根是 ~/.zcodium-exp", () => {
+    assert.equal(ZCODE_USER_DATA_DIR_NAME, ".nek/gui");
+    assert.equal(LEGACY_ZCODE_USER_DATA_DIR_NAME, ".zcodium-exp");
+    // 多段子路径由 path.join 归一化，Windows 上也得到 <base>/.nek/gui 的等价形态。
+    assert.equal(nextRoot, join(baseDir, ".nek", "gui"));
+    assert.equal(legacyRoot, join(baseDir, ".zcodium-exp"));
   });
 
   function seedLegacyTree(): void {
@@ -110,7 +132,7 @@ describe("migrateLegacyUserDataRoot", () => {
   });
 
   it("自定义基目录下按同一 baseDir 解析", () => {
-    const customBase = mkdtempSync(join(tmpdir(), "zcodium-data-base-"));
+    const customBase = mkdtempSync(join(tmpdir(), "nekcode-data-base-"));
     try {
       mkdirSync(join(customBase, LEGACY_ZCODE_USER_DATA_DIR_NAME, "v2"), { recursive: true });
       writeFileSync(
@@ -144,7 +166,7 @@ describe("migrateLegacyUserDataRoot", () => {
   // 以下两条来自 2026-10-03 的真实数据实测补充，覆盖此前单测未触及的形态。
   describe("复杂树与端到端可读", () => {
     beforeEach(() => {
-      baseDir = mkdtempSync(join(tmpdir(), "zcodium-data-root-"));
+      baseDir = mkdtempSync(join(tmpdir(), "nekcode-data-root-"));
       legacyRoot = join(baseDir, LEGACY_ZCODE_USER_DATA_DIR_NAME);
       nextRoot = join(baseDir, ZCODE_USER_DATA_DIR_NAME);
     });
@@ -154,7 +176,7 @@ describe("migrateLegacyUserDataRoot", () => {
     });
 
     it("软链、只读、0 字节、空目录、中文与空格路径逐项保留", () => {
-      // 真实 ~/.zcodium 的形态：深层嵌套 + 大小文件混排 + 软链 + 中文/空格文件名。
+      // 真实 ~/.zcodium-exp 的形态：深层嵌套 + 大小文件混排 + 软链 + 中文/空格文件名。
       // 原用例只比对 config.json 等两个叶子，以上形态没有覆盖。
       // 日志内容刻意用 ASCII：避免多字节字符让长度断言依赖编码细节。
       mkdirSync(join(legacyRoot, "v2", "logs"), { recursive: true });
@@ -171,7 +193,12 @@ describe("migrateLegacyUserDataRoot", () => {
         "export {};",
       );
       writeFileSync(join(legacyRoot, "v2", "zero.bin"), Buffer.alloc(0));
-      symlinkSync(join(legacyRoot, "v2", "state.db"), join(legacyRoot, "v2", "db-link"));
+      // Windows 上非管理员/未开开发者模式时 symlinkSync 会 EPERM；那是环境限制而不是迁移缺陷，
+      // 这种情况下跳过软链断言，其余形态照旧覆盖。
+      const symlinksSupported = canCreateSymlink(
+        join(legacyRoot, "v2", "state.db"),
+        join(legacyRoot, "v2", "db-link"),
+      );
       writeFileSync(join(legacyRoot, "v2", "readonly.txt"), "read only");
       chmodSync(join(legacyRoot, "v2", "readonly.txt"), 0o444);
 
@@ -179,7 +206,9 @@ describe("migrateLegacyUserDataRoot", () => {
 
       assert.equal(lstatSync(join(nextRoot, "v2", "empty-dir")).isDirectory(), true);
       assert.equal(readFileSync(join(nextRoot, "v2", "zero.bin")).length, 0);
-      assert.equal(lstatSync(join(nextRoot, "v2", "db-link")).isSymbolicLink(), true);
+      if (symlinksSupported) {
+        assert.equal(lstatSync(join(nextRoot, "v2", "db-link")).isSymbolicLink(), true);
+      }
       assert.equal(readFileSync(join(nextRoot, "v2", "readonly.txt"), "utf8"), "read only");
       assert.equal(
         readFileSync(join(nextRoot, "cli", "skills", "文档 技能", "SKILL.md"), "utf8"),

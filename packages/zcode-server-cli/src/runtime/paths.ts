@@ -80,7 +80,12 @@ export async function resolveCanonicalServerLayout(
 
 function inferDataBaseDir(serverRoot: string): string {
   const parent = dirname(serverRoot);
-  if (basename(serverRoot) === "server" && basename(parent) === ZCODE_USER_DATA_DIR_NAME) {
+  // ZCODE_USER_DATA_DIR_NAME 可能是多段子路径（如 `.nek/gui`），只能比最后一段，
+  // 否则默认布局会被判成「显式 server root」而不再上溯到数据基目录。
+  if (
+    basename(serverRoot) === "server" &&
+    basename(parent) === basename(ZCODE_USER_DATA_DIR_NAME)
+  ) {
     return dirname(parent);
   }
   // 非标准的显式 server root 仍保持隔离，不向其父目录扩散 Agent/SQLite 数据。
