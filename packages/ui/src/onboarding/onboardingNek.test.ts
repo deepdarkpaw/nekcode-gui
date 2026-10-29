@@ -33,7 +33,13 @@ describe("onboarding nek controller", () => {
     ["NK-2 not_installed", { status: "not_installed" }, "not_installed"],
     [
       "NK-2 incompatible",
-      { status: "incompatible", version: "0.3.0", path: "/bin/nek", protocolVersion: 0, requiredProtocolVersion: 1 },
+      {
+        status: "incompatible",
+        version: "0.3.0",
+        path: "/bin/nek",
+        protocolVersion: 0,
+        requiredProtocolVersion: 1,
+      },
       "incompatible",
     ],
     ["NK-2 failed", { status: "failed", message: "ENOENT" }, "failed"],
@@ -60,22 +66,100 @@ describe("onboarding nek controller", () => {
     expect(result.current.state.logTruncated).toBe(true);
   });
 
-  it("NK-6: cancellation waits for cancelled:true before entering install_cancelled", async () => {
+  it("NK-1: initial detection runs once, recheck and install completion detect again", async () => {
     const api = apiFor({ status: "not_installed" });
-    let resolveInstall: ((result: NekInstallResult) => void) | undefined;
+    const { result } = renderHook(() => useNekStepControllerWithApi(api));
+    await waitFor(() => expect(result.current.state.status).toBe("not_installed"));
+    expect(api.detectLocalNek).toHaveBeenCalledTimes(1);
+    await act(async () => result.current.detect());
+    expect(api.detectLocalNek).toHaveBeenCalledTimes(2);
+    await act(async () => result.current.install());
+    expect(api.detectLocalNek).toHaveBeenCalledTimes(3);
+  });
+
+  it("NK-8: install failure retains message and manual command", async () => {
+    const api = apiFor({ status: "not_installed" });
+    api.installLocalNek.mockResolvedValue({
+      ok: false,
+      cancelled: false,
+      message: "permission denied",
+      manualCommand: "nek install --user",
+    });
+    const { result } = renderHook(() => useNekStepControllerWithApi(api));
+    await waitFor(() => expect(result.current.state.status).toBe("not_installed"));
+    await act(async () => result.current.install());
+    expect(result.current.state).toMatchObject({
+      status: "install_failed",
+      message: "permission denied",
+      manualCommand: "nek install --user",
+    });
+  });
+
+  it("NK-10: channel defaults to stable, changes before install, and is locked while installing", async () => {
+    const api = apiFor({ status: "not_installed" });
+    let resolveInstall: ((value: NekInstallResult) => void) | undefined;
     api.installLocalNek.mockImplementation(
-      () => new Promise((resolve) => {
-        resolveInstall = resolve;
-      }),
+      () =>
+        new Promise((resolve) => {
+          resolveInstall = resolve;
+        }),
     );
     const { result } = renderHook(() => useNekStepControllerWithApi(api));
     await waitFor(() => expect(result.current.state.status).toBe("not_installed"));
-    let running: Promise<void>;
+    expect(result.current.state.channel).toBe("stable");
+    act(() => result.current.setChannel("dev"));
+    expect(result.current.state.channel).toBe("dev");
+    let running!: Promise<void>;
     act(() => {
       running = result.current.install();
     });
     await waitFor(() => expect(result.current.state.status).toBe("installing"));
-    let cancelling: Promise<void>;
+    act(() => result.current.setChannel("stable"));
+    expect(result.current.state.channel).toBe("dev");
+    resolveInstall?.({ ok: true, version: "0.4.0", cancelled: false });
+    await act(async () => running);
+    expect(api.installLocalNek).toHaveBeenCalledWith({ channel: "dev" }, expect.any(Function));
+  });
+
+  it("NK-12: unmounting during installation does not cancel the host operation", async () => {
+    const api = apiFor({ status: "not_installed" });
+    let resolveInstall: ((value: NekInstallResult) => void) | undefined;
+    api.installLocalNek.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInstall = resolve;
+        }),
+    );
+    const { result, unmount } = renderHook(() => useNekStepControllerWithApi(api));
+    await waitFor(() => expect(result.current.state.status).toBe("not_installed"));
+    let running!: Promise<void>;
+    act(() => {
+      running = result.current.install();
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("installing"));
+    unmount();
+    expect(api.cancelLocalInstall).not.toHaveBeenCalled();
+    resolveInstall?.({ ok: true, version: "0.4.0", cancelled: false });
+    await running;
+  });
+
+  it("NK-6: cancellation waits for cancelled:true before entering install_cancelled", async () => {
+    const api = apiFor({ status: "not_installed" });
+    let resolveInstall: ((result: NekInstallResult) => void) | undefined;
+    api.installLocalNek.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInstall = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useNekStepControllerWithApi(api));
+    await waitFor(() => expect(result.current.state.status).toBe("not_installed"));
+    let running!: Promise<void>;
+    act(() => {
+      running = result.current.install();
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("installing"));
+    let cancelling!: Promise<void>;
     act(() => {
       cancelling = result.current.cancelInstall();
     });

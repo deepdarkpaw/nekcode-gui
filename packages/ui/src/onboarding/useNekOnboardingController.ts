@@ -66,6 +66,8 @@ export interface OnboardingController {
     pickLocal: OnboardingActionHandle;
     openRemote: OnboardingActionHandle;
     clearSelection: OnboardingActionHandle;
+    setChannel: (channel: "stable" | "dev") => void;
+    jumpTo: (step: OnboardingStep) => OnboardingActionHandle;
   };
   onKeyDown: (event: ReactKeyboardEvent) => void;
   focus: {
@@ -94,9 +96,7 @@ function actionEnabled(enabled: boolean, installing: boolean, reason: { id: stri
   return enabled && !installing ? undefined : installing ? INSTALLING_REASON : reason;
 }
 
-export function useNekOnboardingController(
-  props: OnboardingControllerProps,
-): OnboardingController {
+export function useNekOnboardingController(props: OnboardingControllerProps): OnboardingController {
   const api = useNekHostApi();
   const [flow, dispatch] = useFlowReducer(props.startStep ?? "nek", props.open);
   const nekController = useNekStepController({ active: props.open && flow.currentStep === "nek" });
@@ -105,7 +105,9 @@ export function useNekOnboardingController(
     onOpenLogin: props.onOpenLogin,
     onOpenProviderForm: props.onOpenProviderForm,
   });
-  const workspaceController = useOnboardingWorkspaceController({ onOpenRemote: props.onOpenRemote });
+  const workspaceController = useOnboardingWorkspaceController({
+    onOpenRemote: props.onOpenRemote,
+  });
   const [attention, setAttention] = useState(false);
   const now = props.now ?? (() => new Date().toISOString());
 
@@ -175,7 +177,9 @@ export function useNekOnboardingController(
   });
   const install = useOnboardingAction({
     action: nekController.install,
-    visible: ["not_installed", "install_failed", "install_cancelled"].includes(nekController.state.status),
+    visible: ["not_installed", "install_failed", "install_cancelled"].includes(
+      nekController.state.status,
+    ),
     primary: flow.currentStep === "nek" && flow.steps.nek !== "done",
   });
   const update = useOnboardingAction({
@@ -189,8 +193,9 @@ export function useNekOnboardingController(
   });
   const recheck = useOnboardingAction({
     action: nekController.detect,
-    visible: ["not_installed", "incompatible", "failed", "install_failed", "install_cancelled"].includes(nekController.state.status),
-    enabled: nekController.state.status !== "checking" && nekController.state.status !== "installing",
+    visible: nekController.state.status !== "ready",
+    enabled:
+      nekController.state.status !== "checking" && nekController.state.status !== "installing",
     disabledReason:
       nekController.state.status === "checking"
         ? { id: "onboarding.nek.checking" }
@@ -201,7 +206,8 @@ export function useNekOnboardingController(
       if (!nekController.state.manualCommand) return;
       await api.copyText(nekController.state.manualCommand);
     },
-    visible: nekController.state.status === "install_failed" && Boolean(nekController.state.manualCommand),
+    visible:
+      nekController.state.status === "install_failed" && Boolean(nekController.state.manualCommand),
   });
 
   const actions = {
@@ -221,6 +227,22 @@ export function useNekOnboardingController(
     pickLocal: workspaceController.actions.pickLocal,
     openRemote: workspaceController.actions.openRemote,
     clearSelection: workspaceController.actions.clearSelection,
+    setChannel: nekController.setChannel,
+    jumpTo: (step: OnboardingStep): OnboardingActionHandle => {
+      const visible =
+        ["nek", "account", "workspace"].indexOf(step) <=
+        ["nek", "account", "workspace"].indexOf(flow.furthest);
+      const enabled = visible && !flow.installing;
+      return {
+        visible,
+        enabled,
+        disabledReason: !visible || enabled ? undefined : INSTALLING_REASON,
+        pending: false,
+        run: async () => {
+          if (enabled) dispatch({ type: "jumpTo", step });
+        },
+      };
+    },
   };
 
   const primaryActionId: OnboardingPrimaryActionId =
@@ -249,7 +271,9 @@ export function useNekOnboardingController(
       return;
     }
     setAttention(false);
-    const frame = globalThis.requestAnimationFrame?.(() => focusElements.current.get(primaryActionId)?.focus());
+    const frame = globalThis.requestAnimationFrame?.(() =>
+      focusElements.current.get(primaryActionId)?.focus(),
+    );
     return () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame?.(frame);
     };
