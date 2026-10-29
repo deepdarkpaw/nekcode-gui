@@ -5,7 +5,9 @@
 import { useEffect, useRef, useState } from "react";
 import { DownloadIcon, FileArchiveIcon, FolderOpenIcon, RefreshCwIcon } from "lucide-react";
 import type { NekAppInfo, NekUpdateCheck } from "../api/hostApi.js";
+import { Button } from "@/components/ui/button.js";
 import { AsyncButton } from "@/components/ui/async-button.js";
+import { requestNekOnboardingOpen } from "@/onboarding/NekOnboardingModal.js";
 import { SettingRow, SettingSection, SettingSelectField } from "@/components/ui/setting-fields.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatBytes } from "@/lib/displayFormat.js";
@@ -189,6 +191,11 @@ export function AboutPage() {
           </SettingRow>
           <SettingRow label={t("settings.nek.about.platform")}>
             <span className="font-mono text-ui-base">{info?.platform ?? "—"}</span>
+          </SettingRow>
+          <SettingRow label={t("settings.shortcuts.command.openOnboarding")}>
+            <Button type="button" variant="outline" onClick={requestNekOnboardingOpen}>
+              {t("settings.shortcuts.command.openOnboarding")}
+            </Button>
           </SettingRow>
         </SettingSection>
         <UpdateSection />
