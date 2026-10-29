@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
 import { ActionTooltip } from "@/components/ui/action-tooltip.js";
 import { Button } from "@/components/ui/button.js";
@@ -12,6 +12,7 @@ interface InteractionActionButtonProps extends Omit<
   handle: ActionHandle;
   labelId: string;
   values?: Record<string, string | number>;
+  icon?: ReactNode;
 }
 
 /** Render one controller action without adding a second interaction state machine. */
@@ -19,6 +20,7 @@ export function InteractionActionButton({
   handle,
   labelId,
   values,
+  icon,
   ...buttonProps
 }: InteractionActionButtonProps) {
   const { intl } = useZCodeIntl();
@@ -39,7 +41,7 @@ export function InteractionActionButton({
       data-interaction-action={labelId}
       onClick={() => void handle.run()}
     >
-      {handle.pending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
+      {handle.pending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : icon}
       {label}
     </Button>
   );
