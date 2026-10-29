@@ -11,6 +11,12 @@ import { pathToFileURL } from "node:url";
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const ENGINE = path.join(REPO_ROOT, "scripts", "ci", "gate-ratchet.mjs");
 const BASELINE_DIR = ".gate-baseline";
+// Windows 只能用退出码表达进程死亡，没有 signal 通道；门禁在两种平台都必须失败关闭，
+// 但"被信号杀死"这句诊断只在真的能报告 signal 的平台可断言。
+const SIGNALS_ARE_REPORTED =
+  spawnSync(process.execPath, ["-e", 'process.kill(process.pid, "SIGKILL");'], {
+    encoding: "utf8",
+  }).signal === "SIGKILL";
 const TOOL = {
   knip: { pkg: "knip", bin: "knip.js" },
   lint: { pkg: "oxlint", bin: "oxlint" },
@@ -106,7 +112,7 @@ test("工具退出码或信号异常时 gate 以 2 失败且不写基线", async
   const signaled = runGate(dir, ["format", "check"]);
   assert.equal(signaled.status, 2, signaled.stdout + signaled.stderr);
   assert.match(signaled.stderr, /oxfmt/);
-  assert.match(signaled.stderr, /SIGKILL/);
+  if (SIGNALS_ARE_REPORTED) assert.match(signaled.stderr, /SIGKILL/);
 });
 
 test("lint 扫描 0 文件或缺少 number_of_files 时拒绝判定为干净", async (t) => {
