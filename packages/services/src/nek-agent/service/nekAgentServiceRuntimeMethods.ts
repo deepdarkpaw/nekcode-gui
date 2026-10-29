@@ -329,6 +329,9 @@ export abstract class NekAgentServiceRuntimeBase {
       case "agent_settled":
         this.pool.endTurn(record.key);
         this.setPhase(record, "idle");
+        void this.refreshProcessSnapshot(record).catch((error) => {
+          this.logger?.warn("failed to refresh nek snapshot after agent_settled", error);
+        });
         break;
       case "extension_ui_request":
         if (
