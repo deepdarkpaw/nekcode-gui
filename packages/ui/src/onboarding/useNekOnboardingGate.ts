@@ -83,9 +83,7 @@ export function useNekOnboardingGate(): NekOnboardingGateState {
   );
 
   if (!snapshot) {
-    return error
-      ? { status: "hide", error, retry, persist }
-      : { status: "loading", retry };
+    return error ? { status: "hide", error, retry, persist } : { status: "loading", retry };
   }
   return {
     status: shouldShowNekOnboarding(snapshot) ? "show" : "hide",

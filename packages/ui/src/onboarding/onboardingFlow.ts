@@ -64,9 +64,7 @@ function moveForward(state: OnboardingFlowState): OnboardingFlowState {
   };
 }
 
-export function createOnboardingFlowState(
-  startStep: OnboardingStep = "nek",
-): OnboardingFlowState {
+export function createOnboardingFlowState(startStep: OnboardingStep = "nek"): OnboardingFlowState {
   return {
     currentStep: startStep,
     furthest: startStep,
@@ -92,7 +90,9 @@ export function reduceOnboardingFlow(
     case "reset":
       return createOnboardingFlowState(event.startStep);
     case "setInstalling":
-      return event.installing === state.installing ? state : { ...state, installing: event.installing };
+      return event.installing === state.installing
+        ? state
+        : { ...state, installing: event.installing };
     case "setStepDone": {
       const current = state.steps[event.step];
       const nextStatus = event.done ? "done" : current === "skipped" ? "skipped" : "pending";
@@ -108,7 +108,9 @@ export function reduceOnboardingFlow(
       return previous ? { ...state, currentStep: previous } : state;
     }
     case "jumpTo":
-      return STEP_INDEX[event.step] <= STEP_INDEX[state.furthest] ? { ...state, currentStep: event.step } : state;
+      return STEP_INDEX[event.step] <= STEP_INDEX[state.furthest]
+        ? { ...state, currentStep: event.step }
+        : state;
     case "skip":
       if (state.steps[state.currentStep] === "done") return state;
       if (state.currentStep === "workspace") return { ...state, completed: true };
@@ -121,15 +123,14 @@ export function reduceOnboardingFlow(
   }
 }
 
-export function firstIncompleteStep(done: Readonly<Record<OnboardingStep, boolean>>): OnboardingStep {
+export function firstIncompleteStep(
+  done: Readonly<Record<OnboardingStep, boolean>>,
+): OnboardingStep {
   if (!done.nek) return "nek";
   if (!done.account) return "account";
   return "workspace";
 }
 
-export function isOnboardingStepDone(
-  state: OnboardingFlowState,
-  step: OnboardingStep,
-): boolean {
+export function isOnboardingStepDone(state: OnboardingFlowState, step: OnboardingStep): boolean {
   return state.steps[step] === "done";
 }

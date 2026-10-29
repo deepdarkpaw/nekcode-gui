@@ -76,10 +76,7 @@ export function useNekStepController(options: { active?: boolean } = {}): NekSte
 }
 
 export function useNekStepControllerWithApi(
-  api: Pick<
-    INekSettingsHostApi,
-    "detectLocalNek" | "installLocalNek" | "cancelLocalInstall"
-  >,
+  api: Pick<INekSettingsHostApi, "detectLocalNek" | "installLocalNek" | "cancelLocalInstall">,
   options: { active?: boolean } = {},
 ): NekStepController {
   const [state, setState] = useState<NekStepState>(createInitialNekStepState);
@@ -135,11 +132,24 @@ export function useNekStepControllerWithApi(
   }, [api, options.active]);
 
   const install = useCallback(async () => {
-    if (installPromiseRef.current || (state.status !== "not_installed" && state.status !== "incompatible" && state.status !== "install_failed" && state.status !== "install_cancelled")) {
+    if (
+      installPromiseRef.current ||
+      (state.status !== "not_installed" &&
+        state.status !== "incompatible" &&
+        state.status !== "install_failed" &&
+        state.status !== "install_cancelled")
+    ) {
       return;
     }
     cancelRequestedRef.current = false;
-    setState((current) => ({ ...current, status: "installing", log: [], logTruncated: false, message: undefined, manualCommand: undefined }));
+    setState((current) => ({
+      ...current,
+      status: "installing",
+      log: [],
+      logTruncated: false,
+      message: undefined,
+      manualCommand: undefined,
+    }));
     const run = (async () => {
       try {
         const result = await api.installLocalNek({ channel: state.channel }, (line) =>
@@ -169,7 +179,11 @@ export function useNekStepControllerWithApi(
         if (cancelRequestedRef.current) {
           setState((current) => ({ ...current, status: "install_cancelled" }));
         } else {
-          setState((current) => ({ ...current, status: "install_failed", message: errorMessage(error) }));
+          setState((current) => ({
+            ...current,
+            status: "install_failed",
+            message: errorMessage(error),
+          }));
         }
       } finally {
         installPromiseRef.current = null;

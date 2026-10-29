@@ -57,7 +57,10 @@ export function createOnboardingAccountView(
     error,
     done,
     logins: ACCOUNT_PROVIDERS.map((provider) =>
-      loginView(statuses.find((item) => item.provider === provider), provider),
+      loginView(
+        statuses.find((item) => item.provider === provider),
+        provider,
+      ),
     ),
     providers: providers.slice(0, 5).map((provider) => provider.name ?? provider.id),
     moreProviders: Math.max(0, providers.length - 5),

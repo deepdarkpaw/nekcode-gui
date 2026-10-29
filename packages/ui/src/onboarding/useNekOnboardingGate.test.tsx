@@ -1,10 +1,7 @@
 // @vitest-environment happy-dom
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  createNekTestEnv,
-  installDomPolyfills,
-} from "@/settings/nek/test/nekTestUtils.js";
+import { createNekTestEnv, installDomPolyfills } from "@/settings/nek/test/nekTestUtils.js";
 import {
   openOnboarding,
   shouldShowNekOnboarding,

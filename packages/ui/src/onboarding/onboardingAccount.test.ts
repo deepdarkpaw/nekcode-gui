@@ -34,14 +34,21 @@ describe("onboarding account completion", () => {
 
   it("AC-1/AC-5: a configured provider or usable login makes the step done", () => {
     expect(
-      isOnboardingAccountComplete({ authStatuses: [], providers: [provider({ kind: "env", name: "KEY" })] }),
+      isOnboardingAccountComplete({
+        authStatuses: [],
+        providers: [provider({ kind: "env", name: "KEY" })],
+      }),
     ).toBe(true);
     expect(isOnboardingAccountComplete({ authStatuses: [oauth("ok")], providers: [] })).toBe(true);
-    expect(isOnboardingAccountComplete({ authStatuses: [oauth("expired")], providers: [] })).toBe(false);
+    expect(isOnboardingAccountComplete({ authStatuses: [oauth("expired")], providers: [] })).toBe(
+      false,
+    );
   });
 
   it("AC-3: provider view is capped at five with a remainder count", () => {
-    const providers = Array.from({ length: 7 }, (_, index) => provider({ kind: "env", name: `KEY_${index}` }));
+    const providers = Array.from({ length: 7 }, (_, index) =>
+      provider({ kind: "env", name: `KEY_${index}` }),
+    );
     const view = createOnboardingAccountView([], providers, false);
     expect(view.providers).toHaveLength(5);
     expect(view.moreProviders).toBe(2);

@@ -5,7 +5,10 @@ import {
   type OnboardingFlowEvent,
 } from "./onboardingFlow.js";
 
-function transition(state: ReturnType<typeof createOnboardingFlowState>, event: OnboardingFlowEvent) {
+function transition(
+  state: ReturnType<typeof createOnboardingFlowState>,
+  event: OnboardingFlowEvent,
+) {
   return reduceOnboardingFlow(state, event);
 }
 
@@ -56,7 +59,9 @@ describe("onboarding flow reducer", () => {
       selection: { kind: "local", path: "/work" },
     });
     expect(transition(state, { type: "next" }).completed).toBe(true);
-    expect(transition(createOnboardingFlowState("workspace"), { type: "skip" }).completed).toBe(true);
+    expect(transition(createOnboardingFlowState("workspace"), { type: "skip" }).completed).toBe(
+      true,
+    );
   });
 
   it("FL-6: close marks the flow closed and invalid transitions preserve identity", () => {

@@ -1,7 +1,4 @@
-import type {
-  NekAuthProviderStatus,
-  NekProviderView,
-} from "@zcode/shared/nek-protocol";
+import type { NekAuthProviderStatus, NekProviderView } from "@zcode/shared/nek-protocol";
 
 /** 只有 OAuth 登录成功才算订阅登录完成；API key 由服务商配置判断。 */
 export function isUsableNekAuthStatus(status: NekAuthProviderStatus): boolean {

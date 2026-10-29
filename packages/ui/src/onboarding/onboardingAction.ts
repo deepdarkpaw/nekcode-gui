@@ -25,9 +25,7 @@ export function useOnboardingAction(options: {
   const asyncAction = useAsyncAction(options.action, { successFeedbackMs: 1500 });
   const visible = options.visible ?? true;
   const enabled = visible && (options.enabled ?? true) && asyncAction.state.status !== "pending";
-  const disabledReason = enabled
-    ? undefined
-    : options.disabledReason ?? { id: "ui.action.busy" };
+  const disabledReason = enabled ? undefined : (options.disabledReason ?? { id: "ui.action.busy" });
   return useMemo(
     () => ({
       visible,

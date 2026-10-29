@@ -3555,7 +3555,8 @@ const enUS: Record<string, string> = {
   "onboarding.nek.cancelInstall": "Cancel installation",
   "onboarding.nek.recheck": "Check again",
   "onboarding.nek.copyCommand": "Copy install command",
-  "onboarding.nek.installing": "nek is installing; wait for it to finish or cancel the installation",
+  "onboarding.nek.installing":
+    "nek is installing; wait for it to finish or cancel the installation",
   "onboarding.nek.checking": "Checking",
   "onboarding.nek.needNek": "Install nek first, or skip this step and use a remote host later",
   "onboarding.nek.ready": "nek {version} is installed",
