@@ -145,6 +145,11 @@ export type {
   ZCodeAgentV4ClientMode,
   ZCodeAgentV4ConnectionContext,
 } from "./zcode-agent/zcodeAgentConnectionScope.js";
+export { NekAgentServiceAdapter } from "./nek-agent/adapter/nekAgentServiceAdapter.js";
+export type {
+  NekAgentServiceAdapterApi,
+  NekAgentServiceAdapterOptions,
+} from "./nek-agent/adapter/types.js";
 export type {
   ZCodeAgentAttachmentBeginParams,
   ZCodeAgentAttachmentChunkParams,

@@ -16,7 +16,6 @@ import {
   type NekSessionResult,
   type NekThoughtLevel,
 } from "./types.js";
-
 /**
  * GUI 对 nek RPC 的唯一会话所有者；不实现 `IZCodeAgentService`。
  *
@@ -31,7 +30,6 @@ export class NekAgentService
   constructor(options: NekAgentServiceOptions) {
     super(options);
   }
-
   // ---- 输入 ----
 
   readonly sendPrompt: NekAgentServiceCommandMethods["sendPrompt"] = async (input) =>
@@ -222,7 +220,6 @@ export class NekAgentService
     const record = this.resolveRecord(sessionKey);
     return record ? this.publicSession(record) : undefined;
   }
-
   commandContext(): NekAgentCommandContext {
     return {
       writableTarget: (sessionKey) => this.commandTarget(sessionKey, true),

@@ -147,11 +147,9 @@ export class NekConversationProjector {
     const projected = projectEntries({
       ...input,
       sessionId: this.store.sessionId,
-      existing: {
-        rows: [...this.store.window],
-        byEntity: this.store.byEntitySnapshot,
-        nextRowId: this.store.nextRowIdValue,
-      },
+      // 每次权威快照都从条目重建，避免 live 事件身份与持久化 entry 身份不一致时
+      // 把旧 rowId 带入新快照，导致 resume 后同一会话出现不同 rowId。
+      existing: undefined,
     });
     this.store.replaceRows(projected.rows, projected.byEntity, projected.nextRowId);
     this.store.state = {
