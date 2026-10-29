@@ -132,7 +132,7 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
   });
   try {
     const target = { workspacePath: "/workspace" };
-    const created = await adapter.createSession(target);
+    const created = await adapter.createNekSession(target);
     const frames: unknown[] = [];
     const event = adapter.onDynamicConversationFrame(target);
     const disposable = event((frame) => frames.push(frame));
@@ -143,7 +143,7 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
     assert.equal(subscription.ack.mode, "snapshot");
     assert.equal(frames.length, 1);
     await assert.rejects(
-      adapter.sendConversationCommandV4({
+      adapter.sendNekConversationCommandV4({
         target,
         envelope: {
           commandId: "cmd-1",
