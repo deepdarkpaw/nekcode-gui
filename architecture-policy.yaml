@@ -23,6 +23,25 @@ modules:
     requires: [shared]
     publicEntrypoints: [packages/services/src/session/contract.ts]
     owner: conversation
+  # nek 集成层：GUI 通过 nek 的 RPC 与配置文件工作，模型请求与凭据都不落在这里。
+  # 三个模块先按存量治理（managed: false），只固定归属与依赖方向。
+  - id: nek-agent
+    roots: [packages/services/src/nek-agent]
+    managed: false
+    requires: [shared, services]
+    publicEntrypoints: [packages/services/src/nek-agent/index.ts]
+    owner: nek-integration
+  - id: nek-config-api
+    roots: [packages/services/src/nek-config-api]
+    managed: false
+    requires: [shared, services]
+    publicEntrypoints: [packages/services/src/nek-config-api/index.ts]
+    owner: nek-integration
+  - id: nek-protocol
+    roots: [packages/shared/src/nek-protocol]
+    managed: false
+    publicEntrypoints: [packages/shared/src/nek-protocol/index.ts]
+    owner: nek-integration
   - id: storage
     roots: [packages/services/src/storage]
     managed: true
