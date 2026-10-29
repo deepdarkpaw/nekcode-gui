@@ -51,12 +51,16 @@ export interface HostKeyChangedControllerProps {
   activeElement?: ActiveElementInfo;
 }
 
+function isHostKeyChangedFocusId(value: string | null): value is HostKeyChangedFocusId {
+  return value === "close" || value === "manageHosts";
+}
+
 export function resolveHostKeyChangedKey(
   input: HostKeyChangedKeyInput,
 ): HostKeyChangedCommand | null {
   if (isImeComposing(input)) return null;
   if (input.key === "Escape") return { type: "activate", action: "close" };
-  if (input.key !== "Enter" || input.focusTarget === null) return null;
+  if (input.key !== "Enter" || !isHostKeyChangedFocusId(input.focusTarget)) return null;
   return { type: "activate", action: input.focusTarget };
 }
 
@@ -68,10 +72,7 @@ export function useHostKeyChangedController({
   activeElement,
 }: HostKeyChangedControllerProps) {
   const busyRef = useRef(false);
-  const [, dispatch] = useReducer(
-    reduceHostKeyChanged,
-    INITIAL_HOST_KEY_CHANGED_STATE,
-  );
+  const [, dispatch] = useReducer(reduceHostKeyChanged, INITIAL_HOST_KEY_CHANGED_STATE);
   const focusRestore = useFocusRestore(open);
   const focus = useRemoteInteractionFocus(open, "close", activeElement, notification.id);
   const close = useCallback(() => {
@@ -103,7 +104,10 @@ export function useHostKeyChangedController({
     const enabled = !busy;
     return {
       label: {
-        id: action === "close" ? "remote.nek.hostKeyChanged.close" : "remote.nek.hostKeyChanged.manageHosts",
+        id:
+          action === "close"
+            ? "remote.nek.hostKeyChanged.close"
+            : "remote.nek.hostKeyChanged.manageHosts",
       },
       visible: true,
       enabled,
@@ -129,7 +133,7 @@ export function useHostKeyChangedController({
       const command = resolveHostKeyChangedKey({
         key: event.key,
         focusTarget: focus.target,
-        isComposing: event.isComposing,
+        isComposing: event.nativeEvent.isComposing,
         keyCode: event.keyCode,
         nativeEvent: event.nativeEvent,
       });

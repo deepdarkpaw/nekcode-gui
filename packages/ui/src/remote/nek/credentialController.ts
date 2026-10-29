@@ -96,7 +96,10 @@ export function useCredentialPromptController({
   );
   const value = interactionState.value;
   const revealed = interactionState.revealed;
-  const setValue = useCallback((nextValue: string) => dispatch({ type: "setValue", value: nextValue }), []);
+  const setValue = useCallback(
+    (nextValue: string) => dispatch({ type: "setValue", value: nextValue }),
+    [],
+  );
   const busyRef = useRef(false);
   const focusRestore = useFocusRestore(open);
   const focus = useRemoteInteractionFocus(open, "input", activeElement, prompt.id);
@@ -150,8 +153,13 @@ export function useCredentialPromptController({
     enabled: boolean,
     primary = false,
   ): RemoteActionHandle => {
-    const runner = action === "submit" ? submit.run : action === "cancel" ? cancel.run : toggleReveal.run;
-    const disabledReason = enabled ? undefined : value.length === 0 && action === "submit" ? emptyReason : disabledReasonForBusy(submitBusy);
+    const runner =
+      action === "submit" ? submit.run : action === "cancel" ? cancel.run : toggleReveal.run;
+    const disabledReason = enabled
+      ? undefined
+      : value.length === 0 && action === "submit"
+        ? emptyReason
+        : disabledReasonForBusy(submitBusy);
     return {
       label: {
         id:
@@ -188,7 +196,7 @@ export function useCredentialPromptController({
       const command = resolveCredentialKey({
         key: event.key,
         value,
-        isComposing: event.isComposing,
+        isComposing: event.nativeEvent.isComposing,
         keyCode: event.keyCode,
         nativeEvent: event.nativeEvent,
       });
@@ -203,14 +211,24 @@ export function useCredentialPromptController({
   const passphrase = isPassphrasePrompt(prompt);
   const description: RemoteMessage = passphrase
     ? prompt.privateKeyPath
-      ? { id: "remote.nek.credential.passphrase.description", values: { path: prompt.privateKeyPath } }
+      ? {
+          id: "remote.nek.credential.passphrase.description",
+          values: { path: prompt.privateKeyPath },
+        }
       : { id: "remote.nek.credential.passphrase.descriptionNoPath" }
-    : { id: "remote.nek.credential.password.description", values: { username: prompt.username, host: prompt.host } };
+    : {
+        id: "remote.nek.credential.password.description",
+        values: { username: prompt.username, host: prompt.host },
+      };
 
   return {
     view: {
       kind: prompt.kind,
-      title: { id: passphrase ? "remote.nek.credential.passphrase.title" : "remote.nek.credential.password.title" },
+      title: {
+        id: passphrase
+          ? "remote.nek.credential.passphrase.title"
+          : "remote.nek.credential.password.title",
+      },
       description,
       value,
       revealed,

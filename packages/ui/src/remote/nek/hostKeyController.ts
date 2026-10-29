@@ -74,10 +74,14 @@ export interface HostKeyConfirmControllerProps {
   activeElement?: ActiveElementInfo;
 }
 
+function isHostKeyFocusId(value: string | null): value is HostKeyFocusId {
+  return value === "reject" || value === "trust" || value === "copyFingerprint";
+}
+
 export function resolveHostKeyConfirmKey(input: HostKeyKeyInput): HostKeyCommand | null {
   if (isImeComposing(input)) return null;
   if (input.key === "Escape") return { type: "activate", action: "reject" };
-  if (input.key !== "Enter" || input.focusTarget === null) return null;
+  if (input.key !== "Enter" || !isHostKeyFocusId(input.focusTarget)) return null;
   return { type: "activate", action: input.focusTarget };
 }
 
@@ -95,12 +99,7 @@ export function useHostKeyConfirmController({
   );
   const busyRef = useRef(false);
   const focusRestore = useFocusRestore(open);
-  const focus = useRemoteInteractionFocus(
-    open,
-    "reject",
-    activeElement,
-    prompt.id,
-  );
+  const focus = useRemoteInteractionFocus(open, "reject", activeElement, prompt.id);
 
   const close = useCallback(() => {
     dispatch({ type: "close" });
@@ -140,7 +139,10 @@ export function useHostKeyConfirmController({
     },
     { successFeedbackMs: 0 },
   );
-  const busy = trust.state.status === "pending" || reject.state.status === "pending" || copy.state.status === "pending";
+  const busy =
+    trust.state.status === "pending" ||
+    reject.state.status === "pending" ||
+    copy.state.status === "pending";
   const busyReason = disabledReasonForBusy(busy);
   const makeAction = (
     action: "trust" | "reject" | "copyFingerprint",
@@ -185,7 +187,7 @@ export function useHostKeyConfirmController({
       const command = resolveHostKeyConfirmKey({
         key: event.key,
         focusTarget: focus.target,
-        isComposing: event.isComposing,
+        isComposing: event.nativeEvent.isComposing,
         keyCode: event.keyCode,
         nativeEvent: event.nativeEvent,
       });
