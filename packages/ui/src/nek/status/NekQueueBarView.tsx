@@ -8,13 +8,13 @@ import { StatusActionButton, renderStatusMessage } from "./viewPrimitives.js";
 export type NekQueueBarViewProps = QueueBarControllerProps;
 
 export function NekQueueBarView(props: NekQueueBarViewProps) {
-  const { intl } = useZCodeIntl();
+  const { intl, locale } = useZCodeIntl();
   const controller = useQueueBarController(props);
   const dequeueShortcut = useActionShortcutLabel("app.message.dequeue");
   if (!controller.view.visible) return null;
   const retrieveLabel = intl.formatMessage({ id: "nek.status.queue.retrieveAll" });
   const clearLabel = intl.formatMessage({ id: "nek.status.queue.clearAll" });
-  const editLabel = intl.locale === "zh-CN" ? "编辑" : "Edit";
+  const editLabel = locale === "zh-CN" ? "编辑" : "Edit";
   const deleteLabel = intl.formatMessage({ id: "common.delete" });
   const emptyText = intl.formatMessage({ id: "nek.status.queue.emptyText" });
   return (

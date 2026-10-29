@@ -19,7 +19,7 @@ function transcriptMessageText(message: unknown): string {
 }
 
 export function NekSubagentTranscriptView(props: NekSubagentTranscriptViewProps) {
-  const { intl } = useZCodeIntl();
+  const { intl, locale } = useZCodeIntl();
   const { view, actions, onKeyDown } = useSubagentTranscriptController(props);
   const backLabel = intl.formatMessage({ id: "nek.status.transcript.back" });
   const retryLabel = intl.formatMessage({ id: "chat.message.bodyPreview.retry" });
@@ -71,7 +71,7 @@ export function NekSubagentTranscriptView(props: NekSubagentTranscriptViewProps)
         <div className="min-h-0 flex-1 overflow-auto">
           {view.state.truncatedCount > 0 ? (
             <p className="mb-2 text-ui-xs text-foreground-subtle">
-              {intl.locale === "zh-CN"
+              {locale === "zh-CN"
                 ? `${view.state.truncatedCount} 条消息已省略`
                 : `${view.state.truncatedCount} messages truncated`}
             </p>
