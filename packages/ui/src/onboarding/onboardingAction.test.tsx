@@ -51,6 +51,16 @@ describe("onboarding action handles", () => {
     });
   });
 
+  it("common §2.7: an enabled action invokes its observable side effect", async () => {
+    const env = createNekTestEnv();
+    const action = vi.fn(async () => undefined);
+    const { result } = renderHook(() => useOnboardingAction({ action }), {
+      wrapper: env.wrapper,
+    });
+    await act(async () => result.current.run());
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
   it("common §2.3/§2.4: failure stays retryable and keeps the triggering handle error", async () => {
     const env = createNekTestEnv();
     const action = vi

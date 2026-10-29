@@ -179,6 +179,17 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
     enabled: !flow.installing && !navigationBusy,
     disabledReason: actionEnabled(true, flow.installing, navigationBusy, INSTALLING_REASON),
   });
+  const primaryActionId: OnboardingPrimaryActionId =
+    flow.steps[flow.currentStep] === "done"
+      ? "next"
+      : flow.currentStep === "nek"
+        ? nekController.state.status === "incompatible"
+          ? "update"
+          : "install"
+        : flow.currentStep === "account"
+          ? "loginAnthropic"
+          : "pickLocal";
+
   const next = useOnboardingAction({
     action: () =>
       runNavigation(async () => {
@@ -186,7 +197,7 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
         else dispatch({ type: "next" });
       }),
     enabled: flow.steps[flow.currentStep] === "done" && !flow.installing && !navigationBusy,
-    primary: flow.steps[flow.currentStep] === "done",
+    primary: primaryActionId === "next",
     disabledReason: actionEnabled(
       flow.steps[flow.currentStep] === "done",
       flow.installing,
@@ -209,12 +220,12 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
     visible: ["not_installed", "install_failed", "install_cancelled"].includes(
       nekController.state.status,
     ),
-    primary: flow.currentStep === "nek" && flow.steps.nek !== "done",
+    primary: primaryActionId === "install",
   });
   const update = useOnboardingAction({
     action: nekController.install,
     visible: nekController.state.status === "incompatible",
-    primary: flow.currentStep === "nek" && flow.steps.nek !== "done",
+    primary: primaryActionId === "update",
   });
   const cancelInstall = useOnboardingAction({
     action: nekController.cancelInstall,
@@ -249,11 +260,17 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
     cancelInstall,
     recheck,
     copyCommand,
-    loginAnthropic: accountController.actions.loginAnthropic,
+    loginAnthropic: {
+      ...accountController.actions.loginAnthropic,
+      primary: primaryActionId === "loginAnthropic",
+    },
     loginCodex: accountController.actions.loginCodex,
     addProvider: accountController.actions.addProvider,
     refreshAccount: accountController.actions.refresh,
-    pickLocal: workspaceController.actions.pickLocal,
+    pickLocal: {
+      ...workspaceController.actions.pickLocal,
+      primary: primaryActionId === "pickLocal",
+    },
     openRemote: workspaceController.actions.openRemote,
     clearSelection: workspaceController.actions.clearSelection,
     setChannel: nekController.setChannel,
@@ -273,17 +290,6 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
       };
     },
   };
-
-  const primaryActionId: OnboardingPrimaryActionId =
-    flow.steps[flow.currentStep] === "done"
-      ? "next"
-      : flow.currentStep === "nek"
-        ? nekController.state.status === "incompatible"
-          ? "update"
-          : "install"
-        : flow.currentStep === "account"
-          ? "loginAnthropic"
-          : "pickLocal";
 
   const focusElements = useRef(new Map<OnboardingPrimaryActionId, HTMLElement>());
   const focusRef = useCallback(

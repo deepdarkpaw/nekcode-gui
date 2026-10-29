@@ -113,6 +113,21 @@ describe("onboarding controller", () => {
     );
   });
 
+  it("common §2.6: each rendered navigation state has at most one primary action", async () => {
+    const env = createNekTestEnv();
+    env.host.localNek = { status: "not_installed" };
+    const { result } = renderHook(() => useNekOnboardingController(props()), {
+      wrapper: env.wrapper,
+    });
+    await waitFor(() => expect(result.current.view.nek.status).toBe("not_installed"));
+    const visiblePrimary = Object.values(result.current.actions).filter(
+      (action): action is typeof result.current.actions.next =>
+        typeof action !== "function" && action.visible && Boolean(action.primary),
+    );
+    expect(visiblePrimary).toHaveLength(1);
+    expect(visiblePrimary[0]?.primary).toBe(true);
+  });
+
   it("common §2.3: one navigation submission disables the other with ui.action.busy", async () => {
     const env = createNekTestEnv();
     let resolvePersist!: () => void;
