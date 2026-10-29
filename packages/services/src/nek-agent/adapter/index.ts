@@ -1,4 +1,4 @@
-export { createNekAgentServiceAdapter } from "./factory.js";
+export { createNekAgentServiceAdapter, createNekZCodeAgentService } from "./factory.js";
 export { NekAgentServiceAdapter } from "./nekAgentServiceAdapter.js";
 export type {
   NekAgentServiceAdapterApi,

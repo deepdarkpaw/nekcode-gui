@@ -38,3 +38,6 @@ export function createNekAgentServiceAdapter(
         })),
   });
 }
+
+/** 阶段 3 依赖注入使用的明确工厂名；旧 ZCode 工厂不再作为 nek 运行时入口。 */
+export const createNekZCodeAgentService = createNekAgentServiceAdapter;
