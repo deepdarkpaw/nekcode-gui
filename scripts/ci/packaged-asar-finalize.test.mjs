@@ -15,6 +15,20 @@ const { statFile, uncache } = require("@electron/asar");
 const asarCli = join(dirname(require.resolve("@electron/asar/package.json")), "bin/asar.js");
 const nativeEntry = "node_modules/native.node";
 
+// 符号链接相关用例需要真的能建链接。Windows 上非管理员且未开开发者模式时 symlink 会 EPERM，
+// 那时场景无法构造：跳过并说明原因，Linux CI 仍然强制执行。
+const SYMLINKS_SUPPORTED = await (async () => {
+  const dir = await mkdtemp(join(tmpdir(), "zcode-symlink-probe-"));
+  try {
+    await symlink(join(dir, "missing"), join(dir, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+})();
+
 async function fixture(t, { maps = false, packFails = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "zcode-asar-finalize-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -172,6 +186,7 @@ test("staging preparation failure preserves archive/sidecar and removes staging"
 });
 
 test("cleanup failure aborts before replacing the archive and removes staging", async (t) => {
+  if (!SYMLINKS_SUPPORTED) return t.skip("当前环境无法创建符号链接，无法构造清理失败场景");
   const f = await fixture(t);
   const before = await readFile(f.appAsarPath);
   let stagingPath;
@@ -211,6 +226,7 @@ test("candidate pack failure preserves the original native sidecar and archive",
 });
 
 test("resource links retain the previous sourcemap cleanup behavior", async (t) => {
+  if (!SYMLINKS_SUPPORTED) return t.skip("当前环境无法创建符号链接，无法构造资源链接场景");
   const f = await fixture(t);
   const target = join(f.root, "linked.js");
   await writeFile(target, "linked\n//# sourceMappingURL=linked.js.map\n");
