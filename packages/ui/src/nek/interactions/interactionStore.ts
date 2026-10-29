@@ -105,6 +105,8 @@ function sessionWithQueue(
   return { ...session, ...queue };
 }
 
+export type NekInteractionStoreApi = ReturnType<typeof createNekInteractionStore>;
+
 export function createNekInteractionStore(options: NekInteractionStoreOptions) {
   const now = options.now ?? (() => Date.now());
   const setIntervalFn =
@@ -374,3 +376,9 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
 
   return store;
 }
+
+/** Renderer-wide queue hook; transport wiring supplies requests and response callbacks. */
+export const useNekInteractionStore = createNekInteractionStore({
+  respond: () => undefined,
+  onEffect: () => undefined,
+});
