@@ -237,7 +237,12 @@ export class NekAgentServiceTopics {
     const workspaceId = workspaceKey(input);
     const sessionKey = this.resolveSessionKey(input);
     const models = sessionKey
-      ? (await this.service.commandContext().target(sessionKey).client.call({ type: "get_available_models" })).models
+      ? (
+          await this.service
+            .commandContext()
+            .target(sessionKey)
+            .client.call({ type: "get_available_models" })
+        ).models
       : await this.service
           .commandContext()
           .control()
@@ -247,12 +252,16 @@ export class NekAgentServiceTopics {
     const state = sessionKey
       ? await this.service.commandContext().target(sessionKey).client.call({ type: "get_state" })
       : undefined;
-    const commands: NekRpcSlashCommand[] = sessionKey ? await this.service.getCommands(sessionKey) : [];
+    const commands: NekRpcSlashCommand[] = sessionKey
+      ? await this.service.getCommands(sessionKey)
+      : [];
     const rawNekState = sessionKey
-      ? (await this.service.commandContext().target(sessionKey).client.call({
-          type: "extension_call",
-          method: "nek.get_state",
-        })).result
+      ? (
+          await this.service.commandContext().target(sessionKey).client.call({
+            type: "extension_call",
+            method: "nek.get_state",
+          })
+        ).result
       : undefined;
     const nekState = isNekState(rawNekState) ? rawNekState : undefined;
     const config: WorkspaceConfigState = {

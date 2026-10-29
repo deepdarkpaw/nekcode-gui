@@ -139,7 +139,12 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     const binding = this.requireBinding(target, target.sessionId);
     const session = this.service.getSession(binding.sessionKey);
     if (session?.readonly) return (session.snapshot?.messages ?? []) as NekAgentMessage[];
-    return (await this.service.commandContext().target(binding.sessionKey).client.call({ type: "get_messages" })).messages;
+    return (
+      await this.service
+        .commandContext()
+        .target(binding.sessionKey)
+        .client.call({ type: "get_messages" })
+    ).messages;
   }
 
   async subscribeConversationV4(
