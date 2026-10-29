@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RemoteConnectionStatusEvent } from "@zcode/shared/nek-protocol";
 import { useAsyncAction } from "@/hooks/useAsyncAction.js";
 import {
@@ -108,7 +108,10 @@ function buildMessage(
       };
     }
     case "failed":
-      return { message: { id: "remote.nek.status.failed" }, failureMessage: firstLine(state.message ?? "") };
+      return {
+        message: { id: "remote.nek.status.failed" },
+        failureMessage: firstLine(state.message ?? ""),
+      };
     case "cancelled":
       return { message: { id: "remote.nek.status.cancelled" } };
   }
@@ -123,7 +126,7 @@ export function useRemoteConnectionStatusController({
   clock = systemClock,
   onReconnected,
 }: RemoteConnectionStatusControllerProps) {
-  const nowFn = now ?? clock.now;
+  const nowFn = now ?? (() => clock.now());
   const [state, setState] = useState<RemoteConnectionStatusState>(() => ({
     connectionId,
     kind: "connected",
@@ -192,6 +195,14 @@ export function useRemoteConnectionStatusController({
     const enabled = visible && !busy;
     const runner = action === "retry" ? retry.run : cancel.run;
     return {
+      label: {
+        id:
+          action === "cancel"
+            ? "remote.nek.status.cancel"
+            : state.kind === "disconnected" || state.kind === "reconnecting"
+              ? "remote.nek.status.retryNow"
+              : "remote.nek.status.retry",
+      },
       visible,
       enabled,
       ...(visible && !enabled ? { disabledReason: busyReason } : {}),
@@ -216,7 +227,13 @@ export function useRemoteConnectionStatusController({
     view: {
       kind: state.kind,
       tone:
-        state.kind === "failed" ? "danger" : state.kind === "cancelled" ? "muted" : state.kind === "connected" ? "neutral" : "warning",
+        state.kind === "failed"
+          ? "danger"
+          : state.kind === "cancelled"
+            ? "muted"
+            : state.kind === "connected"
+              ? "neutral"
+              : "warning",
       message: presentation.message,
       failureMessage: presentation.failureMessage,
       banner: state.kind !== "connected",

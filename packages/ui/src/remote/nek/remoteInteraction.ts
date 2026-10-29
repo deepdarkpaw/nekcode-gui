@@ -38,22 +38,22 @@ export function shouldTakeFocus(activeElement: ActiveElementInfo | undefined): b
   return !(isEditable && (activeElement.hasContent || activeElement.hasSelection));
 }
 
-export interface RemoteFocusController {
-  target: string | null;
-  ref: (id: string) => (element: HTMLElement | null) => void;
+export interface RemoteFocusController<T extends string = string> {
+  target: T | null;
+  ref: (id: T) => (element: HTMLElement | null) => void;
 }
 
 /** Registers visual elements while keeping focus policy in the headless layer. */
-export function useRemoteInteractionFocus(
+export function useRemoteInteractionFocus<T extends string = string>(
   open: boolean,
-  initialTarget: string,
+  initialTarget: T,
   activeElement: ActiveElementInfo | undefined,
   focusToken: string,
-): RemoteFocusController & { attention: boolean } {
-  const [target, setTarget] = useState<string | null>(() =>
+): RemoteFocusController<T> & { attention: boolean } {
+  const [target, setTarget] = useState<T | null>(() =>
     open && shouldTakeFocus(activeElement) ? initialTarget : null,
   );
-  const elementsRef = useRef(new Map<string, HTMLElement>());
+  const elementsRef = useRef(new Map<T, HTMLElement>());
   const shouldFocus = open && shouldTakeFocus(activeElement);
 
   useEffect(() => {
@@ -71,7 +71,7 @@ export function useRemoteInteractionFocus(
   }, [target]);
 
   const ref = useCallback(
-    (id: string) => (element: HTMLElement | null) => {
+    (id: T) => (element: HTMLElement | null) => {
       if (element) {
         elementsRef.current.set(id, element);
       } else {

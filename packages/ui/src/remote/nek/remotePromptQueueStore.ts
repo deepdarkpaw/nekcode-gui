@@ -11,11 +11,7 @@ import { logger } from "@/logger.js";
 export const REMOTE_PROMPT_QUEUE_LIMIT = 16;
 
 export type RemotePromptQueueItem = RemotePromptRequest | RemoteHostKeyChangedEvent;
-export type RemotePromptCancellationReason =
-  | "timeout"
-  | "aborted"
-  | "disconnected"
-  | "superseded";
+export type RemotePromptCancellationReason = "timeout" | "aborted" | "disconnected" | "superseded";
 export type RemotePromptResponder = (
   id: string,
   response: RemotePromptResponse,

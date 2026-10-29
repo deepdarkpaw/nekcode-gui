@@ -112,7 +112,7 @@ describe("RemotePromptBroker", () => {
     let id = 0;
     const broker = createBroker(events, { idFactory: () => `same-${++id}` });
     const first = broker.askPassword();
-    const second = broker.askPassphrase();
+    const _second = broker.askPassphrase();
     await expect(first).resolves.toBeUndefined();
     expect(events).toContainEqual({ id: "same-1", reason: "superseded" });
     const secondEvent = events.find((event) => event.id === "same-2");

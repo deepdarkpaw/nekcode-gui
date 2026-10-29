@@ -13,7 +13,7 @@ import {
 import { shouldTakeFocus } from "./remoteInteraction.js";
 
 const wrapper = ({ children }: { children: ReactNode }) =>
-  createElement(ZCodeIntlProvider, { initialLocale: "zh-CN" }, children);
+  createElement(ZCodeIntlProvider, { initialLocale: "zh-CN", children });
 
 const prompt = {
   id: "host-key-1",
@@ -68,7 +68,9 @@ describe("host key confirmation controller", () => {
         useHostKeyConfirmController({
           open: true,
           prompt,
-          respond: async (_id, response) => responses.push(response),
+          respond: async (_id, response) => {
+            responses.push(response);
+          },
           copyFingerprint: async () => undefined,
           onClose,
         }),
@@ -91,7 +93,9 @@ describe("host key confirmation controller", () => {
         useHostKeyConfirmController({
           open: true,
           prompt: { ...prompt, port: 22 },
-          respond: async (_id, response) => responses.push(response),
+          respond: async (_id, response) => {
+            responses.push(response);
+          },
           copyFingerprint: async () => undefined,
           onClose: () => undefined,
         }),
