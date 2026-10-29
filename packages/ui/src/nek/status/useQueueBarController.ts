@@ -51,7 +51,7 @@ export interface QueueBarController {
     clearAll: StatusActionHandle;
   };
   setDraft: (draft: string) => void;
-  commitEdit: () => Promise<void>;
+  commitEdit: (draft?: string) => Promise<void>;
   cancelEdit: () => void;
   onBlurEdit: () => void;
   onDequeueShortcut: () => Promise<boolean>;
@@ -158,19 +158,23 @@ export function useQueueBarController({
       current ? { ...current, draft, validationError: undefined } : current,
     );
   }, []);
-  const commitEdit = useCallback(async () => {
-    if (!editing || busy) return;
-    if (editing.draft.trim() === "") {
-      setEditing({ ...editing, validationError: { id: "nek.status.queue.emptyText" } });
-      return;
-    }
-    activeOperationRef.current = editing.target;
-    await operationAction.run({
-      target: editing.target,
-      operation: { type: "replace", text: editing.draft },
-    });
-    activeOperationRef.current = null;
-  }, [busy, editing, operationAction]);
+  const commitEdit = useCallback(
+    async (draftOverride?: string) => {
+      if (!editing || busy) return;
+      const draft = draftOverride ?? editing.draft;
+      if (draft.trim() === "") {
+        setEditing({ ...editing, draft, validationError: { id: "nek.status.queue.emptyText" } });
+        return;
+      }
+      activeOperationRef.current = editing.target;
+      await operationAction.run({
+        target: editing.target,
+        operation: { type: "replace", text: draft },
+      });
+      activeOperationRef.current = null;
+    },
+    [busy, editing, operationAction],
+  );
   const cancelEdit = useCallback(() => setEditing(null), []);
   const onBlurEdit = useCallback(() => void commitEdit(), [commitEdit]);
 
