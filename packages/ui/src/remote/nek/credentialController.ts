@@ -102,7 +102,12 @@ export function useCredentialPromptController({
   );
   const busyRef = useRef(false);
   const focusRestore = useFocusRestore(open);
-  const focus = useRemoteInteractionFocus(open, "input", activeElement, prompt.id);
+  const focus = useRemoteInteractionFocus<CredentialFocusId>(
+    open,
+    "input",
+    activeElement,
+    prompt.id,
+  );
 
   useEffect(() => {
     if (!open) {

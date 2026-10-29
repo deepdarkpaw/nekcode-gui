@@ -74,7 +74,12 @@ export function useHostKeyChangedController({
   const busyRef = useRef(false);
   const [, dispatch] = useReducer(reduceHostKeyChanged, INITIAL_HOST_KEY_CHANGED_STATE);
   const focusRestore = useFocusRestore(open);
-  const focus = useRemoteInteractionFocus(open, "close", activeElement, notification.id);
+  const focus = useRemoteInteractionFocus<HostKeyChangedFocusId>(
+    open,
+    "close",
+    activeElement,
+    notification.id,
+  );
   const close = useCallback(() => {
     dispatch({ type: "close" });
     onClose();

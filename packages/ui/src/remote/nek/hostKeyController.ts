@@ -99,7 +99,7 @@ export function useHostKeyConfirmController({
   );
   const busyRef = useRef(false);
   const focusRestore = useFocusRestore(open);
-  const focus = useRemoteInteractionFocus(open, "reject", activeElement, prompt.id);
+  const focus = useRemoteInteractionFocus<HostKeyFocusId>(open, "reject", activeElement, prompt.id);
 
   const close = useCallback(() => {
     dispatch({ type: "close" });
