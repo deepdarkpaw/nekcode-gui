@@ -16,7 +16,7 @@ import type {
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import type { NekSessionIndexItem } from "../index/types.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
-import type { NekAgentServiceEvent } from "../service/types.js";
+import { isNekState, type NekAgentServiceEvent } from "../service/types.js";
 import { makeSessionsIndexWireFrame, makeWorkspaceConfigWireFrame } from "./frameHelpers.js";
 import type {
   NekConversationResyncParams,
@@ -237,18 +237,24 @@ export class NekAgentServiceTopics {
     const workspaceId = workspaceKey(input);
     const sessionKey = this.resolveSessionKey(input);
     const models = sessionKey
-      ? await this.service.getAvailableModels(sessionKey)
+      ? (await this.service.commandContext().target(sessionKey).client.call({ type: "get_available_models" })).models
       : await this.service
           .commandContext()
           .control()
           .then(async (client) => {
             return (await client.call({ type: "get_available_models" })).models;
           });
-    const state = sessionKey ? await this.service.getState(sessionKey) : undefined;
-    const commands: NekRpcSlashCommand[] = sessionKey
-      ? await this.service.getCommands(sessionKey)
-      : [];
-    const nekState = sessionKey ? await this.service.getNekState(sessionKey) : undefined;
+    const state = sessionKey
+      ? await this.service.commandContext().target(sessionKey).client.call({ type: "get_state" })
+      : undefined;
+    const commands: NekRpcSlashCommand[] = sessionKey ? await this.service.getCommands(sessionKey) : [];
+    const rawNekState = sessionKey
+      ? (await this.service.commandContext().target(sessionKey).client.call({
+          type: "extension_call",
+          method: "nek.get_state",
+        })).result
+      : undefined;
+    const nekState = isNekState(rawNekState) ? rawNekState : undefined;
     const config: WorkspaceConfigState = {
       configOptions: [
         {
