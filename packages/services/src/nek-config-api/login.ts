@@ -33,10 +33,11 @@ export const LOGIN_CALLBACK_PORTS: Readonly<Record<string, number>> = {
 /**
  * `auth_status` 的线上形状 → 契约的 `state`。
  *
- * nek 只给 `kind` 与 `expiresAt`：
+ * nek（P2c 起）自己按 `expires <= now` 给出 `state`，原样采用；
+ * 早于 P2c 的 nek 只给 `kind` 与 `expiresAt`，此时按到期时间补：
  * - `oauth` 且已过期 → `expired`（用户需要重新登录）；
  * - `oauth` 未过期 / 非 oauth → `ok`；
- * - `refresh_failed` 目前没有来源（nek 不暴露刷新结果），见报告里的 nek 侧缺项。
+ * - `refresh_failed` 任何版本都不会凭空造出来（nek 不持久化刷新结果）。
  */
 function normalizeAuthStatus(status: NekAuthProviderStatusWire): NekAuthProviderStatus {
   if (status.state) return { ...status, state: status.state };
