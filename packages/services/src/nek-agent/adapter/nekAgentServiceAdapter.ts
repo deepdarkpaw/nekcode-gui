@@ -16,10 +16,12 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
+import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import { makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "./frameHelpers.js";
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
+import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentServiceTopics } from "./nekAgentServiceTopics.js";
 import type {
   NekAgentServiceAdapterApi,
@@ -50,7 +52,67 @@ const MAX_BINDINGS = 5_000;
  * 旧 ZCode agent 的 MCP/plugin/workflow/CUA API 不在此适配；对应调用方必须在阶段 3 删除。
  * 这里保留的是 nek 有真实 RPC 或 v4 投影事实的竖切路径。
  */
-export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
+export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServiceAdapterApi {
+  declare readonly prepareStorage: IZCodeAgentService["prepareStorage"];
+  declare readonly getStorageStartupState: IZCodeAgentService["getStorageStartupState"];
+  declare readonly onDynamicStorageStartupState: IZCodeAgentService["onDynamicStorageStartupState"];
+  declare readonly syncAppRuntimePreferences: IZCodeAgentService["syncAppRuntimePreferences"];
+  declare readonly getWorkspaceRuntimeIdentity: IZCodeAgentService["getWorkspaceRuntimeIdentity"];
+  declare readonly createSession: IZCodeAgentService["createSession"];
+  declare readonly resumeSession: IZCodeAgentService["resumeSession"];
+  declare readonly listSessions: IZCodeAgentService["listSessions"];
+  declare readonly listSessionSubagents: IZCodeAgentService["listSessionSubagents"];
+  declare readonly getTaskTokenUsage: IZCodeAgentService["getTaskTokenUsage"];
+  declare readonly readSession: IZCodeAgentService["readSession"];
+  declare readonly readSessionMessages: IZCodeAgentService["readSessionMessages"];
+  declare readonly readSessionDebug: IZCodeAgentService["readSessionDebug"];
+  declare readonly readSessionEvents: IZCodeAgentService["readSessionEvents"];
+  declare readonly readWorkspacePresentation: IZCodeAgentService["readWorkspacePresentation"];
+  declare readonly grantWorkspaceHookTrust: IZCodeAgentService["grantWorkspaceHookTrust"];
+  declare readonly listMcpServerStatuses: IZCodeAgentService["listMcpServerStatuses"];
+  declare readonly getSkillReferenceCatalog: IZCodeAgentService["getSkillReferenceCatalog"];
+  declare readonly collectLocalRuntimeChildProcesses: IZCodeAgentService["collectLocalRuntimeChildProcesses"];
+  declare readonly generateWorkspaceText: IZCodeAgentService["generateWorkspaceText"];
+  declare readonly testModelConnectivity: IZCodeAgentService["testModelConnectivity"];
+  declare readonly sendPrompt: IZCodeAgentService["sendPrompt"];
+  declare readonly compactSession: IZCodeAgentService["compactSession"];
+  declare readonly goalSession: IZCodeAgentService["goalSession"];
+  declare readonly closeSession: IZCodeAgentService["closeSession"];
+  declare readonly setModel: IZCodeAgentService["setModel"];
+  declare readonly setThoughtLevel: IZCodeAgentService["setThoughtLevel"];
+  declare readonly setMode: IZCodeAgentService["setMode"];
+  declare readonly respondSessionRuntimePreferences: IZCodeAgentService["respondSessionRuntimePreferences"];
+  declare readonly onDynamicSessionRuntimePreferencesRequest: IZCodeAgentService["onDynamicSessionRuntimePreferencesRequest"];
+  declare readonly onDynamicProcessResourceSample: IZCodeAgentService["onDynamicProcessResourceSample"];
+  declare readonly onDynamicMcpTelemetry: IZCodeAgentService["onDynamicMcpTelemetry"];
+  declare readonly onDynamicMcpResourceSamples: IZCodeAgentService["onDynamicMcpResourceSamples"];
+  declare readonly onDynamicToolExecResource: IZCodeAgentService["onDynamicToolExecResource"];
+  declare readonly onDynamicSessionEvent: IZCodeAgentService["onDynamicSessionEvent"];
+  declare readonly helloConversationV4: IZCodeAgentService["helloConversationV4"];
+  declare readonly initializeConversationV4: IZCodeAgentService["initializeConversationV4"];
+  declare readonly setConnectionFlowStateV4: IZCodeAgentService["setConnectionFlowStateV4"];
+  declare readonly conversationRowsRangeV4: IZCodeAgentService["conversationRowsRangeV4"];
+  declare readonly conversationPlansV4: IZCodeAgentService["conversationPlansV4"];
+  declare readonly backgroundBashOutputV4: IZCodeAgentService["backgroundBashOutputV4"];
+  declare readonly conversationFileChangesV4: IZCodeAgentService["conversationFileChangesV4"];
+  declare readonly conversationFileRewindPreviewV4: IZCodeAgentService["conversationFileRewindPreviewV4"];
+  declare readonly sendConversationCommandV4: IZCodeAgentService["sendConversationCommandV4"];
+  declare readonly queryConversationCommandsV4: IZCodeAgentService["queryConversationCommandsV4"];
+  declare readonly attachmentBeginV4: IZCodeAgentService["attachmentBeginV4"];
+  declare readonly attachmentChunkV4: IZCodeAgentService["attachmentChunkV4"];
+  declare readonly attachmentCommitV4: IZCodeAgentService["attachmentCommitV4"];
+  declare readonly attachmentAbortV4: IZCodeAgentService["attachmentAbortV4"];
+  declare readonly attachmentPreviewSourceV4: IZCodeAgentService["attachmentPreviewSourceV4"];
+  declare readonly attachmentReadV4: IZCodeAgentService["attachmentReadV4"];
+  declare readonly conversationAttachmentReadV4: IZCodeAgentService["conversationAttachmentReadV4"];
+  declare readonly conversationAttachmentStatV4: IZCodeAgentService["conversationAttachmentStatV4"];
+  declare readonly onDynamicDiagnostic: IZCodeAgentService["onDynamicDiagnostic"];
+  declare readonly onDynamicSessionActivity: IZCodeAgentService["onDynamicSessionActivity"];
+  declare readonly onDynamicLocalTtftFacts: IZCodeAgentService["onDynamicLocalTtftFacts"];
+  declare readonly onDynamicConversationTelemetryFact: IZCodeAgentService["onDynamicConversationTelemetryFact"];
+  declare readonly onAgentRuntimeRestarted: IZCodeAgentService["onAgentRuntimeRestarted"];
+  declare readonly disposeWorkspace: IZCodeAgentService["disposeWorkspace"];
+  declare readonly disposeAll: IZCodeAgentService["disposeAll"];
   readonly service: NekAgentService;
   private readonly topics: NekAgentServiceTopics;
   private readonly bindings = new Map<string, NekSessionBinding>();
@@ -74,6 +136,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
       syncer,
       options.maxV4Subscriptions,
     );
+    Object.assign(this, createNekLegacyMethods(this));
   }
 
   async initialize(
@@ -83,7 +146,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return { available: true, workspaceKey: workspaceKey(target) };
   }
 
-  async createSession(input: {
+  async createNekSession(input: {
     workspacePath: string;
     sessionId?: string;
     model?: { provider: string; modelId: string };
@@ -102,7 +165,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return result;
   }
 
-  async resumeSession(input: {
+  async resumeNekSession(input: {
     workspacePath: string;
     sessionPath: string;
   }): Promise<NekSessionResult> {
@@ -115,25 +178,25 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return result;
   }
 
-  async listSessions(target: NekWorkspaceTarget): Promise<NekSessionSummary[]> {
+  async listNekSessions(target: NekWorkspaceTarget): Promise<NekSessionSummary[]> {
     return await this.service.listSessions({ cwd: target.workspacePath });
   }
 
-  async closeSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean> {
+  async closeNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean> {
     const binding = this.requireBinding(input, input.sessionId);
     const result = await this.service.closeSession(binding.sessionKey);
     this.bindings.delete(sessionMapKey(input, input.sessionId));
     return result;
   }
 
-  async readSession(
+  async readNekSession(
     input: NekWorkspaceTarget & { sessionId: string },
   ): Promise<ConversationSnapshot> {
     const binding = this.requireBinding(input, input.sessionId);
     return this.service.conversationSnapshot(binding.sessionKey);
   }
 
-  async readSessionMessages(
+  async readNekSessionMessages(
     target: NekWorkspaceTarget & { sessionId: string },
   ): Promise<NekAgentMessage[]> {
     const binding = this.requireBinding(target, target.sessionId);
@@ -264,14 +327,14 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     return this.topics.onDynamicWorkspaceConfigFrame(input);
   }
 
-  async sendConversationCommandV4(input: {
+  async sendNekConversationCommandV4(input: {
     target: NekWorkspaceTarget;
     envelope: NekSessionCommandEnvelope;
   }): Promise<CommandAck> {
     return await sendConversationCommand(
       {
         service: this.service,
-        createSession: async (request) => await this.createSession(request),
+        createSession: async (request) => await this.createNekSession(request),
         requireBinding: (target, sessionId) => this.requireBinding(target, sessionId),
         removeBinding: (target, sessionId) => {
           this.bindings.delete(sessionMapKey(target, sessionId));
@@ -281,7 +344,7 @@ export class NekAgentServiceAdapter implements NekAgentServiceAdapterApi {
     );
   }
 
-  async queryConversationCommandsV4(input: {
+  async queryNekConversationCommandsV4(input: {
     target: NekWorkspaceTarget;
     commands: Array<{ sessionId: string | null; commandId: string }>;
     clock?: true;

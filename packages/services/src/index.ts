@@ -132,11 +132,6 @@ export {
   ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
 } from "./zcode-agent/zcodeAgent.js";
 export {
-  isZCodeAgentMcpStatusModeUnsupportedError,
-  ZCODE_AGENT_MCP_STATUS_MODE_UNSUPPORTED_ERROR_CODE,
-  ZCodeAgentMcpStatusModeUnsupportedError,
-} from "./zcode-agent/zcodeAgentErrors.js";
-export {
   createZCodeAgentConnectionScope,
   readTrustedZCodeAgentV4Connection,
 } from "./zcode-agent/zcodeAgentConnectionScope.js";

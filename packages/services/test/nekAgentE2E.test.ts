@@ -78,13 +78,13 @@ test(
         askProjectTrust: () => true,
       });
       const target = { workspacePath: projectDir };
-      const created = await adapter.createSession({ workspacePath: projectDir });
+      const created = await adapter.createNekSession({ workspacePath: projectDir });
       const frames: unknown[] = [];
       const frameSubscription = adapter.onDynamicConversationFrame(target)((frame) =>
         frames.push(frame),
       );
       await adapter.subscribeConversationV4({ ...target, sessionId: created.sessionId });
-      await adapter.sendConversationCommandV4({
+      await adapter.sendNekConversationCommandV4({
         target,
         envelope: {
           commandId: "e2e-prompt-1",
@@ -96,11 +96,11 @@ test(
         },
       });
       await waitFor(() => hasAssistantAndToolRows(frames), 60_000);
-      const summaries = await adapter.listSessions(target);
+      const summaries = await adapter.listNekSessions(target);
       assert.ok(summaries.some((summary) => summary.id === created.sessionId));
-      const beforeResume = adapter.readSession({ ...target, sessionId: created.sessionId });
-      await adapter.closeSession({ ...target, sessionId: created.sessionId });
-      const resumed = await adapter.resumeSession({
+      const beforeResume = adapter.readNekSession({ ...target, sessionId: created.sessionId });
+      await adapter.closeNekSession({ ...target, sessionId: created.sessionId });
+      const resumed = await adapter.resumeNekSession({
         workspacePath: projectDir,
         sessionPath:
           created.sessionPath ??

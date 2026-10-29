@@ -1,3 +1,4 @@
+import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekLocator } from "../nekLocator.js";
 import { NekAgentServiceAdapter } from "./nekAgentServiceAdapter.js";
 import type { NekAgentServiceAdapterOptions } from "./types.js";
@@ -40,4 +41,8 @@ export function createNekAgentServiceAdapter(
 }
 
 /** 阶段 3 依赖注入使用的明确工厂名；旧 ZCode 工厂不再作为 nek 运行时入口。 */
-export const createNekZCodeAgentService = createNekAgentServiceAdapter;
+export function createNekZCodeAgentService(
+  options: NekAgentServiceAdapterOptions & { locator?: NekLocator },
+): IZCodeAgentService {
+  return createNekAgentServiceAdapter(options);
+}

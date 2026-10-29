@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import type { NekGuiInfo, NekRpcCommand } from "@zcode/shared/nek-protocol";
+import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekRpcProcessExit, NekRpcProcessHandle } from "../src/nek-agent/nekRpcClient.js";
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
+import { createNekZCodeAgentService } from "../src/node.js";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 
 const guiInfo = {
@@ -132,7 +134,7 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
   });
   try {
     const target = { workspacePath: "/workspace" };
-    const created = await adapter.createSession(target);
+    const created = await adapter.createNekSession(target);
     const frames: unknown[] = [];
     const event = adapter.onDynamicConversationFrame(target);
     const disposable = event((frame) => frames.push(frame));
@@ -143,7 +145,7 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
     assert.equal(subscription.ack.mode, "snapshot");
     assert.equal(frames.length, 1);
     await assert.rejects(
-      adapter.sendConversationCommandV4({
+      adapter.sendNekConversationCommandV4({
         target,
         envelope: {
           commandId: "cmd-1",
@@ -165,4 +167,93 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
     await adapter.dispose();
   }
   assert.ok(session.commands.some((command) => command.type === "get_entries"));
+});
+
+const IZCODE_METHODS = [
+  "prepareStorage",
+  "getStorageStartupState",
+  "onDynamicStorageStartupState",
+  "initialize",
+  "syncAppRuntimePreferences",
+  "getWorkspaceRuntimeIdentity",
+  "createSession",
+  "resumeSession",
+  "listSessions",
+  "listSessionSubagents",
+  "getTaskTokenUsage",
+  "readSession",
+  "readSessionMessages",
+  "readSessionDebug",
+  "readSessionEvents",
+  "readWorkspacePresentation",
+  "grantWorkspaceHookTrust",
+  "listMcpServerStatuses",
+  "getSkillReferenceCatalog",
+  "collectLocalRuntimeChildProcesses",
+  "generateWorkspaceText",
+  "testModelConnectivity",
+  "sendPrompt",
+  "compactSession",
+  "goalSession",
+  "closeSession",
+  "setModel",
+  "setThoughtLevel",
+  "setMode",
+  "respondSessionRuntimePreferences",
+  "onDynamicSessionRuntimePreferencesRequest",
+  "onDynamicProcessResourceSample",
+  "onDynamicMcpTelemetry",
+  "onDynamicMcpResourceSamples",
+  "onDynamicToolExecResource",
+  "onDynamicSessionEvent",
+  "helloConversationV4",
+  "initializeConversationV4",
+  "setConnectionFlowStateV4",
+  "subscribeConversationV4",
+  "resyncConversationV4",
+  "unsubscribeConversationV4",
+  "conversationRowsRangeV4",
+  "conversationPlansV4",
+  "backgroundBashOutputV4",
+  "conversationFileChangesV4",
+  "conversationFileRewindPreviewV4",
+  "sendConversationCommandV4",
+  "queryConversationCommandsV4",
+  "attachmentBeginV4",
+  "attachmentChunkV4",
+  "attachmentCommitV4",
+  "attachmentAbortV4",
+  "attachmentPreviewSourceV4",
+  "attachmentReadV4",
+  "conversationAttachmentReadV4",
+  "conversationAttachmentStatV4",
+  "onDynamicConversationFrame",
+  "onDynamicDiagnostic",
+  "onDynamicSessionActivity",
+  "onDynamicLocalTtftFacts",
+  "onDynamicConversationTelemetryFact",
+  "subscribeSessionsIndexV4",
+  "resyncSessionsIndexV4",
+  "unsubscribeSessionsIndexV4",
+  "onDynamicSessionsIndexFrame",
+  "subscribeWorkspaceConfigV4",
+  "resyncWorkspaceConfigV4",
+  "unsubscribeWorkspaceConfigV4",
+  "onDynamicWorkspaceConfigFrame",
+  "onAgentRuntimeRestarted",
+  "disposeWorkspace",
+  "disposeAll",
+] as const satisfies readonly (keyof IZCodeAgentService)[];
+
+test("node factory returns an IZCodeAgentService with every method", () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const service: IZCodeAgentService = createNekZCodeAgentService({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  for (const method of IZCODE_METHODS) assert.equal(typeof service[method], "function", method);
+  service.disposeAll();
 });

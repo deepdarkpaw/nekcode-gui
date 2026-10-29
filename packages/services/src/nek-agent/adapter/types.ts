@@ -72,23 +72,23 @@ export interface NekSessionCommandEnvelope {
 
 export interface NekAgentServiceAdapterApi {
   initialize(target: NekWorkspaceTarget): Promise<{ available: boolean; workspaceKey: string }>;
-  createSession(input: {
+  createNekSession(input: {
     workspacePath: string;
     sessionId?: string;
     model?: { provider: string; modelId: string };
     thinking?: import("@zcode/shared/nek-protocol").NekThinkingLevel;
     mode?: import("@zcode/shared/nek-protocol").NekMode;
   }): Promise<import("../service/types.js").NekSessionResult>;
-  resumeSession(input: {
+  resumeNekSession(input: {
     workspacePath: string;
     sessionPath: string;
   }): Promise<import("../service/types.js").NekSessionResult>;
-  listSessions(
+  listNekSessions(
     target: NekWorkspaceTarget,
   ): Promise<import("@zcode/shared/nek-protocol").NekSessionSummary[]>;
-  closeSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean>;
-  readSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<ConversationSnapshot>;
-  readSessionMessages(
+  closeNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean>;
+  readNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<ConversationSnapshot>;
+  readNekSessionMessages(
     target: NekWorkspaceTarget & { sessionId: string },
   ): Promise<import("@zcode/shared/nek-protocol").NekAgentMessage[]>;
   subscribeConversationV4(
@@ -111,11 +111,11 @@ export interface NekAgentServiceAdapterApi {
   onDynamicWorkspaceConfigFrame(
     target: NekWorkspaceTarget,
   ): Event<WorkspaceConfigTopicWireCandidate>;
-  sendConversationCommandV4(input: {
+  sendNekConversationCommandV4(input: {
     target: NekWorkspaceTarget;
     envelope: NekSessionCommandEnvelope;
   }): Promise<import("@zcode/shared/zcode-protocol-v4").CommandAck>;
-  queryConversationCommandsV4(input: {
+  queryNekConversationCommandsV4(input: {
     target: NekWorkspaceTarget;
     commands: Array<{ sessionId: string | null; commandId: string }>;
     clock?: true;
