@@ -3030,6 +3030,86 @@
       "count": 1
     },
     {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/index.ts\u0000packages/ui/src/onboarding/index.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAccount.test.ts\u0000packages/ui/src/onboarding/onboardingAccount.test.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAccount.ts\u0000packages/ui/src/onboarding/onboardingAccount.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAccountController.ts\u0000packages/ui/src/onboarding/onboardingAccountController.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAction.test.tsx\u0000packages/ui/src/onboarding/onboardingAction.test.tsx",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAction.ts\u0000packages/ui/src/onboarding/onboardingAction.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingFlow.test.ts\u0000packages/ui/src/onboarding/onboardingFlow.test.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingFlow.ts\u0000packages/ui/src/onboarding/onboardingFlow.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingFocus.test.ts\u0000packages/ui/src/onboarding/onboardingFocus.test.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingFocus.ts\u0000packages/ui/src/onboarding/onboardingFocus.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingKeyboard.test.ts\u0000packages/ui/src/onboarding/onboardingKeyboard.test.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingKeyboard.ts\u0000packages/ui/src/onboarding/onboardingKeyboard.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingNek.test.ts\u0000packages/ui/src/onboarding/onboardingNek.test.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingNek.ts\u0000packages/ui/src/onboarding/onboardingNek.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingWorkspaceController.test.tsx\u0000packages/ui/src/onboarding/onboardingWorkspaceController.test.tsx",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingWorkspaceController.ts\u0000packages/ui/src/onboarding/onboardingWorkspaceController.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/useNekOnboardingController.test.tsx\u0000packages/ui/src/onboarding/useNekOnboardingController.test.tsx",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/useNekOnboardingController.ts\u0000packages/ui/src/onboarding/useNekOnboardingController.ts",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/useNekOnboardingGate.test.tsx\u0000packages/ui/src/onboarding/useNekOnboardingGate.test.tsx",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000packages/ui/src/onboarding/useNekOnboardingGate.ts\u0000packages/ui/src/onboarding/useNekOnboardingGate.ts",
+      "count": 1
+    },
+    {
       "key": "knip\u0000files\u0000packages/ui/src/replay.ts\u0000packages/ui/src/replay.ts",
       "count": 1
     },
@@ -4883,6 +4963,14 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/settings/nek/api/NekSettingsContext.tsx\u0000NekTargetsState",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/settings/nek/api/hostApi.ts\u0000NekLocalDetection",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/settings/nek/api/hostApi.ts\u0000NekOnboardingState",
       "count": 1
     },
     {
