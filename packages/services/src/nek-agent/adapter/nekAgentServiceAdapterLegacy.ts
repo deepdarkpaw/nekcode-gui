@@ -62,9 +62,13 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return legacySnapshotFromResult(input, result, input.mode ?? "agent");
     },
     async resumeSession(input) {
+      const summary = (await target.listNekSessions(input)).find(
+        (item) => item.id === input.sessionId,
+      );
+      if (!summary) throw new Error(`nek session ${input.sessionId} was not found`);
       const result = await target.resumeNekSession({
         workspacePath: input.workspacePath,
-        sessionPath: input.sessionId,
+        sessionPath: summary.path,
       });
       return legacySnapshotFromResult(input, result);
     },
