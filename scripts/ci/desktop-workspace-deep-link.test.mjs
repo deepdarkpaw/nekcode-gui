@@ -44,11 +44,11 @@ async function load(file, imports, globals = {}) {
 }
 
 test("single-instance forwarding accepts workspace links and drops retired login payloads", () => {
-  const retired = "zcode://oauth/callback?state=fixture-state&code=fixture-code";
+  const retired = "nekcode://oauth/callback?state=fixture-state&code=fixture-code";
   for (const url of [
     retired,
-    "zcode:/oauth/callback?authCode=fixture-code",
-    "zcode://unknown/open?code=fixture-code",
+    "nekcode:/oauth/callback?authCode=fixture-code",
+    "nekcode://unknown/open?code=fixture-code",
   ]) {
     for (const value of [
       url,
@@ -60,7 +60,7 @@ test("single-instance forwarding accepts workspace links and drops retired login
       assert.equal(urls.extractDeepLinkUrlFromSingleInstanceData({ deepLinkUrl: value }), null);
     }
   }
-  const workspace = "zcode://workspace/open?path=%2Ftmp%2Ffixture%20project";
+  const workspace = "nekcode://workspace/open?path=%2Ftmp%2Ffixture%20project";
   for (const value of [
     workspace,
     `"${workspace}"`,
@@ -70,11 +70,11 @@ test("single-instance forwarding accepts workspace links and drops retired login
     assert.equal(urls.extractWorkspaceOpenPath(parsed), "/tmp/fixture project");
   }
   assert.equal(
-    urls.extractDeepLinkUrlFromArgs(["zcode://workspace/open", "?path=%2Ftmp"]),
-    "zcode://workspace/open?path=%2Ftmp",
+    urls.extractDeepLinkUrlFromArgs(["nekcode://workspace/open", "?path=%2Ftmp"]),
+    "nekcode://workspace/open?path=%2Ftmp",
   );
   assert.equal(
-    urls.extractWorkspaceOpenPath(new URL("zcode:/workspace/open/?path=%2Ftmp")),
+    urls.extractWorkspaceOpenPath(new URL("nekcode:/workspace/open/?path=%2Ftmp")),
     "/tmp",
   );
   assert.equal(urls.extractOpenWorkspacePathFromArgs(["--open-workspace", 'C:"']), "C:\\");
@@ -153,15 +153,15 @@ async function harness(t) {
     setResponse: (value) => {
       response = value;
     },
-    link: `zcode://workspace/open?path=${encodeURIComponent(directory)}`,
+    link: `nekcode://workspace/open?path=${encodeURIComponent(directory)}`,
   };
 }
 
 test("retired callbacks cannot be cached, delivered or logged by Main", async (t) => {
   const h = await harness(t);
   for (const url of [
-    "zcode://oauth/callback?state=fixture-private-state&code=fixture-private-code",
-    "zcode:/oauth/callback?state=fixture-private-state&authCode=fixture-private-code",
+    "nekcode://oauth/callback?state=fixture-private-state&code=fixture-private-code",
+    "nekcode:/oauth/callback?state=fixture-private-state&authCode=fixture-private-code",
     "invalid fixture-private-code",
   ])
     assert.equal(h.router.handleDeepLink(url, h.logger), false);
@@ -218,7 +218,7 @@ test("workspace routing preserves consent, readiness, window isolation and close
   h.calls.length = 0;
   h.setResponse(0);
   assert.equal(
-    h.router.handleDeepLink("zcode://workspace/open?path=%2F%2Fserver%2Fshare", h.logger),
+    h.router.handleDeepLink("nekcode://workspace/open?path=%2F%2Fserver%2Fshare", h.logger),
     false,
   );
   assert.deepEqual(h.calls, []);

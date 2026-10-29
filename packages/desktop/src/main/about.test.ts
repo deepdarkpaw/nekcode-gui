@@ -39,14 +39,14 @@ describe("formatAboutBuildValue", () => {
 });
 
 describe("resolveAboutApplicationName", () => {
-  it("取运行时应用名：正式包 ZCodium Exp、Preview 包 ZCodium Rust", () => {
-    expect(resolveAboutApplicationName("ZCodium Exp")).toBe("ZCodium Exp");
-    expect(resolveAboutApplicationName("ZCodium Rust")).toBe("ZCodium Rust");
+  it("取运行时应用名：正式包 nekcode、Preview 包 nekcode-preview", () => {
+    expect(resolveAboutApplicationName("nekcode")).toBe("nekcode");
+    expect(resolveAboutApplicationName("nekcode-preview")).toBe("nekcode-preview");
   });
 
   it("空名回退，避免 About 出现空白产品名", () => {
-    expect(resolveAboutApplicationName(undefined)).toBe("ZCodium Exp");
-    expect(resolveAboutApplicationName("   ")).toBe("ZCodium Exp");
+    expect(resolveAboutApplicationName(undefined)).toBe("nekcode");
+    expect(resolveAboutApplicationName("   ")).toBe("nekcode");
   });
 });
 

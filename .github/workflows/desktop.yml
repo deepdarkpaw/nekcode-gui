@@ -21,6 +21,11 @@ env:
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
   ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
   ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+  # 安装包的 app-update.yml 指向 GitHub Releases；owner/repo 取本次构建所在仓库，
+  # fork 发版时自动指向自己的 Releases，不需要改代码。默认值（nekcode/nekcode-gui）见
+  # packages/desktop/scripts/desktop-product-identity.mjs。
+  NEKCODE_UPDATE_OWNER: ${{ github.repository_owner }}
+  NEKCODE_UPDATE_REPO: ${{ github.event.repository.name }}
 
 jobs:
   checks:

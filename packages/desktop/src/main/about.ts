@@ -60,9 +60,9 @@ interface AboutSnapshotOptions {
 const ABOUT_WINDOW_WIDTH = 256;
 const ABOUT_WINDOW_HEIGHT = 312;
 // 展示名取运行时应用名（app.setName(runtimeApplicationName) 之后的 app.name，构建期
-// 产品身份经 desktopRuntimeEnv 解析）：正式包是 ZCodium Exp，Preview 包自 2026-10 起是
-// ZCodium Rust。之前这里硬编码 "ZCodium Exp"，Preview 包的 About 会显示错误的产品名。
-const ABOUT_APPLICATION_NAME_FALLBACK = "ZCodium Exp";
+// 产品身份经 desktopRuntimeEnv 解析）：正式包是 nekcode，Preview 包是 nekcode-preview。
+// 这个常量只是取不到 app.name 时的兜底，必须跟产品身份一起改名，否则 About 会漏出旧品牌。
+const ABOUT_APPLICATION_NAME_FALLBACK = "nekcode";
 
 const ABOUT_MESSAGES: Record<
   Locale,
@@ -110,7 +110,7 @@ function getAboutMessages(locale: Locale): (typeof ABOUT_MESSAGES)[Locale] {
 
 /**
  * About 展示名：优先运行时应用名（`app.setName(runtimeApplicationName)` 后的 `app.name`，
- * 随构建期产品身份变化——正式包 ZCodium Exp，Preview 包 ZCodium Rust），空值时回退。
+ * 随构建期产品身份变化——正式包 nekcode，Preview 包 nekcode-preview），空值时回退。
  */
 export function resolveAboutApplicationName(appName: string | undefined | null): string {
   return appName?.trim() || ABOUT_APPLICATION_NAME_FALLBACK;

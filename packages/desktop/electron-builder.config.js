@@ -18,8 +18,11 @@ import {
 import { cleanupPackagedSourcemaps } from "./scripts/packaged-sourcemap-cleanup.mjs";
 import { getTargetPlatform } from "./scripts/target-platform.mjs";
 import {
+  NEKCODE_DEEP_LINK_SCHEME,
   resolveDesktopArtifactSuffix,
   resolveDesktopProductIdentity,
+  resolveGithubPublishOwner,
+  resolveGithubPublishRepo,
 } from "./scripts/desktop-product-identity.mjs";
 const ELECTRON_BUILDER_ARCH = {
   1: "x64",
@@ -227,7 +230,7 @@ if (
   !macSigningIdentity
 ) {
   throw new Error(
-    "ZCode Preview macOS packaging requires APPLE_SIGNING_IDENTITY or CSC_NAME when ZCODE_ENABLE_MAC_SIGN=1",
+    "nekcode preview macOS packaging requires APPLE_SIGNING_IDENTITY or CSC_NAME when ZCODE_ENABLE_MAC_SIGN=1",
   );
 }
 
@@ -305,7 +308,7 @@ async function runTimedAsync(label, fn) {
 
 function resolveAppAsarPath(context) {
   if (context.electronPlatformName === "darwin") {
-    const appName = `${context.packager?.appInfo?.productFilename ?? "ZCodium"}.app`;
+    const appName = `${context.packager?.appInfo?.productFilename ?? desktopProductIdentity.productName}.app`;
     return resolve(context.appOutDir, appName, "Contents", "Resources", "app.asar");
   }
 
@@ -314,7 +317,7 @@ function resolveAppAsarPath(context) {
 
 function resolvePackagedResourcesDir(context) {
   if (context.electronPlatformName === "darwin") {
-    const appName = `${context.packager?.appInfo?.productFilename ?? "ZCodium"}.app`;
+    const appName = `${context.packager?.appInfo?.productFilename ?? desktopProductIdentity.productName}.app`;
     return resolve(context.appOutDir, appName, "Contents", "Resources");
   }
 
@@ -460,10 +463,10 @@ export default {
   extraMetadata: {
     version: buildMetadata.appVersion,
     zcodeProductFlavor: desktopProductIdentity.flavor,
-    homepage: "https://zcode.z.ai",
+    homepage: "https://github.com/nekcode/nekcode-gui",
     author: {
-      name: "ZCodium",
-      email: "dev@zcode.z.ai",
+      name: "nekcode",
+      email: "dev@nekcode.ai",
     },
   },
   // macOS 签名阶段会对 Electron Framework 下每个语言包逐个 codesign。
@@ -643,10 +646,10 @@ export default {
   // OAuth deep link 协议注册（macOS 打包后需要 Info.plist 中声明 CFBundleURLTypes）
   protocols: [
     {
-      // 协议处理器的展示名之前使用小写 scheme，打包产物里的协议描述无法体现产品名。
-      // 展示名跟随安装包身份；scheme 仍保持 zcode，因此两个应用中最后注册者会成为默认 handler。
+      // 协议处理器的展示名跟随安装包身份；scheme 是 `nekcode`，与主进程
+      // `desktopDeepLinkUrl.ts` / `desktopOAuthDeepLink.ts` 解析与注册的 scheme 同源。
       name: desktopProductIdentity.productName,
-      schemes: ["zcode"],
+      schemes: [NEKCODE_DEEP_LINK_SCHEME],
     },
   ],
   mac: {
@@ -686,8 +689,8 @@ export default {
     artifactName: buildDesktopArtifactName("linux"),
     // desktop 包名是 scoped package（@zcode/desktop），electron-builder 默认会把
     // Linux executable/Icon 推成 @zcodedesktop。部分桌面环境无法按这个 icon name 命中
-    // hicolor 图标，最终回退成系统齿轮。这里固定成稳定的小写名称，让 Icon=zcode
-    // 与 /usr/share/icons/hicolor/*/apps/zcode.png 保持一致。
+    // hicolor 图标，最终回退成系统齿轮。这里固定成稳定的小写名称，让 Icon=nekcode
+    // 与 /usr/share/icons/hicolor/*/apps/nekcode.png 保持一致。
     executableName: desktopProductIdentity.linuxExecutableName,
     category: "Development",
     maintainer: "MoyaMryia <MryiaMoya@outlook.com>",
@@ -743,14 +746,12 @@ export default {
     installerHeaderIcon: "build/icon_installer.ico",
   },
   detectUpdateChannel: false,
+  // 更新源是 GitHub Releases：electron-builder 会把这段 publish 配置写进安装包的
+  // app-update.yml，electron-updater 的 GitHub provider 据此拉取 latest*.yml 与安装包。
+  // owner/repo 可用构建期环境变量覆盖（fork 或镜像发版），默认 nekcode/nekcode-gui。
   publish: {
-    provider: "generic",
-    // 当前 OSS/CDN 对多 Range 请求返回 206，但 Content-Type 仍是 application/x-msdownload，
-    // electron-updater 会因缺少 multipart/byteranges 直接回退整包下载。关闭 multiple range 后仍走差分，
-    // 只是按单 Range 顺序拉取差异块，避免 Windows 用户更新时从约 15MB 退化成 300MB+ 全量包。
-    useMultipleRangeRequest: false,
-    // 新客户端运行时使用服务端 manifest provider；这里仅保留 electron-builder 必需的
-    // generic publish 占位，避免打包产物继续携带可配置的旧 stable feed。
-    url: "http://localhost:8081",
+    provider: "github",
+    owner: resolveGithubPublishOwner(process.env),
+    repo: resolveGithubPublishRepo(process.env),
   },
 };

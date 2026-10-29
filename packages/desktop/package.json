@@ -1,8 +1,8 @@
 {
   "name": "@zcode/desktop",
   "private": true,
-  "description": "ZCodium Desktop App",
-  "author": "ZCodium",
+  "description": "nekcode desktop app",
+  "author": "nekcode",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
@@ -68,5 +68,5 @@
     "typescript": "^6.0.2",
     "vite": "^8.0.2"
   },
-  "productName": "ZCodium"
+  "productName": "nekcode"
 }

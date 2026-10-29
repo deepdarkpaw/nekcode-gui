@@ -142,7 +142,7 @@ export interface VerifyHostKeyOptions {
 
 /**
  * 主机密钥存储。filePath 可注入以便测试落到临时目录；默认跟随应用配置根
- * （<数据根>/.zcodium-exp/v2/ssh/known-hosts.json），新目录首次使用自动创建，
+ * （<数据根>/.nek/gui/v2/ssh/known-hosts.json），新目录首次使用自动创建，
  * 不涉及既有数据迁移。
  */
 export class SSHHostKeyStore {

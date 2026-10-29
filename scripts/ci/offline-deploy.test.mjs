@@ -82,7 +82,7 @@ async function fixture(t) {
     commands,
     backend,
     deploy,
-    installed: (value) => join(remote, ".zcodium/server", value),
+    installed: (value) => join(remote, ".nek/gui-server", value),
   };
 }
 
