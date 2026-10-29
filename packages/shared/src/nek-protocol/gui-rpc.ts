@@ -92,12 +92,30 @@ export interface NekProviderDraft {
   authHeader?: boolean;
 }
 
+/**
+ * 已保存 provider 的逐项改写（nek `RpcProviderOverrides`）：有值的字段替换已保存的值，
+ * 缺省的字段沿用已保存的值。设置页因此可以先试改动、再保存。
+ *
+ * 不能与 `draft` 同时使用：草稿已经带有完整配置，nek 会拒绝这种组合。
+ */
+export interface NekProviderOverrides {
+  api?: NekEndpointApi;
+  baseUrl?: string;
+  /** 字面量、`$ENV`/`${ENV}` 或 `!command`；`""` 表示不带密钥请求。 */
+  apiKey?: string;
+  /** 叠加在已保存的请求头之上，同名项覆盖。 */
+  headers?: Record<string, string>;
+  /** 缺省时沿用已保存 provider 的该项设置。 */
+  authHeader?: boolean;
+}
+
 export type NekGuiRpcCommand =
   // ---- 运行时 [session + control] ----
   | { id?: string; type: "get_info" }
   | { id?: string; type: "reload" }
   | { id?: string; type: "validate_config"; cwd?: string }
   | { id?: string; type: "get_changelog"; sinceVersion?: string }
+  | { id?: string; type: "list_builtin_tools" }
   // ---- 会话目录 [session + control] ----
   | { id?: string; type: "list_sessions"; cwd?: string; all?: boolean; limit?: number }
   | { id?: string; type: "delete_session"; sessionPath: string }
@@ -123,13 +141,22 @@ export type NekGuiRpcCommand =
   | { id?: string; type: "auth_logout"; provider: string }
   // ---- 模型 [session + control] ----
   | { id?: string; type: "get_model_catalog"; provider?: string; ids?: string[] }
-  | { id?: string; type: "fetch_provider_models"; provider?: string; draft?: NekProviderDraft }
+  | {
+      id?: string;
+      type: "fetch_provider_models";
+      provider?: string;
+      draft?: NekProviderDraft;
+      /** 先试已保存 provider 的改动：与 `draft` 互斥。 */
+      overrides?: NekProviderOverrides;
+    }
   | {
       id?: string;
       type: "test_provider";
       modelId: string;
       provider?: string;
       draft?: NekProviderDraft;
+      /** 先试已保存 provider 的改动：与 `draft` 互斥。 */
+      overrides?: NekProviderOverrides;
     }
   // ---- 项目信任 [session + control] ----
   | { id?: string; type: "get_project_trust"; cwd: string }
@@ -150,6 +177,7 @@ export const NEK_CONTROL_COMMANDS: readonly string[] = [
   "reload",
   "validate_config",
   "get_changelog",
+  "list_builtin_tools",
   "list_sessions",
   "delete_session",
   "rename_session",
@@ -203,6 +231,21 @@ export interface NekMentionTargetsResult {
   targets: NekMentionTarget[];
 }
 
+/**
+ * `list_builtin_tools` 的一条（nek `RpcBuiltinTool`）。
+ *
+ * 设置中心的 `NekBuiltinTool` 是同一形状的视图类型：工具清单由 nek 决定，
+ * GUI 不再维护镜像。
+ */
+export interface NekBuiltinToolInfo {
+  /** 内置工具名，与 `defaultTools` 的写法一致，例如 "read" 或 "ast_grep"。 */
+  name: string;
+  /** 模型看到的工具描述。 */
+  description?: string;
+  /** 既没有设置也没有启动参数指定工具时，新会话是否启用该工具。 */
+  defaultActive: boolean;
+}
+
 export interface NekConfigDiagnostic {
   /** 绝对路径。 */
   file: string;
@@ -241,6 +284,22 @@ export interface NekSessionSnapshot {
   leafId: string | null;
   /** 与 `get_messages` 相同形状（当前叶子分支上的 AgentMessage 的 JSON）。 */
   messages: unknown[];
+  /**
+   * 持有会话锁的存活进程（nek `RpcSessionLockHolder`）。
+   *
+   * 只在锁被存活进程持有时出现；锁已过期、或锁写入于 nek 记录持有者之前时缺省，
+   * 所以"会话是否被占用"仍然只看 `session.locked`。
+   */
+  lockedBy?: NekSessionLockHolder;
+}
+
+/** 持有会话锁的进程：终端界面、RPC 进程，或一次性运行（`print` / `json`）。 */
+export interface NekSessionLockHolder {
+  pid: number;
+  hostname: string;
+  kind: "tui" | "rpc" | "print" | "json";
+  /** 拿到锁的时间（ISO 8601）。 */
+  startedAt: string;
 }
 
 export interface NekAuthProviderStatus {
@@ -252,19 +311,23 @@ export interface NekAuthProviderStatus {
   /**
    * 凭据健康状态。`expired` / `refresh_failed` 表示需要重新登录。
    *
-   * nek 的 `auth_status` 目前只返回 `kind` 与 `expiresAt`：`expired` 由 host 按到期时间推出，
-   * `refresh_failed` 还没有来源（nek 不暴露刷新结果）。见 `NekAuthProviderStatusWire`。
+   * nek（`auth_status`）自己按 `expires <= now` 给出 `state`：`expired` 表示存储的 OAuth
+   * 访问令牌已过期，其余一律 `ok`（存储的 API Key、环境变量密钥、完全没有凭据都无从判断日期）。
+   * `refresh_failed` 只是取值的一部分，nek 不持久化刷新结果、因此从不下发；刷新失败的令牌
+   * 在下次刷新成功前一直报 `expired`。
    */
-  state: "ok" | "expired" | "refresh_failed";
+  state: NekAuthProviderStatusState;
   /** 该 provider 支持的登录方式。 */
   loginMethods: Array<"oauth" | "api_key">;
   /** OAuth 访问令牌到期时间（ISO 8601）；nek 会自动刷新。 */
   expiresAt?: string;
 }
 
+export type NekAuthProviderStatusState = "ok" | "expired" | "refresh_failed";
+
 /**
- * `auth_status` 的线上形状：nek 只返回 `kind` / `loginMethods` / `expiresAt`，
- * `state` 由 host 归一化后补上（`NekAuthProviderStatus`）。
+ * `auth_status` 的线上形状：nek ≥ P2c 下发 `state`；早于此的 nek 只给 `kind` 与 `expiresAt`，
+ * 由 host 按到期时间补出 `NekAuthProviderStatus`。
  */
 export type NekAuthProviderStatusWire = Omit<NekAuthProviderStatus, "state"> & {
   state?: NekAuthProviderStatus["state"];
@@ -339,6 +402,7 @@ export interface NekGuiRpcResponseData {
   reload: NekReloadResult;
   validate_config: { diagnostics: NekConfigDiagnostic[] };
   get_changelog: { markdown: string };
+  list_builtin_tools: { tools: NekBuiltinToolInfo[] };
   list_sessions: { sessions: NekSessionSummary[] };
   delete_session: Record<string, never>;
   rename_session: Record<string, never>;

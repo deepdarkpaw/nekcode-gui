@@ -198,7 +198,8 @@ export type NekSessionRpcCommand =
   | { id?: string; type: "fork"; entryId: string }
   | { id?: string; type: "clone" }
   | { id?: string; type: "get_fork_messages" }
-  | { id?: string; type: "get_entries"; since?: string }
+  // 分页：`limit` 取最新的一页，配 `beforeEntryId` 取比该条目更旧的一页；`hasMore` 说明还有更旧的条目。
+  | { id?: string; type: "get_entries"; since?: string; limit?: number; beforeEntryId?: string }
   | { id?: string; type: "get_tree" }
   | { id?: string; type: "get_last_assistant_text" }
   | { id?: string; type: "set_session_name"; name: string }
@@ -271,7 +272,7 @@ export interface NekRpcResponseDataMap {
   fork: { text: string; cancelled: boolean };
   clone: { cancelled: boolean };
   get_fork_messages: { messages: Array<{ entryId: string; text: string }> };
-  get_entries: { entries: NekSessionEntry[]; leafId: string | null };
+  get_entries: { entries: NekSessionEntry[]; leafId: string | null; hasMore?: boolean };
   get_tree: { tree: NekSessionTreeNode[]; leafId: string | null };
   get_last_assistant_text: { text: string | null };
   set_session_name: undefined;
@@ -284,6 +285,7 @@ export interface NekRpcResponseDataMap {
   reload: NekGuiRpcResponseData["reload"];
   validate_config: NekGuiRpcResponseData["validate_config"];
   get_changelog: NekGuiRpcResponseData["get_changelog"];
+  list_builtin_tools: NekGuiRpcResponseData["list_builtin_tools"];
   list_sessions: NekGuiRpcResponseData["list_sessions"];
   delete_session: NekGuiRpcResponseData["delete_session"];
   rename_session: NekGuiRpcResponseData["rename_session"];
