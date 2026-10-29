@@ -60,7 +60,7 @@ function state(sessionFile = "/tmp/session.jsonl", streaming = false) {
   };
 }
 
-function snapshot(locked: boolean): NekSessionSnapshot {
+function snapshot(locked: boolean, lockedBy?: NekSessionSnapshot["lockedBy"]): NekSessionSnapshot {
   return {
     session: {
       path: "/tmp/session.jsonl",
@@ -75,6 +75,7 @@ function snapshot(locked: boolean): NekSessionSnapshot {
     entries: [],
     leafId: null,
     messages: [],
+    ...(lockedBy ? { lockedBy } : {}),
   };
 }
 
@@ -89,6 +90,7 @@ function fakeProcess(
   kind: "control" | "session",
   sessionFile = "/tmp/session.jsonl",
   extensionUi?: NekExtensionUiHandler,
+  lockHolder?: NekSessionSnapshot["lockedBy"],
 ): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -115,7 +117,7 @@ function fakeProcess(
         if (command.type === "get_project_trust") {
           data = { cwd: command.cwd, trusted: null, defaultProjectTrust: "ask", resources: [] };
         } else if (command.type === "read_session_snapshot") {
-          data = snapshot(true);
+          data = snapshot(true, lockHolder);
         } else if (command.type === "list_sessions") {
           data = { sessions: [] };
         } else if (command.type === "get_mention_targets") {
@@ -128,7 +130,7 @@ function fakeProcess(
       } else if (command.type === "get_state") {
         data = state(sessionFile, streaming);
       } else if (command.type === "get_entries") {
-        data = { entries: [], leafId: null };
+        data = { entries: [], leafId: null, hasMore: command.limit !== undefined };
       } else if (command.type === "get_session_stats") {
         data = { ...stats, sessionFile, sessionId: "s1" };
       } else if (command.type === "extension_call") {
@@ -226,8 +228,11 @@ function fakeProcess(
   };
 }
 
-function serviceHarness(extensionUi?: NekExtensionUiHandler) {
-  const control = fakeProcess("control");
+function serviceHarness(
+  extensionUi?: NekExtensionUiHandler,
+  lockHolder?: NekSessionSnapshot["lockedBy"],
+) {
+  const control = fakeProcess("control", "/tmp/session.jsonl", undefined, lockHolder);
   const sessions: FakeProcess[] = [];
   const approvals: boolean[] = [];
   const service = new NekAgentService({
@@ -267,8 +272,31 @@ test("opens a locked session from a read-only snapshot", async () => {
   const result = await harness.service.resumeSession({ sessionPath: "/tmp/session.jsonl" });
   assert.equal(result.readonly, true);
   assert.equal(result.phase, "locked");
+  // 早于 P2c 的 nek 不报持有者：只记下"被占用"。
   assert.equal(result.lockedBy, "nek");
+  assert.equal(result.lockHolder, undefined);
   assert.equal(harness.sessions.length, 0);
+  await harness.service.dispose();
+});
+
+test("reports the lock holder nek names in a read-only snapshot", async () => {
+  const lockHolder = {
+    pid: 4242,
+    hostname: "dev-box",
+    kind: "tui" as const,
+    startedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const harness = serviceHarness(undefined, lockHolder);
+  const result = await harness.service.resumeSession({ sessionPath: "/tmp/session.jsonl" });
+  assert.equal(result.phase, "locked");
+  assert.deepEqual(result.lockHolder, lockHolder);
+  assert.equal(result.lockedBy, "nek tui (dev-box:4242)");
+  assert.deepEqual(result.snapshot?.lockedBy, lockHolder);
+  // 只读拒绝仍然指明占用者。
+  await assert.rejects(
+    async () => await harness.service.sendPrompt({ sessionKey: result.sessionKey, message: "hi" }),
+    /is read-only \(nek tui \(dev-box:4242\)\)/,
+  );
   await harness.service.dispose();
 });
 
@@ -429,7 +457,7 @@ test("forks, clones and reads the entries needed to pick a fork point", async ()
   const result = await harness.service.createSession({ cwd: "/workspace" });
 
   const entries = await harness.service.getEntries({ sessionKey: result.sessionKey });
-  assert.deepEqual(entries, { entries: [], leafId: null });
+  assert.deepEqual(entries, { entries: [], leafId: null, hasMore: false });
   assert.deepEqual((await harness.service.getTree(result.sessionKey)).tree, []);
   assert.deepEqual(await harness.service.getForkMessages(result.sessionKey), [
     { entryId: "e1", text: "first" },
@@ -444,6 +472,42 @@ test("forks, clones and reads the entries needed to pick a fork point", async ()
   const fork = harness.sessions[0]!.commands.find((command) => command.type === "fork");
   assert.equal((fork as { entryId: string }).entryId, "e1");
   assert.deepEqual(commandTypes(harness).slice(-2), ["fork", "clone"]);
+  await harness.service.dispose();
+});
+
+test("pages session entries with limit and beforeEntryId", async () => {
+  const harness = serviceHarness();
+  const result = await harness.service.createSession({ cwd: "/workspace" });
+
+  const page = await harness.service.getEntries({
+    sessionKey: result.sessionKey,
+    limit: 2,
+    beforeEntryId: "e9",
+  });
+  assert.equal(page.hasMore, true, "nek says whether entries older than the page exist");
+  const call = harness.sessions[0]!.commands.at(-1) as {
+    type: string;
+    limit?: number;
+    beforeEntryId?: string;
+    since?: string;
+  };
+  assert.equal(call.type, "get_entries");
+  assert.equal(call.limit, 2);
+  assert.equal(call.beforeEntryId, "e9");
+  assert.equal(call.since, undefined);
+
+  // 不带分页参数时不额外发字段：请求仍然是"整份列表"。
+  await harness.service.getEntries({ sessionKey: result.sessionKey, since: "e1" });
+  const sinceCall = harness.sessions[0]!.commands.at(-1) as {
+    type: string;
+    limit?: number;
+    beforeEntryId?: string;
+    since?: string;
+  };
+  assert.equal(sinceCall.type, "get_entries");
+  assert.equal(sinceCall.since, "e1");
+  assert.equal(sinceCall.limit, undefined);
+  assert.equal(sinceCall.beforeEntryId, undefined);
   await harness.service.dispose();
 });
 

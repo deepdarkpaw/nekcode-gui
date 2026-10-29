@@ -37,6 +37,16 @@ const LONG_RUNNING_COMMANDS = [
 ] as const;
 
 /**
+ * 锁持有者的人类可读描述（只用于错误与展示）：`nek tui (host:pid)`。
+ *
+ * nek 不报持有者时退回 `"nek"`：那时候只知道"有进程占着锁"。
+ */
+function lockLabelOf(holder: NekSessionSnapshot["lockedBy"]): string {
+  if (!holder) return "nek";
+  return `nek ${holder.kind} (${holder.hostname}:${holder.pid})`;
+}
+
+/**
  * 会话记录表、进程池接线、事件路由与投影器装载。
  *
  * 这一层只处理"一个会话记录如何挂上 nek 进程并保持状态"，不暴露对外的命令方法；
@@ -291,12 +301,13 @@ export abstract class NekAgentServiceRuntimeBase {
   /**
    * 会话被外部进程占用时只读打开：不启动进程，只把快照装进投影器。
    *
-   * `lockedBy` 只能是 `"nek"`：`read_session_snapshot` 只给出 `locked: boolean`，
-   * 不告诉 GUI 是终端里的 nek 还是另一个 GUI 窗口持有锁。
+   * nek 从 P2c 起在快照里报出锁持有者（`lockedBy`），这里原样透传给会话记录和
+   * `NekSession.lockHolder`；更早的 nek 只报 `locked: true`，此时占用者仍记为 `"nek"`。
    */
   protected openLockedSnapshot(snapshot: NekSessionSnapshot, cwd?: string): NekSessionResult {
     const existing = this.byPath.get(snapshot.session.path);
     if (existing) this.removeRecord(existing);
+    const holder = snapshot.lockedBy;
     const record = this.createRecord({
       key: snapshot.session.path,
       sessionId: snapshot.session.id,
@@ -304,7 +315,8 @@ export abstract class NekAgentServiceRuntimeBase {
       cwd: cwd ?? snapshot.session.cwd,
       phase: "locked",
       readonly: true,
-      lockedBy: "nek",
+      lockedBy: lockLabelOf(holder),
+      ...(holder ? { lockHolder: holder } : {}),
       snapshot,
       closing: false,
     });
@@ -413,6 +425,7 @@ export abstract class NekAgentServiceRuntimeBase {
       phase: record.phase,
       readonly: record.readonly,
       ...(record.lockedBy ? { lockedBy: record.lockedBy } : {}),
+      ...(record.lockHolder ? { lockHolder: record.lockHolder } : {}),
       ...(record.process?.pid ? { processId: record.process.pid } : {}),
       ...(record.snapshot ? { snapshot: record.snapshot } : {}),
     };

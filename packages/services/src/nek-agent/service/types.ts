@@ -6,6 +6,7 @@ import type {
   NekProjectTrust,
   NekRpcSessionState,
   NekSessionEntry,
+  NekSessionLockHolder,
   NekSessionSnapshot,
   NekSessionStats,
   NekSessionSummary,
@@ -33,8 +34,10 @@ export interface NekSessionRecord {
   snapshot?: NekSessionSnapshot;
   phase: NekSessionPhase;
   readonly: boolean;
-  /** 只读快照的占用者；nek 只报 `locked: true`，因此恒为 `"nek"`。 */
+  /** 只读快照的占用者，人类可读；nek 不报持有者时为 `"nek"`。 */
   lockedBy?: string;
+  /** nek 报出的锁持有者详情；早于 P2c 的 nek 只报 `locked: true`，此处缺省。 */
+  lockHolder?: NekSessionLockHolder;
   closing: boolean;
 }
 
@@ -46,6 +49,7 @@ export interface NekSession {
   phase: NekSessionPhase;
   readonly: boolean;
   lockedBy?: string;
+  lockHolder?: NekSessionLockHolder;
   processId?: number;
   /** Only present for a read-only snapshot. */
   snapshot?: NekSessionSnapshot;
@@ -150,6 +154,22 @@ export function isNekSessionSnapshot(value: unknown): value is NekSessionSnapsho
     snapshot.session !== null &&
     Array.isArray(snapshot.entries) &&
     Array.isArray(snapshot.messages) &&
-    (typeof snapshot.leafId === "string" || snapshot.leafId === null)
+    (typeof snapshot.leafId === "string" || snapshot.leafId === null) &&
+    (snapshot.lockedBy === undefined || isNekSessionLockHolder(snapshot.lockedBy))
+  );
+}
+
+/** 锁持有者的形状校验：协议漂移要报错，不能让半个持有者混进会话记录。 */
+function isNekSessionLockHolder(value: unknown): value is NekSessionLockHolder {
+  if (typeof value !== "object" || value === null) return false;
+  const holder = value as NekSessionLockHolder;
+  return (
+    typeof holder.pid === "number" &&
+    typeof holder.hostname === "string" &&
+    (holder.kind === "tui" ||
+      holder.kind === "rpc" ||
+      holder.kind === "print" ||
+      holder.kind === "json") &&
+    typeof holder.startedAt === "string"
   );
 }

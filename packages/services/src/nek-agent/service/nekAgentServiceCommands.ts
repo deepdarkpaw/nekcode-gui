@@ -188,14 +188,24 @@ export async function getCommands(
   return (await context.writableTarget(sessionKey).client.call({ type: "get_commands" })).commands;
 }
 
-/** 会话条目（`fork` / `navigateTree` / `setEntryLabel` 需要 entryId）。 */
+/**
+ * 会话条目（`fork` / `navigateTree` / `setEntryLabel` 需要 entryId）。
+ *
+ * 分页参数原样透传：`limit` 取最新的一页，配 `beforeEntryId` 取比该条目更旧的一页，
+ * `hasMore` 说明还有更旧的条目。早于 P2c 的 nek 忽略这两个参数、返回完整列表，
+ * 此时 `hasMore` 缺省——完整列表之后没有更旧的条目，按 false 报告是准确的。
+ */
 export async function getEntries(
   context: NekAgentCommandContext,
-  input: { sessionKey: string; since?: string },
-): Promise<{ entries: NekSessionEntry[]; leafId: string | null }> {
-  return await context
-    .target(input.sessionKey)
-    .client.call({ type: "get_entries", since: input.since });
+  input: { sessionKey: string; since?: string; limit?: number; beforeEntryId?: string },
+): Promise<{ entries: NekSessionEntry[]; leafId: string | null; hasMore: boolean }> {
+  const data = await context.target(input.sessionKey).client.call({
+    type: "get_entries",
+    ...(input.since === undefined ? {} : { since: input.since }),
+    ...(input.limit === undefined ? {} : { limit: input.limit }),
+    ...(input.beforeEntryId === undefined ? {} : { beforeEntryId: input.beforeEntryId }),
+  });
+  return { entries: data.entries, leafId: data.leafId, hasMore: data.hasMore === true };
 }
 
 /** 分支树：navigateTree 的候选条目。 */

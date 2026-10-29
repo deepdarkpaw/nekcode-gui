@@ -53,10 +53,12 @@ export interface NekAgentServiceCommandMethods {
   setMode(input: { sessionKey: string; mode: NekMode }): Promise<unknown>;
   getCommands(sessionKey: string): Promise<NekRpcSlashCommand[]>;
   /** `get_entries`：会话条目（fork / navigateTree / setEntryLabel 需要 entryId）。 */
-  getEntries(input: { sessionKey: string; since?: string }): Promise<{
-    entries: NekSessionEntry[];
-    leafId: string | null;
-  }>;
+  getEntries(input: {
+    sessionKey: string;
+    since?: string;
+    limit?: number;
+    beforeEntryId?: string;
+  }): Promise<{ entries: NekSessionEntry[]; leafId: string | null; hasMore: boolean }>;
   /** `get_tree`：分支树，navigateTree 的候选条目。 */
   getTree(sessionKey: string): Promise<{ tree: NekSessionTreeNode[]; leafId: string | null }>;
   /** `get_fork_messages`：fork 时可回退到的用户消息。 */
