@@ -119,3 +119,32 @@ export function formatTokens(tokens: number): string {
   }
   return `${sign}${trimOneDecimal(abs / 1_000_000)}M`;
 }
+
+/** 时长：秒以下归零，分钟显示秒，小时以上显示补零的分钟。 */
+export function formatDuration(milliseconds: number): string {
+  const totalSeconds = Number.isFinite(milliseconds)
+    ? Math.max(0, Math.floor(milliseconds / 1000))
+    : 0;
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 1) {
+    return `${seconds}s`;
+  }
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  if (hours < 1) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+/** 费用按美元显示：零为 `$0`，不足一美分显示 `<$0.01`。 */
+export function formatCost(usd: number): string {
+  if (!Number.isFinite(usd) || usd <= 0) {
+    return "$0";
+  }
+  if (usd < 0.01) {
+    return "<$0.01";
+  }
+  return `$${usd.toFixed(2)}`;
+}

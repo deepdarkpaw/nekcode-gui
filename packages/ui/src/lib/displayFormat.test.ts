@@ -5,6 +5,8 @@ import {
   formatDateTime,
   formatRelativeTime,
   formatTokens,
+  formatDuration,
+  formatCost,
 } from "./displayFormat.js";
 
 const formatMessage = ({ id }: { id: string }, values?: Record<string, string | number>) =>
@@ -66,6 +68,25 @@ describe("formatBytes", () => {
   it("rejects invalid sizes", () => {
     expect(formatBytes(-1)).toBe("");
     expect(formatBytes(Number.POSITIVE_INFINITY)).toBe("");
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats the ST duration thresholds", () => {
+    expect(formatDuration(999)).toBe("0s");
+    expect(formatDuration(12_000)).toBe("12s");
+    expect(formatDuration(83_000)).toBe("1m 23s");
+    expect(formatDuration(3_662_000)).toBe("1h 01m");
+    expect(formatDuration(-1)).toBe("0s");
+    expect(formatDuration(Number.NaN)).toBe("0s");
+  });
+});
+
+describe("formatCost", () => {
+  it("formats the ST cost thresholds", () => {
+    expect(formatCost(0)).toBe("$0");
+    expect(formatCost(0.001)).toBe("<$0.01");
+    expect(formatCost(1.234)).toBe("$1.23");
   });
 });
 
