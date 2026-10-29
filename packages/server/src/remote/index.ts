@@ -42,6 +42,18 @@ export {
   type RemoteReconnectState,
 } from "./reconnectStateMachine.js";
 export {
+  createRemoteReconnectStatusAdapter,
+  RemoteReconnectStatusAdapter,
+  toRemoteConnectionStatusEvent,
+  type RemoteReconnectStatusAdapterOptions,
+} from "./remoteReconnectAdapter.js";
+export {
+  RemotePromptBroker,
+  type RemotePromptBrokerOptions,
+  type RemotePromptCancellationReason,
+  type RemotePromptClock,
+} from "./remotePromptBroker.js";
+export {
   acquireRemoteDeployLock,
   buildRemoteDeployLockScript,
   REMOTE_DEPLOY_LOCK_DIR,

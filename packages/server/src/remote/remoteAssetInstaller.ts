@@ -139,7 +139,11 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
     sourceRelativePath: string,
     forceRefresh = false,
   ): Promise<string> {
-    const localPath = await this.tryResolveLocalPath(componentIds, sourceRelativePath, forceRefresh);
+    const localPath = await this.tryResolveLocalPath(
+      componentIds,
+      sourceRelativePath,
+      forceRefresh,
+    );
     if (localPath) {
       return localPath;
     }
@@ -230,5 +234,3 @@ export class LocalUploadAssetInstaller implements RemoteAssetInstaller {
     }
   }
 }
-
-
