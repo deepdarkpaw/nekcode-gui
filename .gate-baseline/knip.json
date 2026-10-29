@@ -294,6 +294,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000duplicates\u0000packages/services/src/nek-agent/adapter/factory.ts\u0000",
+      "count": 1
+    },
+    {
       "key": "knip\u0000duplicates\u0000packages/shared/src/streaming-tool-input-preview.ts\u0000",
       "count": 1
     },
@@ -750,6 +754,18 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/adapter/factory.ts\u0000createNekZCodeAgentService",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekAgentServiceAdapter",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/adapter/index.ts\u0000createNekZCodeAgentService",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-agent/config/nekConfigDocuments.ts\u0000NekConfigParseError",
       "count": 1
     },
@@ -1126,6 +1142,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000NekAgentServiceAdapter",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000ProviderConfigRuntime",
       "count": 1
     },
@@ -1211,6 +1231,14 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000createModelSelectionService",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000createNekAgentServiceAdapter",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/services/src/node.ts\u0000createNekZCodeAgentService",
       "count": 1
     },
     {
@@ -1751,10 +1779,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workspace-config.ts\u0000workspaceConfigSelectValueSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/shared/src/zcode-protocol-v4/workspace-config.ts\u0000workspaceConfigStateSchema",
       "count": 1
     },
     {
@@ -3286,6 +3310,58 @@
       "count": 1
     },
     {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekAgentServiceAdapterApi",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekAgentServiceAdapterOptions",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekConversationResyncParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekConversationSubscribeParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekConversationUnsubscribeParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekSessionBinding",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekSessionCommandEnvelope",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekSessionsIndexSubscribeParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekWorkspaceConfigSubscribeParams",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekWorkspaceTarget",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/nekAgentServiceAdapterCommands.ts\u0000NekCommandContext",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/types.ts\u0000NekSubscriptionHandle",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/types.ts\u0000NekV4Frame",
+      "count": 1
+    },
+    {
       "key": "knip\u0000types\u0000packages/services/src/nek-agent/config/nekConfigFs.ts\u0000NekFileSnapshot",
       "count": 1
     },
@@ -3627,6 +3703,10 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/node.ts\u0000InjectedFsFaultError",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/node.ts\u0000NekAgentServiceAdapterOptions",
       "count": 1
     },
     {
@@ -4110,10 +4190,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/sessions-index.ts\u0000SessionsIndexSnapshot",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/shared-context-import.ts\u0000SharedContextImportStatus",
       "count": 1
     },
@@ -4187,10 +4263,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000SessionsIndexTopicWireFrame",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/transport.ts\u0000SubscribeAck",
       "count": 1
     },
     {
@@ -4283,14 +4355,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workspace-config.ts\u0000WorkspaceConfigSelectValue",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workspace-config.ts\u0000WorkspaceConfigSnapshot",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/shared/src/zcode-protocol-v4/workspace-config.ts\u0000WorkspaceConfigState",
       "count": 1
     },
     {
