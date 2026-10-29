@@ -46,7 +46,9 @@ export function StatusActionButton({
   if (!action.visible) return null;
   const disabled = !action.enabled || action.pending;
   const disabledReason = renderStatusMessage(intl, action.disabledReason);
-  const resolvedVariant = variant ?? (action.destructive ? "destructive" : "ghost");
+  const resolvedVariant = action.primary
+    ? "default"
+    : (variant ?? (action.destructive ? "destructive" : "ghost"));
   return (
     <span className="inline-flex min-w-0 flex-col items-start gap-1">
       <ActionTooltip
