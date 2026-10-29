@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useNekHostApi } from "@/settings/nek/api/NekSettingsContext.js";
 import { isImeComposing } from "@/lib/imeComposition.js";
 import { useOnboardingAction, type OnboardingActionHandle } from "./onboardingAction.js";
 import {
   createOnboardingFlowState,
-  firstIncompleteStep,
   reduceOnboardingFlow,
-  type OnboardingFlowEvent,
   type OnboardingFlowState,
   type OnboardingSelection,
   type OnboardingStep,

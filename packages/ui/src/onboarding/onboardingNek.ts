@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  NekInstallOptions,
-  NekInstallResult,
-  NekLocalDetection,
-} from "@zcode/shared/nek-protocol";
+import type { NekLocalDetection } from "@zcode/shared/nek-protocol";
 import { useNekHostApi } from "@/settings/nek/api/NekSettingsContext.js";
 import type { INekSettingsHostApi } from "@/settings/nek/api/hostApi.js";
 
