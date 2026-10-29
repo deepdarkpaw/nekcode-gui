@@ -34,6 +34,7 @@ import type {
   CreateTempTextAttachmentRequest,
 } from "@zcode/shared";
 import { InternalChannels, PlatformChannels, formatZCodeRendererProcessName } from "@zcode/shared";
+import { createNekIpcPreloadBridge } from "./nekIpc.js";
 
 const updateReadyCallbacks = new Set<(version: string) => void>();
 const updateStateCallbacks = new Set<(payload: UpdateStatePayload) => void>();
@@ -174,6 +175,7 @@ window.addEventListener("DOMContentLoaded", updateRendererProcessTitle, {
  * 通过 MessagePort RPC 访问，不再经过此 bridge。
  */
 contextBridge.exposeInMainWorld("zcode", {
+  nekIpc: createNekIpcPreloadBridge(),
   connectRemote: (
     options: RemoteTarget,
     requestId?: string,

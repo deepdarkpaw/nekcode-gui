@@ -281,6 +281,25 @@ export const PlatformChannels = {
 export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof PlatformChannels];
 
 // ============================================================================
+// nekcode 设置/远程交互 IPC —— 通用请求与事件频道
+// ============================================================================
+
+/**
+ * 设置中心与远程交互使用通用方法分发，避免为每个契约方法创建一个 Electron channel。
+ * 请求只允许由 preload 构造，事件只由 main/host 回推到同一个 renderer。
+ */
+export const NekIpcChannels = {
+  ConfigInvoke: "nek:config:invoke",
+  ConfigEvent: "nek:config:event",
+  SettingsHostInvoke: "nek:settings-host:invoke",
+  SettingsHostEvent: "nek:settings-host:event",
+  RemoteInteractionInvoke: "nek:remote-interaction:invoke",
+  RemoteInteractionEvent: "nek:remote-interaction:event",
+} as const;
+
+export type NekIpcChannelName = (typeof NekIpcChannels)[keyof typeof NekIpcChannels];
+
+// ============================================================================
 // 内部传输频道 —— 框架级别的通信
 // ============================================================================
 /** 内部传输频道。用于 MessagePort 转发等框架级通信。 */

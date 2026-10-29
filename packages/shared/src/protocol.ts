@@ -6,6 +6,29 @@ import type { AppToolSearchMode } from "./app-runtime-preferences.js";
 
 // ── Domain types ──
 
+/** 通用 nek IPC 请求；args 由具体的 renderer/host 契约解释。 */
+export interface NekIpcRequest {
+  requestId: string;
+  operation: "invoke" | "subscribe" | "unsubscribe";
+  method: string;
+  args: unknown[];
+  /** invoke 的流式日志事件；只允许白名单方法使用。 */
+  event?: "log";
+}
+
+/** 通用 nek IPC 事件；payload 始终是契约层可序列化值。 */
+export interface NekIpcEvent {
+  requestId: string;
+  event: "log" | "subscription";
+  payload: unknown;
+}
+
+export interface NekIpcError {
+  code?: string;
+  message: string;
+  fieldErrors?: Record<string, string>;
+}
+
 export interface FileEntry {
   name: string;
   path: string;

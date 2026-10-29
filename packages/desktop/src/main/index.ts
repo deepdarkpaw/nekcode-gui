@@ -158,6 +158,7 @@ import { resolveCanonicalWslTarget } from "./desktopWslTargetResolver.js";
 import { listRegisteredHostAgentProcessIds } from "./resourceManagerWindow.js";
 import { registerPlatformIpcHandlers } from "./desktopMainIpcPlatform.js";
 import { registerRemoteIpcHandlers } from "./desktopMainIpcRemote.js";
+import { registerNekIpcHandlers } from "./desktopMainIpcNek.js";
 import { applyDesktopChromiumNetworkPolicies } from "./desktopNetworkPolicy.js";
 import {
   findWindowsProcessesReferencingResourceMarkers,
@@ -1503,6 +1504,7 @@ app.whenReady().then(async () => {
     listAvailableDockerContainers,
     listSSHConfigAliases,
   });
+  registerNekIpcHandlers(logger);
   registerDesktopStabilityMonitors(logger);
   registerDesktopResourceTelemetry(logger);
   registerDesktopNetworkTelemetry();
