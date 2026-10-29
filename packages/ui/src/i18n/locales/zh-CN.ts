@@ -3346,7 +3346,6 @@ const zhCN: Record<string, string> = {
   "settings.nek.apiKey.remove": "清除密钥",
   "settings.nek.apiKey.removePending": "保存后将删除已保存的密钥",
   "settings.nek.apiKey.removeUndo": "撤销清除",
-  "ui.action.busy": "正在处理上一个操作",
   "onboarding.back": "上一步",
   "onboarding.skip": "跳过此步",
   "onboarding.next": "下一步",
@@ -4105,7 +4104,6 @@ const zhCN: Record<string, string> = {
   "remote.nek.prompt.timeout": "等待输入超时，连接已取消",
   "remote.nek.prompt.aborted": "连接已取消",
   "remote.nek.prompt.disconnected": "窗口失去连接，请求已取消",
-  "ui.action.busy": "正在处理上一个操作",
 };
 
 export default zhCN;

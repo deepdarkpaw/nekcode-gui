@@ -3539,7 +3539,6 @@ const enUS: Record<string, string> = {
   "settings.nek.apiKey.remove": "Clear key",
   "settings.nek.apiKey.removePending": "The saved key is deleted when you save",
   "settings.nek.apiKey.removeUndo": "Keep key",
-  "ui.action.busy": "The previous operation is still processing",
   "onboarding.back": "Back",
   "onboarding.skip": "Skip this step",
   "onboarding.next": "Next",
@@ -4350,7 +4349,6 @@ const enUS: Record<string, string> = {
   "remote.nek.prompt.timeout": "Input timed out; the connection was cancelled",
   "remote.nek.prompt.aborted": "Connection cancelled",
   "remote.nek.prompt.disconnected": "The window lost its connection; the request was cancelled",
-  "ui.action.busy": "The previous action is still processing",
 };
 
 export default enUS;
