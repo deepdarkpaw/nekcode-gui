@@ -35,7 +35,10 @@ updated through their generators, not by manually deleting review markers.
 
 ## Remaining strict obligations
 
-After the Desktop CLI backfill, the aggregate lists 16 unresolved records: older
-publisher/copy notices, Skia and QuickJS build provenance, one old Rust standard
-library revision, and two objc2 Apple SDK-derived licensing questions. These
-remain visible and blocked. No general exemption was added to make strict green.
+After the Desktop CLI backfill the aggregate listed 16 unresolved records; the
+pruned plugins and packages removed the QuickJS-WASM build provenance and the
+objc2 Apple SDK questions with the code that pulled them in, leaving 10: seven
+older publisher notices without version-specific original files, one copied
+skill README, Skia's linked third-party libraries, and one old Rust standard
+library revision. These remain visible and blocked. No general exemption was
+added to make strict green.

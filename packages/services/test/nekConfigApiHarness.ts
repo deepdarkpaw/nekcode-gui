@@ -7,7 +7,7 @@
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { parse as parseJsonc } from "jsonc-parser";
-import type { NekAuthProviderStatusWire } from "@zcode/shared/nek-protocol";
+import type { NekAuthProviderStatusWire, NekBuiltinToolInfo } from "@zcode/shared/nek-protocol";
 import type {
   NekConfigTarget,
   NekConfigTargetInfo,
@@ -40,6 +40,11 @@ export const REMOTE: NekConfigTarget = { kind: "remote", connectionId: "ssh-1" }
 export class FakeControlClient implements NekControlClient {
   readonly commands: Array<{ type: string } & Record<string, unknown>> = [];
   readonly authStatus: NekAuthProviderStatusWire[];
+  /** `list_builtin_tools` 的返回值：由测试决定，宿主不再维护镜像。 */
+  builtinTools: NekBuiltinToolInfo[] = [
+    { name: "read", description: "Read a file", defaultActive: true },
+    { name: "powershell", description: "Run a PowerShell command", defaultActive: false },
+  ];
   private authListeners = new Set<(record: never) => void>();
   private handler: NekStructuredHandler | undefined;
   private loginResolve: ((value: { provider: string }) => void) | undefined;
@@ -142,6 +147,9 @@ export class FakeControlClient implements NekControlClient {
     }
     if (type === "get_model_catalog") {
       return { models: [] } as NekRpcResponseDataFor<C>;
+    }
+    if (type === "list_builtin_tools") {
+      return { tools: this.builtinTools } as NekRpcResponseDataFor<C>;
     }
     if (type === "fetch_provider_models") {
       return {

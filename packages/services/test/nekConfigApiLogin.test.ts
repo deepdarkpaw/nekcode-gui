@@ -178,9 +178,42 @@ test("auth status maps the fields nek actually returns", async () => {
       ["other", "ok"],
     ],
   );
-  // nek 目前不返回 state：host 不会凭空造出 refresh_failed。
+  // 早于 P2c 的 nek 不返回 state：host 不会凭空造出 refresh_failed。
   assert.equal(
     statuses.some((status) => status.state === "refresh_failed"),
     false,
+  );
+});
+
+test("auth status keeps the state nek computed", async () => {
+  const control = new FakeControlClient({
+    authStatus: [
+      {
+        provider: "anthropic",
+        name: "Anthropic",
+        kind: "oauth",
+        // nek 已按 expires <= now 判定：值就是最终结论，host 不再重新推导。
+        expiresAt: "2026-01-01T00:00:00Z",
+        state: "ok",
+        loginMethods: ["oauth"],
+      },
+      {
+        provider: "future",
+        name: "Future",
+        kind: "oauth",
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        state: "expired",
+        loginMethods: ["oauth"],
+      },
+    ],
+  });
+  const harness = createHarness({ control });
+  const statuses = await harness.api.getAuthStatus(LOCAL);
+  assert.deepEqual(
+    statuses.map((status) => [status.provider, status.state]),
+    [
+      ["anthropic", "ok"],
+      ["future", "expired"],
+    ],
   );
 });

@@ -165,11 +165,8 @@ export function canRetryDatabaseStartup(
   return (
     state.phase === "failed" &&
     state.failedPhase !== "starting_services" &&
-    ![
-      "corrupt",
-      "checksum_mismatch",
-      "transport_closed",
-      "startup_status_timeout",
-    ].includes(state.errorCode ?? "sql_failed")
+    !["corrupt", "checksum_mismatch", "transport_closed", "startup_status_timeout"].includes(
+      state.errorCode ?? "sql_failed",
+    )
   );
 }

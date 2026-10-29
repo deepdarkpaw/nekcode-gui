@@ -100,9 +100,7 @@ try {
   );
   const terminal = await run(node, [ptySmoke], options);
   assert.match(terminal.stdout, /PTY input\/resize\/exit OK/);
-  console.log(
-    "Remote bundle verified: Node, Server, PTY input/resize/exit, bfs, ripgrep, ugrep",
-  );
+  console.log("Remote bundle verified: Node, Server, PTY input/resize/exit, bfs, ripgrep, ugrep");
 } finally {
   await rm(staging, { recursive: true, force: true });
 }

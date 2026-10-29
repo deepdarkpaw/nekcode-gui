@@ -128,7 +128,7 @@ export interface INekConfigApi {
   getModelCatalog(target: NekConfigTarget, ids?: string[]): Promise<NekCatalogModel[]>;
   /** 当前目标上可用的模型（`provider/id`），用于默认模型、压缩模型、子代理模型选择。 */
   listAvailableModels(target: NekConfigTarget): Promise<NekCatalogModel[]>;
-  /** nek 当前版本没有 builtin-tools RPC 时，由 host 提供精确版本镜像。 */
+  /** nek 的内置工具清单（`list_builtin_tools`）：工具名、描述与默认启用状态。 */
   listBuiltinTools(target: NekConfigTarget): Promise<NekBuiltinTool[]>;
 
   // ---- settings.json ----

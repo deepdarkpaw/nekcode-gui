@@ -214,18 +214,6 @@
     "license": "MIT"
   },
   {
-    "id": "Superpowers skill description adaptations",
-    "referenceRevision": "f2cbfbefebbfef77321e4c9abc9e949826bea9d7",
-    "source": "https://raw.githubusercontent.com/obra/superpowers/f2cbfbefebbfef77321e4c9abc9e949826bea9d7/LICENSE",
-    "file": "third-party/upstream/a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400.txt",
-    "sha256": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
-    "importRevision": null,
-    "provenance": "Original import revision is not recorded. This pinned upstream license/source reference is not asserted to be the original import version.",
-    "roots": ["packages/ui/src/lib/builtinSkillI18n.ts"],
-    "scope": "Superpowers-derived skill descriptions and their translations only; unrelated descriptions from other projects in this file are not covered. The former bundled plugin implementation has been removed; only its retained license remains.",
-    "license": "MIT"
-  },
-  {
     "id": "React Best Practices skill",
     "referenceRevision": "063bee94c3f4df8453406c830b0a7df0f2860278",
     "source": "https://github.com/vercel-labs/agent-skills/tree/063bee94c3f4df8453406c830b0a7df0f2860278",

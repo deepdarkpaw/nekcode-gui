@@ -14,6 +14,7 @@ import {
   LOCAL,
   PROJECT,
   PROJECT_DIR,
+  REMOTE,
   createHarness,
   expectNekError,
   readJson,
@@ -925,20 +926,21 @@ test("agent presets report broken files as diagnostics with a directory revision
   assert.ok(fixed.entries.some((entry) => entry.preset.name === "fixed"));
 });
 
-test("builtin tools mirror nek, including powershell being off by default", async () => {
+test("builtin tools come from the nek control process", async () => {
   const harness = createHarness();
   const tools = await harness.api.listBuiltinTools(LOCAL);
   assert.deepEqual(
-    tools.map((tool) => tool.name),
-    ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls", "ast_grep", "web_search"],
+    harness.control.commands.map((command) => command.type),
+    ["list_builtin_tools"],
   );
+  assert.deepEqual(tools, harness.control.builtinTools);
   assert.equal(tools.find((tool) => tool.name === "powershell")?.defaultActive, false);
-  assert.equal(tools.find((tool) => tool.name === "read")?.defaultActive, true);
-  // 返回副本：改结果不会污染镜像
-  const first = tools[0];
-  assert.ok(first);
-  first.name = "mutated";
-  assert.equal((await harness.api.listBuiltinTools(LOCAL))[0]?.name, "read");
+
+  // 清单完全由 nek 决定：换一份返回值就换一份结果，宿主没有硬编码镜像。
+  harness.control.builtinTools = [{ name: "webfetch", defaultActive: false }];
+  assert.deepEqual(await harness.api.listBuiltinTools(REMOTE), [
+    { name: "webfetch", defaultActive: false },
+  ]);
 });
 
 test("mcp entries carry the file they come from", async () => {
@@ -954,75 +956,62 @@ test("mcp entries carry the file they come from", async () => {
   assert.equal(project.servers[0]?.path, PROJECT_MCP_PATH);
 });
 
-test("fetching models and testing a provider accept {providerId} or {providerId, draft}", async () => {
-  const harness = createHarness({
-    localFiles: {
-      [MODELS_PATH]: modelsFile(`{
-    "local": {
-      "api": "openai-completions",
-      "baseUrl": "http://saved",
-      "apiKey": "sk-saved",
-      "headers": { "x-saved": "1" },
-      "models": [{ "id": "m1" }]
-    }
-  }`),
-    },
-  });
+test("fetching models and testing a provider send the provider id plus draft overrides", async () => {
+  const harness = createHarness();
 
   await harness.api.fetchProviderModels(LOCAL, { providerId: "local" });
-  const savedCommand = harness.control.commands.at(-1);
-  assert.equal(savedCommand?.type, "fetch_provider_models");
-  assert.equal(savedCommand?.provider, "local");
-  assert.equal(savedCommand?.draft, undefined);
+  assert.deepEqual(harness.control.commands.at(-1), {
+    type: "fetch_provider_models",
+    provider: "local",
+  });
 
-  // 草稿只带端点与请求头：密钥沿用 models.json 里保存的那个。
+  // 草稿只带端点：没写的密钥/请求头由 nek 沿用已保存的值，宿主不再读 models.json。
   await harness.api.fetchProviderModels(LOCAL, {
     providerId: "local",
     draft: { api: "anthropic-messages", baseUrl: "http://draft" },
   });
-  const draftCommand = harness.control.commands.at(-1);
-  assert.equal(draftCommand?.provider, undefined);
-  assert.deepEqual(draftCommand?.draft, {
-    api: "anthropic-messages",
-    baseUrl: "http://draft",
-    apiKey: "sk-saved",
-    headers: { "x-saved": "1" },
+  assert.deepEqual(harness.control.commands.at(-1), {
+    type: "fetch_provider_models",
+    provider: "local",
+    overrides: { api: "anthropic-messages", baseUrl: "http://draft" },
   });
 
   const tested = await harness.api.testProvider(
     LOCAL,
-    { providerId: "local", draft: { api: "openai-completions", baseUrl: "http://draft" } },
+    {
+      providerId: "local",
+      draft: {
+        api: "openai-completions",
+        baseUrl: "http://draft",
+        apiKey: "$DRAFT_KEY",
+        headers: { "x-draft": "1" },
+        authHeader: false,
+      },
+    },
     "m1",
   );
   assert.deepEqual(tested, { ok: true, latencyMs: 7 });
-  const testCommand = harness.control.commands.at(-1);
-  assert.equal(testCommand?.type, "test_provider");
-  assert.equal(testCommand?.modelId, "m1");
-  assert.deepEqual(testCommand?.draft, {
-    api: "openai-completions",
-    baseUrl: "http://draft",
-    apiKey: "sk-saved",
-    headers: { "x-saved": "1" },
+  assert.deepEqual(harness.control.commands.at(-1), {
+    type: "test_provider",
+    modelId: "m1",
+    provider: "local",
+    overrides: {
+      api: "openai-completions",
+      baseUrl: "http://draft",
+      apiKey: "$DRAFT_KEY",
+      headers: { "x-draft": "1" },
+      authHeader: false,
+    },
   });
 
-  // 草稿里的密钥优先（支持 $ENV 写法）
-  await harness.api.fetchProviderModels(LOCAL, {
-    providerId: "local",
-    draft: { api: "openai-completions", baseUrl: "http://draft", apiKey: "$DRAFT_KEY" },
+  // 未知 provider 交给 nek 判定（它回 "Unknown provider: <id>"），宿主不预读配置。
+  await harness.api.fetchProviderModels(REMOTE, {
+    providerId: "missing",
+    draft: { api: "openai-completions", baseUrl: "http://draft" },
   });
-  assert.equal(
-    (harness.control.commands.at(-1)?.draft as { apiKey?: string } | undefined)?.apiKey,
-    "$DRAFT_KEY",
-  );
+  assert.equal(harness.control.commands.at(-1)?.provider, "missing");
 
-  await expectNekError(
-    async () =>
-      await harness.api.fetchProviderModels(LOCAL, {
-        providerId: "missing",
-        draft: { api: "openai-completions", baseUrl: "http://draft" },
-      }),
-    "validation",
-  );
+  // 空 providerId 仍然本地拒绝：不必为一次拼错的调用来回起控制进程。
   await expectNekError(
     async () => await harness.api.fetchProviderModels(LOCAL, { providerId: "" }),
     "validation",

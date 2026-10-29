@@ -15,16 +15,14 @@ import type {
   NekLoginSession,
   NekProjectTrust,
   NekProviderDraft,
+  NekProviderOverrides,
   NekTestProviderResult,
   NekTestWebSearchResult,
 } from "@zcode/shared/nek-protocol";
 import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import type { NekModel } from "@zcode/shared/nek-protocol";
 import type { NekConfigRuntime } from "./runtime.js";
-import { listBuiltinTools } from "./builtinTools.js";
 import { validationError } from "./errors.js";
-import { readModelsSnapshot } from "./modelsDocument.js";
-import { modelsPath } from "./paths.js";
 
 export type ProviderSource = { providerId: string; draft?: NekProviderDraft };
 
@@ -88,50 +86,31 @@ export function toCatalogModel(model: NekModel): NekCatalogModel {
 /**
  * 请求来源 → nek 命令参数。
  *
- * 两种参数共用 `providerId`：没有 `draft` 时直接用已保存的 provider；有 `draft` 时
- * 用**已保存的 apiKey**（草稿里没写就取 saved 值）加草稿里的其他字段，这样"改了 baseUrl /
- * headers 但没重新输入密钥"也能测试。草稿里的 apiKey 优先，支持 `$ENV` / `!command`。
+ * 两种来源共用 `providerId`：没有 `draft` 时直接用已保存的 provider；有 `draft` 时把草稿里
+ * 写了的字段作为 `overrides` 交给 nek，由 nek 叠加在已保存的 provider 之上——没写的字段
+ * （密钥、请求头、`authHeader`）沿用保存值，所以"改了 baseUrl 但没重新输入密钥"照样能测。
+ * nek 的 `overrides` 支持 `$ENV` / `!command`，与 models.json 的解析规则一致。
  */
-async function sourceCommand(
-  runtime: NekConfigRuntime,
-  target: NekConfigTarget,
-  source: ProviderSource,
-): Promise<{ providerId: string } | { draft: NekProviderDraft }> {
+function providerCommand(source: ProviderSource): {
+  provider: string;
+  overrides?: NekProviderOverrides;
+} {
   if (source.providerId.trim() === "") {
     throw validationError("providerId is required", { providerId: "required" });
   }
-  if (!source.draft) return { providerId: source.providerId };
-  const context = runtime.target(target);
-  const snapshot = await readModelsSnapshot(context.executor, modelsPath(context.layout));
-  const provider = snapshot.providers[source.providerId];
-  if (!provider) {
-    throw validationError(`unknown provider "${source.providerId}"`, { providerId: "unknown" });
-  }
-  const savedKey = typeof provider.apiKey === "string" ? provider.apiKey : undefined;
-  const apiKey = source.draft.apiKey ?? savedKey;
-  const headers = source.draft.headers ?? asHeaders(provider.headers);
-  const authHeader = source.draft.authHeader ?? asBoolean(provider.authHeader);
+  if (!source.draft) return { provider: source.providerId };
+  return { provider: source.providerId, overrides: overridesOf(source.draft) };
+}
+
+/** 草稿的字段全部可选地映射成 `overrides`；缺省的字段表示沿用已保存的值。 */
+function overridesOf(draft: NekProviderDraft): NekProviderOverrides {
   return {
-    draft: {
-      api: source.draft.api ?? (provider.api as NekProviderDraft["api"]),
-      baseUrl: source.draft.baseUrl ?? String(provider.baseUrl ?? ""),
-      ...(apiKey === undefined ? {} : { apiKey }),
-      ...(headers === undefined ? {} : { headers }),
-      ...(authHeader === undefined ? {} : { authHeader }),
-    },
+    api: draft.api,
+    baseUrl: draft.baseUrl,
+    ...(draft.apiKey === undefined ? {} : { apiKey: draft.apiKey }),
+    ...(draft.headers === undefined ? {} : { headers: draft.headers }),
+    ...(draft.authHeader === undefined ? {} : { authHeader: draft.authHeader }),
   };
-}
-
-function asHeaders(value: unknown): Record<string, string> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const entries = Object.entries(value as Record<string, unknown>).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
-  );
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
-}
-
-function asBoolean(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
 }
 
 export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
@@ -153,28 +132,19 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
     },
 
     listBuiltinTools: async (target) => {
-      runtime.target(target);
-      return listBuiltinTools();
+      const control = await runtime.control(target);
+      const data = await control.call({ type: "list_builtin_tools" });
+      return data.tools;
     },
 
     fetchProviderModels: async (target, source) => {
       const control = await runtime.control(target);
-      const resolved = await sourceCommand(runtime, target, source);
-      const command =
-        "draft" in resolved
-          ? { type: "fetch_provider_models" as const, draft: resolved.draft }
-          : { type: "fetch_provider_models" as const, provider: resolved.providerId };
-      return await control.call(command);
+      return await control.call({ type: "fetch_provider_models", ...providerCommand(source) });
     },
 
     testProvider: async (target, source, modelId) => {
       const control = await runtime.control(target);
-      const resolved = await sourceCommand(runtime, target, source);
-      const command =
-        "draft" in resolved
-          ? { type: "test_provider" as const, modelId, draft: resolved.draft }
-          : { type: "test_provider" as const, modelId, provider: resolved.providerId };
-      return await control.call(command);
+      return await control.call({ type: "test_provider", modelId, ...providerCommand(source) });
     },
 
     testWebSearch: async (target, query) => {
