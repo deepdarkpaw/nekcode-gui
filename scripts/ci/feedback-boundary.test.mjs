@@ -43,16 +43,20 @@ test("Host initialization does not propagate obsolete feedback endpoints or devi
   );
 });
 
-test("task notifications preserve execution and permission states without ticket updates", () => {
+test("task notifications keep only execution and elicitation states without ticket updates", () => {
   const notification = { taskId: "fixture", title: "title", body: "body" };
-  for (const status of ["completed", "failed", "permission_request", "elicitation_request"]) {
+  for (const status of ["completed", "failed", "elicitation_request"]) {
     assert.equal(
       taskNotificationPayloadSchema.safeParse({ ...notification, status }).success,
       true,
     );
   }
-  assert.equal(
-    taskNotificationPayloadSchema.safeParse({ ...notification, status: "feedback_update" }).success,
-    false,
-  );
+  // 逐工具权限审批通道已删除，任务通知不再有 permission_request 状态。
+  for (const status of ["permission_request", "feedback_update"]) {
+    assert.equal(
+      taskNotificationPayloadSchema.safeParse({ ...notification, status }).success,
+      false,
+      `${status} 不应再被任务通知接受`,
+    );
+  }
 });

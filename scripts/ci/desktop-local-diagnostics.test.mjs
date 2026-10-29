@@ -210,9 +210,31 @@ test("process lifecycle diagnostic contracts reject raw errors and private spawn
     false,
   );
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(
-    new URL("../../packages/services/src/zcode-agent/zcodeAgentProcessManager.ts", import.meta.url),
+  // 旧 zcode agent 进程管理器已随运行时删除。stderr 现在只由 nek-agent 里的一个有界环形缓冲持有，
+  // 进程层代码不许再另存一份无界 stderr 副本。
+  for (const file of ["nekRpcClient.ts", "nekRpcProcess.ts", "nekProcessLauncher.ts"]) {
+    const source = await readFile(
+      new URL(`../../packages/services/src/nek-agent/${file}`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      source,
+      /createAgentStderrTail|stderr\s*\+=/,
+      `${file} 不得另存无界 stderr`,
+    );
+  }
+  const client = await readFile(
+    new URL("../../packages/services/src/nek-agent/nekRpcClient.ts", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(source, /createAgentStderrTail|stderrTail:/);
+  assert.match(client, /NekStderrRingBuffer/, "nek RPC 客户端必须把 stderr 存进有界环形缓冲");
+  const { summarizeStderr } = await tsImport(
+    "../../packages/services/src/nek-agent/nekLocator.ts",
+    import.meta.url,
+  );
+  const summary = summarizeStderr(
+    Array.from({ length: 200 }, (_, index) => `line-${index}`).join("\n"),
+  );
+  assert.equal(summary.split("\n").length, 20, "定位器错误摘要必须按行有界");
+  assert.ok(summary.length <= 2049, "定位器错误摘要必须按字节有界");
 });

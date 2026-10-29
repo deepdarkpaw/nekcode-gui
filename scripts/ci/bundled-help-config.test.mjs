@@ -13,10 +13,6 @@ const { readDesktopHelpConfig } = await tsImport(
   "../../packages/desktop/src/main/desktopHelpConfig.ts",
   import.meta.url,
 );
-const { resolveZCodeAgentPresentationSurface } = await tsImport(
-  "../../packages/services/src/zcode-agent/zcodeAgentPresentationSurface.ts",
-  import.meta.url,
-);
 const bundled = JSON.parse(
   await readFile(new URL("../../config/default.json", import.meta.url), "utf8"),
 );
@@ -65,31 +61,5 @@ test("Desktop packaged/development and Web help use the same bundled links witho
   await writeFile(join(resources, "config/default.json"), "malformed");
   await assert.rejects(
     readDesktopHelpConfig({ isPackaged: true, appPath: "unused", resourcesPath: resources }),
-  );
-});
-
-test("desktop prompt is derived from Host facts with a local opt-out, never enabled on manual servers", () => {
-  assert.equal(
-    resolveZCodeAgentPresentationSurface({ runtimeSurface: "desktop_local_host" }),
-    "desktop",
-  );
-  assert.equal(
-    resolveZCodeAgentPresentationSurface({ serviceAuthorityMode: "desktop-attached-remote" }),
-    "desktop",
-  );
-  assert.equal(
-    resolveZCodeAgentPresentationSurface({
-      runtimeSurface: "desktop_local_host",
-      desktopContextPromptEnabled: false,
-    }),
-    undefined,
-  );
-  assert.equal(
-    resolveZCodeAgentPresentationSurface({ runtimeSurface: "remote_workspace_host" }),
-    undefined,
-  );
-  assert.equal(
-    resolveZCodeAgentPresentationSurface({ desktopContextPromptEnabled: true }),
-    undefined,
   );
 });
