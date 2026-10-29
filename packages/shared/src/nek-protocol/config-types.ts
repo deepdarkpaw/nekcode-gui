@@ -400,8 +400,25 @@ export interface NekInstallOptions {
 }
 
 export type NekInstallResult =
-  | { ok: true; version: string }
-  | { ok: false; message: string; manualCommand: string };
+  | { ok: true; version: string; cancelled?: false; manualCommand?: never }
+  | { ok: false; cancelled: boolean; message: string; manualCommand: string };
+
+export type NekLocalDetection =
+  | { status: "ready"; version: string; path: string; protocolVersion: number }
+  | { status: "not_installed" }
+  | {
+      status: "incompatible";
+      version: string;
+      path: string;
+      protocolVersion: number;
+      requiredProtocolVersion: number;
+    }
+  | { status: "failed"; message: string };
+
+export interface NekOnboardingState {
+  completedAt?: string;
+  dismissedAt?: string;
+}
 
 export interface NekUpdateCheck {
   current: string;
@@ -439,6 +456,15 @@ export interface INekSettingsHostApi {
   openExternal(url: string): Promise<void>;
   copyText(text: string): Promise<void>;
   getAppInfo(): Promise<NekAppInfo>;
+  detectLocalNek(): Promise<NekLocalDetection>;
+  installLocalNek(
+    options: NekInstallOptions,
+    onLog: (line: string) => void,
+  ): Promise<NekInstallResult>;
+  cancelLocalInstall(): Promise<void>;
+  pickDirectory(): Promise<string | null>;
+  getOnboardingState(): Promise<NekOnboardingState>;
+  setOnboardingState(patch: Partial<NekOnboardingState>): Promise<void>;
   checkNekUpdate(target: NekConfigTarget): Promise<NekUpdateCheck>;
   runNekUpdate(
     target: NekConfigTarget,

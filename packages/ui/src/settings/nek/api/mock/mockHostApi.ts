@@ -1,7 +1,12 @@
 /**
  * `INekSettingsHostApi` 的内存 mock：主机列表与 mock 配置 API 的远程目标保持一致。
  */
-import type { NekConfigTarget } from "@zcode/shared/nek-protocol";
+import type {
+  NekConfigTarget,
+  NekInstallOptions,
+  NekLocalDetection,
+  NekOnboardingState,
+} from "@zcode/shared/nek-protocol";
 import type { INekSettingsHostApi, NekRemoteHost } from "../hostApi.js";
 import type { MockNekConfigApi } from "./mockNekConfigApi.js";
 import { MOCK_REMOTE_CONNECTED, MOCK_REMOTE_DISCONNECTED } from "./mockSeed.js";
@@ -62,7 +67,16 @@ export class MockNekSettingsHostApi implements INekSettingsHostApi {
   private readonly listeners = new Set<() => void>();
   /** 每台主机当前进行中的安装；`cancelInstall` 用它作废进行中的迭代。 */
   private readonly installs = new Map<string, symbol>();
+  private localInstallToken: symbol | undefined;
   private seq = 0;
+  onboardingState: NekOnboardingState = {};
+  localNek: NekLocalDetection = {
+    status: "ready",
+    path: "/home/me/.local/bin/nek",
+    version: "0.4.0",
+    protocolVersion: 1,
+  };
+  selectedDirectory: string | null = "/home/me/projects/nekcode-gui";
 
   constructor(
     private readonly config: MockNekConfigApi,
@@ -218,6 +232,68 @@ export class MockNekSettingsHostApi implements INekSettingsHostApi {
   async getAppInfo() {
     await delay(this.latencyMs);
     return { guiVersion: "0.1.0-dev", platform: "win32", logsDir: "~/.nek/gui/logs" };
+  }
+
+  async detectLocalNek() {
+    await delay(this.latencyMs);
+    return structuredClone(this.localNek);
+  }
+
+  async getOnboardingState() {
+    await delay(this.latencyMs);
+    return structuredClone(this.onboardingState);
+  }
+
+  async setOnboardingState(patch: Partial<NekOnboardingState>) {
+    await delay(this.latencyMs);
+    this.onboardingState = { ...this.onboardingState, ...patch };
+  }
+
+  async installLocalNek(_options: NekInstallOptions, onLog: (line: string) => void) {
+    const lines = [
+      "Downloading install.sh",
+      "Installing Node.js runtime",
+      "Installing nek 0.4.0",
+      "Done",
+    ];
+    const token = Symbol("local-install");
+    this.localInstallToken = token;
+    try {
+      for (const line of lines) {
+        await delay(Math.max(this.latencyMs, 200));
+        if (this.localInstallToken !== token) {
+          return {
+            ok: false as const,
+            cancelled: true,
+            message: "install cancelled",
+            manualCommand: "nek install",
+          };
+        }
+        onLog(line);
+      }
+      this.localNek = {
+        status: "ready",
+        path: "/home/me/.local/bin/nek",
+        version: "0.4.0",
+        protocolVersion: 1,
+      };
+      return {
+        ok: true as const,
+        version: "0.4.0",
+        cancelled: false as const,
+      };
+    } finally {
+      if (this.localInstallToken === token) this.localInstallToken = undefined;
+    }
+  }
+
+  async cancelLocalInstall() {
+    this.localInstallToken = undefined;
+  }
+
+  async pickDirectory() {
+    await delay(this.latencyMs);
+    return this.selectedDirectory;
   }
 
   async checkNekUpdate(_target: NekConfigTarget) {
