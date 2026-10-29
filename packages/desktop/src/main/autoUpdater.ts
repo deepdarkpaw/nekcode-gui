@@ -815,14 +815,53 @@ async function syncAutoUpdateCheckChannelFromSettings(
   activeAutoUpdateCheckChannel = nextChannel;
 }
 
+/**
+ * 决定本轮更新走哪个 feed。
+ *
+ * 三条来源，优先级从高到低：
+ * 1. 开发态显式 feed 覆盖（`ZCODE_UPDATE_FEED_URL` / `--zcode-update-feed-url`，仅未打包生效）
+ *    → electron-updater 的 generic provider；
+ * 2. 构建期注入的自有 manifest 源（`ZCODIUM_UPDATE_ORIGIN`，自建分发时才注入）
+ *    → 仓库自有的 manifest provider；
+ * 3. 都没有 → 不调用 setFeedURL，electron-updater 读取打包产物里的 `app-update.yml`，
+ *    也就是 electron-builder 按 `publish: { provider: "github" }` 写下的 GitHub Releases 源。
+ *
+ * 第 3 条是 nekcode 的默认更新链路：不再强制绑定 ZCode 的服务端 manifest，
+ * 也不再需要占位 generic feed。
+ */
+function applyUpdateFeed(options: InitAutoUpdaterOptions): void {
+  const feedUrl = options.updateFeedSource?.url.trim();
+  if (feedUrl) {
+    resolveAutoUpdater().setFeedURL({
+      provider: "generic",
+      url: feedUrl,
+      // 与打包配置保持一致：多 Range 请求在部分 CDN 上会退化成整包下载。
+      useMultipleRangeRequest: false,
+    });
+    logger.info(
+      `[auto-update] generic update feed applied url=${redactUpdateFeedUrlForLog(feedUrl)}`,
+    );
+    return;
+  }
+
+  if (!ZCODIUM_UPDATE_ORIGIN) {
+    // 未注入自有更新源：保持 electron-updater 的默认 provider，
+    // 由打包产物 app-update.yml（GitHub Releases）决定更新地址。
+    logger.info("[auto-update] 使用打包内置的 GitHub Releases 更新源（app-update.yml）");
+    return;
+  }
+
+  applyManifestUpdateProvider(options);
+}
+
 function applyManifestUpdateProvider(options: InitAutoUpdaterOptions): void {
   const manifestUrl = options.updateFeedSource?.url.trim();
   resolveAutoUpdater().setFeedURL({
     provider: "custom",
     updateProvider: ManifestUpdateProvider,
     // 上游 DEFAULT_ZCODE_ENDPOINT_ORIGIN 的 manifest 分发官方 ZCode 安装包（appId dev.zcode.app），
-    // 与本仓库构建的 ZCodium 不是同一个应用，沿用会把自己的客户端更新成上游版本。
-    // 更新源只认自有 origin；未配置时调用方不会走到这里（见 initAutoUpdater 的提前返回）。
+    // 与本仓库构建的 nekcode 不是同一个应用，沿用会把自己的客户端更新成上游版本。
+    // 更新源只认构建期注入的自有 origin；未注入时 applyUpdateFeed 走 GitHub Releases 默认源。
     endpointOrigin: ZCODIUM_UPDATE_ORIGIN,
     ...(manifestUrl ? { manifestUrl } : {}),
     releasePlatform: getElectronReleasePlatform(),
@@ -1538,16 +1577,13 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
   autoUpdaterDisabledForProductFlavor = false;
   if (!canUseAutoUpdaterInCurrentRuntime()) return;
 
-  // 自有更新源未配置时不做任何检查：上游源会分发官方 ZCode 安装包，不能作为兜底。
-  // 这里连 provider 都不配置，避免 electron-updater 回落到 app-update.yml 里的占位 feed。
+  // 未注入自有更新源（ZCODIUM_UPDATE_ORIGIN）时不再禁用整条更新链路：
+  // nekcode 的默认更新源是打包产物 app-update.yml 里的 GitHub Releases，
+  // 具体 provider 由 applyUpdateFeed 决定，这里只记录走的是哪条链路。
   if (!ZCODIUM_UPDATE_ORIGIN) {
-    autoUpdaterDisabledForProductFlavor = true;
-    if (autoUpdatePollTimer) {
-      clearInterval(autoUpdatePollTimer);
-      autoUpdatePollTimer = null;
-    }
-    logger.info("[auto-update] 未配置自有更新源（ZCODIUM_UPDATE_ORIGIN），跳过更新检查");
-    return;
+    logger.info(
+      "[auto-update] 未配置自有更新源（ZCODIUM_UPDATE_ORIGIN），回落到 GitHub Releases 更新源",
+    );
   }
 
   onBeforeQuitAndInstall = options.onBeforeQuitAndInstall;
@@ -1582,7 +1618,7 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
   // 这里仅在 Windows 关闭“退出即自动安装”，要求用户显式点更新；其他平台保持原有行为，避免改动既有升级链路。
   resolveAutoUpdater().autoInstallOnAppQuit = process.platform !== "win32";
   resolveAutoUpdater().logger = logger;
-  applyManifestUpdateProvider(options);
+  applyUpdateFeed(options);
 
   const triggerCheckForUpdates = (reason: string) => {
     if (checkForUpdatesInFlight) {
