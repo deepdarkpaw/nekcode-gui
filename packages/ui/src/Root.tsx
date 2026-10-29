@@ -49,6 +49,11 @@ import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveRootWorkspaceShellTarget } from "@/root/rootWorkspaceShellTarget.js";
 import { OccupationOnboarding } from "@/onboarding/OccupationOnboarding.js";
 import { OnboardingDialog } from "@/onboarding/OnboardingDialog.js";
+import { NekOnboardingModal } from "@/onboarding/NekOnboardingModal.js";
+import { NekRemotePromptHost } from "@/remote/nek/NekRemotePromptHost.js";
+import { NekSettingsProvider } from "@/settings/nek/api/NekSettingsContext.js";
+import { resolveNekSettingsApis } from "@/settings/nek/api/registry.js";
+import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { useRemoteWorkspaceHistory } from "@/root/useRemoteWorkspaceHistory.js";
 import { useRemoteWorkspaceTabLifecycle } from "@/root/useRemoteWorkspaceTabLifecycle.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
@@ -87,6 +92,7 @@ interface RemoteConnectionOpenPreference {
  * 外层挂载 StoreProvider（连接广播服务）+ TabStoreProvider，内层处理启动和路由。
  */
 export function Root(props: RootProps) {
+  const nekApis = resolveNekSettingsApis();
   return (
     <LucideProvider strokeWidth={DEFAULT_LUCIDE_STROKE_WIDTH}>
       {/*
@@ -108,7 +114,9 @@ export function Root(props: RootProps) {
                   <AssistantCodeCommentFeatureProvider
                     enabled={props.assistantCodeCommentCardsEnabled}
                   >
-                    <RootInner {...props} />
+                    <NekSettingsProvider apis={nekApis}>
+                      <RootInner {...props} />
+                    </NekSettingsProvider>
                   </AssistantCodeCommentFeatureProvider>
                 </DiffsWorkerPoolProvider>
               </TabStoreProvider>
@@ -301,6 +309,7 @@ function RootInner({
     countAllUnreadTasks(state.workspaces),
   );
   const addTab = useTabStore((state) => state.addTab);
+  const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const activateTabByPath = useTabStore((state) => state.activateTabByPath);
   const tabStoreApi = useTabStoreApi();
   useRootProviderSettingsSnapshot(services);
@@ -389,6 +398,54 @@ function RootInner({
     addTab,
     onWorkspaceActivated: handleRemoteWorkspaceActivated,
   });
+
+  const handleOnboardingComplete = useCallback(
+    async (selection: import("@/onboarding/onboardingFlow.js").OnboardingSelection | null) => {
+      if (!selection) return;
+      if (selection.kind === "local") {
+        await handleSelectProject(selection.path);
+        return;
+      }
+      await handleSelectRemoteProject(selection.connectionId, selection.path);
+    },
+    [handleSelectProject, handleSelectRemoteProject],
+  );
+  const handleOnboardingOpenLogin = useCallback(
+    (provider: "anthropic" | "openai-codex") => {
+      setPendingSettingsSectionIntent("nekAccounts");
+      openSettingsTab();
+      logger.info("[Root] onboarding requested account login", { provider });
+    },
+    [openSettingsTab],
+  );
+  const handleOnboardingOpenProviderForm = useCallback(() => {
+    setPendingSettingsSectionIntent("nekProviders");
+    openSettingsTab();
+  }, [openSettingsTab]);
+  const handleOnboardingOpenKnownHosts = useCallback(
+    (connectionId: string) => {
+      setPendingSettingsSectionIntent("nekRemoteHosts");
+      openSettingsTab();
+      logger.info("[Root] onboarding requested known-host management", { connectionId });
+    },
+    [openSettingsTab],
+  );
+  const remotePromptHost = (
+    <NekRemotePromptHost
+      connectionId={workspaceShellRemoteSessionId}
+      onOpenKnownHosts={handleOnboardingOpenKnownHosts}
+    />
+  );
+  const nekOnboardingModal = (
+    <NekOnboardingModal
+      childDialogOpen={remoteConnectionInProgress}
+      onComplete={handleOnboardingComplete}
+      onClose={() => undefined}
+      onOpenLogin={handleOnboardingOpenLogin}
+      onOpenProviderForm={handleOnboardingOpenProviderForm}
+      onOpenRemote={handleOpenRemoteConnection}
+    />
+  );
 
   useEffect(() => {
     // fileDisplay 默认不传 basePath 时需要落到“当前激活 workspace”。
@@ -734,6 +791,8 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
+        {remotePromptHost}
+        {nekOnboardingModal}
         <RootStartupLoading label={loadingLabel} />
       </RootShell>
     );
@@ -747,6 +806,8 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
+        {remotePromptHost}
+        {nekOnboardingModal}
         <RootStartupLoading label={errorLabel} busy={false}>
           <p role="alert" className="max-w-sm px-4 text-center text-ui-base">
             {errorLabel}
@@ -783,6 +844,8 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {initialWorkspaceLoadingFallback}
         {directoryBrowserDialog}
+        {remotePromptHost}
+        {nekOnboardingModal}
       </RootShell>
     );
   }
@@ -793,6 +856,8 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
+        {remotePromptHost}
+        {nekOnboardingModal}
         <OccupationOnboarding
           showWindowControls={Boolean(isWindowsDesktop || (isDesktop && !isMacDesktop))}
           showChildrenWhileLoading={!workspaceShellPath && isSettingsTabActive}
