@@ -113,6 +113,28 @@ describe("onboarding controller", () => {
     );
   });
 
+  it("common §2.3: one navigation submission disables the other with ui.action.busy", async () => {
+    const env = createNekTestEnv();
+    let resolvePersist!: () => void;
+    env.host.setOnboardingState = async () =>
+      await new Promise<void>((resolve) => {
+        resolvePersist = resolve;
+      });
+    const { result } = renderHook(() => useNekOnboardingController(props()), {
+      wrapper: env.wrapper,
+    });
+    await waitFor(() => expect(result.current.view.nek.status).toBe("ready"));
+    let closing: Promise<void>;
+    act(() => {
+      closing = result.current.actions.close.run();
+    });
+    await waitFor(() => expect(result.current.actions.close.pending).toBe(true));
+    expect(result.current.actions.next.enabled).toBe(false);
+    expect(result.current.actions.next.disabledReason?.id).toBe("ui.action.busy");
+    resolvePersist();
+    await act(async () => closing);
+  });
+
   it("FL-1/FL-5/WS-4: primary action changes by step and completion persists selection", async () => {
     const env = createNekTestEnv();
     const onComplete = vi.fn();

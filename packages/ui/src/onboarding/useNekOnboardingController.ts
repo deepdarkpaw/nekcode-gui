@@ -92,8 +92,15 @@ function useFlowReducer(startStep: OnboardingStep, open: boolean) {
   return [state, dispatch] as const;
 }
 
-function actionEnabled(enabled: boolean, installing: boolean, reason: { id: string }) {
-  return enabled && !installing ? undefined : installing ? INSTALLING_REASON : reason;
+function actionEnabled(
+  enabled: boolean,
+  installing: boolean,
+  busy: boolean,
+  reason: { id: string },
+) {
+  if (installing) return INSTALLING_REASON;
+  if (busy) return { id: "ui.action.busy" };
+  return enabled ? undefined : reason;
 }
 
 export function useNekOnboardingController(props: OnboardingControllerProps): OnboardingController {
@@ -109,7 +116,21 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
     onOpenRemote: props.onOpenRemote,
   });
   const [attention, setAttention] = useState(false);
+  const [navigationBusy, setNavigationBusy] = useState(false);
+  const navigationBusyRef = useRef(false);
   const now = props.now ?? (() => new Date().toISOString());
+
+  const runNavigation = useCallback(async (action: () => Promise<void>) => {
+    if (navigationBusyRef.current) return;
+    navigationBusyRef.current = true;
+    setNavigationBusy(true);
+    try {
+      await action();
+    } finally {
+      navigationBusyRef.current = false;
+      setNavigationBusy(false);
+    }
+  }, []);
 
   useEffect(() => {
     dispatch({ type: "setStepDone", step: "nek", done: nekController.state.status === "ready" });
@@ -138,30 +159,38 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
   }, [api, now, props.onClose]);
 
   const back = useOnboardingAction({
-    action: async () => dispatch({ type: "back" }),
+    action: () => runNavigation(async () => dispatch({ type: "back" })),
     visible: flow.currentStep !== "nek",
-    enabled: flow.currentStep !== "nek" && !flow.installing,
-    disabledReason: actionEnabled(flow.currentStep !== "nek", flow.installing, INSTALLING_REASON),
+    enabled: flow.currentStep !== "nek" && !flow.installing && !navigationBusy,
+    disabledReason: actionEnabled(
+      flow.currentStep !== "nek",
+      flow.installing,
+      navigationBusy,
+      INSTALLING_REASON,
+    ),
   });
   const skip = useOnboardingAction({
-    action: async () => {
-      if (flow.currentStep === "workspace") await finish(null);
-      else dispatch({ type: "skip" });
-    },
+    action: () =>
+      runNavigation(async () => {
+        if (flow.currentStep === "workspace") await finish(null);
+        else dispatch({ type: "skip" });
+      }),
     visible: flow.steps[flow.currentStep] !== "done",
-    enabled: !flow.installing,
-    disabledReason: actionEnabled(true, flow.installing, INSTALLING_REASON),
+    enabled: !flow.installing && !navigationBusy,
+    disabledReason: actionEnabled(true, flow.installing, navigationBusy, INSTALLING_REASON),
   });
   const next = useOnboardingAction({
-    action: async () => {
-      if (flow.currentStep === "workspace") await finish(workspaceController.view.selection);
-      else dispatch({ type: "next" });
-    },
-    enabled: flow.steps[flow.currentStep] === "done" && !flow.installing,
+    action: () =>
+      runNavigation(async () => {
+        if (flow.currentStep === "workspace") await finish(workspaceController.view.selection);
+        else dispatch({ type: "next" });
+      }),
+    enabled: flow.steps[flow.currentStep] === "done" && !flow.installing && !navigationBusy,
     primary: flow.steps[flow.currentStep] === "done",
     disabledReason: actionEnabled(
       flow.steps[flow.currentStep] === "done",
       flow.installing,
+      navigationBusy,
       flow.currentStep === "nek"
         ? NEED_NEK_REASON
         : flow.currentStep === "account"
@@ -170,10 +199,10 @@ export function useNekOnboardingController(props: OnboardingControllerProps): On
     ),
   });
   const closeAction = useOnboardingAction({
-    action: close,
-    enabled: !flow.installing,
+    action: () => runNavigation(close),
+    enabled: !flow.installing && !navigationBusy,
     destructive: false,
-    disabledReason: actionEnabled(true, flow.installing, INSTALLING_REASON),
+    disabledReason: actionEnabled(true, flow.installing, navigationBusy, INSTALLING_REASON),
   });
   const install = useOnboardingAction({
     action: nekController.install,
