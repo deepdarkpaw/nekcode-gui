@@ -122,7 +122,15 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
     },
     collectLocalRuntimeChildProcesses: () => unsupported("collectLocalRuntimeChildProcesses"),
     generateWorkspaceText: () => unsupported("generateWorkspaceText"),
-    async testModelConnectivity() {
+    async testModelConnectivity(input) {
+      const result = await (
+        await target.service.commandContext().control()
+      ).call({
+        type: "test_provider",
+        provider: input.selection.providerId,
+        modelId: input.selection.modelId,
+      });
+      if (!result.ok) throw new Error(result.message);
       return { success: true };
     },
     async sendPrompt(input) {
