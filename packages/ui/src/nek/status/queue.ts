@@ -11,9 +11,7 @@ export interface QueueTarget {
   occurrence: number;
 }
 
-export type QueueEdit =
-  | { type: "delete" }
-  | { type: "replace"; text: string };
+export type QueueEdit = { type: "delete" } | { type: "replace"; text: string };
 
 export type QueueEditResult =
   | { ok: true; requeue: QueueContents }
@@ -120,4 +118,3 @@ export function resolveDequeueShortcut(input: QueueKeyInput): boolean {
     !input.metaKey
   );
 }
-EOF

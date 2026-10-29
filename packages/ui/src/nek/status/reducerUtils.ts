@@ -15,25 +15,24 @@ export const TERMINAL_SUBAGENT_STATUSES = new Set<NekSubagentRecord["status"]>([
   "aborted",
 ]);
 
+export function isTerminalSubagentStatus(
+  status: NekSubagentRecord["status"],
+): status is "completed" | "errored" | "aborted" {
+  return TERMINAL_SUBAGENT_STATUSES.has(status);
+}
+
 export function updateTimestamp(state: NekSessionStatus, now: number): NekSessionStatus {
   return state.lastUpdatedAt === now ? state : { ...state, lastUpdatedAt: now };
 }
 
-export function pushNotice(
-  state: NekSessionStatus,
-  notice: NekStatusNotice,
-): NekSessionStatus {
+export function pushNotice(state: NekSessionStatus, notice: NekStatusNotice): NekSessionStatus {
   return {
     ...state,
     notices: [...state.notices, notice].slice(-NEK_STATUS_MAX_NOTICES),
   };
 }
 
-export function makeNotice(
-  sessionKey: string,
-  id: string,
-  now: number,
-): NekStatusNotice {
+export function makeNotice(sessionKey: string, id: string, now: number): NekStatusNotice {
   return { sessionKey, id, createdAt: now };
 }
 
@@ -45,8 +44,7 @@ export function trimSubagents(
   const nextById = { ...byId };
   while (nextOrder.length > NEK_STATUS_MAX_SUBAGENTS) {
     const removableIndex = nextOrder.findIndex(
-      (id) =>
-        nextById[id] !== undefined && TERMINAL_SUBAGENT_STATUSES.has(nextById[id].status),
+      (id) => nextById[id] !== undefined && TERMINAL_SUBAGENT_STATUSES.has(nextById[id].status),
     );
     if (removableIndex < 0) break;
     const [removed] = nextOrder.splice(removableIndex, 1);
@@ -63,7 +61,7 @@ export function finishedNotification(
 ): { state: NekSessionStatus; event?: SubagentFinishedEvent } {
   if (
     previous?.status !== "running" ||
-    !TERMINAL_SUBAGENT_STATUSES.has(next.status) ||
+    !isTerminalSubagentStatus(next.status) ||
     state.finishedSubagentIds.includes(next.id)
   ) {
     return { state };
@@ -86,4 +84,3 @@ export function finishedNotification(
     event,
   };
 }
-EOF

@@ -48,4 +48,3 @@ export function createStatusFocusController(
   };
   return focus;
 }
-EOF

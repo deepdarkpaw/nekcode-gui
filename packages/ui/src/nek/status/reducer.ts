@@ -1,21 +1,11 @@
+import type { NekRpcEvent, NekState, NekSubagentRecord } from "@zcode/shared/nek-protocol";
 import type {
-  NekRpcEvent,
-  NekState,
-  NekSubagentRecord,
-} from "@zcode/shared/nek-protocol";
-import {
-  NEK_STATUS_STATS_THROTTLE_MS,
-  type NekSessionStatus,
-  type NekStatusDirectEvent,
-  type NekStatusEvent,
-  type NekStatusEventOutput,
-  type NekStatusSubagent,
+  NekSessionStatus,
+  NekStatusDirectEvent,
+  NekStatusEvent,
+  NekStatusEventOutput,
 } from "./types.js";
-import {
-  abortRunningSubagents,
-  mergeStateSubagents,
-  upsertSubagent,
-} from "./subagentReducer.js";
+import { abortRunningSubagents, mergeStateSubagents, upsertSubagent } from "./subagentReducer.js";
 import {
   advanceNekStatus,
   reduceCompactionEvent,
@@ -84,7 +74,9 @@ function normalizeEvent(event: NekStatusEvent): NekStatusDirectEvent | null {
   return isStatusDirectEvent(event) ? event : null;
 }
 
-function isStatusDirectEvent(event: NekRpcEvent | NekStatusDirectEvent): event is NekStatusDirectEvent {
+function isStatusDirectEvent(
+  event: NekRpcEvent | NekStatusDirectEvent,
+): event is NekStatusDirectEvent {
   return (
     event.type === "queue_update" ||
     event.type === "agent_start" ||
@@ -209,9 +201,7 @@ export function reduceNekStatusEvent(
           state: refreshed.state,
           output: {
             ...refreshed.output,
-            ...(result.noticeId
-              ? { notice: makeNotice(sessionKey, result.noticeId, now) }
-              : {}),
+            ...(result.noticeId ? { notice: makeNotice(sessionKey, result.noticeId, now) } : {}),
           },
         };
       }
@@ -219,9 +209,7 @@ export function reduceNekStatusEvent(
         state: result.state,
         output: {
           needsStatsRefresh: false,
-          ...(result.noticeId
-            ? { notice: makeNotice(sessionKey, result.noticeId, now) }
-            : {}),
+          ...(result.noticeId ? { notice: makeNotice(sessionKey, result.noticeId, now) } : {}),
         },
       };
     }
@@ -268,4 +256,3 @@ export function clearStopRequested(state: NekSessionStatus, id: string): NekSess
     subagents: { ...state.subagents, byId: { ...state.subagents.byId, [id]: record } },
   };
 }
-EOF

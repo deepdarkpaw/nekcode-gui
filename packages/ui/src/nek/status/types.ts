@@ -105,7 +105,7 @@ export interface SubagentFinishedEvent {
 }
 
 export interface NekStatusEventOutput {
-  subagentFinished?: SubagentFinishedEvent;
+  subagentFinished?: SubagentFinishedEvent[];
   notice?: NekStatusNotice;
   needsStatsRefresh: boolean;
 }
@@ -145,11 +145,7 @@ export interface NekStatusSessionEntry {
 
 export interface NekStatusStoreState {
   sessions: Record<string, NekSessionStatus>;
-  consumeEvent: (
-    sessionKey: string,
-    event: NekStatusEvent,
-    now?: number,
-  ) => NekStatusEventOutput;
+  consumeEvent: (sessionKey: string, event: NekStatusEvent, now?: number) => NekStatusEventOutput;
   setStats: (sessionKey: string, stats: NekSessionStats, now?: number) => void;
   markStatsFresh: (sessionKey: string, now?: number) => void;
   flushStatsRefresh: (sessionKey: string, now?: number) => boolean;
@@ -159,4 +155,3 @@ export interface NekStatusStoreState {
   clearRetry: (sessionKey: string) => void;
   reset: () => void;
 }
-EOF

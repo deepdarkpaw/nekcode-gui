@@ -5,11 +5,7 @@ import {
   trimSubagents,
   updateTimestamp,
 } from "./reducerUtils.js";
-import type {
-  NekSessionStatus,
-  NekStatusSubagent,
-  SubagentFinishedEvent,
-} from "./types.js";
+import type { NekSessionStatus, NekStatusSubagent, SubagentFinishedEvent } from "./types.js";
 
 function cloneSubagent(record: NekSubagentRecord): NekStatusSubagent {
   return { ...record };
@@ -80,10 +76,7 @@ export function mergeStateSubagents(
     nextOrder.push(record.id);
   }
   return {
-    state: updateTimestamp(
-      { ...currentState, subagents: trimSubagents(nextOrder, nextById) },
-      now,
-    ),
+    state: updateTimestamp({ ...currentState, subagents: trimSubagents(nextOrder, nextById) }, now),
     events,
   };
 }
@@ -122,4 +115,3 @@ export function abortRunningSubagents(
   }
   return { state: nextState, events };
 }
-EOF

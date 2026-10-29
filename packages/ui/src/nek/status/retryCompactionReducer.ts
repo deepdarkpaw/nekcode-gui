@@ -48,23 +48,23 @@ export function reduceRetryEvent(
         },
         now,
       );
-    case "summarization_retry_attempt_start":
-      return state.retry
-        ? updateTimestamp(
-            {
-              ...state,
-              retry: {
-                phase: "retrying",
-                kind: state.retry.kind,
-                attempt: state.retry.attempt,
-                max: state.retry.max,
-                errorMessage:
-                  state.retry.phase === "waiting" ? state.retry.errorMessage : "",
-              },
-            },
-            now,
-          )
-        : state;
+    case "summarization_retry_attempt_start": {
+      const retry = state.retry;
+      if (!retry || retry.phase === "failed") return state;
+      return updateTimestamp(
+        {
+          ...state,
+          retry: {
+            phase: "retrying",
+            kind: retry.kind,
+            attempt: retry.attempt,
+            max: retry.max,
+            errorMessage: retry.phase === "waiting" ? retry.errorMessage : "",
+          },
+        },
+        now,
+      );
+    }
     case "auto_retry_end":
       if (event.success) return updateTimestamp({ ...state, retry: null }, now);
       return updateTimestamp(
@@ -88,10 +88,7 @@ export function reduceRetryEvent(
   }
 }
 
-export function advanceNekStatus(
-  state: NekSessionStatus,
-  now = Date.now(),
-): NekSessionStatus {
+export function advanceNekStatus(state: NekSessionStatus, now = Date.now()): NekSessionStatus {
   const retry = state.retry;
   if (!retry || retry.phase !== "waiting" || now - retry.startedAt < retry.delayMs) {
     return state;
@@ -168,4 +165,3 @@ export function reduceCompactionEvent(
       return { state };
   }
 }
-EOF

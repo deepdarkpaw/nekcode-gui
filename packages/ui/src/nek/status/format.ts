@@ -16,7 +16,12 @@ export function contextLevel(percent: number | null): ContextLevel {
 }
 
 export function contextPercent(tokens: number | null, contextWindow: number): number | null {
-  if (tokens === null || !Number.isFinite(tokens) || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+  if (
+    tokens === null ||
+    !Number.isFinite(tokens) ||
+    !Number.isFinite(contextWindow) ||
+    contextWindow <= 0
+  ) {
     return null;
   }
   return Math.round((tokens / contextWindow) * 100);
@@ -74,19 +79,11 @@ export function retryErrorSummary(error: string): string {
   return firstLine.length > 200 ? `${firstLine.slice(0, 199)}…` : firstLine;
 }
 
-export function retryRemainingMs(
-  delayMs: number,
-  startedAt: number,
-  now: number,
-): number {
+export function retryRemainingMs(delayMs: number, startedAt: number, now: number): number {
   return Math.max(0, delayMs - Math.max(0, now - startedAt));
 }
 
-export function retryRemainingSeconds(
-  delayMs: number,
-  startedAt: number,
-  now: number,
-): number {
+export function retryRemainingSeconds(delayMs: number, startedAt: number, now: number): number {
   return Math.ceil(retryRemainingMs(delayMs, startedAt, now) / 1000);
 }
 
@@ -97,4 +94,3 @@ export function getRunningSubagents<T extends Pick<NekSubagentRecord, "status" |
     .filter((record) => record.status === "running")
     .toSorted((left, right) => left.startedAt - right.startedAt);
 }
-EOF

@@ -46,7 +46,7 @@ export interface NekStatusStoreStateWithSession extends NekStatusStoreState {
   setCurrentSession: (sessionKey: string | null, now?: number) => void;
 }
 
-export const useNekStatusStore = create<NekStatusStoreStateWithSession>((set, get) => ({
+export const useNekStatusStore = create<NekStatusStoreStateWithSession>((set) => ({
   sessions: EMPTY_SESSIONS,
   currentSessionKey: null,
   consumeEvent: (
@@ -60,12 +60,7 @@ export const useNekStatusStore = create<NekStatusStoreStateWithSession>((set, ge
       const reduced = reduceNekStatusEvent(current, sessionKey, event, now);
       output = reduced.output;
       return {
-        sessions: touchSession(
-          state.sessions,
-          sessionKey,
-          reduced.state,
-          state.currentSessionKey,
-        ),
+        sessions: touchSession(state.sessions, sessionKey, reduced.state, state.currentSessionKey),
       };
     });
     return output;
@@ -109,8 +104,8 @@ export const useNekStatusStore = create<NekStatusStoreStateWithSession>((set, ge
       const current = state.sessions[sessionKey];
       if (
         !current?.statsRefreshPending ||
-        current.lastStatsRefreshAt !== undefined &&
-          now - current.lastStatsRefreshAt < NEK_STATUS_STATS_THROTTLE_MS
+        (current.lastStatsRefreshAt !== undefined &&
+          now - current.lastStatsRefreshAt < NEK_STATUS_STATS_THROTTLE_MS)
       ) {
         return state;
       }
@@ -138,12 +133,7 @@ export const useNekStatusStore = create<NekStatusStoreStateWithSession>((set, ge
       const advanced = advanceNekStatus(current, now);
       if (advanced === current) return state;
       return {
-        sessions: touchSession(
-          state.sessions,
-          sessionKey,
-          advanced,
-          state.currentSessionKey,
-        ),
+        sessions: touchSession(state.sessions, sessionKey, advanced, state.currentSessionKey),
       };
     });
   },
@@ -202,4 +192,3 @@ export function selectNekSessionStatus(
 ): NekSessionStatus | undefined {
   return state.sessions[sessionKey];
 }
-EOF
