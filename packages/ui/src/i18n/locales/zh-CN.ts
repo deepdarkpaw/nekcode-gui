@@ -4042,6 +4042,36 @@ const zhCN: Record<string, string> = {
   "settings.nek.about.copyPath": "复制路径",
   "settings.nek.about.logs": "日志",
   "settings.nek.about.openLogs": "打开日志目录",
+  // ---- 远程 nek 交互（headless controller 文案）----
+  "remote.nek.hostKey.body":
+    "第一次连接这台主机。请核对指纹是否与服务器管理员提供的一致，确认后会记住这台主机。",
+  "remote.nek.hostKey.trust": "信任并连接",
+  "remote.nek.hostKey.reject": "取消连接",
+  "remote.nek.hostKey.copyFingerprint": "复制指纹",
+  "remote.nek.hostKeyChanged.body":
+    "这台主机的身份指纹和上次记录的不一致，可能是服务器重装了系统，也可能有人在冒充它。为了安全，连接已经停止。",
+  "remote.nek.hostKeyChanged.close": "我知道了",
+  "remote.nek.hostKeyChanged.manageHosts": "在设置中管理已记录的主机",
+  "remote.nek.credential.passphrase.title": "输入私钥口令",
+  "remote.nek.credential.passphrase.description": "私钥 {path} 已加密",
+  "remote.nek.credential.passphrase.descriptionNoPath": "私钥已加密",
+  "remote.nek.credential.password.title": "输入密码",
+  "remote.nek.credential.password.description": "{username}@{host}",
+  "remote.nek.credential.show": "显示",
+  "remote.nek.credential.hide": "隐藏",
+  "remote.nek.credential.submit": "连接",
+  "remote.nek.credential.cancel": "取消",
+  "remote.nek.credential.empty": "请输入{kind}",
+  "remote.nek.status.connected": "已连接",
+  "remote.nek.status.disconnected": "连接已断开",
+  "remote.nek.status.reconnecting": "连接已断开，{seconds} 秒后第 {attempt}/{max} 次重连",
+  "remote.nek.status.reconnectingNow": "正在重连（第 {attempt}/{max} 次）…",
+  "remote.nek.status.failed": "重连失败",
+  "remote.nek.status.cancelled": "已停止重连",
+  "remote.nek.prompt.timeout": "等待输入超时，连接已取消",
+  "remote.nek.prompt.aborted": "连接已取消",
+  "remote.nek.prompt.disconnected": "窗口失去连接，请求已取消",
+  "ui.action.busy": "正在处理上一个操作",
 };
 
 export default zhCN;
