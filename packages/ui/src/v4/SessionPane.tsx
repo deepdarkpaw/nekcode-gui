@@ -168,6 +168,10 @@ import type {
 } from "@/v4/legacyChatViewTypes.js";
 import type { SessionLease } from "@/v4/sessionDataLayer.js";
 import { V4InteractionDialogs } from "@/v4/V4InteractionDialogs.js";
+import {
+  NekSessionStatusSlot,
+  type NekSessionStatusCallbacks,
+} from "@/nek/status/index.js";
 
 import {
   parseV4VisibleSlashCommand,
@@ -280,6 +284,8 @@ export interface SessionPaneProps {
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
+  /** Optional nek status command wiring; the visual slot stays null without active status. */
+  nekStatusCallbacks?: NekSessionStatusCallbacks;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -445,6 +451,7 @@ export function SessionPane({
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
   onOpenPlanDetail,
+  nekStatusCallbacks,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
@@ -3873,6 +3880,9 @@ export function SessionPane({
           remoteSessionId={remoteSessionId ?? undefined}
           snapshot={snapshot}
         />
+      ) : null}
+      {sessionId && nekStatusCallbacks ? (
+        <NekSessionStatusSlot sessionKey={sessionId} callbacks={nekStatusCallbacks} />
       ) : null}
       {composerNode}
     </>
