@@ -26,6 +26,7 @@ import {
   pendingUserInputToViewModel,
 } from "@/v4/pendingInteractionAdapter.js";
 import { V4UserInputDialog } from "@/v4/V4UserInputDialog.js";
+import { NekInteractionHost } from "@/nek/interactions/NekInteractionHost.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
 
 interface V4InteractionDialogsProps {
@@ -300,8 +301,9 @@ export function V4InteractionDialogs({
     }
   }, [pending?.autoResolution, pending?.interactionId, sendSnoozeOnce]);
 
+  const nekInteractionHost = <NekInteractionHost sessionKey={sessionId} />;
   if (!pending) {
-    return null;
+    return nekInteractionHost;
   }
 
   const projectedElicitationRequest = pendingUserInputToElicitationRequest(sessionId, {
@@ -318,46 +320,49 @@ export function V4InteractionDialogs({
       pending.payload.toolName?.trim().toLowerCase() === "askuserquestion" ||
       pending.autoResolution !== undefined;
     return (
-      <ElicitationDialog
-        key={buildV4ElicitationProgressKey(elicitationRequest)}
-        request={elicitationRequest}
-        initialFormDraft={
-          botElicitationProgress?.requestId === elicitationRequest.requestId
-            ? undefined
-            : localElicitationDraft
-        }
-        onFormDraftChange={persistElicitationDraft}
-        autoResolution={isAskUserQuestion ? pending.autoResolution : undefined}
-        onFirstInteraction={
-          isAskUserQuestion
-            ? (source) => {
-                if (!loggedSnoozeSourceIdsRef.current.has(pending.interactionId)) {
-                  loggedSnoozeSourceIdsRef.current.add(pending.interactionId);
-                  logger.debug("[v4-interaction] AskUserQuestion 请求暂停自动结束", {
-                    interactionId: pending.interactionId,
-                    source,
-                  });
+      <>
+        {nekInteractionHost}
+        <ElicitationDialog
+          key={buildV4ElicitationProgressKey(elicitationRequest)}
+          request={elicitationRequest}
+          initialFormDraft={
+            botElicitationProgress?.requestId === elicitationRequest.requestId
+              ? undefined
+              : localElicitationDraft
+          }
+          onFormDraftChange={persistElicitationDraft}
+          autoResolution={isAskUserQuestion ? pending.autoResolution : undefined}
+          onFirstInteraction={
+            isAskUserQuestion
+              ? (source) => {
+                  if (!loggedSnoozeSourceIdsRef.current.has(pending.interactionId)) {
+                    loggedSnoozeSourceIdsRef.current.add(pending.interactionId);
+                    logger.debug("[v4-interaction] AskUserQuestion 请求暂停自动结束", {
+                      interactionId: pending.interactionId,
+                      source,
+                    });
+                  }
+                  autoResolutionIntentRef.current.markInteracted(pending.interactionId);
+                  return sendSnoozeOnce(pending.interactionId, Boolean(pending.autoResolution));
                 }
-                autoResolutionIntentRef.current.markInteracted(pending.interactionId);
-                return sendSnoozeOnce(pending.interactionId, Boolean(pending.autoResolution));
+              : undefined
+          }
+          onRespond={(_requestId, action, content) => {
+            void resolveInteraction(pending.interactionId, {
+              action,
+              ...(content ? { content } : {}),
+            }).then((accepted) => {
+              if (!accepted) return;
+              removeElicitationDraft(pending.interactionId);
+              if (isExitPlanMode) {
+                // Plan 回执 ACK 与 replayable pending 清场是两条异步路径。
+                // 这里只上报已接受的 Plan interaction，由手机 pane 在仍读到旧权威状态时触发恢复。
+                onPlanInteractionAccepted?.(pending.interactionId);
               }
-            : undefined
-        }
-        onRespond={(_requestId, action, content) => {
-          void resolveInteraction(pending.interactionId, {
-            action,
-            ...(content ? { content } : {}),
-          }).then((accepted) => {
-            if (!accepted) return;
-            removeElicitationDraft(pending.interactionId);
-            if (isExitPlanMode) {
-              // Plan 回执 ACK 与 replayable pending 清场是两条异步路径。
-              // 这里只上报已接受的 Plan interaction，由手机 pane 在仍读到旧权威状态时触发恢复。
-              onPlanInteractionAccepted?.(pending.interactionId);
-            }
-          });
-        }}
-      />
+            });
+          }}
+        />
+      </>
     );
   }
 
@@ -366,11 +371,14 @@ export function V4InteractionDialogs({
     payload: pending.payload,
   });
   return (
-    <V4UserInputDialog
-      model={model}
-      onSubmit={(answer) => {
-        void resolveInteraction(pending.interactionId, answer);
-      }}
-    />
+    <>
+      {nekInteractionHost}
+      <V4UserInputDialog
+        model={model}
+        onSubmit={(answer) => {
+          void resolveInteraction(pending.interactionId, answer);
+        }}
+      />
+    </>
   );
 }
