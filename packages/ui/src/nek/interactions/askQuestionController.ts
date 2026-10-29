@@ -59,6 +59,7 @@ export interface AskQuestionController {
   };
   onKeyDown: (event: ReactKeyboardEvent) => void;
   selectOption: (index: number) => void;
+  setOther: (value: string) => void;
   focusOther: () => void;
   getOptionTabIndex: (index: number) => 0 | -1;
   focus: ReturnType<typeof useInteractionFocus>;
@@ -234,6 +235,13 @@ export function useAskQuestionController({
     [currentQuestion, focus, focusActive, lastQuestion, payload, pending, runOperation, state],
   );
 
+  const setOther = useCallback(
+    (value: string) => {
+      if (!pending) dispatch({ type: "setOther", value });
+    },
+    [pending],
+  );
+
   const focusOther = useCallback(() => {
     if (!pending) {
       dispatch({ type: "setActive", active: currentQuestion?.options.length ?? 0 });
@@ -405,6 +413,7 @@ export function useAskQuestionController({
     actions,
     onKeyDown,
     selectOption,
+    setOther,
     focusOther,
     getOptionTabIndex: (index) => getAskQuestionOptionTabIndex(state.active, index),
     focus,
