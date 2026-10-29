@@ -45,6 +45,7 @@ export function NekPlanReviewCard(props: NekPlanReviewCardProps) {
                   { revision: view.revision },
                 )}
               </p>
+              <p className="break-all font-mono text-ui-sm text-foreground-subtle">{view.path}</p>
             </div>
             <InteractionActionButton
               handle={actions.openFile}
