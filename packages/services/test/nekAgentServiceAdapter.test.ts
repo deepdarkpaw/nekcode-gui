@@ -4,6 +4,10 @@ import test from "node:test";
 import { DEFAULT_GUI_RUNTIME_CONFIG } from "@zcode/shared/guiRuntimeConfig";
 import type { NekGuiInfo, NekInteractionFrame, NekRpcCommand } from "@zcode/shared/nek-protocol";
 import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
+import {
+  NEK_INTERACTION_FEED_METHODS,
+  createZCodeAgentConnectionScope,
+} from "../src/zcode-agent/zcodeAgentConnectionScope.js";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekRpcProcessExit, NekRpcProcessHandle } from "../src/nek-agent/nekRpcClient.js";
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
@@ -26,6 +30,8 @@ const guiInfo = {
 interface FakeProcess {
   process: NekRpcProcess;
   commands: NekRpcCommand[];
+  /** nek 收到的 `extension_ui_response`：用来断言 GUI 的回答真的回到 nek 侧。 */
+  responses: unknown[];
   /** 让某个 extension_call 方法按 nek 的格式失败，用于错误可见性断言。 */
   failExtensions: Set<string>;
   /** 让某个 extension_call 方法返回形状不对的结果（验证 host 不把脏数据交给界面）。 */
@@ -46,6 +52,7 @@ function fakeProcess(
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   const commands: NekRpcCommand[] = [];
+  const responses: unknown[] = [];
   const failExtensions = new Set<string>();
   const invalidExtensions = new Set<string>();
   const exits = new Set<(info: NekRpcProcessExit) => void>();
@@ -59,7 +66,10 @@ function fakeProcess(
       input = input.slice(index + 1);
       if (!line) continue;
       const command = JSON.parse(line) as NekRpcCommand & { id?: string };
-      if (command.type === "extension_ui_response") continue;
+      if (command.type === "extension_ui_response") {
+        responses.push(command);
+        continue;
+      }
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
@@ -190,6 +200,7 @@ function fakeProcess(
   };
   return {
     commands,
+    responses,
     failExtensions,
     invalidExtensions,
     emit: (record) =>
@@ -266,6 +277,9 @@ const IZCODE_METHODS = [
   "resumeSession",
   "listSessions",
   "listSessionSubagents",
+  "stopSubagent",
+  "getSubagentTranscript",
+  "listAgentTypes",
   "getTaskTokenUsage",
   "readSession",
   "readSessionMessages",
@@ -459,6 +473,109 @@ test("publishes the project trust confirm through the interaction channel and st
     );
     subscription.dispose();
   } finally {
+    await adapter.dispose();
+  }
+});
+
+test("hosts the interaction feed and subagent RPCs on the connection scope facade", async () => {
+  const control = fakeProcess("control");
+  const sessions: FakeProcess[] = [];
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: (request) => {
+      const created = fakeProcess(
+        "session",
+        request.extensionUi ? { extensionUi: request.extensionUi } : {},
+      );
+      sessions.push(created);
+      return created.process;
+    },
+  });
+  const scope = createZCodeAgentConnectionScope(adapter, {
+    connectionId: "host-rpc-test",
+    clientMode: "desktop-continuous",
+  });
+  try {
+    for (const method of NEK_INTERACTION_FEED_METHODS) {
+      assert.equal(typeof scope.service[method], "function", method);
+    }
+
+    const target = { workspacePath: "/workspace" };
+    const frames: NekInteractionFrame[] = [];
+    const subscription = scope.service.onDynamicNekInteractionFrame(target)((frame) =>
+      frames.push(frame),
+    );
+    const created = await adapter.createNekSession(target);
+    const session = sessions[0];
+    if (!session) throw new Error("expected a session process");
+
+    const answer = { answers: [{ questionId: "q1", selected: ["opt-a"] }] };
+    session.emit({
+      type: "extension_ui_request",
+      id: "ask-1",
+      method: "structured",
+      kind: "nek.ask_question",
+      payload: {
+        title: "Pick a route",
+        questions: [
+          {
+            id: "q1",
+            prompt: "Which route?",
+            options: [{ id: "opt-a", label: "Route A" }],
+          },
+        ],
+      },
+    });
+    await waitForInteraction(() => frames.length > 0);
+    const frame = frames[0];
+    if (frame?.kind !== "request") throw new Error("expected an ask_question frame");
+    assert.equal(frame.request.kind, "nek.ask_question");
+    // 帧按会话 id 打标：publish 把 nek 的 sessionKey 映射成 renderer 用的 sessionId。
+    assert.equal(frame.scope.sessionId, created.sessionId);
+    assert.deepEqual(session.responses, []);
+
+    await scope.service.respondNekInteraction({
+      requestId: frame.request.id,
+      response: { type: "extension_ui_response", id: frame.request.id, result: answer },
+    });
+    await waitForInteraction(() => session.responses.length > 0);
+    assert.deepEqual(session.responses[0], {
+      type: "extension_ui_response",
+      id: "ask-1",
+      result: answer,
+    });
+    assert.equal(
+      frames.some((candidate) => candidate.kind === "cancel"),
+      false,
+    );
+
+    const sessionTarget = { ...target, sessionId: created.sessionId };
+    assert.deepEqual(await scope.service.stopSubagent({ ...sessionTarget, id: "child-1" }), {
+      status: "aborted",
+    });
+    assert.deepEqual(
+      await scope.service.getSubagentTranscript({ ...sessionTarget, id: "child-1" }),
+      {
+        messages: [{ role: "assistant", content: "done" }],
+      },
+    );
+    const types = await scope.service.listAgentTypes(sessionTarget);
+    assert.equal(types.types[0]?.name, "worker");
+    subscription.dispose();
+
+    await scope.dispose();
+    assert.throws(
+      () => scope.service.onDynamicNekInteractionFrame(target),
+      /fault\.connection\.closed/u,
+    );
+    await assert.rejects(
+      scope.service.stopSubagent({ ...sessionTarget, id: "child-1" }),
+      /fault\.connection\.closed/u,
+    );
+  } finally {
+    await scope.dispose();
     await adapter.dispose();
   }
 });

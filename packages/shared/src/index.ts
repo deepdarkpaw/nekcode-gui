@@ -27,6 +27,7 @@ export type {
   NekIpcRequest,
   NekIpcEvent,
   NekIpcError,
+  NekIpcScope,
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
 export {
@@ -41,7 +42,11 @@ export {
   ZCODE_WORKSPACE_CONFIG_FILE_NAME,
   ZCODE_WORKSPACE_IGNORE_FILE_NAME,
 } from "./appDirNames.js";
-export { DEFAULT_LOCALE } from "./protocol.js";
+export {
+  DEFAULT_LOCALE,
+  NEK_IPC_SUBSCRIPTION_LISTENER_INDEX,
+  nekIpcSubscriptionListenerIndex,
+} from "./protocol.js";
 export { ZCODE_VERSION, ZCODE_COMMIT, ZCODE_BUILD_TIME } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
 export type { ZCodeEnv, ZCodeProductFlavor } from "./env.js";

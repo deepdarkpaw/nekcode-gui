@@ -1,4 +1,11 @@
-import { utils as ssh2Utils, type ConnectConfig } from "ssh2";
+import ssh2, { type ConnectConfig } from "ssh2";
+
+/**
+ * ssh2 是 CommonJS 包，`utils` 写在 `module.exports` 的嵌套对象字面量里，
+ * Node ESM 的具名导出检测识别不到；打包后以原生 ESM 加载时具名导入会直接抛 SyntaxError，
+ * 所以只能经默认导出（即 `module.exports`）访问。
+ */
+const ssh2Utils = ssh2.utils;
 
 export const SSH_READY_TIMEOUT_MS = 60_000;
 export const SSH_KEEPALIVE_INTERVAL_MS = 15_000;

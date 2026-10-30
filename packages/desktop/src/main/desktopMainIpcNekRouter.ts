@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
-import type { NekIpcEvent, NekIpcRequest } from "@zcode/shared";
+import {
+  nekIpcSubscriptionListenerIndex,
+  type NekIpcEvent,
+  type NekIpcRequest,
+  type NekIpcScope,
+} from "@zcode/shared";
 import type { NekConfigHostBridge } from "./desktopMainIpcNekBridge.js";
 import type { NekRemoteInteractionHostService } from "./desktopMainIpcNekRemote.js";
 
-export type NekIpcScope = "config" | "settings-host" | "remote-interaction";
+export type { NekIpcScope };
 type EventSink = (event: NekIpcEvent) => void;
 type UnknownFunction = (...args: unknown[]) => unknown;
 
@@ -64,11 +69,17 @@ export class NekIpcHostRouter {
   }
 
   private subscribe(scope: NekIpcScope, request: NekIpcRequest, send: EventSink): string {
+    const listenerIndex = nekIpcSubscriptionListenerIndex(scope, request.method);
+    if (listenerIndex === undefined) {
+      throw new Error(`${scope}.${request.method} is not a subscription method`);
+    }
     const target = this.target(scope);
     const listener = (payload: unknown) =>
       send({ requestId: request.requestId, event: "subscription", payload });
     const fn = methodOf(target, request.method);
-    const result = fn(...request.args, listener);
+    const args = [...request.args];
+    args.splice(listenerIndex, 0, listener);
+    const result = fn(...args);
     if (typeof result !== "function") {
       throw new Error(`${scope}.${request.method} did not return an unsubscribe function`);
     }

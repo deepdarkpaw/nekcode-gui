@@ -46,10 +46,11 @@ export function NekInteractionHost({
     Math.max(0, (state.sessions[sessionKey]?.queue.length ?? 0) - 1),
   );
   const settle = useCallback(
-    (response: NekExtensionUiResponse) => {
-      if (!store.getState().settle(sessionKey, response.id, response)) {
-        throw new Error(`Interaction ${response.id} is no longer pending.`);
-      }
+    async (response: NekExtensionUiResponse) => {
+      // 回答先送达后端再关闭卡片：失败时请求留在队列里，控制器把错误挂在动作上可以重试。
+      // 送达通道由 feed 在订阅时按会话键注册（见 nek/feed/nekAgentFeed.ts）。
+      const accepted = await store.getState().settleAsync(sessionKey, response.id, response);
+      if (!accepted) throw new Error(`Interaction ${response.id} is no longer pending.`);
     },
     [sessionKey, store],
   );

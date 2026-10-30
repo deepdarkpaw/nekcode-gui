@@ -11,6 +11,7 @@ import { createRequire } from "node:module";
 import process from "node:process";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { findDynamicRequireCalls } from "./esm-dynamic-require.mjs";
 import { collectRuntimeModuleClosureEntries } from "./runtime-dependency-closure.mjs";
 import { resolveDesktopProductIdentity } from "./desktop-product-identity.mjs";
 import {
@@ -97,6 +98,12 @@ const requiredRuntimeModules = [
   "node-forge",
   // 与 tsup external 对齐，保留 ZIP 解包器的 CommonJS 运行时边界。
   "yauzl",
+  // 与 tsup external 对齐：nek settings 锁与 ~/.ssh/config 解析器都是 CommonJS 运行时依赖。
+  "proper-lockfile",
+  "graceful-fs",
+  "retry",
+  "signal-exit",
+  "ssh-config",
   // ssh2 的关键依赖链（asn1/bcrypt-pbkdf/tweetnacl）若缺失，
   // 连接远程 workspace 时会在 keyParser 阶段直接抛 MODULE_NOT_FOUND。
   // 这里把 ssh2 关键依赖链纳入机械校验，避免坏包流出。
@@ -624,6 +631,16 @@ function resolveAppAsarPath(os, arch) {
   throw new Error(`不支持的目标操作系统: ${os}`);
 }
 
+/** main/host 的 ESM 产物里不允许残留 esbuild 动态 require shim 调用，否则启动即崩。 */
+async function verifyNoEsmDynamicRequire() {
+  const findings = await findDynamicRequireCalls(resolve(desktopRoot, "out"));
+  if (findings.length === 0) return;
+  const lines = findings.map(({ file, specifier }) => `${file}: require("${specifier}")`);
+  throw new Error(
+    `ESM 产物内联了会动态 require 的 CommonJS 依赖，需加入 tsup.config.ts 的 desktopNodeRuntimeExternals:\n- ${lines.join("\n- ")}`,
+  );
+}
+
 function verifyPackagedRuntimeDependencies(os, arch) {
   const appAsarPath = resolveAppAsarPath(os, arch);
   if (!existsSync(appAsarPath)) {
@@ -671,8 +688,9 @@ function verifyPackagedRuntimeDependencies(os, arch) {
     return true;
   });
 
-  for (const { moduleName } of resolvableRuntimeModules) {
-    const moduleRoot = `/node_modules/${moduleName}`;
+  for (const { installPath } of resolvableRuntimeModules) {
+    // 按真实安装路径校验：嵌套版本被 hoisted 同名包冒充时同样算缺失。
+    const moduleRoot = `/node_modules/${installPath}`;
     // @electron/asar 在 Windows 下列目录时会通过 path.join 产出反斜杠路径，
     // 之前这里按 POSIX 路径做精确匹配，导致模块其实已经打进 app.asar，校验却仍然误报缺失。
     // 先统一归一化成正斜杠，避免 Windows 打包机被这道机械校验误伤。
@@ -682,7 +700,7 @@ function verifyPackagedRuntimeDependencies(os, arch) {
 
     if (!hasModule) {
       // 校验也按依赖闭包展开，确保 afterPack 注入逻辑遗漏子依赖时能在 bundle 阶段直接失败。
-      throw new Error(`打包产物缺少运行时依赖 ${moduleName}: ${appAsarPath}`);
+      throw new Error(`打包产物缺少运行时依赖 ${installPath}: ${appAsarPath}`);
     }
   }
 }
@@ -729,6 +747,8 @@ async function main() {
   if (!skipBuild) {
     run(pnpmCommand, [buildScript], buildEnv);
   }
+
+  await runTimedAsync("bundle:verify-esm-dynamic-require", () => verifyNoEsmDynamicRequire());
 
   await runTimedAsync("bundle:electron-builder", () =>
     runElectronBuilderWithRetry(buildArgs, buildEnv),

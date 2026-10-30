@@ -1,10 +1,16 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { Emitter } from "@zcode/rpc";
 import { describe, expect, it, vi } from "vitest";
-import type { NekAskQuestionPayload, NekExtensionUiRequest } from "@zcode/shared/nek-protocol";
+import type {
+  NekAskQuestionPayload,
+  NekExtensionUiRequest,
+  NekInteractionFrame,
+} from "@zcode/shared/nek-protocol";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { NekAgentFeedProvider } from "@/nek/feed/nekAgentFeed.js";
 import { NekAskQuestionCard } from "./NekAskQuestionCard.js";
 import { NekInteractionHost } from "./NekInteractionHost.js";
 import { createNekInteractionStore } from "./interactionStore.js";
@@ -159,5 +165,62 @@ describe("Nek interaction views", () => {
     );
     expect(screen.getByTestId("nek-ask-question-card")).toBeTruthy();
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers a fed request through the feed RPC and drops it on a cancel frame", async () => {
+    const emitter = new Emitter<NekInteractionFrame>();
+    const respondNekInteraction = vi.fn(async () => undefined);
+    const service = {
+      onDynamicNekInteractionFrame: () => emitter.event,
+      respondNekInteraction,
+      stopSubagent: vi.fn(),
+      getSubagentTranscript: vi.fn(),
+      listAgentTypes: vi.fn(),
+    };
+    const target = { workspacePath: "/workspace" };
+    const rendered = render(
+      <NekAgentFeedProvider service={service} target={target}>
+        <NekInteractionHost sessionKey="session-1" />
+      </NekAgentFeedProvider>,
+      { wrapper },
+    );
+    const card = within(rendered.container);
+
+    act(() => {
+      emitter.fire({
+        kind: "request",
+        scope: { ...target, sessionId: "session-1" },
+        request: askRequest(),
+      });
+    });
+    await act(async () => {
+      fireEvent.click(card.getByRole("checkbox", { name: "Use API" }));
+    });
+    await act(async () => {
+      fireEvent.click(card.getByRole("button", { name: "nek.interaction.question.submit" }));
+    });
+    expect(respondNekInteraction).toHaveBeenCalledWith({
+      requestId: "ask-1",
+      response: {
+        type: "extension_ui_response",
+        id: "ask-1",
+        result: { answers: [{ questionId: "q1", selected: ["api"] }] },
+      },
+    });
+    await waitFor(() => expect(card.queryByTestId("nek-ask-question-card")).toBeNull());
+
+    act(() => {
+      emitter.fire({
+        kind: "request",
+        scope: { ...target, sessionId: "session-1" },
+        request: askRequest("ask-2"),
+      });
+    });
+    expect(card.getByTestId("nek-ask-question-card")).toBeTruthy();
+    act(() => {
+      emitter.fire({ kind: "cancel", scope: { ...target, sessionId: "session-1" }, id: "ask-2" });
+    });
+    await waitFor(() => expect(card.queryByTestId("nek-ask-question-card")).toBeNull());
+    rendered.unmount();
   });
 });

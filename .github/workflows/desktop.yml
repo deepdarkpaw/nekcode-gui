@@ -18,6 +18,8 @@ env:
   HUSKY: "0"
   ZCODE_ENV: production
   ZCODE_SKIP_REMOTE_ASSETS: "1"
+  # 默认不签名、不做本机身份自动发现。打包 step 之前由「Resolve signing configuration」
+  # 按 secret 是否存在覆盖成 true，并在缺证书时明确打日志说明本次产物未签名。
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
   ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
   ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
@@ -180,6 +182,44 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends rpm libarchive-tools zstd
       - uses: ./.github/actions/setup-workspace
+      - name: Resolve signing configuration
+        shell: bash
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          # 有证书 secret 时才签名；缺 secret 只记录明确提示，产物保持未签名，
+          # 不把「没有证书」静默当成「签名成功」，也不因此让打包失败。
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if [ -n "$WINDOWS_CSC_LINK" ] && [ -n "$WINDOWS_CSC_KEY_PASSWORD" ]; then
+              {
+                echo "CSC_LINK=$WINDOWS_CSC_LINK"
+                echo "CSC_KEY_PASSWORD=$WINDOWS_CSC_KEY_PASSWORD"
+                echo "CSC_IDENTITY_AUTO_DISCOVERY=true"
+              } >> "$GITHUB_ENV"
+              echo "::notice::WINDOWS_CSC_LINK 已配置：Windows 产物将签名"
+            else
+              echo "::notice::未配置 WINDOWS_CSC_LINK / WINDOWS_CSC_KEY_PASSWORD：本次 Windows 产物不签名"
+            fi
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            if [ -n "$MACOS_CSC_LINK" ] && [ -n "$MACOS_SIGNING_IDENTITY" ]; then
+              {
+                echo "CSC_LINK=$MACOS_CSC_LINK"
+                echo "CSC_KEY_PASSWORD=$MACOS_CSC_KEY_PASSWORD"
+                echo "CSC_NAME=$MACOS_SIGNING_IDENTITY"
+                echo "ZCODE_ENABLE_MAC_SIGN=1"
+                echo "CSC_IDENTITY_AUTO_DISCOVERY=true"
+              } >> "$GITHUB_ENV"
+              echo "::notice::macOS 签名证书已配置：产物启用 hardened runtime 签名（electron-builder notarize=false，公证未接入）"
+            else
+              echo "::notice::未配置 MACOS_CSC_LINK / MACOS_SIGNING_IDENTITY：本次 macOS 产物不签名"
+            fi
+          else
+            echo "::notice::Linux 产物无代码签名步骤：AppImage/deb/rpm/pacman 不签名"
+          fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bundled-remote-linux-x64
@@ -234,6 +274,32 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
+      - name: Resolve signing configuration
+        shell: bash
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          # 与 linux/win 同一个判定：有证书 secret 才签名，缺 secret 时明确记录未签名产物。
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            if [ -n "$MACOS_CSC_LINK" ] && [ -n "$MACOS_SIGNING_IDENTITY" ]; then
+              {
+                echo "CSC_LINK=$MACOS_CSC_LINK"
+                echo "CSC_KEY_PASSWORD=$MACOS_CSC_KEY_PASSWORD"
+                echo "CSC_NAME=$MACOS_SIGNING_IDENTITY"
+                echo "ZCODE_ENABLE_MAC_SIGN=1"
+                echo "CSC_IDENTITY_AUTO_DISCOVERY=true"
+              } >> "$GITHUB_ENV"
+              echo "::notice::macOS 签名证书已配置：产物启用 hardened runtime 签名（electron-builder notarize=false，公证未接入）"
+            else
+              echo "::notice::未配置 MACOS_CSC_LINK / MACOS_SIGNING_IDENTITY：本次 macOS 产物不签名"
+            fi
+          else
+            echo "::notice::$RUNNER_OS 产物无代码签名步骤"
+          fi
       # 与 linux/win 同样下载 ubuntu 上产出的 Linux x64 远端运行时：
       # 打包链路在 beforePack/afterPack 里无条件校验 bundled-remote-assets。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -271,57 +337,21 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # assemble/publish 需要仓库里的 `yaml` 依赖来合并并校验 latest*.yml，
+      # 因此发布 job 不再跳过依赖安装（此前的 publish 只用 node 内置模块）。
       - uses: ./.github/actions/setup-workspace
-        with:
-          install-dependencies: "false"
+      # 每个打包 job 的 artifact 单独落到 dist/artifacts/<artifact-name>/：
+      # 同一平台的 x64 与 arm64 各自产出同名 latest.yml / latest-mac.yml，
+      # 直接平铺下载会静默覆盖其中一份，arm64 用户将收不到更新。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: desktop-production-linux-x64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-production-linux-arm64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-production-win-x64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-production-win-arm64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-production-mac-arm64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-production-mac-x64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-preview-linux-x64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-preview-linux-arm64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-preview-win-x64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-preview-win-arm64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-preview-mac-arm64
-          path: dist/release-assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: desktop-preview-mac-x64
-          path: dist/release-assets
+          pattern: desktop-*
+          path: dist/artifacts
+      # 安装包平铺到 dist/release-assets，Windows/macOS 的更新元数据按架构合并成一份。
+      # electron-updater 按 latest.yml / latest-linux.yml / latest-linux-arm64.yml /
+      # latest-mac.yml 拉取更新（provider=github），缺一份就会 ERR_UPDATER_CHANNEL_FILE_NOT_FOUND。
+      - name: Assemble release assets
+        run: node scripts/ci/desktop-release.mjs assemble
       - name: Verify assets and create or update draft
         run: node scripts/ci/desktop-release.mjs publish
         env:

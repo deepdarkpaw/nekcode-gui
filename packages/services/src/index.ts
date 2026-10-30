@@ -134,13 +134,15 @@ export {
 export {
   createZCodeAgentConnectionScope,
   readTrustedZCodeAgentV4Connection,
+  NEK_INTERACTION_FEED_METHODS,
 } from "./zcode-agent/zcodeAgentConnectionScope.js";
 export type {
   ZCodeAgentConnectionScope,
   ZCodeAgentV4ClientMode,
   ZCodeAgentV4ConnectionContext,
 } from "./zcode-agent/zcodeAgentConnectionScope.js";
-export { NekAgentServiceAdapter } from "./nek-agent/adapter/nekAgentServiceAdapter.js";
+// NekAgentServiceAdapter 是 Node 实现（nek 进程、配置文件锁），只从 `@zcode/services/node` 导出；
+// 放进本浏览器入口会把 proper-lockfile / graceful-fs 打进 renderer，启动即 `process is not defined`。
 export type {
   NekAgentServiceAdapterApi,
   NekAgentServiceAdapterOptions,

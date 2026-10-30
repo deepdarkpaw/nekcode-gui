@@ -42,6 +42,14 @@
       "count": 1
     },
     {
+      "key": "knip\u0000dependencies\u0000packages/desktop/package.json\u0000proper-lockfile",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000dependencies\u0000packages/desktop/package.json\u0000ssh-config",
+      "count": 1
+    },
+    {
       "key": "knip\u0000dependencies\u0000packages/desktop/package.json\u0000ssh2",
       "count": 1
     },

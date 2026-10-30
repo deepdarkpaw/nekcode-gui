@@ -16,6 +16,29 @@ export interface NekIpcRequest {
   event?: "log";
 }
 
+/** nek IPC 的三条契约通道。 */
+export type NekIpcScope = "config" | "settings-host" | "remote-interaction";
+
+/**
+ * 订阅方法的 listener 参数位置，与 nek-protocol 契约签名一一对应。
+ * renderer 取出该位置的 listener、其余参数按原顺序发送；host 再把 listener 插回同一位置。
+ * 不能假设 listener 在末尾：`watch(target, listener, cwd?)` 的 listener 后还有可选参数。
+ */
+export const NEK_IPC_SUBSCRIPTION_LISTENER_INDEX = {
+  config: { onLoginEvent: 1, onReloadResult: 1, watch: 1 },
+  "settings-host": { onHostsChanged: 0 },
+  "remote-interaction": { onRemotePrompt: 0, onRemoteConnectionStatus: 0 },
+} as const satisfies Record<NekIpcScope, Readonly<Record<string, number>>>;
+
+/** 订阅方法的 listener 位置；非订阅方法返回 undefined。 */
+export function nekIpcSubscriptionListenerIndex(
+  scope: NekIpcScope,
+  method: string,
+): number | undefined {
+  const table: Readonly<Record<string, number>> = NEK_IPC_SUBSCRIPTION_LISTENER_INDEX[scope];
+  return Object.hasOwn(table, method) ? table[method] : undefined;
+}
+
 /** 通用 nek IPC 事件；payload 始终是契约层可序列化值。 */
 export interface NekIpcEvent {
   requestId: string;

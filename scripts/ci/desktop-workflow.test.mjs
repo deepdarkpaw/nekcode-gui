@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { parse } from "yaml";
+import { releaseUpdateInfoNames } from "./desktop-release.mjs";
+import { desktopProductIdentities } from "../../packages/desktop/scripts/desktop-product-identity.mjs";
 
 // 直接解析真实工作流（公开入口），断言 job 条件与 needs 图语义，
 // 而不是复制一份手写函数；工作流文件是唯一事实来源。
@@ -183,20 +185,110 @@ test("actual event expressions expand to four daily or twelve dual-product jobs"
   }
 });
 
-test("release downloads exactly the twelve flavor/platform/arch artifacts", async () => {
+test("release downloads every flavor/platform/arch artifact into per-job directories", async () => {
   const jobs = await loadJobs();
-  const names = uses(jobs.release, "actions/download-artifact").map((step) => step.with.name);
-  const expected = ["production", "preview"].flatMap((flavor) => [
-    `desktop-${flavor}-linux-x64`,
-    `desktop-${flavor}-linux-arm64`,
-    `desktop-${flavor}-win-x64`,
-    `desktop-${flavor}-win-arm64`,
-    `desktop-${flavor}-mac-arm64`,
-    `desktop-${flavor}-mac-x64`,
-  ]);
-  assert.equal(names.length, 12);
-  assert.deepEqual([...names].sort(), [...expected].sort());
-  assert.equal(new Set(names).size, 12);
+  const release = jobs.release;
+  const downloads = uses(release, "actions/download-artifact");
+  // 12 个 artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载，
+  // 否则后一个架构的更新元数据会静默覆盖前一个。
+  assert.equal(downloads.length, 1);
+  assert.equal(downloads[0].with?.pattern, "desktop-*");
+  assert.equal(downloads[0].with?.path, "dist/artifacts");
+  assert.equal(downloads[0].with?.["merge-multiple"], undefined);
+  const runs = release.steps.map((step) => String(step.run ?? ""));
+  const assemble = runs.findIndex((run) => run.includes("desktop-release.mjs assemble"));
+  const publish = runs.findIndex((run) => run.includes("desktop-release.mjs publish"));
+  assert.ok(assemble >= 0 && publish > assemble);
+});
+
+test("packaging jobs collect the platform update metadata required by electron-updater", async () => {
+  const jobs = await loadJobs();
+  for (const [id, platform] of [
+    ["build", "$ZCODE_TARGET_OS"],
+    ["build-macos", "mac"],
+  ]) {
+    const collect = jobs[id].steps.find((step) =>
+      String(step.run ?? "").includes("desktop-release.mjs collect"),
+    );
+    assert.ok(collect, `${id} must collect installers and update metadata`);
+    assert.ok(String(collect.run).includes(platform));
+    // 上传的是 collect 之后的整个 release-assets 目录，包含 latest*.yml 与安装包。
+    const upload = uses(jobs[id], "actions/upload-artifact")[0];
+    assert.equal(upload.with?.path, "dist/release-assets/*");
+    assert.equal(upload.with?.["if-no-files-found"], "error");
+  }
+  // 三平台的 update metadata 名字由发布脚本统一派生：latest.yml / latest-linux*.yml / latest-mac.yml，
+  // Preview 走 latest-preview* 通道，两个身份不会互相覆盖。
+  assert.deepEqual(
+    releaseUpdateInfoNames([desktopProductIdentities.production, desktopProductIdentities.preview]),
+    [
+      "latest-linux-arm64.yml",
+      "latest-linux.yml",
+      "latest-mac.yml",
+      "latest-preview-linux-arm64.yml",
+      "latest-preview-linux.yml",
+      "latest-preview-mac.yml",
+      "latest-preview.yml",
+      "latest.yml",
+    ],
+  );
+});
+
+test("release publishes only through gh drafts with a scoped token", async () => {
+  const document = parse(await readFile(workflowPath, "utf8"));
+  const jobs = document.jobs;
+  // 发布 job 之外的权限只有读；写权限只在发布 job 内。
+  assert.equal(document.permissions?.contents, "read");
+  assert.equal(jobs.release.permissions?.contents, "write");
+  for (const id of Object.keys(jobs).filter((job) => job !== "release"))
+    assert.notEqual(jobs[id].permissions?.contents, "write");
+  const publishStep = jobs.release.steps.find((step) =>
+    String(step.run ?? "").includes("desktop-release.mjs publish"),
+  );
+  assert.equal(publishStep.env?.GH_TOKEN, "${{ github.token }}");
+  // electron-builder 自身禁止发布（--publish never 由 bundle:desktop 固定），
+  // 也不使用 softprops/action-gh-release 之类的第三方发布 action。
+  const allRuns = Object.values(jobs)
+    .flatMap((job) => job.steps.map((step) => String(step.run ?? "")))
+    .join("\n");
+  assert.doesNotMatch(allRuns, /--publish\s+always/);
+  assert.equal(uses(jobs.release, "softprops/action-gh-release").length, 0);
+  // 更新源是 GitHub Releases，两个 owner/repo 变量都从当前仓库派生。
+  assert.equal(document.env.NEKCODE_UPDATE_OWNER, "${{ github.repository_owner }}");
+  assert.equal(document.env.NEKCODE_UPDATE_REPO, "${{ github.event.repository.name }}");
+});
+
+test("electron-builder publishes to the GitHub Releases provider", async () => {
+  // provider 是构建配置的事实来源，工作流不重复声明；这里断言两者没有分叉。
+  const root = resolve(import.meta.dirname, "../..");
+  const config = await readFile(
+    resolve(root, "packages/desktop/electron-builder.config.js"),
+    "utf8",
+  );
+  assert.match(config, /provider:\s*"github"/);
+  assert.match(config, /owner:\s*resolveGithubPublishOwner\(process\.env\)/);
+  assert.match(config, /repo:\s*resolveGithubPublishRepo\(process\.env\)/);
+  assert.match(config, /NEKCODE_DEEP_LINK_SCHEME/);
+});
+
+test("signing runs only when certificate secrets exist and says so when it cannot", async () => {
+  const jobs = await loadJobs();
+  const document = parse(await readFile(workflowPath, "utf8"));
+  assert.equal(document.env.CSC_IDENTITY_AUTO_DISCOVERY, "false");
+  for (const id of ["build", "build-macos"]) {
+    const step = jobs[id].steps.find((item) => item.name === "Resolve signing configuration");
+    assert.ok(step, `${id} must resolve signing configuration from secrets`);
+    for (const input of ["WINDOWS_CSC_LINK", "MACOS_CSC_LINK", "MACOS_SIGNING_IDENTITY"])
+      assert.match(String(step.env?.[input]), new RegExp(`secrets\\.${input}`));
+    // 缺 secret 时必须留明确提示，不能静默产出未签名包。
+    assert.match(String(step.run), /::notice::未配置/);
+    assert.match(String(step.run), /CSC_IDENTITY_AUTO_DISCOVERY=true/);
+  }
+  // macOS 签名仍需显式开关，避免 preview 在无身份时静默走未签名链路。
+  const macStep = jobs["build-macos"].steps.find(
+    (item) => item.name === "Resolve signing configuration",
+  );
+  assert.match(String(macStep.run), /ZCODE_ENABLE_MAC_SIGN=1/);
 });
 
 test("release still requires checks success before publishing a draft", async () => {

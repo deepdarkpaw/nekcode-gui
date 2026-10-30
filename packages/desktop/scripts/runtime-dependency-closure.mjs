@@ -49,6 +49,22 @@ function readRuntimePackage(moduleLookupRoots, moduleName, parentPackagePath = n
   return null;
 }
 
+/**
+ * 包在运行时 node_modules 树中的安装路径（相对最外层 node_modules）。
+ * 父包依赖的版本与 hoisted 同名包不同时，包管理器会把它装在 `<parent>/node_modules/<name>`；
+ * 注入与校验必须沿用这个嵌套位置，否则运行时会解析到 hoisted 的另一个版本
+ * （proper-lockfile 需要 signal-exit@3，平铺后拿到 hoisted 的 v4，启动即 `onExit is not a function`）。
+ */
+export function resolveInstallPath(packageRoot, moduleName) {
+  const normalized = packageRoot.replaceAll("\\", "/");
+  const marker = "/node_modules/";
+  const first = normalized.indexOf(marker);
+  if (first < 0) return moduleName;
+  const relativePath = normalized.slice(first + marker.length);
+  // pnpm 虚拟存储（.pnpm/...）不是运行时布局，按包名平铺。
+  return relativePath.startsWith(".pnpm/") ? moduleName : relativePath;
+}
+
 export function collectRuntimeModuleClosure(moduleNames, moduleLookupRoots) {
   return collectRuntimeModuleClosureEntries(moduleNames, moduleLookupRoots).map(
     (entry) => entry.moduleName,
@@ -60,18 +76,23 @@ export function collectRuntimeModuleClosureEntries(moduleNames, moduleLookupRoot
   const visited = new Set();
 
   function visit(moduleName, optional = false, parentPackagePath = null) {
-    if (visited.has(moduleName)) {
-      return;
-    }
-
     const runtimePackage = readRuntimePackage(moduleLookupRoots, moduleName, parentPackagePath);
     if (!runtimePackage && optional) {
       return;
     }
 
-    visited.add(moduleName);
+    // 按安装路径去重：同名包的不同版本（hoisted 与嵌套）都要各自进入闭包。
+    const installPath = runtimePackage
+      ? resolveInstallPath(runtimePackage.packageRoot, moduleName)
+      : moduleName;
+    if (visited.has(installPath)) {
+      return;
+    }
+
+    visited.add(installPath);
     collected.push({
       moduleName,
+      installPath,
       sourceModulePath: runtimePackage?.packageRoot ?? null,
       packageJsonPath: runtimePackage?.packageJsonPath ?? null,
     });
