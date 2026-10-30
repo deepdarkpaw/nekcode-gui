@@ -48,6 +48,7 @@ import { useToolbarConfigOptions } from "@/hooks/useZCodeConfig.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
+import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { logger } from "@/logger.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
@@ -407,6 +408,17 @@ function V4ComposerModelControlsImpl({
       model: effectiveConfig.model,
     });
   }, [effectiveConfig, onSelectThought, thoughtOption]);
+
+  useNekActionHandlers(
+    {
+      "app.thinking.cycle": {
+        enabled: Boolean(thoughtOption && effectiveConfig),
+        run: handleCycleThoughtLevel,
+      },
+    },
+    !disabled,
+    110,
+  );
 
   const taskUsage = useMemo(() => {
     const contextWindow = usage?.contextWindow;

@@ -21,6 +21,14 @@ function truncatePromptHistoryEntry(entry: string): string {
 
 type PromptHistoryDirection = "up" | "down";
 
+export function shouldHandlePromptHistoryNavigation(input: {
+  text: string;
+  atEditorStart: boolean;
+  currentIndex: number | null;
+}): boolean {
+  return input.currentIndex !== null || input.text.length === 0 || input.atEditorStart;
+}
+
 interface PromptHistoryNavigationResult {
   nextIndex: number | null;
   nextValue: string;

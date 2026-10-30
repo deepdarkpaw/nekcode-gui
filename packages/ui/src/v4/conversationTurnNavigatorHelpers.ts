@@ -260,11 +260,12 @@ export function resolveAdjacentConversationTurnQuery(
   direction: "previous" | "next",
 ): ConversationTurnNavigatorQueryTarget | undefined {
   if (targets.length === 0) return undefined;
-  const activeIndex = activeRowId === undefined
-    ? direction === "previous"
-      ? targets.length
-      : -1
-    : targets.findIndex((target) => target.rowId === activeRowId);
+  const activeIndex =
+    activeRowId === undefined
+      ? direction === "previous"
+        ? targets.length
+        : -1
+      : targets.findIndex((target) => target.rowId === activeRowId);
   const nextIndex = activeIndex + (direction === "previous" ? -1 : 1);
   return targets[Math.max(0, Math.min(targets.length - 1, nextIndex))];
 }

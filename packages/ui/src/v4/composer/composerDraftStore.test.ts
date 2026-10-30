@@ -45,6 +45,8 @@ describe("composer draft persistence", () => {
       });
     }
     expect(readV4ComposerDraft("/workspace", undefined, "session-0")).toBeNull();
-    expect(readV4ComposerDraft("/workspace", undefined, `session-${MAX_V4_DRAFT_SCOPES}`)).not.toBeNull();
+    expect(
+      readV4ComposerDraft("/workspace", undefined, `session-${MAX_V4_DRAFT_SCOPES}`),
+    ).not.toBeNull();
   });
 });

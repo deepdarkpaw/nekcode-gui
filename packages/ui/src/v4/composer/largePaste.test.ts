@@ -54,8 +54,6 @@ describe("large paste blocks", () => {
       lineCount: 1,
     } as const;
     expect(removeLargePasteBlock([first, second], "paste-1")).toEqual([second]);
-    expect(expandLargePasteBlocks("[paste 1] [paste 2]", [second])).toBe(
-      "[paste 1] second",
-    );
+    expect(expandLargePasteBlocks("[paste 1] [paste 2]", [second])).toBe("[paste 1] second");
   });
 });

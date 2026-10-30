@@ -57,7 +57,7 @@ import {
 } from "./mentions/nodes/PromptMentionNode.js";
 import { logger } from "./logger.js";
 
-import { navigatePromptHistory } from "./lib/promptHistory.js";
+import { navigatePromptHistory, shouldHandlePromptHistoryNavigation } from "./lib/promptHistory.js";
 import type { MentionItemData } from "@/mentions/mentionTypes.js";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 
@@ -1079,7 +1079,13 @@ function PromptHistoryPlugin({
 
       // 历史导航只在“空输入”、光标位于首行起点或已经进入历史浏览态时接管上下键，
       // 避免抢走多行输入中间位置原本的光标移动行为。
-      if (currentIndex === null && !atEditorStart) {
+      if (
+        !shouldHandlePromptHistoryNavigation({
+          text,
+          atEditorStart,
+          currentIndex,
+        })
+      ) {
         return false;
       }
       if (currentIndex === null && text.length > 0 && direction === "up") {

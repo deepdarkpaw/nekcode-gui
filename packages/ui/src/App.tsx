@@ -789,7 +789,9 @@ export function App({
 
   useNekActionKeyboard();
   useNekActionHandlers({
-    "app.session.new": { run: () => runVisibleWorkspaceCommand(() => handleCreateTaskIfWritable()) },
+    "app.session.new": {
+      run: () => runVisibleWorkspaceCommand(() => handleCreateTaskIfWritable()),
+    },
     "gui.settings.open": { run: openSettingsTab },
     "gui.commandPalette.open": { run: handleOpenQuickPick },
     "tui.altScreen.search": { run: handleOpenTaskFind },

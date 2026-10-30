@@ -35,7 +35,10 @@ describe("nek action dispatch", () => {
   it("K2: IME composition and repeat never resolve an action", () => {
     const bindings = resolveEffectiveActionBindings();
     expect(
-      resolveNekActionKeyboardEvent(event({ key: "o", ctrlKey: true, isComposing: true }), bindings),
+      resolveNekActionKeyboardEvent(
+        event({ key: "o", ctrlKey: true, isComposing: true }),
+        bindings,
+      ),
     ).toBe(null);
     expect(
       resolveNekActionKeyboardEvent(event({ key: "o", ctrlKey: true, keyCode: 229 }), bindings),
@@ -55,7 +58,26 @@ describe("nek action dispatch", () => {
     ).toBe("tui.altScreen.search");
   });
 
-  it("K4: dispatch runs the focused handler and does not run it twice after cleanup", () => {
+  it("K4: composer scope resolves Shift+Tab only while editing", () => {
+    expect(
+      resolveNekActionKeyboardEvent(
+        event({ key: "Tab", shiftKey: true }),
+        resolveEffectiveActionBindings(),
+        false,
+        win,
+      ),
+    ).toBe(null);
+    expect(
+      resolveNekActionKeyboardEvent(
+        event({ key: "Tab", shiftKey: true }),
+        resolveEffectiveActionBindings(),
+        true,
+        win,
+      ),
+    ).toBe("app.thinking.cycle");
+  });
+
+  it("K5: dispatch runs the focused handler and does not run it twice after cleanup", () => {
     const run = vi.fn();
     const dispose = registerNekActionHandlers({ "app.tools.expand": { run } }, 10);
     expect(dispatchNekAction("app.tools.expand")).toBe(true);
@@ -65,7 +87,7 @@ describe("nek action dispatch", () => {
     expect(run).toHaveBeenCalledOnce();
   });
 
-  it("K5: disabled runtime handlers are not reported as handled", () => {
+  it("K6: disabled runtime handlers are not reported as handled", () => {
     const run = vi.fn();
     registerNekActionHandlers({
       "app.thinking.toggle": {
@@ -78,7 +100,7 @@ describe("nek action dispatch", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("K6: registry marks unavailable targets with a reason instead of claiming success", () => {
+  it("K7: registry marks unavailable targets with a reason instead of claiming success", () => {
     expect(getNekActionDisabledReason("app.model.select")).toEqual({
       id: "ui.action.unavailable.modelPicker",
     });

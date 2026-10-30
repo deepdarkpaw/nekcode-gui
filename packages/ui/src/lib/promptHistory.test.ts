@@ -3,6 +3,7 @@ import {
   appendPromptHistoryEntry,
   MAX_PROMPT_HISTORY_ENTRY_BYTES,
   navigatePromptHistory,
+  shouldHandlePromptHistoryNavigation,
 } from "./promptHistory.js";
 
 describe("prompt history", () => {
@@ -27,6 +28,23 @@ describe("prompt history", () => {
       nextValue: "",
       shouldHandle: true,
     });
+  });
+
+  it("P9: a non-empty first-line cursor may browse history, but a middle cursor may not", () => {
+    expect(
+      shouldHandlePromptHistoryNavigation({
+        text: "draft",
+        atEditorStart: true,
+        currentIndex: null,
+      }),
+    ).toBe(true);
+    expect(
+      shouldHandlePromptHistoryNavigation({
+        text: "draft",
+        atEditorStart: false,
+        currentIndex: null,
+      }),
+    ).toBe(false);
   });
 
   it("P6: down from a fresh empty editor is not intercepted", () => {

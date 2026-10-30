@@ -3304,7 +3304,8 @@ const enUS: Record<string, string> = {
   "nek.status.usage.compact": "Compress context",
   "nek.status.usage.context": "{percent}% · {tokens}/{window}",
   "ui.action.busy": "The previous operation is still being processed",
-  "ui.action.unavailable.modelPicker": "The model picker does not currently expose a shortcut entry",
+  "ui.action.unavailable.modelPicker":
+    "The model picker does not currently expose a shortcut entry",
   "ui.action.unavailable.externalEditor": "The external editor is not connected in this GUI yet",
   "todo.panel.title": "Todo",
   "todo.panel.currentTask": "Current task",

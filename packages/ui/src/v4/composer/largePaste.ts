@@ -12,8 +12,7 @@ export interface LargePasteBlock {
 
 export function isLargePaste(text: string): boolean {
   return (
-    text.length > LARGE_PASTE_CHAR_THRESHOLD ||
-    countPasteLines(text) > LARGE_PASTE_LINE_THRESHOLD
+    text.length > LARGE_PASTE_CHAR_THRESHOLD || countPasteLines(text) > LARGE_PASTE_LINE_THRESHOLD
   );
 }
 
@@ -50,14 +49,8 @@ export function createLargePasteBlock({
   };
 }
 
-export function expandLargePasteBlocks(
-  text: string,
-  blocks: readonly LargePasteBlock[],
-): string {
-  return blocks.reduce(
-    (expanded, block) => expanded.split(block.marker).join(block.text),
-    text,
-  );
+export function expandLargePasteBlocks(text: string, blocks: readonly LargePasteBlock[]): string {
+  return blocks.reduce((expanded, block) => expanded.split(block.marker).join(block.text), text);
 }
 
 export function removeLargePasteBlock(

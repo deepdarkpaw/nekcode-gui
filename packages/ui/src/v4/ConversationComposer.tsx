@@ -82,10 +82,7 @@ import {
   ChatMediaAttachmentPreviewDialog,
   type ChatMediaAttachmentPreviewTarget,
 } from "@/ChatMediaAttachmentPreviewDialog.js";
-import type {
-  ChatComposerPasteEvent,
-  LexicalChatInputHandle,
-} from "@/LexicalChatInput.js";
+import type { ChatComposerPasteEvent, LexicalChatInputHandle } from "@/LexicalChatInput.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -135,6 +132,7 @@ import {
 import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
+import { ContextAttachmentPill } from "@/v4/composer/ContextAttachmentPill.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
 import {
   createLargePasteBlock,
@@ -609,6 +607,7 @@ function ConversationComposerImpl({
     disabled,
   });
   const pasteBlocksRef = useRef<LargePasteBlock[]>([]);
+  const [pasteBlocks, setPasteBlocks] = useState<readonly LargePasteBlock[]>([]);
   const nextPasteBlockIdRef = useRef(1);
   const handleComposerPaste = useCallback(
     (event: ChatComposerPasteEvent) => {

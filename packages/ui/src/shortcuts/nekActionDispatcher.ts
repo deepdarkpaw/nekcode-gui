@@ -22,7 +22,7 @@ export interface NekActionHandler {
 export type NekActionHandlers = Partial<Record<NekActionId, NekActionHandler | null>>;
 
 interface HandlerRegistration {
-  readonly handlers: NekActionHandlers;
+  readonly handlersRef: { current: NekActionHandlers };
   readonly priority: number;
 }
 
@@ -39,19 +39,30 @@ export function resolveNekActionKeyboardEvent(
   editableTarget = false,
   platformInfo?: KeyboardShortcutPlatformInfo,
 ): NekActionId | null {
-  const actionId = matchActionEvent(event, effective, "global", platformInfo);
-  if (actionId === null) return null;
-  if (editableTarget && !getNekAction(actionId).allowInEditable) return null;
-  return actionId;
+  const globalActionId = matchActionEvent(event, effective, "global", platformInfo);
+  if (globalActionId !== null) {
+    if (editableTarget && !getNekAction(globalActionId).allowInEditable) return null;
+    return globalActionId;
+  }
+  if (!editableTarget) return null;
+  return matchActionEvent(event, effective, "composer", platformInfo);
 }
 
 /** 注册一个 pane/app 的当前动作处理器；cleanup 后不会残留旧 pane 的回调。 */
-export function registerNekActionHandlers(
-  handlers: NekActionHandlers,
-  priority = 0,
+export function registerNekActionHandlers(handlers: NekActionHandlers, priority = 0): () => void {
+  const ownerId = `nek-action-owner-${nextOwnerId++}`;
+  registrations.set(ownerId, { handlersRef: { current: handlers }, priority });
+  return () => {
+    registrations.delete(ownerId);
+  };
+}
+
+function registerNekActionHandlersRef(
+  handlersRef: { current: NekActionHandlers },
+  priority: number,
 ): () => void {
   const ownerId = `nek-action-owner-${nextOwnerId++}`;
-  registrations.set(ownerId, { handlers, priority });
+  registrations.set(ownerId, { handlersRef, priority });
   return () => {
     registrations.delete(ownerId);
   };
@@ -60,7 +71,7 @@ export function registerNekActionHandlers(
 function currentHandler(actionId: NekActionId): NekActionHandler | null {
   const candidates = [...registrations.values()]
     .map((registration) => ({
-      handler: registration.handlers[actionId],
+      handler: registration.handlersRef.current[actionId],
       priority: registration.priority,
     }))
     .filter(
@@ -80,9 +91,7 @@ export function dispatchNekAction(actionId: NekActionId): boolean {
 }
 
 /** 在宿主组件中挂载唯一的 window capture 键盘通道。 */
-export function useNekActionKeyboard(
-  platformInfo?: KeyboardShortcutPlatformInfo,
-): void {
+export function useNekActionKeyboard(platformInfo?: KeyboardShortcutPlatformInfo): void {
   const platformInfoRef = useRef(platformInfo);
   platformInfoRef.current = platformInfo;
 
@@ -114,7 +123,7 @@ export function useNekActionHandlers(
   handlersRef.current = handlers;
   useEffect(() => {
     if (!enabled) return;
-    return registerNekActionHandlers(handlersRef.current, priority);
+    return registerNekActionHandlersRef(handlersRef, priority);
   }, [enabled, priority]);
 }
 

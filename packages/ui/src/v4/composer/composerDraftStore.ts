@@ -6,8 +6,8 @@
 // 语义：scope = sessionId（draft 态 = "__draft__"）；保存 text + editorStateJson，外部预填在
 // Lexical 尚未挂载时额外保存 mention（保证重挂载不降级为纯文本）。
 // mode/modelSelection 与正文同 scope 保存；发送只清内容，显式清理才删除整个 scope。
-// 附件不入草稿（objectUrl/File 不可序列化，localPath 附件重启后归属难校验——
-// 与「v4 composer 不做附件草稿持久化」的裁决一致）。
+// 只持久化已完成上传的 AttachmentRef（objectUrl/File 内容本体不落盘），恢复时由 composer
+// 把引用交回现有 session-owned attachment 通道；未完成上传项仍只留在 renderer 内存。
 import { logger } from "@/logger.js";
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared";
 import {
@@ -256,7 +256,14 @@ export function persistV4ComposerDraft(
     delete file.scopes[scopeId];
   } else {
     const normalized = normalizeDraftForStorage(draft);
-    file.scopes[scopeId] = { ...normalized, updatedAt: Date.now() };
+    const latestUpdatedAt = Object.values(file.scopes).reduce(
+      (latest, current) => Math.max(latest, current.updatedAt),
+      0,
+    );
+    file.scopes[scopeId] = {
+      ...normalized,
+      updatedAt: Math.max(Date.now(), latestUpdatedAt + 1),
+    };
   }
   return writeDraftFile(key, file);
 }
