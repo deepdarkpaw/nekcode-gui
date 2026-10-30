@@ -27,7 +27,6 @@ import {
 } from "@/v4/pendingInteractionAdapter.js";
 import { V4UserInputDialog } from "@/v4/V4UserInputDialog.js";
 import { NekInteractionHost } from "@/nek/interactions/NekInteractionHost.js";
-import { useOptionalNekAgentFeed } from "@/nek/feed/nekAgentFeed.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
 
 interface V4InteractionDialogsProps {
@@ -106,7 +105,6 @@ export function V4InteractionDialogs({
   onPlanInteractionAccepted,
 }: V4InteractionDialogsProps) {
   const { sendCommand } = useV4Conversation();
-  const interactionFeed = useOptionalNekAgentFeed();
   const connectWorkspaceHookCommands = useWorkspaceHookReviewStore((state) => state.connect);
   const disconnectWorkspaceHookCommands = useWorkspaceHookReviewStore((state) => state.disconnect);
   const upsertWorkspaceHookReview = useWorkspaceHookReviewStore((state) => state.upsert);
@@ -303,12 +301,7 @@ export function V4InteractionDialogs({
     }
   }, [pending?.autoResolution, pending?.interactionId, sendSnoozeOnce]);
 
-  const nekInteractionHost = (
-    <NekInteractionHost
-      sessionKey={sessionId}
-      respondNekInteraction={interactionFeed?.respond}
-    />
-  );
+  const nekInteractionHost = <NekInteractionHost sessionKey={sessionId} />;
   if (!pending) {
     return nekInteractionHost;
   }

@@ -1,12 +1,19 @@
-import { createContext, createElement, useContext, useEffect, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useMemo,
+  type ReactNode,
+} from "react";
 import type { IZCodeAgentService } from "@zcode/services";
 import type { IDisposable } from "@zcode/rpc";
-import type {
-  NekAgentTypeInfo,
-  NekExtensionUiResponse,
-  NekInteractionFrame,
-} from "@zcode/shared/nek-protocol";
-import { useNekInteractionStore, type NekInteractionStoreApi } from "@/nek/interactions/interactionStore.js";
+import type { NekAgentTypeInfo, NekInteractionFrame } from "@zcode/shared/nek-protocol";
+import { logger } from "@/logger.js";
+import {
+  useNekInteractionStore,
+  type NekInteractionStoreApi,
+} from "@/nek/interactions/interactionStore.js";
 import type { WorkspaceConnectionAgentService } from "@/v4/workspaceConnectionRegistry.js";
 
 type NekAgentFeedTargetBase = Parameters<IZCodeAgentService["onDynamicNekInteractionFrame"]>[0];
@@ -70,17 +77,33 @@ interface FeedEntry {
 const feedEntries = new WeakMap<object, Map<string, FeedEntry>>();
 
 function targetKey(target: NekAgentFeedTarget): string {
-  return JSON.stringify([target.workspacePath, target.workspaceIdentity ?? "", target.remoteSessionId ?? ""]);
+  return JSON.stringify([
+    target.workspacePath,
+    target.workspaceIdentity ?? "",
+    target.remoteSessionId ?? "",
+  ]);
 }
 
 function frameSessionKey(frame: NekInteractionFrame, target: NekAgentFeedTarget): string {
   return frame.scope.sessionId ?? frame.scope.sessionKey ?? target.workspacePath;
 }
 
-function isPendingRequest(store: NekInteractionStoreApi, id: string): boolean {
-  return Object.values(store.getState().sessions).some((session) =>
-    session.queue.some((record) => record.request.id === id),
-  );
+/**
+ * 一条 feed 记住的会话键上限：一个 workspace 上打开过的会话数量有限，超出只丢最旧的键
+ * （队列本身由 store 的 32 会话 LRU 收口），避免长时间打开的窗格无限增长。
+ */
+const NEK_FEED_SESSION_KEY_LIMIT = 64;
+
+function rememberSessionKey(sessionKeys: Set<string>, sessionKey: string): void {
+  if (sessionKeys.has(sessionKey)) return;
+  sessionKeys.add(sessionKey);
+  if (sessionKeys.size <= NEK_FEED_SESSION_KEY_LIMIT) return;
+  const oldest = sessionKeys.values().next();
+  if (oldest.done) return;
+  sessionKeys.delete(oldest.value);
+  logger.warn("[nekAgentFeed] dropping the oldest tracked session key", {
+    sessionKey: oldest.value,
+  });
 }
 
 function createNekAgentFeed(
@@ -92,12 +115,13 @@ function createNekAgentFeed(
   let subscription: IDisposable | undefined;
   const ingest = (frame: NekInteractionFrame): void => {
     const sessionKey = frameSessionKey(frame, target);
-    sessionKeys.add(sessionKey);
+    rememberSessionKey(sessionKeys, sessionKey);
     if (frame.kind === "request") {
       store.getState().enqueueExtensionRequest(sessionKey, frame.request);
       return;
     }
-    store.getState().cancelByHost(sessionKey, frame.id);
+    // 请求 id 全局唯一；按 id 找会话可以覆盖"发出请求的会话随后被回收"的撤销帧。
+    store.getState().cancelById(frame.id);
   };
   const feed: NekAgentFeed = {
     respond: async ({ requestId, response }) => {
@@ -106,15 +130,11 @@ function createNekAgentFeed(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (/no longer pending|unknown interaction/u.test(message)) {
-          // The bridge's false/unknown-id result means nek already cancelled this request.
-          // Remove the stale card before surfacing the error to the controller.
-          for (const sessionKey of sessionKeys) {
-            store.getState().cancelByHost(sessionKey, requestId);
-          }
+          // 后端已经不认识这条请求：先撤掉过期卡片并留下一次性提示，再把错误交给控制器。
+          store.getState().cancelStaleById(requestId);
           throw new Error(`Interaction ${requestId} is no longer pending: ${message}`);
         }
-        // A transport failure must leave the request in the queue; the controller can show
-        // its error state and retry the same response.
+        // 传输失败必须让请求留在队列里：控制器显示错误，用户可以原样重试。
         throw error;
       }
     },
@@ -144,14 +164,14 @@ export function acquireNekAgentFeed(
 ): { feed: NekAgentFeed; release: () => void } {
   const serviceEntries = feedEntries.get(service);
   const key = targetKey(target);
-  let entry = serviceEntries?.get(key);
-  if (!entry) {
+  const existing = serviceEntries?.get(key);
+  const entry = existing ?? createNekAgentFeed(service, target, store);
+  if (existing) {
+    existing.refs += 1;
+  } else {
     const nextEntries = serviceEntries ?? new Map<string, FeedEntry>();
-    entry = createNekAgentFeed(service, target, store);
     nextEntries.set(key, entry);
     feedEntries.set(service, nextEntries);
-  } else {
-    entry.refs += 1;
   }
   let released = false;
   return {
@@ -159,9 +179,9 @@ export function acquireNekAgentFeed(
     release: () => {
       if (released) return;
       released = true;
-      entry!.refs -= 1;
-      if (entry!.refs > 0) return;
-      entry!.dispose();
+      entry.refs -= 1;
+      if (entry.refs > 0) return;
+      entry.dispose();
       const entries = feedEntries.get(service);
       entries?.delete(key);
       if (entries?.size === 0) feedEntries.delete(service);
@@ -169,9 +189,12 @@ export function acquireNekAgentFeed(
   };
 }
 
-const NekAgentFeedContext = createContext<NekAgentFeed | null>(null);
+const NekAgentFeedContext = createContext<{
+  feed: NekAgentFeed;
+  target: NekAgentFeedTarget;
+} | null>(null);
 
-export interface NekAgentFeedProviderProps {
+interface NekAgentFeedProviderProps {
   service: NekAgentFeedService;
   target: NekAgentFeedTarget;
   children: ReactNode;
@@ -180,18 +203,26 @@ export interface NekAgentFeedProviderProps {
 export function NekAgentFeedProvider({ service, target, children }: NekAgentFeedProviderProps) {
   const lease = useMemo(() => acquireNekAgentFeed(service, target), [service, target]);
   useEffect(() => () => lease.release(), [lease]);
-  return createElement(NekAgentFeedContext.Provider, { value: lease.feed }, children);
+  const value = useMemo(() => ({ feed: lease.feed, target }), [lease, target]);
+  return createElement(NekAgentFeedContext.Provider, { value }, children);
 }
 
 /** Optional so static/replay views can keep the existing headless controllers. */
 export function useOptionalNekAgentFeed(): NekAgentFeed | null {
-  return useContext(NekAgentFeedContext);
+  return useContext(NekAgentFeedContext)?.feed ?? null;
 }
 
 export function useNekAgentFeed(): NekAgentFeed {
   const feed = useOptionalNekAgentFeed();
   if (!feed) throw new Error("useNekAgentFeed must be used inside NekAgentFeedProvider");
   return feed;
+}
+
+/** feed 绑定的 workspace 目标：子代理 RPC 在同一目标上补 sessionId。 */
+export function useNekAgentFeedTarget(): NekAgentFeedTarget {
+  const value = useContext(NekAgentFeedContext);
+  if (!value) throw new Error("useNekAgentFeedTarget must be used inside NekAgentFeedProvider");
+  return value.target;
 }
 
 export const NEK_AGENT_FEED_METHODS = [
@@ -201,7 +232,3 @@ export const NEK_AGENT_FEED_METHODS = [
   "getSubagentTranscript",
   "listAgentTypes",
 ] as const satisfies readonly (keyof WorkspaceConnectionAgentService)[];
-
-export function hasPendingInteraction(store: NekInteractionStoreApi, requestId: string): boolean {
-  return isPendingRequest(store, requestId);
-}
