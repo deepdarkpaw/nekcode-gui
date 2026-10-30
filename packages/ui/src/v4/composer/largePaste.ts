@@ -25,7 +25,7 @@ function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).byteLength;
 }
 
-export function isLargePaste(text: string): boolean {
+function isLargePaste(text: string): boolean {
   return (
     text.length > LARGE_PASTE_CHAR_THRESHOLD || countPasteLines(text) > LARGE_PASTE_LINE_THRESHOLD
   );

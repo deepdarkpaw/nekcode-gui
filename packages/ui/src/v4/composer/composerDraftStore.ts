@@ -47,7 +47,7 @@ export const V4_DRAFT_SCOPE_ROOT = "__draft__";
 export const MAX_V4_DRAFT_SCOPES = 50;
 /** 单条正文最多 128 KiB；编辑器 JSON 超出剩余预算时不落盘 JSON。 */
 export const MAX_V4_DRAFT_TEXT_BYTES = 128 * 1024;
-export const MAX_V4_DRAFT_ATTACHMENTS = 8;
+const MAX_V4_DRAFT_ATTACHMENTS = 8;
 const warnedStorageKeys = new Set<string>();
 
 function warnStorageFailure(key: string, error: unknown) {
