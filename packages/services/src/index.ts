@@ -134,6 +134,7 @@ export {
 export {
   createZCodeAgentConnectionScope,
   readTrustedZCodeAgentV4Connection,
+  NEK_INTERACTION_FEED_METHODS,
 } from "./zcode-agent/zcodeAgentConnectionScope.js";
 export type {
   ZCodeAgentConnectionScope,

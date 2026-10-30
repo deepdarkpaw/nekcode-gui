@@ -72,6 +72,12 @@ type ConversationV4AgentService = Pick<
   | "onDynamicConversationFrame"
   | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
+  // nek interaction feed
+  | "onDynamicNekInteractionFrame"
+  | "respondNekInteraction"
+  | "stopSubagent"
+  | "getSubagentTranscript"
+  | "listAgentTypes"
 > &
   Partial<Pick<IZCodeAgentService, "onAgentRuntimeLifecycle">>;
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   NekExtensionUiDialogRequest,
   NekExtensionUiFireAndForgetRequest,
@@ -209,5 +209,146 @@ describe("NekInteractionStore", () => {
     store.getState().cancelByUser("session-a", "a");
     expect(interval).toBeUndefined();
     store.getState().shutdown();
+  });
+
+  it("settleAsync answers first and only then closes the request", async () => {
+    store.getState().enqueue("session-a", inputRequest("a"));
+    const responder = vi.fn(async () => undefined);
+    await expect(
+      store
+        .getState()
+        .settleAsync(
+          "session-a",
+          "a",
+          { type: "extension_ui_response", id: "a", value: "v" },
+          responder,
+        ),
+    ).resolves.toBe(true);
+    expect(responder).toHaveBeenCalledWith("session-a", {
+      type: "extension_ui_response",
+      id: "a",
+      value: "v",
+    });
+    expect(store.getState().getHead("session-a")).toBeUndefined();
+    expect(responses).toHaveLength(0);
+  });
+
+  it("settleAsync keeps the request and its draft when delivery fails", async () => {
+    store.getState().enqueue("session-a", inputRequest("a"));
+    store.getState().updateDraft("session-a", "a", { text: "draft" });
+    await expect(
+      store
+        .getState()
+        .settleAsync(
+          "session-a",
+          "a",
+          { type: "extension_ui_response", id: "a", value: "v" },
+          async () => {
+            throw new Error("transport down");
+          },
+        ),
+    ).rejects.toThrow("transport down");
+    expect(store.getState().getHead("session-a")?.request.id).toBe("a");
+    expect(store.getState().sessions["session-a"]?.drafts.a).toEqual({ text: "draft" });
+  });
+
+  it("settleAsync only submits once while the first answer is in flight", async () => {
+    store.getState().enqueue("session-a", inputRequest("a"));
+    let release: (() => void) | undefined;
+    const responder = vi.fn(
+      async () =>
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const first = store
+      .getState()
+      .settleAsync(
+        "session-a",
+        "a",
+        { type: "extension_ui_response", id: "a", value: "1" },
+        responder,
+      );
+    await expect(
+      store
+        .getState()
+        .settleAsync(
+          "session-a",
+          "a",
+          { type: "extension_ui_response", id: "a", value: "2" },
+          responder,
+        ),
+    ).resolves.toBe(false);
+    release?.();
+    await expect(first).resolves.toBe(true);
+    expect(responder).toHaveBeenCalledOnce();
+  });
+
+  it("settleAsync still succeeds when the host cancels while the answer is in flight", async () => {
+    store.getState().enqueue("session-a", inputRequest("a"));
+    await expect(
+      store
+        .getState()
+        .settleAsync(
+          "session-a",
+          "a",
+          { type: "extension_ui_response", id: "a", value: "v" },
+          async () => {
+            store.getState().cancelByHost("session-a", "a");
+          },
+        ),
+    ).resolves.toBe(true);
+    expect(store.getState().getHead("session-a")).toBeUndefined();
+  });
+
+  it("routes non-component cancels through the responder registered for that session", () => {
+    const registered = vi.fn();
+    store.getState().setResponder("session-a", registered);
+    store.getState().enqueue("session-a", inputRequest("a", 1_000));
+    store.getState().enqueue("session-b", inputRequest("b", 1_000));
+    now = 2_000;
+    interval?.();
+    expect(registered).toHaveBeenCalledWith("session-a", {
+      type: "extension_ui_response",
+      id: "a",
+      cancelled: true,
+    });
+    // 未注册的会话仍走创建 store 时的兜底 responder。
+    expect(responses).toEqual([{ type: "extension_ui_response", id: "b", cancelled: true }]);
+  });
+
+  it("clearResponder only removes the implementation that is still registered", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    store.getState().setResponder("session-a", first);
+    store.getState().setResponder("session-a", second);
+    store.getState().clearResponder("session-a", first);
+    store.getState().cancelByUser("session-a", "a");
+    store.getState().enqueue("session-a", inputRequest("a"));
+    store.getState().cancelByUser("session-a", "a");
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+  });
+
+  it("cancelStaleById removes the request and leaves one bounded notice", () => {
+    store.getState().enqueue("session-a", inputRequest("a"));
+    expect(store.getState().cancelStaleById("a")).toBe(true);
+    expect(store.getState().getHead("session-a")).toBeUndefined();
+    expect(store.getState().cancelStaleById("a")).toBe(false);
+    expect(store.getState().sessions["session-a"]?.notices).toEqual([
+      { requestId: "a", id: "nek.interaction.cancelledByHost" },
+    ]);
+    expect(store.getState().sessions["session-a"]?.closedRequestIds).toContain("a");
+  });
+
+  it("keeps notices bounded when many requests go stale", () => {
+    for (let index = 0; index < 12; index += 1) {
+      const id = `stale-${index}`;
+      store.getState().enqueue("session-a", inputRequest(id));
+      store.getState().cancelStaleById(id);
+    }
+    expect(store.getState().sessions["session-a"]?.notices).toHaveLength(8);
+    expect(store.getState().takeNotices("session-a")).toHaveLength(8);
+    expect(store.getState().sessions["session-a"]?.notices).toEqual([]);
   });
 });

@@ -37,6 +37,12 @@ export type WorkspaceConnectionAgentService = Pick<
   | "onDynamicConversationFrame"
   | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
+  // nek interaction feed
+  | "onDynamicNekInteractionFrame"
+  | "respondNekInteraction"
+  | "stopSubagent"
+  | "getSubagentTranscript"
+  | "listAgentTypes"
 >;
 
 interface WorkspaceConnectionScope {
