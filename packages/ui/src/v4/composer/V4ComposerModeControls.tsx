@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo } from "react";
 import { ChevronDownIcon } from "lucide-react";
 import {
   TID_CHAT_MODE_SELECT_TRIGGER,
@@ -7,7 +7,6 @@ import {
   ZCODE_AGENT_PROVIDER,
   getZCodeAgentAvailableModes,
   testId,
-  type ZCodeConfigOption,
 } from "@zcode/shared";
 import {
   DropdownMenu,
@@ -25,15 +24,9 @@ import {
 } from "@/chat-input-toolbar/display.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { isCoarseTouchDevice } from "@/lib/pickerFocus.js";
-import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
+import { useActionShortcutLabel } from "@/shortcuts/useActionShortcuts.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
-import {
-  getNextConfigSelectValue,
-  useToolbarShortcutBindings,
-} from "@/v4/composer/toolbarShortcuts.js";
 import type { V4ComposerToolbarProps } from "@/v4/composer/V4ComposerToolbar.js";
-
-function noop(): void {}
 
 /** 模式只有 agent / plan 两档，单选；只编辑草稿，不向 Runtime 发切换命令。 */
 function V4ComposerModeSwitchImpl({
@@ -56,35 +49,13 @@ function V4ComposerModeSwitchImpl({
 >) {
   const { intl } = useZCodeIntl();
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
-  const modeShortcutLabel = useShortcutCommandLabel("cycleSessionMode");
+  // Agent/Plan 切换的快捷键是 nek 动作 `nek.plan.toggle`（默认 Alt+M），
+  // 由 SessionPane 统一登记；工具条只负责展示 label 与点击切换。
+  const modeShortcutLabel = useActionShortcutLabel("nek.plan.toggle");
   const modes = getZCodeAgentAvailableModes();
   const selected = modes.find((mode) => mode.id === draftConfig?.mode);
   const label = (mode: (typeof modes)[number]) =>
     getModeOptionDisplayLabel(intl, displayProvider, { value: mode.id, name: mode.name });
-  const modeOption = useMemo<ZCodeConfigOption>(
-    () => ({
-      id: "mode",
-      name: "Mode",
-      category: "mode",
-      type: "select",
-      currentValue: draftConfig?.mode ?? "agent",
-      options: getZCodeAgentAvailableModes().map((mode) => ({ value: mode.id, name: mode.name })),
-    }),
-    [draftConfig?.mode],
-  );
-  const cycle = useCallback(() => {
-    const next = getNextConfigSelectValue(modeOption);
-    if (next) onSwitchMode(next);
-  }, [modeOption, onSwitchMode]);
-  useToolbarShortcutBindings({
-    hasAnyOption: Boolean(selected),
-    toolbarDisabled: disabled,
-    modelMenuDisabled: true,
-    modeOption,
-    onCycleSessionMode: cycle,
-    onOpenModelMenu: noop,
-    onCycleThoughtLevel: noop,
-  });
   if (!selected) return null;
   const Icon = resolveModeOptionIcon(selected.id);
   return (

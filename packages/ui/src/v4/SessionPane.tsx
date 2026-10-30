@@ -106,6 +106,7 @@ import {
   type ConversationComposerSendResult,
 } from "@/v4/ConversationComposer.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
+import { shouldIgnoreEscapeForStopGeneration } from "@/v4/composer/escapeStop.js";
 import { ConversationDraftEmptyState } from "@/v4/ConversationDraftEmptyState.js";
 import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHeader.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
@@ -956,7 +957,9 @@ export function SessionPane({
   const nextComposerRestoreRequestIdRef = useRef(1);
   const timelineScrollToBottomRef = useRef<(() => void) | null>(null);
   const timelineScrollToTopRef = useRef<(() => void) | null>(null);
-  const timelineScrollToPromptRef = useRef<((direction: "previous" | "next") => void) | null>(null);
+  const timelineScrollToPromptRef = useRef<((direction: "previous" | "next") => boolean) | null>(
+    null,
+  );
   const timelineScrollToQueryRef = useRef<
     ((target: { unitIndex: number; rowId: number }) => void) | null
   >(null);
@@ -3060,39 +3063,78 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
+  // focused pane 独占 nek 动作：stop / 折叠 / 跳转都作用于明确的 pane。
+  // 每个 handler 返回「本次是否真的执行了目标」，没执行时派发器不吞按键。
+  const queueHasItems = (snapshot?.queue.items.length ?? 0) > 0;
+  const timelineRendered = !(sessionId !== null && state.status === "error");
   useNekActionHandlers(
     {
       "app.interrupt": {
-        enabled: Boolean(sessionId && snapshotRef.current?.control.canStop),
-        run: () => handleStop("escape"),
+        enabled: Boolean(sessionId && snapshot?.control.canStop),
+        run: ({ event }) => {
+          // 对话框 / 提及面板已经消费这次 Esc 时不再停止生成（只关最内层）。
+          if (event && shouldIgnoreEscapeForStopGeneration(event)) return false;
+          if (!snapshotRef.current?.control.canStop) return false;
+          handleStop("escape");
+          return true;
+        },
       },
       "nek.plan.toggle": {
         enabled: !readOnly,
-        run: () => handleSwitchMode(draftConfig.planEnabled ? "agent" : "plan"),
+        run: () => {
+          handleSwitchMode(draftConfig.planEnabled ? "agent" : "plan");
+          return true;
+        },
       },
       "app.tools.expand": {
         enabled: !readOnly,
-        run: () => useFoldStore.getState().toggleGroup("toolOutput"),
+        run: () => {
+          useFoldStore.getState().toggleGroup("toolOutput");
+          return true;
+        },
       },
       "app.thinking.toggle": {
         enabled: !readOnly,
-        run: () => useFoldStore.getState().toggleGroup("thinking"),
+        run: () => {
+          useFoldStore.getState().toggleGroup("thinking");
+          return true;
+        },
+      },
+      "app.message.dequeue": {
+        // nek 一次取回全部排队消息；GUI 的输入框只有一份草稿，逐条取回（每次最早一条）。
+        enabled: !readOnly && queueHasItems,
+        run: () => {
+          const next = snapshotRef.current?.queue.items[0];
+          if (!next) return false;
+          void handleEditQueueItem(next.queueItemId);
+          return true;
+        },
       },
       "tui.altScreen.previousPrompt": {
-        enabled: Boolean(!readOnly && timelineScrollToPromptRef.current),
-        run: () => timelineScrollToPromptRef.current?.("previous"),
+        enabled: !readOnly && timelineRendered,
+        run: () => timelineScrollToPromptRef.current?.("previous") ?? false,
       },
       "tui.altScreen.nextPrompt": {
-        enabled: Boolean(!readOnly && timelineScrollToPromptRef.current),
-        run: () => timelineScrollToPromptRef.current?.("next"),
+        enabled: !readOnly && timelineRendered,
+        run: () => timelineScrollToPromptRef.current?.("next") ?? false,
       },
       "tui.altScreen.top": {
-        enabled: Boolean(!readOnly && timelineScrollToTopRef.current),
-        run: () => timelineScrollToTopRef.current?.(),
+        enabled: !readOnly && timelineRendered,
+        run: () => {
+          const action = timelineScrollToTopRef.current;
+          if (!action) return false;
+          action();
+          return true;
+        },
       },
       "tui.altScreen.bottom": {
-        enabled: Boolean(!readOnly && timelineScrollToBottomRef.current),
-        run: () => timelineScrollToBottomRef.current?.(),
+        enabled: !readOnly && timelineRendered,
+        run: () => {
+          const action = timelineScrollToBottomRef.current;
+          if (!action) return false;
+          action();
+          return true;
+        },
       },
     },
     focused && !readOnly,

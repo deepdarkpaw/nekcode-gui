@@ -36,6 +36,23 @@ import { useShortcutRecording } from "./useShortcutRecording.js";
  * 单行多绑定：一个命令一行，多组键帽在键位列纵向排列；每条可替换/删除，
  * 命令级「+」追加；同命令物理等价重复在录制入口拒绝。
  */
+/**
+ * 不在命令表里展示的命令：
+ * - `openOnboarding` / `toggleInterfaceMode`：只保留注册与冲突检测；
+ * - 已迁到 nek 动作表的命令：键位语义由 `shortcuts/nekActions.ts` 接管（动作页可改绑），
+ *   同一物理键在两张表里同时展示会让用户改错表。
+ */
+const HIDDEN_COMMAND_IDS: ReadonlySet<ShortcutCommandId> = new Set<ShortcutCommandId>([
+  "openOnboarding",
+  "toggleInterfaceMode",
+  "openCommandCenter",
+  "openSettings",
+  "findInTask",
+  "openModelMenu",
+  "cycleSessionMode",
+  "cycleThoughtLevel",
+]);
+
 export function ShortcutSettingsSection({ isDesktop = false }: { isDesktop?: boolean }) {
   const { intl } = useZCodeIntl();
   const { settings, update } = useSettings();
@@ -59,7 +76,7 @@ export function ShortcutSettingsSection({ isDesktop = false }: { isDesktop?: boo
     const keyBinding = keySearch.binding;
     return SHORTCUT_COMMANDS.filter((entry) => {
       // 这些快捷键保留注册和冲突检测，但不在用户可见列表中展示。
-      if (entry.id === "openOnboarding" || entry.id === "toggleInterfaceMode") return false;
+      if (HIDDEN_COMMAND_IDS.has(entry.id)) return false;
       const matchesText =
         !keyword ||
         entry.id.toLowerCase().includes(keyword) ||

@@ -318,9 +318,9 @@ interface ConversationTimelineProps {
   scrollToBottomActionRef?: { current: (() => void) | null };
   /** 宿主可调用的一次性“滚动到顶部”动作。 */
   scrollToTopActionRef?: { current: (() => void) | null };
-  /** 宿主可调用的相邻用户轮次跳转动作。 */
+  /** 宿主可调用的相邻用户轮次跳转动作；返回是否找到了目标轮次。 */
   scrollToPromptActionRef?: {
-    current: ((direction: "previous" | "next") => void) | null;
+    current: ((direction: "previous" | "next") => boolean) | null;
   };
   /** 宿主可调用的一次性 query 定位动作；不改变分享面板 view。 */
   scrollToQueryActionRef?: {
@@ -1407,13 +1407,15 @@ function ConversationTimelineImpl({
 
   useLayoutEffect(() => {
     if (!scrollToPromptActionRef) return;
-    const action = (direction: "previous" | "next") => {
+    const action = (direction: "previous" | "next"): boolean => {
       const target = resolveAdjacentConversationTurnQuery(
         turnNavigatorQueryTargetsRef.current,
         turnNavigatorViewport.activeQueryRowId,
         direction,
       );
-      if (target) scrollToQuery(target);
+      if (!target) return false;
+      scrollToQuery(target);
+      return true;
     };
     scrollToPromptActionRef.current = action;
     return () => {
