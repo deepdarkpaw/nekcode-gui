@@ -27,7 +27,14 @@ export interface NekHostDirEntry {
 
 /** 同步临界区（与 nek 的 `withLock` 同语义：回调内不得 await）。 */
 export interface NekHostLock {
-  runLocked: (path: string, critical: (current: string | undefined) => string | undefined) => void;
+  /**
+   * 同步临界区语义（回调内不得 await）；本机执行器直接同步返回，
+   * 远程执行器先拿远端锁再跑同一个回调，因此允许返回 Promise。
+   */
+  runLocked: (
+    path: string,
+    critical: (current: string | undefined) => string | undefined,
+  ) => Promise<void> | void;
 }
 
 export interface NekConfigHostExecutor {

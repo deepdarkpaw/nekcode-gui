@@ -57,7 +57,7 @@ export async function patchSettingsDocument(
     throw ioError(`cannot write ${path}: the target executor provides no settings lock`);
   }
   let next: string | undefined;
-  lock.runLocked(path, (current) => {
+  await lock.runLocked(path, (current) => {
     const currentRevision =
       current === undefined
         ? ABSENT_REVISION

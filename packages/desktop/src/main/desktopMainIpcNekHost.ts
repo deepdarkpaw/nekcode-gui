@@ -186,7 +186,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
   }
 
   dispose(): void {
-    this.remoteConfigs.dispose();
+    void this.remoteConfigs.dispose();
     for (const item of this.remoteInstallControllers.values()) void item.backend.dispose();
     this.remoteInstallControllers.clear();
     this.hostListeners.clear();
