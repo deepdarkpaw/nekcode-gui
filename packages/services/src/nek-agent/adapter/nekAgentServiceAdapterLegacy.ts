@@ -33,8 +33,6 @@ import {
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
 
-const MAX_CONVERSATION_PLANS = 100;
-
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
   if (typeof value !== "object" || value === null) return false;
   const plan = value as Partial<NekPlanSummary & { markdown: string }>;
@@ -297,7 +295,8 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       });
       if (!isNekState(stateResponse.result))
         throw new Error("nek returned an invalid state snapshot");
-      const summaries = stateResponse.result.plans.slice(-MAX_CONVERSATION_PLANS).reverse();
+      const limit = target.service.runtimeConfig.nek.maxConversationPlans;
+      const summaries = stateResponse.result.plans.slice(-limit).reverse();
       const plans = await Promise.all(
         summaries.map(async (summary, index) => {
           const response = await commandTarget.client.call({

@@ -272,7 +272,7 @@ export class NekAgentService
         sessionKey: key,
         cwd: input.cwd,
         approve: approval,
-        extensionUi: this.extensionUi,
+        extensionUi: this.extensionUiFor({ workspacePath: input.cwd, sessionKey: key }),
       });
       if (input.model || input.thinking || input.mode) {
         await this.withLease(record, async () => {
@@ -325,7 +325,7 @@ export class NekAgentService
       cwd: record.cwd,
       sessionPath: input.sessionPath,
       approve: approval,
-      extensionUi: this.extensionUi,
+      extensionUi: this.extensionUiFor({ workspacePath: record.cwd, sessionKey: record.key }),
     });
     if (record.state?.isStreaming) {
       this.emit({
@@ -419,6 +419,7 @@ export class NekAgentService
     }
     this.sessions.clear();
     this.byPath.clear();
+    this.interactions.dispose();
     await this.pool.dispose();
     this.listeners.clear();
   }

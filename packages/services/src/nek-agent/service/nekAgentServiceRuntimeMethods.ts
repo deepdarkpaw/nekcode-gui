@@ -1,17 +1,27 @@
 import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type {
   NekAgentMessage,
+  NekExtensionUiResponse,
+  NekInteractionFrame,
+  NekInteractionScope,
   NekRpcEvent,
   NekSessionEntry,
   NekSessionSnapshot,
 } from "@zcode/shared/nek-protocol";
-import { NekConversationProjector } from "../nekConversationProjector.js";
+import type { NekConversationProjector } from "../nekConversationProjector.js";
 import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js";
-import { NekProcessPool, type NekProcessPoolEvent } from "../nekProcessPool.js";
+import type { NekProcessPool, NekProcessPoolEvent } from "../nekProcessPool.js";
 import { createNekRpcProcess, type NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
-import { createProjectTrustPrompt } from "./projectTrustPrompt.js";
+import { NekGuiInteractionBridge } from "./guiInteractionBridge.js";
+import { createProjectTrustPrompt, resolveProjectTrustApproval } from "./projectTrustPrompt.js";
 import { isNekState } from "./types.js";
+import {
+  NEK_LONG_RUNNING_COMMANDS,
+  createNekAgentProcessPool,
+  createNekConversationProjector,
+  nekLockLabel,
+} from "./nekAgentServiceWiring.js";
 import type {
   NekAgentServiceEvent,
   NekAgentServiceOptions,
@@ -22,31 +32,6 @@ import type {
   NekSessionResult,
 } from "./types.js";
 
-const LONG_RUNNING_COMMANDS = [
-  "compact",
-  "export_session",
-  "share_session",
-  "navigate_tree",
-  "fork",
-  "clone",
-  "import_session",
-  "auth_login",
-  "fetch_provider_models",
-  "test_provider",
-  "test_web_search",
-  "mcp_test",
-] as const;
-
-/**
- * 锁持有者的人类可读描述（只用于错误与展示）：`nek tui (host:pid)`。
- *
- * nek 不报持有者时退回 `"nek"`：那时候只知道"有进程占着锁"。
- */
-function lockLabelOf(holder: NekSessionSnapshot["lockedBy"]): string {
-  if (!holder) return "nek";
-  return `nek ${holder.kind} (${holder.hostname}:${holder.pid})`;
-}
-
 /**
  * 会话记录表、进程池接线、事件路由与投影器装载。
  *
@@ -56,7 +41,8 @@ function lockLabelOf(holder: NekSessionSnapshot["lockedBy"]): string {
 export abstract class NekAgentServiceRuntimeBase {
   protected readonly config: GuiRuntimeConfig;
   protected readonly logger: NekAgentServiceOptions["logger"];
-  protected readonly extensionUi: NekExtensionUiHandler | undefined;
+  protected readonly customExtensionUi: NekExtensionUiHandler | undefined;
+  protected readonly interactions: NekGuiInteractionBridge;
   protected readonly askProjectTrust: NekAgentServiceOptions["askProjectTrust"];
   protected readonly defaultCwd: string;
   protected readonly pool: NekProcessPool<NekRpcProcess>;
@@ -70,38 +56,53 @@ export abstract class NekAgentServiceRuntimeBase {
   constructor(options: NekAgentServiceOptions) {
     this.config = options.runtimeConfig ?? DEFAULT_GUI_RUNTIME_CONFIG;
     this.logger = options.logger;
-    this.extensionUi = options.extensionUi;
-    this.askProjectTrust = options.askProjectTrust ?? createProjectTrustPrompt(this.extensionUi);
     this.defaultCwd = options.cwd ?? process.cwd();
+    this.customExtensionUi = options.extensionUi;
+    this.interactions = new NekGuiInteractionBridge({
+      timeoutMs: this.config.timeouts.interactionMs,
+      maxPending: this.config.events.pendingInteractions,
+      ...(this.logger ? { logger: this.logger } : {}),
+    });
+    this.askProjectTrust =
+      options.askProjectTrust ?? createProjectTrustPrompt((scope) => this.extensionUiFor(scope));
     this.pool =
       options.processPool ??
-      new NekProcessPool<NekRpcProcess>({
-        maxSessions: this.config.nek.maxSessionProcesses,
-        idleTimeoutMs: this.config.nek.idleMinutes * 60_000,
-        createSessionProcess: async (sessionKey) => {
-          const request = this.pendingCreates.get(sessionKey);
-          if (!request) throw new Error(`no create options for nek session ${sessionKey}`);
-          return await this.createSessionProcess(request, options);
-        },
-        createControlProcess: async () => {
-          if (options.createControlProcess) return await options.createControlProcess();
-          if (!options.guiInfo) throw new Error("nek guiInfo or createControlProcess is required");
-          return createNekRpcProcess({
-            guiInfo: options.guiInfo,
-            cwd: this.defaultCwd,
-            control: true,
-            client: this.clientOptions(),
-            logger: this.logger,
-          });
-        },
+      createNekAgentProcessPool({
+        config: this.config,
         logger: this.logger,
+        defaultCwd: this.defaultCwd,
+        serviceOptions: options,
+        pendingCreates: this.pendingCreates,
+        createSessionProcess: async (request) => await this.createSessionProcess(request, options),
+        clientOptions: (scope) => this.clientOptions(scope),
       });
     this.detachPoolEvents = this.pool.onEvent((event) => this.handlePoolEvent(event));
+  }
+
+  /** GUI 运行参数（只读）；适配层用它决定计划列表上限等有界值。 */
+  get runtimeConfig(): GuiRuntimeConfig {
+    return this.config;
   }
 
   onEvent(listener: (event: NekAgentServiceEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * 渲染层订阅交互帧。
+   *
+   * 返回 detach；最后一个订阅者离开后，nek 侧的 dialog 请求会立刻按取消收口，
+   * 不再等一个永远不会来的回答。
+   */
+  onInteractionEvent(listener: (frame: NekInteractionFrame) => void): () => void {
+    return this.interactions.onFrame(listener);
+  }
+
+  /** 渲染层回答交互请求；未知 id（已取消或已结算）返回 `false`。 */
+  respondInteraction(response: NekExtensionUiResponse): boolean {
+    this.assertAlive();
+    return this.interactions.respond(response);
   }
 
   protected emit(event: NekAgentServiceEvent): void {
@@ -112,6 +113,11 @@ export abstract class NekAgentServiceRuntimeBase {
         this.logger?.warn("nek service listener threw", error);
       }
     }
+  }
+
+  /** 某个范围的扩展 UI 处理器：注入的实现优先，否则走交互桥（按范围打标）。 */
+  protected extensionUiFor(scope: NekInteractionScope): NekExtensionUiHandler {
+    return this.customExtensionUi ?? this.interactions.scoped(scope);
   }
 
   protected assertAlive(): void {
@@ -129,17 +135,17 @@ export abstract class NekAgentServiceRuntimeBase {
       cwd: request.cwd,
       sessionPath: request.sessionPath,
       approve: request.approve,
-      client: this.clientOptions(),
+      client: this.clientOptions({ workspacePath: request.cwd, sessionKey: request.sessionKey }),
       logger: this.logger,
     });
   }
 
-  protected clientOptions(): Omit<NekRpcClientOptions, "logger"> {
+  protected clientOptions(scope: NekInteractionScope): Omit<NekRpcClientOptions, "logger"> {
     const timeouts: Record<string, number> = {
       prompt: this.config.timeouts.promptPreflightMs,
       default: this.config.timeouts.commandMs,
     };
-    for (const command of LONG_RUNNING_COMMANDS)
+    for (const command of NEK_LONG_RUNNING_COMMANDS)
       timeouts[command] = this.config.timeouts.longRunningMs;
     return {
       defaultTimeoutMs: this.config.timeouts.commandMs,
@@ -147,22 +153,23 @@ export abstract class NekAgentServiceRuntimeBase {
       closeGraceMs: this.config.timeouts.shutdownGraceMs,
       maxLineBytes: this.config.nek.maxLineMb * 1024 * 1024,
       stderrMaxBytes: this.config.nek.stderrBufferKb * 1024,
-      extensionUi: this.extensionUi,
+      extensionUi: this.extensionUiFor(scope),
     };
   }
 
-  /** 启动前询问项目信任：已有记录直接采用，没有记录时按 defaultProjectTrust 或注入的回调决定。 */
+  /**
+   * 启动前确定项目信任：已记录的决定直接采用，没有记录时按 `defaultProjectTrust`
+   * 或渲染层的确认结果决定；确认后立刻按 nek 的规则落盘（`set_project_trust`），
+   * 下次（含终端 `/trust`）不再询问。
+   */
   protected async resolveProjectApproval(cwd: string): Promise<boolean> {
-    const control = await this.pool.ensureControl();
-    const trust = await control.client.call({ type: "get_project_trust", cwd });
-    if (trust.trusted !== null) return trust.trusted;
-    if (trust.defaultProjectTrust === "always") return true;
-    if (trust.defaultProjectTrust === "never") return false;
     if (!this.askProjectTrust) throw new Error(`project trust decision required for ${cwd}`);
-    const approved = await this.askProjectTrust({ trust, cwd });
-    if (!approved) throw new Error(`project trust denied for ${cwd}; confirm trust and retry`);
-    await control.client.call({ type: "set_project_trust", cwd, trusted: true });
-    return true;
+    const control = await this.pool.ensureControl();
+    return await resolveProjectTrustApproval({
+      client: control.client,
+      askProjectTrust: this.askProjectTrust,
+      cwd,
+    });
   }
 
   protected async acquireProcess(
@@ -291,15 +298,7 @@ export abstract class NekAgentServiceRuntimeBase {
   }
 
   protected createProjector(record: NekSessionRecord): NekConversationProjector {
-    return new NekConversationProjector({
-      sessionId: record.sessionId,
-      streamFlushIntervalMs: Math.max(
-        1,
-        Math.floor(1000 / this.config.events.streamFlushPerSecond),
-      ),
-      maxWindowRows: this.config.events.eventBufferEntries,
-      logger: this.logger,
-    });
+    return createNekConversationProjector({ config: this.config, logger: this.logger, record });
   }
 
   /**
@@ -319,7 +318,7 @@ export abstract class NekAgentServiceRuntimeBase {
       cwd: cwd ?? snapshot.session.cwd,
       phase: "locked",
       readonly: true,
-      lockedBy: lockLabelOf(holder),
+      lockedBy: nekLockLabel(holder),
       ...(holder ? { lockHolder: holder } : {}),
       snapshot,
       closing: false,
@@ -371,6 +370,7 @@ export abstract class NekAgentServiceRuntimeBase {
   protected handleProcessExit(record: NekSessionRecord, exit: NekRpcProcessExit): void {
     if (record.closing || this.disposed) return;
     this.detachProcess(record);
+    this.interactions.cancelScope({ workspacePath: record.cwd, sessionKey: record.key });
     this.setPhase(record, "error");
     this.emit({ type: "process_exit", session: this.publicSession(record), exit });
   }
@@ -410,7 +410,11 @@ export abstract class NekAgentServiceRuntimeBase {
       sessionKey: record.key,
       cwd: record.cwd,
       ...(record.path ? { sessionPath: record.path } : {}),
-      extensionUi: this.extensionUi,
+      extensionUi: this.extensionUiFor({
+        workspacePath: record.cwd,
+        sessionKey: record.key,
+        sessionId: record.sessionId,
+      }),
     };
   }
 
@@ -448,6 +452,7 @@ export abstract class NekAgentServiceRuntimeBase {
   protected removeRecord(record: NekSessionRecord): void {
     this.sessions.delete(record.key);
     if (record.path && this.byPath.get(record.path) === record) this.byPath.delete(record.path);
+    this.interactions.cancelScope({ workspacePath: record.cwd, sessionKey: record.key });
     record.projector?.dispose();
     this.detachProcess(record);
   }

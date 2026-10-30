@@ -224,7 +224,6 @@ import { createObservableSettingService } from "./setting/observableSettingServi
 import { createCredentialService } from "./credential/credentialService.js";
 import { createBroadcastService } from "./broadcast/broadcastService.js";
 import { createNekZCodeAgentService } from "./nek-agent/adapter/index.js";
-import type { NekExtensionUiHandler } from "./nek-agent/nekExtensionUiRouter.js";
 import type { ZCodeAgentCommandResolver } from "./zcode-agent/zcodeAgentCommand.js";
 import { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
 import { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
@@ -362,8 +361,6 @@ export function createLocalServices(options: {
   runtimeProcessEnvPatch?: Record<string, string>;
   /** 本地桌面上次 workspace 缺失时，仅用于 Agent 子进程 spawn.cwd 兜底。 */
   zcodeAgentSpawnFallbackCwd?: string;
-  /** GUI 交互请求处理器；用于项目取信等启动前确认。 */
-  nekExtensionUi?: NekExtensionUiHandler;
   /** desktop-attached remote server 从 Desktop Host 收到的一次性 Agent 网络配置。 */
   remoteAgentNetwork?: {
     httpProxy?: string;
@@ -499,7 +496,6 @@ export function createLocalServices(options: {
   // 决定执行就绪状态。Desktop-attached remote 也读取远端自己的本地模型配置。
   const zcodeAgentService = createNekZCodeAgentService({
     cwd: options?.zcodeAgentSpawnFallbackCwd,
-    ...(options?.nekExtensionUi ? { extensionUi: options.nekExtensionUi } : {}),
   });
   providerConnectivityAgentService = zcodeAgentService;
   // desktop-continuous UI 直接订阅 zcodeSessionService，绕开 ZCode task adapter 的

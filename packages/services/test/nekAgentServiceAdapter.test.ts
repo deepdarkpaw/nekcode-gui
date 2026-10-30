@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
-import type { NekGuiInfo, NekRpcCommand } from "@zcode/shared/nek-protocol";
+import { DEFAULT_GUI_RUNTIME_CONFIG } from "@zcode/shared/guiRuntimeConfig";
+import type { NekGuiInfo, NekInteractionFrame, NekRpcCommand } from "@zcode/shared/nek-protocol";
 import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekRpcProcessExit, NekRpcProcessHandle } from "../src/nek-agent/nekRpcClient.js";
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
 import { createNekZCodeAgentService } from "../src/node.js";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
+import type { NekExtensionUiHandler } from "../src/nek-agent/nekExtensionUiRouter.js";
 
 const guiInfo = {
   protocolVersion: 1,
@@ -21,14 +23,28 @@ const guiInfo = {
   arch: "x64",
 } satisfies NekGuiInfo;
 
-function fakeProcess(kind: "control" | "session"): {
+interface FakeProcess {
   process: NekRpcProcess;
   commands: NekRpcCommand[];
-} {
+  /** 让某个 extension_call 方法按 nek 的格式失败，用于错误可见性断言。 */
+  failExtensions: Set<string>;
+  /** 模拟 nek 主动发出的 stdout 事件（extension_ui_request / extension_ui_cancel）。 */
+  emit(record: unknown): void;
+}
+
+function fakeProcess(
+  kind: "control" | "session",
+  options: {
+    extensionUi?: NekExtensionUiHandler;
+    projectTrust?: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" };
+    planCount?: number;
+  } = {},
+): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   const commands: NekRpcCommand[] = [];
+  const failExtensions = new Set<string>();
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let input = "";
   stdin.on("data", (chunk: Buffer) => {
@@ -46,7 +62,11 @@ function fakeProcess(kind: "control" | "session"): {
       let data: unknown = {};
       if (kind === "control") {
         if (command.type === "get_project_trust")
-          data = { cwd: command.cwd, trusted: true, defaultProjectTrust: "always", resources: [] };
+          data = {
+            cwd: command.cwd,
+            resources: [],
+            ...(options.projectTrust ?? { trusted: true, defaultProjectTrust: "always" }),
+          };
         if (command.type === "list_sessions") data = { sessions: [] };
         if (command.type === "get_available_models") data = { models: [] };
       } else if (command.type === "get_state") {
@@ -77,6 +97,12 @@ function fakeProcess(kind: "control" | "session"): {
           cost: 0,
         };
       } else if (command.type === "extension_call") {
+        if (failExtensions.has(command.method)) {
+          stdout.write(
+            `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: false, error: `nek rejected ${command.method}` })}\n`,
+          );
+          continue;
+        }
         if (command.method === "nek.stop_subagent") data = { result: { status: "aborted" } };
         else if (command.method === "nek.get_subagent_transcript")
           data = { result: { messages: [{ role: "assistant", content: "done" }] } };
@@ -95,33 +121,33 @@ function fakeProcess(kind: "control" | "session"): {
               ],
             },
           };
-        else if (command.method === "nek.get_plan")
+        else if (command.method === "nek.get_plan") {
+          const requested = (command.params as { path?: string } | undefined)?.path;
+          const index = Number(requested?.match(/(\d+)\.plan\.md$/u)?.[1] ?? "1");
           data = {
             result: {
-              path: "/workspace/.nek/plans/ship.plan.md",
-              name: "Ship",
+              path: requested ?? "/workspace/.nek/plans/1.plan.md",
+              name: `Ship ${index}`,
               overview: "Ship the feature",
-              revision: 2,
+              revision: index,
               status: "ready",
-              todos: [{ id: "todo-1", content: "Implement" }],
-              markdown: "# Ship\n\n- Implement",
+              todos: [{ id: `todo-${index}`, content: "Implement" }],
+              markdown: `# Ship ${index}`,
             },
           };
-        else if (command.method === "nek.get_state")
+        } else if (command.method === "nek.get_state")
           data = {
             result: {
               mode: "agent",
               todos: [],
-              plans: [
-                {
-                  path: "/workspace/.nek/plans/ship.plan.md",
-                  name: "Ship",
-                  overview: "Ship the feature",
-                  revision: 2,
-                  status: "ready",
-                  todos: [{ id: "todo-1", content: "Implement" }],
-                },
-              ],
+              plans: Array.from({ length: options.planCount ?? 1 }, (_, index) => ({
+                path: `/workspace/.nek/plans/${index + 1}.plan.md`,
+                name: `Ship ${index + 1}`,
+                overview: "Ship the feature",
+                revision: index + 1,
+                status: "ready",
+                todos: [{ id: `todo-${index + 1}`, content: "Implement" }],
+              })),
               subagents: [],
             },
           };
@@ -149,7 +175,10 @@ function fakeProcess(kind: "control" | "session"): {
       return () => exits.delete(listener);
     },
   };
-  const client = new NekRpcClient(handle, { defaultTimeoutMs: 500 });
+  const client = new NekRpcClient(handle, {
+    defaultTimeoutMs: 500,
+    extensionUi: options.extensionUi,
+  });
   const emitExit = (info: NekRpcProcessExit) => {
     if (exited) return;
     exited = true;
@@ -157,6 +186,10 @@ function fakeProcess(kind: "control" | "session"): {
   };
   return {
     commands,
+    failExtensions,
+    emit: (record) =>
+      stdout.write(`${JSON.stringify(record)}
+`),
     process: {
       client,
       guiInfo,
@@ -249,6 +282,8 @@ const IZCODE_METHODS = [
   "setMode",
   "respondSessionRuntimePreferences",
   "onDynamicSessionRuntimePreferencesRequest",
+  "onDynamicNekInteractionFrame",
+  "respondNekInteraction",
   "onDynamicProcessResourceSample",
   "onDynamicMcpTelemetry",
   "onDynamicMcpResourceSamples",
@@ -311,7 +346,7 @@ test("maps nek plan snapshots into the v4 plan result", async () => {
     });
     assert.equal(result.plans.length, 1);
     assert.equal(result.plans[0]?.toolName, "nek.plan");
-    assert.equal(result.plans[0]?.output?.text, "# Ship\n\n- Implement");
+    assert.equal(result.plans[0]?.output?.text, "# Ship 1");
     assert.ok(result.atSeq >= 0);
     assert.ok(
       session.commands.some(
@@ -381,4 +416,118 @@ test("node factory returns an IZCodeAgentService with every method", () => {
   });
   for (const method of IZCODE_METHODS) assert.equal(typeof service[method], "function", method);
   service.disposeAll();
+});
+
+test("publishes the project trust confirm through the interaction channel and stores it", async () => {
+  const control = fakeProcess("control", {
+    projectTrust: { trusted: null, defaultProjectTrust: "ask" },
+  });
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    createControlProcess: () => control.process,
+    createSessionProcess: (request) =>
+      fakeProcess("session", request.extensionUi ? { extensionUi: request.extensionUi } : {})
+        .process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const frames: NekInteractionFrame[] = [];
+    const subscription = adapter.onDynamicNekInteractionFrame(target)((frame) =>
+      frames.push(frame),
+    );
+    const pending = adapter.createNekSession(target);
+    await waitForInteraction(() => frames.length > 0);
+    const frame = frames[0];
+    assert.equal(frame?.kind, "request");
+    if (frame?.kind !== "request") throw new Error("expected a trust request frame");
+    assert.equal(frame.request.method, "confirm");
+    assert.match(frame.request.title, /信任此项目/u);
+    await adapter.respondNekInteraction({
+      requestId: frame.request.id,
+      response: { type: "extension_ui_response", id: frame.request.id, confirmed: true },
+    });
+    const created = await pending;
+    assert.equal(created.sessionId.length > 0, true);
+    assert.deepEqual(
+      control.commands.map((command) => command.type),
+      ["get_project_trust", "set_project_trust"],
+    );
+    subscription.dispose();
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("surfaces subagent RPC failures and closed-session errors", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const created = await adapter.createNekSession(target);
+    session.failExtensions.add("nek.stop_subagent");
+    await assert.rejects(
+      adapter.stopSubagent({ ...target, sessionId: created.sessionId, id: "child-1" }),
+      /nek rejected nek\.stop_subagent/u,
+    );
+    await assert.rejects(
+      adapter.getSubagentTranscript({ ...target, sessionId: "missing", id: "child-1" }),
+      /nek session missing is not open/u,
+    );
+    await assert.rejects(
+      adapter.respondNekInteraction({
+        requestId: "gone",
+        response: { type: "extension_ui_response", id: "gone", cancelled: true },
+      }),
+      /is no longer pending/u,
+    );
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+async function waitForInteraction(check: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error("timed out waiting for an interaction frame");
+}
+
+test("bounds the conversation plan list with the GUI runtime config", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session", { planCount: 3 });
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+    runtimeConfig: {
+      ...DEFAULT_GUI_RUNTIME_CONFIG,
+      nek: { ...DEFAULT_GUI_RUNTIME_CONFIG.nek, maxConversationPlans: 2 },
+    },
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const created = await adapter.createNekSession(target);
+    const result = await adapter.conversationPlansV4({ ...target, sessionId: created.sessionId });
+    assert.deepEqual(
+      result.plans.map((plan) => plan.toolCallId),
+      ["/workspace/.nek/plans/3.plan.md", "/workspace/.nek/plans/2.plan.md"],
+    );
+    assert.equal(
+      session.commands.filter(
+        (command) => command.type === "extension_call" && command.method === "nek.get_plan",
+      ).length,
+      2,
+    );
+  } finally {
+    await adapter.dispose();
+  }
 });

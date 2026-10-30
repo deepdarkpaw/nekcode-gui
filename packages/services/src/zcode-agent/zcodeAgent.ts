@@ -71,7 +71,12 @@ import type {
   V4WorkspaceConfigSubscribeResult,
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
-import type { NekAgentTypeInfo, NekSubagentRecord } from "@zcode/shared/nek-protocol";
+import type {
+  NekAgentTypeInfo,
+  NekExtensionUiResponse,
+  NekInteractionFrame,
+  NekSubagentRecord,
+} from "@zcode/shared/nek-protocol";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export * from "./zcodeAgentWorkspaceParams.js";
@@ -142,6 +147,11 @@ export interface ZCodeAgentListSessionsParams extends ZCodeAgentWorkspaceTarget 
   /** @deprecated 协议侧已接收即忽略；仓库调用端停发，仅保留旧调用签名兼容。 */
   includeArchived?: boolean;
   limit?: number;
+}
+
+export interface ZCodeAgentRespondNekInteractionParams {
+  requestId: string;
+  response: NekExtensionUiResponse;
 }
 
 export interface ZCodeAgentListSessionSubagentsParams extends ZCodeAgentSessionTarget {
@@ -522,6 +532,15 @@ export interface IZCodeAgentService {
     params: ZCodeAgentRespondSessionRuntimePreferencesParams,
   ): Promise<void>;
   onDynamicSessionRuntimePreferencesRequest(): Event<ZCodeAgentSessionRuntimePreferencesRequest>;
+  /**
+   * nek 的扩展 UI 交互通道：dialog / structured / notify 统一从这里到渲染层。
+   *
+   * 按 workspace 发（新建会话前的项目信任确认没有会话）；dialog 请求会一直等
+   * `respondNekInteraction`，所以渲染层必须在创建会话前订阅。
+   */
+  onDynamicNekInteractionFrame(params: ZCodeAgentWorkspaceTarget): Event<NekInteractionFrame>;
+  /** 回答一条交互请求；请求已被取消/结算时抛错，不静默丢弃。 */
+  respondNekInteraction(params: ZCodeAgentRespondNekInteractionParams): Promise<void>;
   /**
    * CLI 进程级资源样本，带 services 打的 lane 标签（CLI 自己不知道 lane）。
    * 使用 dynamic event 避免 RPC 服务在无人订阅时缓冲周期事件；
