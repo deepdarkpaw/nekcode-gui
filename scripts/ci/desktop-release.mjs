@@ -10,6 +10,24 @@ import { getBuildMetadata } from "../../packages/desktop/scripts/build-metadata.
 import { collectRollingAppVersion } from "../rolling-app-version.mjs";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import {
+  asUpdateInfoString,
+  RELEASE_ARCHES,
+  mergeUpdateInfo,
+  readUpdateInfo,
+  releaseUpdateInfoNames,
+  sourceUpdateInfoName,
+  stringifyUpdateInfo,
+  updateInfoChannelName,
+} from "../../packages/desktop/scripts/desktop-update-info.mjs";
+
+export {
+  mergeUpdateInfo,
+  readUpdateInfo,
+  releaseUpdateInfoNames,
+  sourceUpdateInfoName,
+  updateInfoChannelName,
+};
 
 const execFileAsync = promisify(execFile);
 // 用户指定以 Shakespeare《Hamlet》原文开头并附中文，避免默认发行文案偏离本次授权要求。
@@ -106,6 +124,50 @@ async function assertInstaller(file) {
   if (!info.isFile() || info.size === 0) throw new Error(`Invalid or empty installer: ${file}`);
 }
 
+function assertNonEmptyUpdateInfo(file) {
+  return assertInstaller(file);
+}
+
+function matchesPlatformUpdateInfo(name, platform) {
+  // electron-builder 只会写 latest 通道名：Windows 是 latest.yml，macOS 是 latest-mac.yml，
+  // Linux 按架构写成 latest-linux.yml / latest-linux-<arch>.yml。
+  if (platform === "win") return name === "latest.yml";
+  if (platform === "mac") return name === "latest-mac.yml";
+  return /^latest-linux(?:-[\w.-]+)?\.yml$/.test(name);
+}
+
+/**
+ * 把 electron-builder 写进 dist 的更新元数据一起收进发布产物。
+ *
+ * CI 的每个打包 job 只产出一个架构，因此按 (platform, arch) 精确取一份；未指定 arch
+ * （本地一次性收全部架构）时按平台前缀收集现有文件，仍要求至少存在一份——缺失更新元数据
+ * 意味着 electron-updater 会 404，不能当成“没有也没关系”。
+ */
+async function collectUpdateInfo(source, destination, platform, arch) {
+  if (arch) {
+    const name = sourceUpdateInfoName(platform, arch);
+    const file = join(source, name);
+    try {
+      await lstat(file);
+    } catch {
+      // 缺更新元数据意味着 electron-updater 会 404，必须在这里失败而不是发一个不可更新的包。
+      throw new Error(`Missing update metadata for ${platform}/${arch}: ${file}`);
+    }
+    await assertNonEmptyUpdateInfo(file);
+    await copyFile(file, join(destination, name));
+    return [name];
+  }
+  const entries = (await readdir(source)).filter((name) =>
+    matchesPlatformUpdateInfo(name, platform),
+  );
+  if (entries.length === 0) throw new Error(`Missing update metadata for ${platform} in ${source}`);
+  for (const name of entries) {
+    await assertNonEmptyUpdateInfo(join(source, name));
+    await copyFile(join(source, name), join(destination, name));
+  }
+  return entries.sort();
+}
+
 export async function collectArtifacts(
   source,
   destination,
@@ -120,6 +182,71 @@ export async function collectArtifacts(
   if ((await readdir(destination)).length)
     throw new Error(`Artifact directory must be empty: ${destination}`);
   for (const name of names) await copyFile(join(source, name), join(destination, name));
+  await collectUpdateInfo(source, destination, platform, arch);
+}
+
+/**
+ * 把单架构 artifact 目录（`desktop-<flavor>-<platform>-<arch>`）组装成可上传的发布资产。
+ *
+ * 安装包按电子表格里的固定名字平铺；Windows/macOS 的两个架构在这里合并成一份
+ * `latest.yml` / `latest-mac.yml`，避免后一个架构的上传把前一个架构的更新元数据覆盖掉。
+ */
+export async function assembleReleaseAssets({
+  artifactsRoot,
+  destination,
+  version,
+  identities = [desktopProductIdentities.production, desktopProductIdentities.preview],
+}) {
+  if (!Array.isArray(identities) || identities.length === 0)
+    throw new Error("Release identities must not be empty");
+  await mkdir(destination, { recursive: true });
+  if ((await readdir(destination)).length)
+    throw new Error(`Artifact directory must be empty: ${destination}`);
+
+  const documents = new Map();
+  for (const identity of identities) {
+    for (const platform of Object.keys(extensions)) {
+      for (const arch of RELEASE_ARCHES) {
+        const artifactName = `desktop-${identity.flavor}-${platform}-${arch}`;
+        const source = join(artifactsRoot, artifactName);
+        const installers = artifactNames(platform, version, arch, identity);
+        for (const name of installers) {
+          const file = join(source, name);
+          await assertInstaller(file);
+          await copyFile(file, join(destination, name));
+        }
+        const updateInfo = await readUpdateInfo(join(source, sourceUpdateInfoName(platform, arch)));
+        // 更新元数据只描述本 job 产出的安装包：出现别的平台/架构的文件名说明打包与收集错位。
+        const allowedUrls = new Set(artifactNames(platform, version, undefined, identity));
+        for (const entry of Array.isArray(updateInfo.document.files)
+          ? updateInfo.document.files
+          : []) {
+          const url = asUpdateInfoString(entry?.url);
+          if (!allowedUrls.has(url))
+            throw new Error(`Update info of ${artifactName} references unknown artifact: ${url}`);
+        }
+        const key = `${identity.flavor}/${platform}/${platform === "linux" ? arch : "all"}`;
+        const bucket = documents.get(key) ?? {
+          flavor: identity.flavor,
+          platform,
+          arch,
+          documents: [],
+        };
+        bucket.documents.push(updateInfo);
+        documents.set(key, bucket);
+      }
+    }
+  }
+
+  const written = [];
+  for (const { flavor, platform, arch, documents: bucket } of documents.values()) {
+    // x64 元数据在前：合并后 path/sha512 兼容字段指向主下载产物，files[] 顺序稳定。
+    bucket.sort((left, right) => left.file.localeCompare(right.file));
+    const name = updateInfoChannelName(platform, flavor, arch);
+    await writeFile(join(destination, name), await stringifyUpdateInfo(mergeUpdateInfo(bucket)));
+    written.push(name);
+  }
+  return written.sort();
 }
 
 export async function verifyReleaseAssets(
@@ -142,12 +269,27 @@ export async function verifyReleaseAssets(
     )
     .sort();
   if (new Set(names).size !== names.length) throw new Error("Duplicate release asset filenames");
-  const allowed = new Set([...names, "SHA256SUMS"]);
+  const updateInfoNames = releaseUpdateInfoNames(identities);
+  const allowed = new Set([...names, ...updateInfoNames, "SHA256SUMS"]);
   for (const name of await readdir(directory)) {
     if (!allowed.has(name)) throw new Error(`Unexpected release asset: ${name}`);
   }
   const files = names.map((name) => join(directory, name));
   for (const file of files) await assertInstaller(file);
+  const updateInfoFiles = updateInfoNames.map((name) => join(directory, name));
+  const knownArtifacts = new Set(names);
+  for (const name of updateInfoNames) {
+    const file = join(directory, name);
+    await assertNonEmptyUpdateInfo(file);
+    const { document } = await readUpdateInfo(file);
+    if (asUpdateInfoString(document.version) !== version)
+      throw new Error(`Update metadata ${name} does not describe version ${version}`);
+    for (const entry of Array.isArray(document.files) ? document.files : []) {
+      const url = asUpdateInfoString(entry?.url);
+      if (!knownArtifacts.has(url))
+        throw new Error(`Update metadata ${name} references unknown artifact: ${url}`);
+    }
+  }
   const sums = [];
   for (const [index, file] of files.entries()) {
     const hash = createHash("sha256");
@@ -161,7 +303,7 @@ export async function verifyReleaseAssets(
   }
   const checksumFile = join(directory, "SHA256SUMS");
   await writeFile(checksumFile, sums.join(""));
-  return [...files, checksumFile];
+  return [...files, ...updateInfoFiles, checksumFile];
 }
 
 export async function publishDraft({ tag, repo, files, run = execFileAsync }) {
@@ -204,7 +346,7 @@ export async function publishDraft({ tag, repo, files, run = execFileAsync }) {
 }
 
 async function main() {
-  const [command, platform] = process.argv.slice(2);
+  const [command, platform, positionalArch] = process.argv.slice(2);
   const root = resolve(import.meta.dirname, "../..");
   const { version } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   const artifacts = join(root, "dist", "release-assets");
@@ -224,9 +366,20 @@ async function main() {
       artifacts,
       platform,
       buildVersion,
-      process.env.ZCODE_TARGET_ARCH,
+      process.env.ZCODE_TARGET_ARCH?.trim() || positionalArch?.trim() || undefined,
       resolveDesktopProductIdentity(),
     );
+  } else if (command === "assemble") {
+    // 每个打包 job 各自上传 artifact（安装包 + 单架构 latest*.yml），发布 job 在这里合并
+    // 成一份可上传的 release-assets：安装包平铺，Windows/macOS 的更新元数据按架构合并。
+    const buildVersion = getBuildMetadata().appVersion;
+    validateVersion(buildVersion);
+    const written = await assembleReleaseAssets({
+      artifactsRoot: join(root, "dist", "artifacts"),
+      destination: artifacts,
+      version: buildVersion,
+    });
+    console.log(`Assembled update metadata: ${written.join(", ")}`);
   } else if (command === "publish") {
     if (process.env.GITHUB_EVENT_NAME !== "push" || process.env.GITHUB_REF_TYPE !== "tag") {
       throw new Error("Draft releases require a tag push");
@@ -241,7 +394,9 @@ async function main() {
     ]);
     await publishDraft({ tag, repo: process.env.GITHUB_REPOSITORY, files });
   } else {
-    throw new Error("Usage: desktop-release.mjs check-version | collect <linux|win> | publish");
+    throw new Error(
+      "Usage: desktop-release.mjs check-version | collect <linux|win|mac> | assemble | publish",
+    );
   }
 }
 
