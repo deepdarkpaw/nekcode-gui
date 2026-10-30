@@ -139,7 +139,6 @@ export const diagnosticMessages: readonly string[] = [
   "[ModelProviderSection] 请求删除自定义模型供应商",
   "[ModelTrajectoryPane] 打开调用轨迹目录失败",
   "[ModelTrajectory] copy expanded content failed",
-  "[NekInteractionStore] cancel delivery failed",
   "[NekInteractionStore] evicting oldest session",
   "[NekInteractionStore] response delivery failed",
   "[NekInteractionStore] status limit reached",
