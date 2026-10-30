@@ -18,33 +18,26 @@ import {
   getQueueHead,
   getRemainingInteractionMs,
   reduceInteractionQueue,
-  type InteractionQueueState,
+  type InteractionNotice,
   type InteractionRequestRecord,
   type PendingInteractionRequest,
 } from "./interactionQueue.js";
+import {
+  applyFireAndForgetEffect,
+  createSession,
+  hasDeadline,
+  sessionWithQueue,
+  timeoutMs,
+  type InteractionSessionState,
+} from "./interactionSessionState.js";
 
 /** Session slots are bounded so disconnected sessions cannot retain renderer memory forever. */
 export const INTERACTION_SESSION_LIMIT = 32;
-/** Fire-and-forget notifications are an event stream, not an unbounded toast history. */
-export const INTERACTION_EFFECT_LIMIT = 64;
-export const INTERACTION_STATUS_LIMIT = 32;
-export const INTERACTION_WIDGET_LIMIT = 16;
-export const INTERACTION_WIDGET_LINE_LIMIT = 50;
 export const INTERACTION_TICK_MS = 1000;
+/** 一次性提示只用于"卡片刚被撤销"的说明，超出即丢最旧的，避免无限堆积。 */
+const INTERACTION_NOTICE_LIMIT = 8;
 
-export interface InteractionWidget {
-  lines: string[];
-  placement: "aboveEditor" | "belowEditor";
-  truncated: boolean;
-}
-
-export interface InteractionSessionState extends InteractionQueueState {
-  effects: NekExtensionUiEffect[];
-  statuses: Readonly<Record<string, string>>;
-  widgets: Readonly<Record<string, InteractionWidget>>;
-  titleOverride?: string;
-  clockMs: number;
-}
+export type { InteractionSessionState } from "./interactionSessionState.js";
 
 export type InteractionResponder = (
   sessionKey: string,
@@ -75,6 +68,11 @@ export interface NekInteractionStore {
   cancelByUser: (sessionKey: string, requestId: string) => boolean;
   cancelByHost: (sessionKey: string, requestId: string) => boolean;
   cancelById: (requestId: string) => boolean;
+  /**
+   * 后端已经不认识这条请求（已取消或已结算）：移除卡片，并留下一次性提示，
+   * 同时把 id 记进 closedRequestIds 让迟到的回调失效。
+   */
+  cancelStaleById: (requestId: string) => boolean;
   disconnect: (sessionKey: string) => void;
   handleFireAndForget: (sessionKey: string, request: NekExtensionUiFireAndForgetRequest) => boolean;
   tick: (now?: number) => void;
@@ -83,35 +81,6 @@ export interface NekInteractionStore {
   takeEffects: (sessionKey: string) => NekExtensionUiEffect[];
   takeNotices: (sessionKey: string) => InteractionSessionState["notices"];
   shutdown: () => void;
-}
-
-function timeoutMs(request: PendingInteractionRequest): number | undefined {
-  if (!("timeout" in request) || typeof request.timeout !== "number") return undefined;
-  if (!Number.isFinite(request.timeout)) return undefined;
-  return Math.max(0, request.timeout);
-}
-
-function createSession(now: number): InteractionSessionState {
-  return {
-    ...EMPTY_INTERACTION_QUEUE,
-    effects: [],
-    statuses: {},
-    widgets: {},
-    clockMs: now,
-  };
-}
-
-function hasDeadline(sessions: Readonly<Record<string, InteractionSessionState>>): boolean {
-  return Object.values(sessions).some((session) =>
-    session.queue.some((record) => record.deadline !== undefined),
-  );
-}
-
-function sessionWithQueue(
-  session: InteractionSessionState,
-  queue: InteractionQueueState,
-): InteractionSessionState {
-  return { ...session, ...queue };
 }
 
 export type NekInteractionStoreApi = ReturnType<typeof createNekInteractionStore>;
@@ -145,7 +114,12 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
           },
         };
       });
-      for (const item of outbox) options.respond(sessionKey, item.response);
+      for (const item of outbox) {
+        // 超时/被丢弃请求的取消回答同样可能失败：记录下来，不让它变成未处理的 rejection。
+        void Promise.resolve(options.respond(sessionKey, item.response)).catch((error: unknown) => {
+          logger.warn("[NekInteractionStore] cancel delivery failed", error);
+        });
+      }
     };
 
     const ensureSession = (sessionKey: string): InteractionSessionState | undefined => {
@@ -198,6 +172,37 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         return { sessions };
       });
       refreshTicker();
+    }
+
+    /** 追加一次性提示；同一条请求的同一种提示不重复堆积，整体保持在有界上限内。 */
+    function pushNotice(sessionKey: string, notice: InteractionNotice): void {
+      set((state) => {
+        const current = state.sessions[sessionKey];
+        if (!current) return state;
+        if (
+          current.notices.some(
+            (candidate) => candidate.requestId === notice.requestId && candidate.id === notice.id,
+          )
+        ) {
+          return state;
+        }
+        return {
+          sessions: {
+            ...state.sessions,
+            [sessionKey]: {
+              ...current,
+              notices: [...current.notices, notice].slice(-INTERACTION_NOTICE_LIMIT),
+            },
+          },
+        };
+      });
+    }
+
+    function findSessionKeyByRequestId(requestId: string): string | undefined {
+      for (const [sessionKey, session] of Object.entries(get().sessions)) {
+        if (session.queue.some((record) => record.request.id === requestId)) return sessionKey;
+      }
+      return undefined;
     }
 
     return {
@@ -264,14 +269,16 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         }
         settlingIds.add(requestId);
         try {
+          // 回答真正送达后端之后才关闭卡片：失败时请求留在队列里（草稿也保留），
+          // 控制器把错误挂在动作上，用户可以原样重试。
           await responder(sessionKey, response);
         } finally {
           settlingIds.delete(requestId);
         }
-        if (!get().sessions[sessionKey]?.queue.some((record) => record.request.id === requestId)) {
-          return false;
+        if (get().sessions[sessionKey]?.queue.some((record) => record.request.id === requestId)) {
+          applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "settled" });
         }
-        applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "settled" });
+        // 送达成功即结算；后端在途中撤销时（cancel 帧先到）队列已经清空，不算失败。
         refreshTicker();
         return true;
       },
@@ -289,12 +296,16 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         return true;
       },
       cancelById: (requestId) => {
-        for (const [sessionKey, session] of Object.entries(get().sessions)) {
-          if (session.queue.some((record) => record.request.id === requestId)) {
-            return get().cancelByHost(sessionKey, requestId);
-          }
-        }
-        return false;
+        const sessionKey = findSessionKeyByRequestId(requestId);
+        return sessionKey ? get().cancelByHost(sessionKey, requestId) : false;
+      },
+      cancelStaleById: (requestId) => {
+        const sessionKey = findSessionKeyByRequestId(requestId);
+        if (!sessionKey) return false;
+        applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "host" });
+        pushNotice(sessionKey, { requestId, id: "nek.interaction.cancelledByHost" });
+        refreshTicker();
+        return true;
       },
       disconnect: disconnectSession,
       handleFireAndForget: (sessionKey, request) => {
@@ -304,53 +315,10 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         set((state) => {
           const current = state.sessions[sessionKey];
           if (!current) return state;
-          let statuses = { ...current.statuses };
-          let widgets = { ...current.widgets };
-          let titleOverride = current.titleOverride;
-          let effects = [...current.effects, effect].slice(-INTERACTION_EFFECT_LIMIT);
-          if (effect.kind === "toast") {
-            // Toast remains an event so the host can map it to a notification without UI coupling.
-          } else if (effect.kind === "setStatus") {
-            if (!effect.statusText?.trim()) {
-              delete statuses[effect.statusKey];
-            } else {
-              if (
-                !Object.hasOwn(statuses, effect.statusKey) &&
-                Object.keys(statuses).length >= INTERACTION_STATUS_LIMIT
-              ) {
-                const oldest = Object.keys(statuses)[0];
-                if (oldest) delete statuses[oldest];
-                logger.warn("[NekInteractionStore] status limit reached");
-              }
-              statuses[effect.statusKey] = effect.statusText;
-            }
-          } else if (effect.kind === "setWidget") {
-            if (!effect.widgetLines) {
-              delete widgets[effect.widgetKey];
-            } else {
-              const truncated = effect.widgetLines.length > INTERACTION_WIDGET_LINE_LIMIT;
-              const nextWidget = {
-                lines: effect.widgetLines.slice(0, INTERACTION_WIDGET_LINE_LIMIT),
-                placement: effect.widgetPlacement,
-                truncated,
-              } satisfies InteractionWidget;
-              if (
-                !Object.hasOwn(widgets, effect.widgetKey) &&
-                Object.keys(widgets).length >= INTERACTION_WIDGET_LIMIT
-              ) {
-                const oldest = Object.keys(widgets)[0];
-                if (oldest) delete widgets[oldest];
-                logger.warn("[NekInteractionStore] widget limit reached");
-              }
-              widgets[effect.widgetKey] = nextWidget;
-            }
-          } else if (effect.kind === "setTitle") {
-            titleOverride = effect.title || undefined;
-          }
           return {
             sessions: {
               ...state.sessions,
-              [sessionKey]: { ...current, effects, statuses, widgets, titleOverride },
+              [sessionKey]: { ...current, ...applyFireAndForgetEffect(current, effect) },
             },
           };
         });
