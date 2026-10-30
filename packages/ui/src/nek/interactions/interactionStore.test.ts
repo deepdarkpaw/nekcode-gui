@@ -301,6 +301,35 @@ describe("NekInteractionStore", () => {
     expect(store.getState().getHead("session-a")).toBeUndefined();
   });
 
+  it("routes non-component cancels through the responder registered for that session", () => {
+    const registered = vi.fn();
+    store.getState().setResponder("session-a", registered);
+    store.getState().enqueue("session-a", inputRequest("a", 1_000));
+    store.getState().enqueue("session-b", inputRequest("b", 1_000));
+    now = 2_000;
+    interval?.();
+    expect(registered).toHaveBeenCalledWith("session-a", {
+      type: "extension_ui_response",
+      id: "a",
+      cancelled: true,
+    });
+    // 未注册的会话仍走创建 store 时的兜底 responder。
+    expect(responses).toEqual([{ type: "extension_ui_response", id: "b", cancelled: true }]);
+  });
+
+  it("clearResponder only removes the implementation that is still registered", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    store.getState().setResponder("session-a", first);
+    store.getState().setResponder("session-a", second);
+    store.getState().clearResponder("session-a", first);
+    store.getState().cancelByUser("session-a", "a");
+    store.getState().enqueue("session-a", inputRequest("a"));
+    store.getState().cancelByUser("session-a", "a");
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+  });
+
   it("cancelStaleById removes the request and leaves one bounded notice", () => {
     store.getState().enqueue("session-a", inputRequest("a"));
     expect(store.getState().cancelStaleById("a")).toBe(true);

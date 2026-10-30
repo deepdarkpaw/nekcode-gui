@@ -15,8 +15,14 @@ import { createNekInteractionStore } from "@/nek/interactions/interactionStore.j
 
 const target = { workspacePath: "/workspace", workspaceIdentity: "local-workspace" };
 
-function request(id: string): NekExtensionUiDialogRequest {
-  return { type: "extension_ui_request", id, method: "input", title: id };
+function request(id: string, timeout?: number): NekExtensionUiDialogRequest {
+  return {
+    type: "extension_ui_request",
+    id,
+    method: "input",
+    title: id,
+    ...(timeout === undefined ? {} : { timeout }),
+  };
 }
 
 function answer(id: string, value = "ok"): NekExtensionUiResponse {
@@ -45,10 +51,25 @@ function fakeService() {
   return { emitter, response, service, dispose };
 }
 
-function store() {
+interface StoreOptions {
+  now?: () => number;
+  onTick?: (callback: () => void) => void;
+}
+
+function store(options: StoreOptions = {}) {
   return createNekInteractionStore({
     respond: vi.fn(),
     onEffect: vi.fn(),
+    ...(options.now ? { now: options.now } : {}),
+    ...(options.onTick
+      ? {
+          setIntervalFn: (callback: () => void) => {
+            options.onTick?.(callback);
+            return callback;
+          },
+          clearIntervalFn: () => undefined,
+        }
+      : {}),
   });
 }
 
@@ -157,6 +178,33 @@ describe("nek agent feed", () => {
     expect(interactionStore.getState().getHead("/workspace")).toBeUndefined();
     expect(interactionStore.getState().takeNotices("/workspace")).toEqual([
       { requestId: "gone", id: "nek.interaction.cancelledByHost" },
+    ]);
+    lease.release();
+  });
+
+  it("delivers a GUI-side timeout cancel through respondNekInteraction", () => {
+    const { emitter, response, service } = fakeService();
+    let tick: (() => void) | undefined;
+    let now = 0;
+    const interactionStore = store({
+      now: () => now,
+      onTick: (callback) => {
+        tick = callback;
+      },
+    });
+    const lease = acquireNekAgentFeed(service, target, interactionStore);
+    emitter.fire({ kind: "request", scope: target, request: request("slow", 1_000) });
+
+    // store 的兜底 responder 是 no-op；超时取消必须走 feed 注册的通道才回得到后端。
+    now = 1_500;
+    tick?.();
+    expect(response).toHaveBeenCalledWith({
+      requestId: "slow",
+      response: { type: "extension_ui_response", id: "slow", cancelled: true },
+    });
+    expect(interactionStore.getState().getHead("/workspace")).toBeUndefined();
+    expect(interactionStore.getState().takeNotices("/workspace")).toEqual([
+      { requestId: "slow", id: "nek.interaction.timedOut" },
     ]);
     lease.release();
   });

@@ -73,6 +73,13 @@ export interface NekInteractionStore {
    * 同时把 id 记进 closedRequestIds 让迟到的回调失效。
    */
   cancelStaleById: (requestId: string) => boolean;
+  /**
+   * 绑定某个会话键的回答通道：feed 在订阅期间注册，超时/丢弃这类**非组件触发**的取消
+   * 回答也就能真的回到后端，而不是落到创建 store 时的兜底实现上。
+   */
+  setResponder: (sessionKey: string, responder: InteractionResponder) => void;
+  /** 只在当前注册的仍是同一个实现时移除，避免换连接时把新 feed 的注册一起清掉。 */
+  clearResponder: (sessionKey: string, responder: InteractionResponder) => void;
   disconnect: (sessionKey: string) => void;
   handleFireAndForget: (sessionKey: string, request: NekExtensionUiFireAndForgetRequest) => boolean;
   tick: (now?: number) => void;
@@ -94,6 +101,15 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
     ((handle) => clearInterval(handle as ReturnType<typeof setInterval>));
   let intervalHandle: unknown = null;
   const settlingIds = new Set<string>();
+  const sessionResponders = new Map<string, InteractionResponder>();
+  const responderFor = (sessionKey: string): InteractionResponder =>
+    sessionResponders.get(sessionKey) ?? options.respond;
+  /** 送达一条回答；失败只记录，不让它变成未处理的 rejection。 */
+  const deliver = (sessionKey: string, response: NekExtensionUiResponse): void => {
+    void Promise.resolve(responderFor(sessionKey)(sessionKey, response)).catch((error: unknown) => {
+      logger.warn("[NekInteractionStore] response delivery failed", error);
+    });
+  };
 
   const store = create<NekInteractionStore>((set, get) => {
     const flushQueueEffects = (sessionKey: string): void => {
@@ -114,12 +130,8 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
           },
         };
       });
-      for (const item of outbox) {
-        // 超时/被丢弃请求的取消回答同样可能失败：记录下来，不让它变成未处理的 rejection。
-        void Promise.resolve(options.respond(sessionKey, item.response)).catch((error: unknown) => {
-          logger.warn("[NekInteractionStore] cancel delivery failed", error);
-        });
-      }
+      // 超时/被丢弃请求的取消回答同样要真的回到后端（走该会话注册的回答通道）。
+      for (const item of outbox) deliver(sessionKey, item.response);
     };
 
     const ensureSession = (sessionKey: string): InteractionSessionState | undefined => {
@@ -164,6 +176,8 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
     };
 
     function disconnectSession(sessionKey: string): void {
+      // 回答通道的注册归 feed 所有：换连接时新 feed 可能已经注册同一个键，
+      // 这里删掉会把新连接的回答一起丢掉，只在 feed 释放时按身份清除。
       const existing = get().sessions[sessionKey];
       if (!existing) return;
       set((state) => {
@@ -253,13 +267,11 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         const session = get().sessions[sessionKey];
         if (!session?.queue.some((record) => record.request.id === requestId)) return false;
         applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "settled" });
-        void Promise.resolve(options.respond(sessionKey, response)).catch((error: unknown) => {
-          logger.warn("[NekInteractionStore] response delivery failed", error);
-        });
+        deliver(sessionKey, response);
         refreshTicker();
         return true;
       },
-      settleAsync: async (sessionKey, requestId, response, responder = options.respond) => {
+      settleAsync: async (sessionKey, requestId, response, responder) => {
         const session = get().sessions[sessionKey];
         if (
           !session?.queue.some((record) => record.request.id === requestId) ||
@@ -271,7 +283,7 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         try {
           // 回答真正送达后端之后才关闭卡片：失败时请求留在队列里（草稿也保留），
           // 控制器把错误挂在动作上，用户可以原样重试。
-          await responder(sessionKey, response);
+          await (responder ?? responderFor(sessionKey))(sessionKey, response);
         } finally {
           settlingIds.delete(requestId);
         }
@@ -298,6 +310,12 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
       cancelById: (requestId) => {
         const sessionKey = findSessionKeyByRequestId(requestId);
         return sessionKey ? get().cancelByHost(sessionKey, requestId) : false;
+      },
+      setResponder: (sessionKey, responder) => {
+        sessionResponders.set(sessionKey, responder);
+      },
+      clearResponder: (sessionKey, responder) => {
+        if (sessionResponders.get(sessionKey) === responder) sessionResponders.delete(sessionKey);
       },
       cancelStaleById: (requestId) => {
         const sessionKey = findSessionKeyByRequestId(requestId);
@@ -372,6 +390,7 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         if (intervalHandle !== null) clearIntervalFn(intervalHandle);
         intervalHandle = null;
         settlingIds.clear();
+        sessionResponders.clear();
       },
     } satisfies NekInteractionStore;
   });

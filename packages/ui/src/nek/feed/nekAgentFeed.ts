@@ -12,6 +12,7 @@ import type { NekAgentTypeInfo, NekInteractionFrame } from "@zcode/shared/nek-pr
 import { logger } from "@/logger.js";
 import {
   useNekInteractionStore,
+  type InteractionResponder,
   type NekInteractionStoreApi,
 } from "@/nek/interactions/interactionStore.js";
 import type { WorkspaceConnectionAgentService } from "@/v4/workspaceConnectionRegistry.js";
@@ -94,16 +95,18 @@ function frameSessionKey(frame: NekInteractionFrame, target: NekAgentFeedTarget)
  */
 const NEK_FEED_SESSION_KEY_LIMIT = 64;
 
-function rememberSessionKey(sessionKeys: Set<string>, sessionKey: string): void {
-  if (sessionKeys.has(sessionKey)) return;
+/** 记住会话键，返回被挤出上限的那个键（没有就是 undefined）。 */
+function rememberSessionKey(sessionKeys: Set<string>, sessionKey: string): string | undefined {
+  if (sessionKeys.has(sessionKey)) return undefined;
   sessionKeys.add(sessionKey);
-  if (sessionKeys.size <= NEK_FEED_SESSION_KEY_LIMIT) return;
+  if (sessionKeys.size <= NEK_FEED_SESSION_KEY_LIMIT) return undefined;
   const oldest = sessionKeys.values().next();
-  if (oldest.done) return;
+  if (oldest.done) return undefined;
   sessionKeys.delete(oldest.value);
   logger.warn("[nekAgentFeed] dropping the oldest tracked session key", {
     sessionKey: oldest.value,
   });
+  return oldest.value;
 }
 
 function createNekAgentFeed(
@@ -113,9 +116,16 @@ function createNekAgentFeed(
 ): FeedEntry {
   const sessionKeys = new Set<string>([target.workspacePath]);
   let subscription: IDisposable | undefined;
+  let feed: NekAgentFeed;
+  // 这个 workspace 的所有会话都用 feed 回答：组件触发的回答走 settleAsync，
+  // 超时/丢弃这类非组件触发的取消回答由 store 通过这里注册的通道送回后端。
+  const storeResponder: InteractionResponder = async (_sessionKey, response) =>
+    await feed.respond({ requestId: response.id, response });
   const ingest = (frame: NekInteractionFrame): void => {
     const sessionKey = frameSessionKey(frame, target);
-    rememberSessionKey(sessionKeys, sessionKey);
+    const evicted = rememberSessionKey(sessionKeys, sessionKey);
+    if (evicted !== undefined) store.getState().clearResponder(evicted, storeResponder);
+    store.getState().setResponder(sessionKey, storeResponder);
     if (frame.kind === "request") {
       store.getState().enqueueExtensionRequest(sessionKey, frame.request);
       return;
@@ -123,7 +133,7 @@ function createNekAgentFeed(
     // 请求 id 全局唯一；按 id 找会话可以覆盖"发出请求的会话随后被回收"的撤销帧。
     store.getState().cancelById(frame.id);
   };
-  const feed: NekAgentFeed = {
+  feed = {
     respond: async ({ requestId, response }) => {
       try {
         await service.respondNekInteraction({ requestId, response });
@@ -149,9 +159,13 @@ function createNekAgentFeed(
   const dispose = (): void => {
     subscription?.dispose();
     subscription = undefined;
-    for (const sessionKey of sessionKeys) store.getState().disconnect(sessionKey);
+    for (const sessionKey of sessionKeys) {
+      store.getState().clearResponder(sessionKey, storeResponder);
+      store.getState().disconnect(sessionKey);
+    }
     sessionKeys.clear();
   };
+  store.getState().setResponder(target.workspacePath, storeResponder);
   start();
   return { feed, refs: 1, dispose };
 }
@@ -207,8 +221,7 @@ export function NekAgentFeedProvider({ service, target, children }: NekAgentFeed
   return createElement(NekAgentFeedContext.Provider, { value }, children);
 }
 
-/** Optional so static/replay views can keep the existing headless controllers. */
-export function useOptionalNekAgentFeed(): NekAgentFeed | null {
+function useOptionalNekAgentFeed(): NekAgentFeed | null {
   return useContext(NekAgentFeedContext)?.feed ?? null;
 }
 

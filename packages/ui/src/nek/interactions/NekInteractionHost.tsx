@@ -8,7 +8,6 @@ import type {
   NekSwitchModePayload,
 } from "@zcode/shared/nek-protocol";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useOptionalNekAgentFeed } from "@/nek/feed/nekAgentFeed.js";
 import type { ActiveElementInfo } from "./interactionCommon.js";
 import { NekAskQuestionCard } from "./NekAskQuestionCard.js";
 import { NekExtensionDialogCard } from "./NekExtensionDialogCard.js";
@@ -23,11 +22,6 @@ export interface NekInteractionHostProps {
   onOpenPlanFile?: (path: string) => Promise<void> | void;
   focusComposer?: () => void;
   onLostText?: (text: string) => void;
-  /** 覆盖项：默认用 feed 的 `respondNekInteraction`，测试和静态回放可以直接给实现。 */
-  respondNekInteraction?: (params: {
-    requestId: string;
-    response: NekExtensionUiResponse;
-  }) => Promise<void>;
 }
 
 function extensionResponse(
@@ -45,11 +39,8 @@ export function NekInteractionHost({
   onOpenPlanFile,
   focusComposer,
   onLostText,
-  respondNekInteraction,
 }: NekInteractionHostProps) {
   const { intl } = useZCodeIntl();
-  const feed = useOptionalNekAgentFeed();
-  const respond = respondNekInteraction ?? feed?.respond;
   const activeRequest = store((state) => state.sessions[sessionKey]?.queue[0]?.request);
   const queueLength = store((state) =>
     Math.max(0, (state.sessions[sessionKey]?.queue.length ?? 0) - 1),
@@ -57,20 +48,11 @@ export function NekInteractionHost({
   const settle = useCallback(
     async (response: NekExtensionUiResponse) => {
       // 回答先送达后端再关闭卡片：失败时请求留在队列里，控制器把错误挂在动作上可以重试。
-      const accepted = await store
-        .getState()
-        .settleAsync(
-          sessionKey,
-          response.id,
-          response,
-          respond
-            ? async (_sessionKey, nextResponse) =>
-                await respond({ requestId: nextResponse.id, response: nextResponse })
-            : undefined,
-        );
+      // 送达通道由 feed 在订阅时按会话键注册（见 nek/feed/nekAgentFeed.ts）。
+      const accepted = await store.getState().settleAsync(sessionKey, response.id, response);
       if (!accepted) throw new Error(`Interaction ${response.id} is no longer pending.`);
     },
-    [respond, sessionKey, store],
+    [sessionKey, store],
   );
   if (!activeRequest) return null;
 
