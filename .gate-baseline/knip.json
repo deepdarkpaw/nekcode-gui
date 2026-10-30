@@ -1270,27 +1270,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000INTERACTION_EFFECT_LIMIT",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000INTERACTION_SESSION_LIMIT",
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000INTERACTION_STATUS_LIMIT",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000INTERACTION_TICK_MS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000INTERACTION_WIDGET_LIMIT",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000INTERACTION_WIDGET_LINE_LIMIT",
       "count": 1
     },
     {
@@ -2854,15 +2838,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000InteractionResponder",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000InteractionSessionState",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/interactions/interactionStore.ts\u0000InteractionWidget",
       "count": 1
     },
     {
@@ -3423,10 +3399,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/v4/conversationTurnNavigatorHelpers.ts\u0000ConversationTurnNavigatorQueryTarget",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/v4/workspaceConnectionRegistry.ts\u0000WorkspaceConnectionAgentService",
       "count": 1
     },
     {
