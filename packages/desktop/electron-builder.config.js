@@ -142,6 +142,11 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // 已在线上触发安装包启动即报 Cannot find module 'ms'（Require stack: debug/src/common.js），
   // 自动更新链路直接崩。ms 是叶子包，显式注入即可让 debug 在 app.asar 内稳定解析。
   "ms",
+  // nek settings.json 锁与 ~/.ssh/config 解析器是 tsup external 的 CommonJS 依赖；
+  // proper-lockfile 的子依赖 retry 曾被 electron-builder 漏拷（bundle 校验报「缺少运行时依赖 retry」），
+  // 以它们作为闭包根注入，让 graceful-fs / retry / signal-exit 随包进入 app.asar。
+  "proper-lockfile",
+  "ssh-config",
 ];
 // pacman 依赖必须使用 Arch 官方仓库中的包名。electron-builder 的历史默认集合包含
 // 已移除的 libappindicator-gtk3/http-parser，且缺少 Electron 实际需要的运行库；显式
@@ -384,8 +389,8 @@ function resolveMissingRuntimeModules(appAsarPath) {
     return true;
   });
   return resolvableRuntimeModules.filter((entry) => {
-    const { moduleName } = entry;
-    const moduleRoot = `/node_modules/${moduleName}`;
+    // 按真实安装路径判断：嵌套版本（<parent>/node_modules/<name>）不能被 hoisted 同名包冒充。
+    const moduleRoot = `/node_modules/${entry.installPath}`;
     if (asarEntrySet.has(moduleRoot)) {
       return false;
     }
@@ -414,9 +419,9 @@ async function finalizePackagedAppAsar(context) {
       if (missingRuntimeModules.length === 0) return false;
       const stagingNodeModulesDir = resolve(stagingDir, "node_modules");
       await mkdir(stagingNodeModulesDir, { recursive: true });
-      for (const { moduleName, sourceModulePath } of missingRuntimeModules) {
+      for (const { moduleName, installPath, sourceModulePath } of missingRuntimeModules) {
         if (!sourceModulePath) throw new Error(`未找到运行时依赖 ${moduleName}`);
-        const targetModulePath = resolve(stagingNodeModulesDir, moduleName);
+        const targetModulePath = resolve(stagingNodeModulesDir, installPath);
         await mkdir(dirname(targetModulePath), { recursive: true });
         await rm(targetModulePath, { force: true, recursive: true });
         await cp(sourceModulePath, targetModulePath, { recursive: true });

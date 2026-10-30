@@ -121,6 +121,11 @@ const desktopNodeRuntimeExternals = [
   "node-forge",
   // ZIP 解包器内部依赖 CommonJS require("fs")，不能内联到 ESM main/host 产物。
   "yauzl",
+  // nek settings.json 锁：proper-lockfile → graceful-fs / signal-exit 内部 require("fs"/"assert"/"events")，
+  // 内联后 main 启动即抛 Dynamic require of "path" is not supported。
+  "proper-lockfile",
+  // 远程 ~/.ssh/config 解析器是 CommonJS，内部 require("child_process"/"os")。
+  "ssh-config",
 ];
 
 function createDevReadyMarkerHook(target: "main" | "host" | "preload"): string {
