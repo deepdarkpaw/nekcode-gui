@@ -13,10 +13,6 @@ const MAX_BINDINGS = 5_000;
 export class NekSessionBindings {
   private readonly entries = new Map<string, NekSessionBinding>();
 
-  get size(): number {
-    return this.entries.size;
-  }
-
   bind(target: NekWorkspaceTarget, result: NekSessionResult): void {
     if (this.entries.size >= MAX_BINDINGS)
       throw new Error(`nek session binding limit exceeded (${MAX_BINDINGS})`);

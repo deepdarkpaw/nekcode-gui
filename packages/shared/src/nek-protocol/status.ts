@@ -6,13 +6,7 @@
  * 上限与 renderer `nek/status/types.ts` 的 store 上限同源，二者不允许各自漂移。
  */
 import type { NekExtensionEvent } from "./gui-rpc.js";
-import type {
-  NekMode,
-  NekPlanSummary,
-  NekState,
-  NekSubagentRecord,
-  NekTodo,
-} from "./gui-extension-api.js";
+import type { NekState } from "./gui-extension-api.js";
 import type { NekSessionStats } from "./rpc.js";
 import type { NekAgentSessionEvent } from "./rpc-events.js";
 
@@ -87,9 +81,3 @@ export type NekStatusFrame =
   | { kind: "snapshot"; sessionKey: string; snapshot: NekStatusSnapshot }
   | { kind: "event"; sessionKey: string; event: NekStatusFrameEvent }
   | { kind: "closed"; sessionKey: string };
-
-/** 仅用于保证跨模块引用时不会意外把镜像类型变成独立事实源。 */
-export type NekStatusMode = NekMode;
-export type NekStatusTodo = NekTodo;
-export type NekStatusPlan = NekPlanSummary;
-export type NekStatusSubagent = NekSubagentRecord;

@@ -10,8 +10,6 @@ import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
 
-/** 在会话租约内执行的一次命令实现（`runSessionCommand` 的入参形状）。 */
-export type NekAgentCommandRunner<T> = (context: NekAgentCommandContext) => Promise<T>;
 import {
   isNekSessionSnapshot,
   type NekAgentServiceOptions,
@@ -157,7 +155,7 @@ export class NekAgentService
    * 适配器层不直接调用 protected 的 `withSession`；这里把"一次命令 = 一次租约"的规则
    * 收口到服务内部，空闲进程因此仍可被进程池回收。
    */
-  runSessionCommand<T>(sessionKey: string, run: NekAgentCommandRunner<T>): Promise<T> {
+  runSessionCommand<T>(sessionKey: string, run: commands.NekAgentCommandRunner<T>): Promise<T> {
     return this.withSession(sessionKey, async () => await run(this.commandContext()));
   }
 

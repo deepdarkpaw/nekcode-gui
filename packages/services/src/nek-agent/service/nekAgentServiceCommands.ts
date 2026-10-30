@@ -28,6 +28,9 @@ export interface NekAgentCommandTarget {
   setPhase: (phase: "idle" | "running" | "waiting_input" | "error" | "locked") => void;
 }
 
+/** 在会话租约内执行的一次命令实现（`NekAgentService.runSessionCommand` 的形状）。 */
+export type NekAgentCommandRunner<T> = (context: NekAgentCommandContext) => Promise<T>;
+
 export interface NekAgentCommandContext {
   writableTarget: (sessionKey: string) => NekAgentCommandTarget;
   target: (sessionKey: string) => NekAgentCommandTarget;

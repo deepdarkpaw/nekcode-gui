@@ -22,12 +22,12 @@ import {
 import type { NekSessionBinding, NekWorkspaceTarget } from "./types.js";
 
 /** 薄壳依赖的适配器内部面：服务实例与绑定解析。 */
-export interface NekAgentStatusSurface {
+interface NekAgentStatusSurface {
   service: NekAgentService;
   requireBinding(target: NekWorkspaceTarget, sessionId: string): NekSessionBinding;
 }
 
-/** `Object.assign` 挂到适配器上的状态方法；类型由适配器文件的合并接口声明。 */
+/** `Object.assign` 挂到适配器上的状态方法（适配器用 `declare readonly` 补接口类型）。 */
 export interface NekAgentStatusMethods {
   onDynamicNekStatusFrame: IZCodeAgentService["onDynamicNekStatusFrame"];
   getNekStatusSnapshot: IZCodeAgentService["getNekStatusSnapshot"];
@@ -40,17 +40,15 @@ export interface NekAgentStatusMethods {
   compactNekSession: IZCodeAgentService["compactNekSession"];
 }
 
-/** 状态 feed 的两块产物：帧通道（打开/关闭/释放由适配器触发）与 RPC 方法。 */
-export interface NekAgentStatusFeedParts {
-  channel: NekAgentStatusChannel;
-  methods: NekAgentStatusMethods;
-}
-
+/**
+ * 建状态 feed：`channel` 由适配器在 create/resume/close/dispose 时驱动，
+ * `methods` 经 Object.assign 挂到适配器上暴露给 renderer。
+ */
 export function createNekAgentStatusFeed(
   surface: NekAgentStatusSurface,
   logger?: NekStatusChannelLogger,
-): NekAgentStatusFeedParts {
-  const { service } = surface;
+): { channel: NekAgentStatusChannel; methods: NekAgentStatusMethods } {
+  const { service, requireBinding } = surface;
   /** 权威快照：只读会话没有活进程，`commands.getStatusSnapshot` 会直接报错。 */
   const readSnapshot = async (sessionKey: string): Promise<NekStatusSnapshot> =>
     await service.runSessionCommand(
@@ -65,18 +63,21 @@ export function createNekAgentStatusFeed(
     },
     logger,
   );
-  return { channel, methods: createNekAgentStatusMethods(surface, channel, readSnapshot) };
+  return {
+    channel,
+    methods: createNekAgentStatusMethods(service, requireBinding, channel, readSnapshot),
+  };
 }
 
-export function createNekAgentStatusMethods(
-  surface: NekAgentStatusSurface,
+function createNekAgentStatusMethods(
+  service: NekAgentService,
+  requireBinding: NekAgentStatusSurface["requireBinding"],
   channel: NekAgentStatusChannel,
   readSnapshot: (sessionKey: string) => Promise<NekStatusSnapshot>,
 ): NekAgentStatusMethods {
-  const { service } = surface;
-  /** renderer 的 sessionId → 服务内部会话键；未打开的会话直接报错（不落的兜底）。 */
+  /** renderer 的 sessionId → 服务内部会话键；未打开的会话直接报错，不做兜底。 */
   const sessionKeyOf = (params: NekWorkspaceTarget & { sessionId: string }): string =>
-    surface.requireBinding(params, params.sessionId).sessionKey;
+    requireBinding(params, params.sessionId).sessionKey;
   return {
     onDynamicNekStatusFrame: (target) => channel.onDynamic(target),
     getNekStatusSnapshot: async (params): Promise<NekStatusSnapshot> =>

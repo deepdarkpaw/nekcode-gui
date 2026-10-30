@@ -5,7 +5,7 @@ import { NekRetryBannerView } from "./NekRetryBannerView.js";
 import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
-import { getNekStatusActions } from "@/nek/statusFeed/statusFeed.js";
+import { useNekStatusActions } from "@/nek/statusFeed/statusActions.js";
 import { useNekStatusStore } from "./store.js";
 
 export interface NekSessionStatusCallbacks {
@@ -32,12 +32,15 @@ export interface NekSessionStatusSlotProps {
 }
 
 export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatusSlotProps) {
-  const statusActions = getNekStatusActions(sessionKey);
+  // 只依赖 agent 服务的动作由 status feed 直接提供（订单见 statusFeed/statusActions.ts）；
+  // pane 传入的 callbacks 负责需要 composer / 侧栏 / 行跳转的那几个动作。
+  const statusActions = useNekStatusActions(sessionKey);
   const effectiveCallbacks = statusActions
     ? {
         ...callbacks,
         clearQueue: statusActions.clearQueue,
         requeue: statusActions.requeue,
+        abort: statusActions.abort,
         abortRetry: statusActions.abortRetry,
         abortCompaction: statusActions.abortCompaction,
         onCompact: statusActions.compact,

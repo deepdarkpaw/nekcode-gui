@@ -16,7 +16,6 @@ import {
   NEK_STATUS_FRAME_MAX_SUBAGENTS,
   NEK_STATUS_FRAME_MAX_TEXT,
   NEK_STATUS_FRAME_MAX_TODOS,
-  type NekAgentSessionEvent,
   type NekExtensionEvent,
   type NekRpcEvent,
   type NekState,
@@ -169,26 +168,6 @@ export function projectNekStatusEvent(event: NekRpcEvent): NekStatusFrameEvent |
       return null;
   }
 }
-
-/** 会话事件是否属于 status feed（用于帧计数/诊断，不影响投影结果）。 */
-export function isNekStatusSessionEvent(type: string): boolean {
-  return STATUS_EVENT_TYPES.has(type as NekAgentSessionEvent["type"]);
-}
-
-const STATUS_EVENT_TYPES = new Set<string>([
-  "agent_start",
-  "agent_settled",
-  "message_start",
-  "message_end",
-  "queue_update",
-  "compaction_start",
-  "compaction_end",
-  "auto_retry_start",
-  "auto_retry_end",
-  "summarization_retry_scheduled",
-  "summarization_retry_attempt_start",
-  "summarization_retry_finished",
-]);
 
 export class NekAgentStatusChannel {
   private readonly entries = new Map<string, WorkspaceFeedEntry>();

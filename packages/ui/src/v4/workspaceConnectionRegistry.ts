@@ -43,6 +43,7 @@ export type WorkspaceConnectionAgentService = Pick<
   | "requeueNekQueue"
   | "abortNekRetry"
   | "abortNekCompaction"
+  | "abortNekSession"
   | "compactNekSession"
   | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
@@ -134,7 +135,8 @@ function releaseEntry(entry: RegistryEntry): void {
     if (registry.get(entry.key) === entry) {
       registry.delete(entry.key);
     }
-    entry.layer.dispose();
+    // 与流式传输一起回收 status feed：keep-warm 到期后不能再有订阅或 store 残留。
+    disposeEntry(entry);
     logger.lifecycle.info("v4 workspace connection keep-warm expired", {
       event: "v4.workspace_connection.keep_warm_expired",
       key: entry.key,
