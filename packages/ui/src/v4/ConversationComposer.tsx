@@ -133,6 +133,7 @@ import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
+import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import {
   createLargePasteBlock,
   expandLargePasteBlocks,
@@ -610,7 +611,7 @@ function ConversationComposerImpl({
     disabled,
   });
   // 大段粘贴折叠：正文只留在按 scope 的内存表里，编辑器里只出现占位标记。
-  const pasteScopeKey = `${workspaceKey} ${draftScopeId}`;
+  const pasteScopeKey = `${workspaceKey}\0${draftScopeId}`;
   const pasteScopeKeyRef = useRef(pasteScopeKey);
   pasteScopeKeyRef.current = pasteScopeKey;
   const pasteBlocksRef = useRef<readonly LargePasteBlock[]>([]);
@@ -1419,6 +1420,29 @@ function ConversationComposerImpl({
       return false;
     },
     [submit],
+  );
+
+  // nek `app.message.followUp`（桌面默认 Alt+Enter）：不参与文本输入，交给动作派发器，
+  // 语义与组合键发送一致——单次反向 delivery（配置为 guide 时排队，否则立即抢占）。
+  useNekActionHandlers(
+    {
+      "app.message.followUp": {
+        enabled: !disabled,
+        run: () => {
+          const followupMode = snapshotRef.current?.config.followupMode;
+          textRef.current = inputApiRef.current?.getMarkdown() ?? textRef.current;
+          void submit(
+            undefined,
+            undefined,
+            undefined,
+            followupMode ? resolveOppositeFollowupDelivery(followupMode) : undefined,
+          );
+          return true;
+        },
+      },
+    },
+    !disabled,
+    120,
   );
 
   const handleClearQueueSend = useCallback(() => {

@@ -617,8 +617,9 @@ function KeyboardPlugin({
           return true;
         }
 
-        // Shift+Enter，以及未启用反转投递时的 Ctrl/Meta+Enter 继续换行。
-        if (event.shiftKey || event.ctrlKey || event.metaKey) {
+        // Shift+Enter，以及未启用反转投递时的 Ctrl/Meta+Enter 继续换行；
+        // Alt+Enter 不是文本输入，放行给 nek 动作派发器（`app.message.followUp`）。
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
           return false;
         }
 
