@@ -82,7 +82,7 @@ import {
   ChatMediaAttachmentPreviewDialog,
   type ChatMediaAttachmentPreviewTarget,
 } from "@/ChatMediaAttachmentPreviewDialog.js";
-import type { LexicalChatInputHandle } from "@/LexicalChatInput.js";
+import type { ChatComposerPasteEvent, LexicalChatInputHandle } from "@/LexicalChatInput.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -133,6 +133,16 @@ import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
+import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
+import {
+  createLargePasteBlock,
+  expandLargePasteBlocks,
+  nextLargePasteBlockId,
+  pruneLargePasteBlocks,
+  readLargePasteBlocks,
+  writeLargePasteBlocks,
+  type LargePasteBlock,
+} from "@/v4/composer/largePaste.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { CodeCommentAttachmentChip } from "@/v4/composer/CodeCommentAttachmentChip.js";
 import { removeCodeCommentPreview } from "@/v4/composer/codeCommentPreviewSync.js";
@@ -379,6 +389,12 @@ interface ConversationComposerProps {
    * 竖切多 pane 时由宿主传入 SessionPane.focused，仅焦点 pane 聚焦、后台 pane 不抢焦点。
    */
   autoFocusEnabled?: boolean;
+  /**
+   * 所在 pane 是否持有 pane 级焦点（分屏宿主传 `SessionPane.focused`）。
+   * 工具条的 nek 动作（Ctrl+L / Shift+Tab）只在焦点 pane 注册，避免多个 composer
+   * 同时挂载时抢同一个键。
+   */
+  paneFocused?: boolean;
   /** 当前 composer 是否运行在手机 Web 远控壳中。 */
   workspacePath: string;
   workspaceIdentity?: string;
@@ -476,6 +492,7 @@ function ConversationComposerImpl({
   blockingRequestId = null,
   disabled = false,
   autoFocusEnabled = true,
+  paneFocused = true,
   workspacePath,
   workspaceIdentity,
   remoteSessionId,
@@ -600,6 +617,41 @@ function ConversationComposerImpl({
     onRuntimeLifecycle,
     disabled,
   });
+  // 大段粘贴折叠：正文只留在按 scope 的内存表里，编辑器里只出现占位标记。
+  const pasteScopeKey = `${workspaceKey}\0${draftScopeId}`;
+  const pasteScopeKeyRef = useRef(pasteScopeKey);
+  pasteScopeKeyRef.current = pasteScopeKey;
+  const pasteBlocksRef = useRef<readonly LargePasteBlock[]>([]);
+  const commitPasteBlocks = useCallback((blocks: readonly LargePasteBlock[]) => {
+    pasteBlocksRef.current = blocks;
+    writeLargePasteBlocks(pasteScopeKeyRef.current, blocks);
+  }, []);
+  const handleComposerPaste = useCallback(
+    (event: ChatComposerPasteEvent) => {
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      const existing = pasteBlocksRef.current;
+      const block = createLargePasteBlock({
+        id: nextLargePasteBlockId(existing),
+        text,
+        existing,
+        formatMarker: (index, lineCount) =>
+          intl.formatMessage(
+            { id: "chat.composer.pasteBlock.placeholder" },
+            { index, lines: lineCount },
+          ),
+      });
+      if (!block) {
+        attachmentsApi.handlePaste(event);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation?.();
+      commitPasteBlocks([...existing, block]);
+      inputApiRef.current?.appendText(block.marker);
+      updateText(inputApiRef.current?.getMarkdown() ?? `${textRef.current}${block.marker}`);
+    },
+    [attachmentsApi.handlePaste, commitPasteBlocks, intl, updateText],
+  );
   // 对齐旧版 useChatComposer：窗口级 dragover 会在指针进入 ChatView 前预先点亮
   // 整个聊天区与桌面草稿标题栏；workspace payload 的文案优先于系统附件。
   const { externalFileDragging, workspaceFileDragging } = usePromptEditorDragState({
@@ -703,8 +755,12 @@ function ConversationComposerImpl({
   const snapshotDraftOfEditor = useCallback((): {
     text: string;
     editorStateJson?: string;
+    attachments?: readonly AttachmentRef[];
   } => {
     const currentText = textRef.current;
+    const attachments = attachmentsApi.attachments.flatMap((item) =>
+      item.attachmentRef ? [item.attachmentRef] : [],
+    );
     let editorStateJson: string | undefined;
     try {
       const editorState = inputApiRef.current?.getEditorState();
@@ -712,10 +768,12 @@ function ConversationComposerImpl({
     } catch (error) {
       logger.warn(`[v4-composer] 草稿 editorState 序列化失败: ${String(error)}`);
     }
-    return currentText.trim()
-      ? { text: currentText, ...(editorStateJson ? { editorStateJson } : {}) }
-      : { text: "" };
-  }, []);
+    return {
+      text: currentText,
+      ...(editorStateJson ? { editorStateJson } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
+    };
+  }, [attachmentsApi.attachments]);
 
   const persistDraftNow = useCallback(
     (scopeId: string) => {
@@ -893,6 +951,8 @@ function ConversationComposerImpl({
       workspaceIdentity,
       scopeId: draftScopeId,
     };
+    // 粘贴块随 scope 切换：新 scope 的标记行必须能找回自己的原文。
+    pasteBlocksRef.current = readLargePasteBlocks(pasteScopeKey);
 
     const draft = transferredDraft ?? composerDraft;
     const restoreDraftInto = (api: LexicalChatInputHandle) => {
@@ -912,6 +972,9 @@ function ConversationComposerImpl({
           },
         }),
       );
+      if (draft.attachments?.length) {
+        attachmentsApi.restoreSessionOwnedAttachments(draft.attachments);
+      }
     };
     const applyDraft = () => {
       const api = inputApiRef.current;
@@ -929,7 +992,9 @@ function ConversationComposerImpl({
     return undefined;
     // 依赖收敛到 scope/workspace：draft 恢复只应发生在 scope 切换或 workspace 切换。
   }, [
+    attachmentsApi.restoreSessionOwnedAttachments,
     draftScopeId,
+    pasteScopeKey,
     persistDraftNow,
     requestComposerFocus,
     snapshotDraftOfEditor,
@@ -1070,7 +1135,8 @@ function ConversationComposerImpl({
       existingLocalTtft?: LocalTtftContext,
       requestedDelivery?: "startNow" | "queue" | "guide",
     ) => {
-      const trimmed = textRef.current.trim();
+      const expandedText = expandLargePasteBlocks(textRef.current, pasteBlocksRef.current);
+      const trimmed = expandedText.trim();
       const submittedQueueItemIds =
         snapshotRef.current?.queue.items.map((item) => item.queueItemId) ?? [];
       const hasPendingAttachments = attachmentsApi.attachments.length > 0;
@@ -1263,6 +1329,8 @@ function ConversationComposerImpl({
         if (contentRevisionRef.current === cleanupRevision) {
           inputApiRef.current?.clear();
           updateText("");
+          // 正文已交出去，本次折叠的原文不再需要留在内存里。
+          commitPasteBlocks([]);
         }
         attachmentsApi.clearAttachments(submittedAttachmentIds);
         // 与附件相同，只移除本次冻结的引用；等待期间新加入的引用属于下一条消息。
@@ -1300,6 +1368,7 @@ function ConversationComposerImpl({
       removeCodeCommentContext,
       removeConversationSelectionReference,
       sessionId,
+      commitPasteBlocks,
       snapshotDraftOfEditor,
       updateText,
       updateComposerContent,
@@ -1312,11 +1381,16 @@ function ConversationComposerImpl({
   const handleEditorChange = useCallback(
     (value: string) => {
       updateText(value);
+      // 标记行被删掉的粘贴块立即释放，不留下看不见的内存块。
+      const remaining = pruneLargePasteBlocks(value, pasteBlocksRef.current);
+      if (remaining.length !== pasteBlocksRef.current.length) {
+        commitPasteBlocks(remaining);
+      }
       // 正文先进入与 mode/model 相同的内存 Draft；防抖只负责补充最新 Lexical JSON。
       updateComposerContent({ text: value });
       scheduleDraftPersist();
     },
-    [scheduleDraftPersist, updateComposerContent, updateText],
+    [commitPasteBlocks, scheduleDraftPersist, updateComposerContent, updateText],
   );
 
   // 编辑器提交（Enter / 发送键 form submit 同路径）。返回 false：编辑器不自行 reset，
@@ -1353,6 +1427,28 @@ function ConversationComposerImpl({
       return false;
     },
     [submit],
+  );
+
+  // nek `app.message.followUp`（桌面默认 Alt+Enter）：不参与文本输入，交给动作派发器，
+  // 语义与组合键发送一致——单次反向 delivery（配置为 guide 时排队，否则立即抢占）。
+  useNekActionHandlers(
+    {
+      "app.message.followUp": {
+        run: () => {
+          const followupMode = snapshotRef.current?.config.followupMode;
+          textRef.current = inputApiRef.current?.getMarkdown() ?? textRef.current;
+          void submit(
+            undefined,
+            undefined,
+            undefined,
+            followupMode ? resolveOppositeFollowupDelivery(followupMode) : undefined,
+          );
+          return true;
+        },
+      },
+    },
+    !disabled && paneFocused,
+    120,
   );
 
   const handleClearQueueSend = useCallback(() => {
@@ -1818,6 +1914,7 @@ function ConversationComposerImpl({
             draftConfig={draftConfig}
             usage={composerUsage}
             disabled={disabled}
+            paneFocused={paneFocused}
             activeConfigPicker={activeConfigPicker}
             onConfigPickerOpenChange={handleConfigPickerOpenChange}
             onSelectModel={handleSelectModel}
@@ -2036,7 +2133,7 @@ function ConversationComposerImpl({
           className="p-0"
           onChange={handleEditorChange}
           onSubmit={handleEditorSubmit}
-          onPaste={attachmentsApi.handlePaste}
+          onPaste={handleComposerPaste}
         />
         {attachmentsApi.attachmentError ? (
           <p className="flex items-start gap-2 p-3 text-ui-base text-warning">

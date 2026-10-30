@@ -34,7 +34,6 @@ import { ChatContextUsage } from "@/chat-input-toolbar/display.js";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
 import { getNextThoughtLevelValue } from "@/chat-input-toolbar/thoughtLevelOptions.js";
 import type { V4ComposerConfigPicker } from "@/v4/composer/configPickerState.js";
-import { useToolbarShortcutBindings } from "@/v4/composer/toolbarShortcuts.js";
 import {
   resolveModelSelectTriggerDisplay,
   shouldShowManageModelsAction,
@@ -47,7 +46,8 @@ import type { ModelSelectionState } from "@/hooks/useModelSelectionView.js";
 import { useToolbarConfigOptions } from "@/hooks/useZCodeConfig.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
-import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
+import { useActionShortcutLabel } from "@/shortcuts/useActionShortcuts.js";
+import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { logger } from "@/logger.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
@@ -65,7 +65,6 @@ const V4_COMPOSER_INPUT_SELECTOR = `[data-testid="${TID_V4_COMPOSER_INPUT}"]`;
 const MODEL_SELECTION_LOADING_STATE: ModelSelectionState = { status: "loading" };
 
 /** 稳定空回调（热键 hook 单实例只处理本组件拥有的选项，其余动作占位）。 */
-function noop(): void {}
 
 export interface ModelSelectionSource {
   provider: string;
@@ -90,6 +89,12 @@ export interface V4ComposerToolbarProps {
   draftConfig?: Partial<SessionConfigState>;
   usage: SessionUsageState | null;
   disabled: boolean;
+  /**
+   * 所在 pane 是否持有 pane 级焦点（`SessionPane` 的 focused）。
+   * 分屏时多个工具条同时挂载，只有焦点 pane 注册 `app.model.select` / `app.thinking.cycle`，
+   * 否则 Ctrl+L 会打开第一个挂载的 pane 的模型菜单。默认 true（非分屏宿主）。
+   */
+  paneFocused?: boolean;
   /** 单个 composer 内的配置 picker 排他 owner；只属于 renderer-local presentation。 */
   activeConfigPicker: V4ComposerConfigPicker | null;
   onConfigPickerOpenChange: (picker: V4ComposerConfigPicker, open: boolean) => void;
@@ -125,6 +130,7 @@ function V4ComposerModelControlsImpl({
   draftConfig,
   usage,
   disabled,
+  paneFocused = true,
   activeConfigPicker,
   onConfigPickerOpenChange,
   onSelectModel,
@@ -161,17 +167,6 @@ function V4ComposerModelControlsImpl({
     },
     [onConfigPickerOpenChange],
   );
-
-  const modelOption = modelSelectionView?.providers.some((provider) => provider.models.length > 0)
-    ? ({
-        id: "model",
-        name: "Model",
-        category: "model",
-        type: "select",
-        currentValue: "",
-        options: [],
-      } satisfies ZCodeConfigOption)
-    : undefined;
 
   // 空模型/档位曾被 Session 旧值补回，界面显示与实际不可提交状态矛盾。
   // 初始化已经由 Composer owner 完成；显示层只消费它，不能再次补值。
@@ -392,20 +387,18 @@ function V4ComposerModelControlsImpl({
     [effectiveConfig, onSelectThought],
   );
 
-  // Ctrl+T 热键：按目录顺序循环下一次 Submission 的思考深度。
-  const handleCycleThoughtLevel = useCallback(() => {
-    if (!thoughtOption || thoughtOption.type !== "select") {
-      return;
-    }
+  // Shift+Tab（nek `app.thinking.cycle`）：按目录顺序循环下一次 Submission 的思考深度。
+  // 返回是否真的改了值——没有可循环的目录项时动作不吞按键。
+  const handleCycleThoughtLevel = useCallback((): boolean => {
+    if (!thoughtOption || thoughtOption.type !== "select") return false;
     const nextValue = getNextThoughtLevelValue(thoughtOption);
-    if (nextValue == null) {
-      return;
-    }
-    if (!effectiveConfig) return;
+    if (nextValue == null) return false;
+    if (!effectiveConfig) return false;
     onSelectThought(nextValue, {
       provider: effectiveConfig.provider,
       model: effectiveConfig.model,
     });
+    return true;
   }, [effectiveConfig, onSelectThought, thoughtOption]);
 
   const taskUsage = useMemo(() => {
@@ -418,28 +411,41 @@ function V4ComposerModelControlsImpl({
       ...(contextWindow.breakdown ? { breakdown: contextWindow.breakdown } : {}),
     };
   }, [usage?.contextWindow]);
-  // 工具条热键已转正为命令表命令：tooltip 快捷键文案读生效表，
+  // 工具条 tooltip 的快捷键文案读 nek 动作生效表（Ctrl+L / Shift+Tab），
   // 改绑后按钮提示即时跟随（不能用硬编码文案）。
-  const modelShortcutLabel = useShortcutCommandLabel("openModelMenu");
-  const thoughtShortcutLabel = useShortcutCommandLabel("cycleThoughtLevel");
+  const modelShortcutLabel = useActionShortcutLabel("app.model.select");
+  const thoughtShortcutLabel = useActionShortcutLabel("app.thinking.cycle");
   const isModelOptionLocked = useCallback(() => false, []);
 
-  // 键盘热键（旧 useToolbarShortcutBindings）：Ctrl+M 打开模型菜单、Ctrl+T 循环思考深度。
-  // 模式循环（Ctrl+Shift+M）由 V4ComposerModeSwitch 单独绑定（modeOption 在彼处）。
   // 模型留空是正常的待选择状态，包括已有会话；不能因为没有已选模型隐藏重选入口。
   // 有可选组时正常显示；无组但有「管理模型」入口时也显示，避免用户零模型入口。
   const modelMenuVisible = modelSelectGroups.length > 0 || showManageModelsAction;
   const providerSubmenuClassName = undefined;
-  useToolbarShortcutBindings({
-    hasAnyOption: Boolean(modelOption) || Boolean(thoughtOption),
-    toolbarDisabled: disabled || recoveryPending,
-    modelMenuDisabled: disabled || recoveryPending || !modelMenuVisible,
-    modelOption,
-    thoughtOption: thoughtOption ?? undefined,
-    onOpenModelMenu: handleOpenModelMenuShortcut,
-    onCycleThoughtLevel: handleCycleThoughtLevel,
-    onCycleSessionMode: noop,
-  });
+  useNekActionHandlers(
+    {
+      // nek 动作表里与本工具条相关的两条：模型菜单（Ctrl+L）与思考等级（Shift+Tab）。
+      // 工具输出 / thinking 的全局折叠由 SessionPane 登记，分屏时不在这里重复。
+      "app.model.select": {
+        run: () => {
+          if (disabled || recoveryPending || !modelMenuVisible) {
+            logger.debug("[V4ComposerToolbar] 模型菜单热键未打开模型菜单", {
+              hasModelOption: modelSelectGroups.length > 0,
+              modelMenuDisabled: disabled || recoveryPending,
+            });
+            return false;
+          }
+          handleOpenModelMenuShortcut();
+          return true;
+        },
+      },
+      "app.thinking.cycle": {
+        enabled: !disabled && !recoveryPending && Boolean(thoughtOption && effectiveConfig),
+        run: handleCycleThoughtLevel,
+      },
+    },
+    !disabled && paneFocused,
+    110,
+  );
 
   return (
     <>

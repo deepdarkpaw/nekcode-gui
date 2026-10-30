@@ -7,10 +7,15 @@
 !PARITY.md
 !third-party/**/NOTICE.md
 
-# 隐藏目录默认忽略；CI 工作流与门禁基线是构建必需，显式放行。
-.*/
-!.github/
-!.gate-baseline/
+# 本地隐藏目录逐个列出，不用 `.*/`：该模式会在 `.worktree/<task>` 这类点目录
+# checkout 中把整棵树判为忽略，导致 knip 的 gitignore 过滤统计全空。
+/.agents/
+/.nek/
+/.vscode/
+/.idea/
+**/.vscode/
+**/.idea/
+**/.tui-staging/
 
 # 参考源码、本地工具链、子代理工作树
 /参考/

@@ -180,6 +180,8 @@ import {
   type V4VisibleSlashCommand,
 } from "@/v4/slashCommands.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
+import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
+import { useFoldStore } from "@/lib/foldState.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
 import { useConversationProjection } from "@/v4/useConversationProjection.js";
 import { usePendingCommandRecovery } from "@/v4/usePendingCommandRecovery.js";
@@ -954,6 +956,10 @@ export function SessionPane({
     useState<ComposerRestoreRequest | null>(null);
   const nextComposerRestoreRequestIdRef = useRef(1);
   const timelineScrollToBottomRef = useRef<(() => void) | null>(null);
+  const timelineScrollToTopRef = useRef<(() => void) | null>(null);
+  const timelineScrollToPromptRef = useRef<((direction: "previous" | "next") => boolean) | null>(
+    null,
+  );
   const timelineScrollToQueryRef = useRef<
     ((target: { unitIndex: number; rowId: number }) => void) | null
   >(null);
@@ -3057,6 +3063,84 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
+  // focused pane 独占 nek 动作：stop / 折叠 / 跳转都作用于明确的 pane。
+  // 每个 handler 返回「本次是否真的执行了目标」，没执行时派发器不吞按键。
+  const queueHasItems = (snapshot?.queue.items.length ?? 0) > 0;
+  const timelineRendered = !(sessionId !== null && state.status === "error");
+  useNekActionHandlers(
+    {
+      "app.interrupt": {
+        enabled: Boolean(sessionId && snapshot?.control.canStop),
+        run: ({ event }) => {
+          // 对话框 / 提及面板已经消费这次 Esc 时不再停止生成（只关最内层）。
+          if (event && shouldIgnoreEscapeForStopGeneration(event)) return false;
+          if (!snapshotRef.current?.control.canStop) return false;
+          handleStop("escape");
+          return true;
+        },
+      },
+      "nek.plan.toggle": {
+        enabled: !readOnly,
+        run: () => {
+          handleSwitchMode(draftConfig.planEnabled ? "agent" : "plan");
+          return true;
+        },
+      },
+      "app.tools.expand": {
+        enabled: !readOnly,
+        run: () => {
+          useFoldStore.getState().toggleGroup("toolOutput");
+          return true;
+        },
+      },
+      "app.thinking.toggle": {
+        enabled: !readOnly,
+        run: () => {
+          useFoldStore.getState().toggleGroup("thinking");
+          return true;
+        },
+      },
+      "app.message.dequeue": {
+        // nek 一次取回全部排队消息；GUI 的输入框只有一份草稿，逐条取回（每次最早一条）。
+        enabled: !readOnly && queueHasItems,
+        run: () => {
+          const next = snapshotRef.current?.queue.items[0];
+          if (!next) return false;
+          void handleEditQueueItem(next.queueItemId);
+          return true;
+        },
+      },
+      "tui.altScreen.previousPrompt": {
+        enabled: !readOnly && timelineRendered,
+        run: () => timelineScrollToPromptRef.current?.("previous") ?? false,
+      },
+      "tui.altScreen.nextPrompt": {
+        enabled: !readOnly && timelineRendered,
+        run: () => timelineScrollToPromptRef.current?.("next") ?? false,
+      },
+      "tui.altScreen.top": {
+        enabled: !readOnly && timelineRendered,
+        run: () => {
+          const action = timelineScrollToTopRef.current;
+          if (!action) return false;
+          action();
+          return true;
+        },
+      },
+      "tui.altScreen.bottom": {
+        enabled: !readOnly && timelineRendered,
+        run: () => {
+          const action = timelineScrollToBottomRef.current;
+          if (!action) return false;
+          action();
+          return true;
+        },
+      },
+    },
+    focused && !readOnly,
+    100,
+  );
+
   const handlePauseGoal = useCallback(() => {
     const current = snapshotRef.current;
     if (!sessionId || !current?.availability.pauseGoal.allowed) return;
@@ -3076,23 +3160,6 @@ export function SessionPane({
       }
     });
   }, [dispatchCommand, sessionId]);
-
-  // composer parity：Esc → stop（旧 useChatViewEffects「Escape 停止生成」语义保真：
-  // 事件路径含 dialog / defaultPrevented 时跳过；mention/slash 面板打开时 Lexical 已
-  // preventDefault，本 handler 自然让路）。仅 focused pane 监听：
-  // 「stop 等危险操作永远作用于明确的 pane，快捷键走 focused pane」。
-  useEffect(() => {
-    if (!focused || readOnly) return;
-    if (!sessionId || !snapshot?.control.canStop) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (shouldIgnoreEscapeForStopGeneration(event)) return;
-      event.preventDefault();
-      handleStop("escape");
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focused, handleStop, readOnly, sessionId, snapshot?.control.canStop]);
 
   // handleStop 带 source 参数（button / escape 两个调用点），但 ConversationComposer 是 memo：
   // 直接写 onStop={() => handleStop("button")} 每次 render 都换引用，memo 白做，而 composer
@@ -3748,6 +3815,7 @@ export function SessionPane({
       externalTextInsertRequest={focused && sessionId === null ? composerTextInsertRequest : null}
       onExternalTextInsertApplied={handleExternalTextInsertApplied}
       autoFocusEnabled={focused}
+      paneFocused={focused}
       disabled={connecting || draftRuntimeRebuilding || queueEditActiveForCurrentComposer}
       workspacePath={workspacePath}
       workspaceIdentity={workspaceIdentity}
@@ -4032,6 +4100,8 @@ export function SessionPane({
         ) : (
             <ConversationTimeline
               scrollToBottomActionRef={timelineScrollToBottomRef}
+              scrollToTopActionRef={timelineScrollToTopRef}
+              scrollToPromptActionRef={timelineScrollToPromptRef}
               scrollToQueryActionRef={timelineScrollToQueryRef}
               selectionPanelLayoutContainerRef={conversationLayoutContainerRef}
               rows={timelineSnapshot?.rows.window ?? []}

@@ -26,6 +26,12 @@
         "build-remote.ts"
       ]
     },
+    "packages/ui": {
+      "vitest": {
+        "config": ["vitest.config.ts"],
+        "entry": ["src/**/*.test.{ts,tsx}"]
+      }
+    },
     "packages/services": {
       "entry": [
         "src/index.ts",

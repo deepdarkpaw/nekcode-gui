@@ -4,6 +4,8 @@ import type { ConversationTurnRenderUnit } from "@/v4/conversationTurnRenderUnit
 import { projectAssistantCodeComments } from "@/lib/assistantCodeComment.js";
 
 export type ConversationFindRowKind = "userInput" | "assistantText";
+/** 会话内搜索最多保留 5000 个匹配，避免长输出占满 renderer 内存。 */
+export const CONVERSATION_FIND_MAX_MATCHES = 5_000;
 
 export interface ConversationFindMatch {
   globalIndex: number;
@@ -101,10 +103,11 @@ export function buildConversationFindIndex(
 
   const matches: ConversationFindMatch[] = [];
   for (const target of targets) {
+    if (matches.length >= CONVERSATION_FIND_MAX_MATCHES) break;
     const normalizedText = target.text.toLocaleLowerCase();
     let searchStart = 0;
     let rowMatchIndex = 0;
-    while (searchStart < normalizedText.length) {
+    while (searchStart < normalizedText.length && matches.length < CONVERSATION_FIND_MAX_MATCHES) {
       const matchIndex = normalizedText.indexOf(normalizedQuery, searchStart);
       if (matchIndex === -1) {
         break;
