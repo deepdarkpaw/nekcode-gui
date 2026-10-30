@@ -1,10 +1,15 @@
 import type { IRemoteBackend, RemoteUploadOptions } from "@zcode/server/remote";
 import { quotePosixPathArg } from "@zcode/server/remote/posixShell.js";
-import type { TraceId, ZCodePromptAttachment } from "@zcode/shared";
+import {
+  ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME,
+  type TraceId,
+  type ZCodePromptAttachment,
+} from "@zcode/shared";
 import { randomUUID } from "node:crypto";
 
-const REMOTE_PROMPT_ATTACHMENT_ROOT = "~/.zcodium/tmp/prompt-attachments";
-const REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT = ".zcodium/tmp/prompt-attachments";
+/** 远端暂存附件的相对路径：挂在远端安装根下，与 gui-server 共用同一命名空间。 */
+const REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT = `${ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME}/tmp/prompt-attachments`;
+const REMOTE_PROMPT_ATTACHMENT_ROOT = `~/${REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT}`;
 
 interface RemotePromptAttachmentMaterializeInput {
   taskId?: string;
