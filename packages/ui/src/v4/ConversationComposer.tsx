@@ -389,6 +389,12 @@ interface ConversationComposerProps {
    * 竖切多 pane 时由宿主传入 SessionPane.focused，仅焦点 pane 聚焦、后台 pane 不抢焦点。
    */
   autoFocusEnabled?: boolean;
+  /**
+   * 所在 pane 是否持有 pane 级焦点（分屏宿主传 `SessionPane.focused`）。
+   * 工具条的 nek 动作（Ctrl+L / Shift+Tab）只在焦点 pane 注册，避免多个 composer
+   * 同时挂载时抢同一个键。
+   */
+  paneFocused?: boolean;
   /** 当前 composer 是否运行在手机 Web 远控壳中。 */
   workspacePath: string;
   workspaceIdentity?: string;
@@ -486,6 +492,7 @@ function ConversationComposerImpl({
   blockingRequestId = null,
   disabled = false,
   autoFocusEnabled = true,
+  paneFocused = true,
   workspacePath,
   workspaceIdentity,
   remoteSessionId,
@@ -1427,7 +1434,6 @@ function ConversationComposerImpl({
   useNekActionHandlers(
     {
       "app.message.followUp": {
-        enabled: !disabled,
         run: () => {
           const followupMode = snapshotRef.current?.config.followupMode;
           textRef.current = inputApiRef.current?.getMarkdown() ?? textRef.current;
@@ -1441,7 +1447,7 @@ function ConversationComposerImpl({
         },
       },
     },
-    !disabled,
+    !disabled && paneFocused,
     120,
   );
 
@@ -1908,6 +1914,7 @@ function ConversationComposerImpl({
             draftConfig={draftConfig}
             usage={composerUsage}
             disabled={disabled}
+            paneFocused={paneFocused}
             activeConfigPicker={activeConfigPicker}
             onConfigPickerOpenChange={handleConfigPickerOpenChange}
             onSelectModel={handleSelectModel}

@@ -23,9 +23,7 @@ import {
 import { getActionShortcutOverrides } from "./useActionShortcuts.js";
 import { getNekAction, type NekActionDispatchPhase, type NekActionId } from "./nekActions.js";
 
-export type { NekActionDispatchPhase };
-
-export interface NekActionDispatchContext {
+interface NekActionDispatchContext {
   /** 键盘来源的 DOM 事件；非键盘来源（按钮/菜单复用同一动作）为 null。 */
   readonly event: KeyboardEvent | null;
 }

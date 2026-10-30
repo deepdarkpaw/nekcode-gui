@@ -3815,6 +3815,7 @@ export function SessionPane({
       externalTextInsertRequest={focused && sessionId === null ? composerTextInsertRequest : null}
       onExternalTextInsertApplied={handleExternalTextInsertApplied}
       autoFocusEnabled={focused}
+      paneFocused={focused}
       disabled={connecting || draftRuntimeRebuilding || queueEditActiveForCurrentComposer}
       workspacePath={workspacePath}
       workspaceIdentity={workspaceIdentity}

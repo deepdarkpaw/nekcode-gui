@@ -89,6 +89,12 @@ export interface V4ComposerToolbarProps {
   draftConfig?: Partial<SessionConfigState>;
   usage: SessionUsageState | null;
   disabled: boolean;
+  /**
+   * 所在 pane 是否持有 pane 级焦点（`SessionPane` 的 focused）。
+   * 分屏时多个工具条同时挂载，只有焦点 pane 注册 `app.model.select` / `app.thinking.cycle`，
+   * 否则 Ctrl+L 会打开第一个挂载的 pane 的模型菜单。默认 true（非分屏宿主）。
+   */
+  paneFocused?: boolean;
   /** 单个 composer 内的配置 picker 排他 owner；只属于 renderer-local presentation。 */
   activeConfigPicker: V4ComposerConfigPicker | null;
   onConfigPickerOpenChange: (picker: V4ComposerConfigPicker, open: boolean) => void;
@@ -124,6 +130,7 @@ function V4ComposerModelControlsImpl({
   draftConfig,
   usage,
   disabled,
+  paneFocused = true,
   activeConfigPicker,
   onConfigPickerOpenChange,
   onSelectModel,
@@ -432,7 +439,7 @@ function V4ComposerModelControlsImpl({
         run: handleCycleThoughtLevel,
       },
     },
-    !disabled,
+    !disabled && paneFocused,
     110,
   );
 

@@ -31,7 +31,7 @@ export function isLargePaste(text: string): boolean {
   );
 }
 
-export function countPasteLines(text: string): number {
+function countPasteLines(text: string): number {
   return text.length === 0 ? 0 : text.split(/\r?\n/u).length;
 }
 
