@@ -69,7 +69,9 @@ export class NekAgentInteractionChannel {
   private publish(frame: NekInteractionFrame): void {
     const sessionId =
       frame.scope.sessionId ??
-      (frame.scope.sessionKey ? this.service.getSession(frame.scope.sessionKey)?.sessionId : undefined);
+      (frame.scope.sessionKey
+        ? this.service.getSession(frame.scope.sessionKey)?.sessionId
+        : undefined);
     const mappedFrame: NekInteractionFrame = sessionId
       ? { ...frame, scope: { ...frame.scope, sessionId } }
       : frame;
