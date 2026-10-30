@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type {
   NekAgentMessage,
-  NekExtensionUiDialogRequest,
   NekRpcEvent,
   NekSessionEntry,
   NekSessionSnapshot,
@@ -12,6 +10,7 @@ import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js"
 import { NekProcessPool, type NekProcessPoolEvent } from "../nekProcessPool.js";
 import { createNekRpcProcess, type NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
+import { createProjectTrustPrompt } from "./projectTrustPrompt.js";
 import { isNekState } from "./types.js";
 import type {
   NekAgentServiceEvent,
@@ -46,23 +45,6 @@ const LONG_RUNNING_COMMANDS = [
 function lockLabelOf(holder: NekSessionSnapshot["lockedBy"]): string {
   if (!holder) return "nek";
   return `nek ${holder.kind} (${holder.hostname}:${holder.pid})`;
-}
-
-function createProjectTrustPrompt(
-  handler: NekExtensionUiHandler | undefined,
-): NekAgentServiceOptions["askProjectTrust"] {
-  if (!handler?.dialog) return undefined;
-  return async ({ cwd, signal }) => {
-    const request: NekExtensionUiDialogRequest = {
-      type: "extension_ui_request",
-      id: `project-trust-${randomUUID()}`,
-      method: "confirm",
-      title: "是否信任此项目？",
-      message: `信任 ${cwd} 将允许 nek 加载项目设置、资源和扩展。`,
-    };
-    const answer = await handler.dialog(request, signal ?? new AbortController().signal);
-    return answer !== undefined && "confirmed" in answer ? answer.confirmed : false;
-  };
 }
 
 /**

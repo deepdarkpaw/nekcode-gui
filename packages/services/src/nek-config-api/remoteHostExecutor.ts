@@ -1,10 +1,7 @@
 import type { Readable, Writable } from "node:stream";
-import type { NekRpcProcessHandle } from "../../../services/src/nek-agent/nekRpcClient.js";
-import type {
-  NekConfigHostExecutor,
-  NekHostDirEntry,
-  NekHostStat,
-} from "../../../services/src/nek-config-api/hostExecutor.js";
+import type { NekRpcProcessHandle } from "../nek-agent/nekRpcClient.js";
+import type { NekConfigHostExecutor, NekHostDirEntry } from "./hostExecutor.js";
+import type { NekHostStat } from "./revision.js";
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
@@ -56,7 +53,7 @@ try {
     catch (error) { if (error && error.code === "ENOENT") result({ content: null }); else throw error; }
   } else if (operation === "write") {
     const target = values[0];
-    const temporary = `${target}.tmp`;
+    const temporary = target + ".tmp";
     fs.mkdirSync(path.dirname(target), { recursive: true });
     try { fs.writeFileSync(temporary, Buffer.from(values[1], "base64")); fs.renameSync(temporary, target); }
     catch (error) { try { fs.unlinkSync(temporary); } catch {} throw error; }
@@ -74,7 +71,7 @@ try {
     fs.renameSync(values[0], values[1]);
     result(null);
   } else {
-    throw new Error(`unknown remote config operation: ${operation}`);
+    throw new Error("unknown remote config operation: " + operation);
   }
 } catch (error) {
   process.stderr.write(error instanceof Error ? error.message : String(error));
@@ -87,20 +84,34 @@ async function runJson(
   values: string[] = [],
 ): Promise<unknown> {
   const payload = Buffer.from(JSON.stringify([operation, ...values]), "utf8").toString("base64");
-  const process = await connection.exec(`node -e ${shellQuote(REMOTE_SCRIPT)} ${shellQuote(payload)}`);
+  const process = await connection.exec(
+    `node -e ${shellQuote(REMOTE_SCRIPT)} ${shellQuote(payload)}`,
+  );
   const stdout = { value: "" };
   const stderr = { value: "" };
-  process.stdout.on("data", (chunk) => appendOutput(stdout, chunk));
-  process.stderr.on("data", (chunk) => appendOutput(stderr, chunk));
+  let outputError: Error | undefined;
+  const collect = (buffer: { value: string }, chunk: unknown): void => {
+    if (outputError) return;
+    try {
+      appendOutput(buffer, chunk);
+    } catch (error) {
+      outputError = error instanceof Error ? error : new Error(String(error));
+    }
+  };
+  process.stdout.on("data", (chunk) => collect(stdout, chunk));
+  process.stderr.on("data", (chunk) => collect(stderr, chunk));
   const code = await new Promise<number>((resolve) => {
     process.onClose((exitCode) => resolve(exitCode));
   });
+  if (outputError) throw outputError;
   if (code !== 0) throw new Error(stderr.value || `远端配置操作失败，退出码 ${code}`);
   let parsed: RemoteJsonResult;
   try {
     parsed = JSON.parse(stdout.value) as RemoteJsonResult;
   } catch (error) {
-    throw new Error(`远端配置操作返回无效 JSON: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `远端配置操作返回无效 JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   if (!parsed.ok) throw new Error(parsed.error ?? "远端配置操作失败");
   return parsed.value;
@@ -155,9 +166,11 @@ export function createRemoteNekConfigHostExecutor(options: {
     agentDir: () => options.agentDir,
     readFile: async (path) => {
       const value = await runJson(connection, "read", [path]);
-      if (typeof value !== "object" || value === null) throw new Error("远端 readFile 返回无效数据");
+      if (typeof value !== "object" || value === null)
+        throw new Error("远端 readFile 返回无效数据");
       const content = (value as { content?: unknown }).content;
-      if (content !== null && typeof content !== "string") throw new Error("远端 readFile 返回无效数据");
+      if (content !== null && typeof content !== "string")
+        throw new Error("远端 readFile 返回无效数据");
       return content;
     },
     writeFileAtomic: async (path, content) => {
@@ -176,7 +189,9 @@ export function createRemoteNekConfigHostExecutor(options: {
       const stream = await connection.exec(
         [command, ...args].map((argument) => shellQuote(argument)).join(" "),
       );
-      const onExit = (listener: (info: { code: number | null; signal: NodeJS.Signals | null }) => void) => {
+      const onExit = (
+        listener: (info: { code: number | null; signal: NodeJS.Signals | null }) => void,
+      ) => {
         const subscription = stream.onClose((code) => listener({ code, signal: null }));
         return () => subscription.dispose();
       };
