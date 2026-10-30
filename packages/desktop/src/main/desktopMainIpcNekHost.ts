@@ -165,13 +165,10 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     this.emitHostsChanged();
   }
 
+  /** 建立配置读写用的远端连接；主机密钥由 SSH backend 的 known-hosts 存储负责，不伪造指纹。 */
   async connectHost(connectionId: string): Promise<void> {
     const host = await this.requireHost(connectionId);
     await this.remoteConfigs.connect(connectionId, host.target);
-    host.fingerprints = host.fingerprints.some((item) => item.fingerprint === "unknown")
-      ? host.fingerprints
-      : [...host.fingerprints, { fingerprint: "unknown", keyType: "unknown", addedAt: Date.now() }];
-    await this.persistHosts(await this.readHosts());
     this.emitHostsChanged();
   }
 
