@@ -28,6 +28,8 @@ interface FakeProcess {
   commands: NekRpcCommand[];
   /** 让某个 extension_call 方法按 nek 的格式失败，用于错误可见性断言。 */
   failExtensions: Set<string>;
+  /** 让某个 extension_call 方法返回形状不对的结果（验证 host 不把脏数据交给界面）。 */
+  invalidExtensions: Set<string>;
   /** 模拟 nek 主动发出的 stdout 事件（extension_ui_request / extension_ui_cancel）。 */
   emit(record: unknown): void;
 }
@@ -45,6 +47,7 @@ function fakeProcess(
   const stderr = new PassThrough();
   const commands: NekRpcCommand[] = [];
   const failExtensions = new Set<string>();
+  const invalidExtensions = new Set<string>();
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let input = "";
   stdin.on("data", (chunk: Buffer) => {
@@ -103,7 +106,8 @@ function fakeProcess(
           );
           continue;
         }
-        if (command.method === "nek.stop_subagent") data = { result: { status: "aborted" } };
+        if (invalidExtensions.has(command.method)) data = { result: {} };
+        else if (command.method === "nek.stop_subagent") data = { result: { status: "aborted" } };
         else if (command.method === "nek.get_subagent_transcript")
           data = { result: { messages: [{ role: "assistant", content: "done" }] } };
         else if (command.method === "nek.list_agent_types")
@@ -187,6 +191,7 @@ function fakeProcess(
   return {
     commands,
     failExtensions,
+    invalidExtensions,
     emit: (record) =>
       stdout.write(`${JSON.stringify(record)}
 `),
@@ -478,6 +483,16 @@ test("surfaces subagent RPC failures and closed-session errors", async () => {
     await assert.rejects(
       adapter.getSubagentTranscript({ ...target, sessionId: "missing", id: "child-1" }),
       /nek session missing is not open/u,
+    );
+    session.invalidExtensions.add("nek.list_agent_types");
+    await assert.rejects(
+      adapter.listAgentTypes({ ...target, sessionId: created.sessionId }),
+      /invalid agent type list/u,
+    );
+    session.invalidExtensions.add("nek.get_subagent_transcript");
+    await assert.rejects(
+      adapter.getSubagentTranscript({ ...target, sessionId: created.sessionId, id: "child-1" }),
+      /invalid subagent transcript/u,
     );
     await assert.rejects(
       adapter.respondNekInteraction({

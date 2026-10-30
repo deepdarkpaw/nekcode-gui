@@ -183,42 +183,63 @@ export async function setMode(
   ).result;
 }
 
+const SUBAGENT_STATUSES: readonly NekSubagentRecord["status"][] = [
+  "running",
+  "completed",
+  "errored",
+  "aborted",
+];
+
+/** 停止子代理；nek 只回新状态，形状不对就报错而不是把 `undefined` 交给界面。 */
 export async function stopSubagent(
   context: NekAgentCommandContext,
   input: { sessionKey: string; id: string },
 ): Promise<{ status: NekSubagentRecord["status"] }> {
-  return (
+  const result = (
     await context.writableTarget(input.sessionKey).client.call({
       type: "extension_call",
       method: "nek.stop_subagent",
       params: { id: input.id },
     })
-  ).result as { status: NekSubagentRecord["status"] };
+  ).result as { status?: unknown };
+  const status = result?.status;
+  if (!SUBAGENT_STATUSES.includes(status as NekSubagentRecord["status"])) {
+    throw new Error(`nek returned an invalid subagent status: ${String(status)}`);
+  }
+  return { status: status as NekSubagentRecord["status"] };
 }
 
+/** 子会话消息原样透传；`messages` 必须是数组。 */
 export async function getSubagentTranscript(
   context: NekAgentCommandContext,
   input: { sessionKey: string; id: string },
 ): Promise<{ messages: unknown[] }> {
-  return (
+  const result = (
     await context.target(input.sessionKey).client.call({
       type: "extension_call",
       method: "nek.get_subagent_transcript",
       params: { id: input.id },
     })
-  ).result as { messages: unknown[] };
+  ).result as { messages?: unknown };
+  if (!Array.isArray(result?.messages)) {
+    throw new Error(`nek returned an invalid subagent transcript for ${input.id}`);
+  }
+  return { messages: result.messages };
 }
 
+/** 可用子代理类型（内置 / 用户 / 项目三种来源）。 */
 export async function listAgentTypes(
   context: NekAgentCommandContext,
   sessionKey: string,
 ): Promise<{ types: NekAgentTypeInfo[] }> {
-  return (
+  const result = (
     await context.target(sessionKey).client.call({
       type: "extension_call",
       method: "nek.list_agent_types",
     })
-  ).result as { types: NekAgentTypeInfo[] };
+  ).result as { types?: unknown };
+  if (!Array.isArray(result?.types)) throw new Error("nek returned an invalid agent type list");
+  return { types: result.types as NekAgentTypeInfo[] };
 }
 
 export async function getCommands(
