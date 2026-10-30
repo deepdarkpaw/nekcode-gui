@@ -135,7 +135,10 @@ Windows 本地打包提示：electron-builder 解压 `winCodeSign`（内含 `rce
 - 推送 `v*` 标签触发 `.github/workflows/desktop.yml`：先跑检查，再打包三平台（Windows NSIS、macOS dmg/zip、
   Linux AppImage/deb/rpm/pacman，各含 x64 与 arm64），最后创建一个**草稿** Release，由维护者审核后手动发布。
 - Release 资产包含安装包、`SHA256SUMS` 与 electron-updater 元数据 `latest.yml` / `latest-linux.yml` /
-  `latest-linux-arm64.yml` / `latest-mac.yml`。Preview 身份写入独立通道 `latest-preview*.yml`，不会顶掉正式包。
+  `latest-linux-arm64.yml` / `latest-mac.yml`。同一平台的 x64 与 arm64 安装包会被合并进同一份元数据，Preview 身份
+  另有 `latest-preview*.yml`，两个身份不会互相覆盖。
+- 客户端实际请求的通道名由 electron-updater 按当前版本与 Release tag 的 prerelease 段推导，取不到时回退到
+  `latest*.yml`；因此 Preview 版目前也通过 `latest*.yml` 更新，`latest-preview*.yml` 是为独立通道预留的产物。
 - 安装包内的 `app-update.yml` 由 electron-builder 按 `publish: { provider: "github", owner, repo }` 生成，默认指向
   `nekcode/nekcode-gui`，可用 `NEKCODE_UPDATE_OWNER` / `NEKCODE_UPDATE_REPO` 覆盖（fork 发版用）。
 - 签名：只有配置了证书 secret（Windows `WINDOWS_CSC_LINK` + `WINDOWS_CSC_KEY_PASSWORD`；macOS `MACOS_CSC_LINK`
