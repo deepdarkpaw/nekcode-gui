@@ -41,7 +41,7 @@ export async function exportLogs(
   try {
     const outputRoot = dependencies.getExportLogDir?.() ?? getExportLogDir();
     await mkdir(outputRoot, { recursive: true });
-    const output = await mkdtemp(join(outputRoot, "zcodium-diagnostics-"));
+    const output = await mkdtemp(join(outputRoot, "nekcode-diagnostics-"));
     const path = join(output, "diagnostics.zip");
     const content = await archiveContents(dependencies.getZCodeDataDir?.() ?? getAppConfigDir());
     let result = path;
