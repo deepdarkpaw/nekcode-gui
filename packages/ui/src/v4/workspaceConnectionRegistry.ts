@@ -13,6 +13,7 @@ import { ReplaceableConversationTransport } from "@/v4/replaceableConversationTr
 import { SessionDataLayer } from "@/v4/sessionDataLayer.js";
 import type { ConversationTransport } from "@/v4/transport.js";
 import { logger } from "@/logger.js";
+import { createNekStatusFeed, type NekStatusFeedHandle } from "@/nek/statusFeed/statusFeed.js";
 
 /** 注册表需要的 agentService 窄面（= conversation transport 的依赖面，便于测试注入）。 */
 export type WorkspaceConnectionAgentService = Pick<
@@ -35,6 +36,15 @@ export type WorkspaceConnectionAgentService = Pick<
   | "attachmentPreviewSourceV4"
   | "attachmentReadV4"
   | "onDynamicConversationFrame"
+  // nek status feed
+  | "onDynamicNekStatusFrame"
+  | "getNekSessionStats"
+  | "clearNekQueue"
+  | "requeueNekQueue"
+  | "abortNekRetry"
+  | "abortNekCompaction"
+  | "abortNekSession"
+  | "compactNekSession"
   | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
   // nek interaction feed
@@ -72,6 +82,7 @@ interface RegistryEntry {
   transport: ConversationTransport;
   replaceableTransport: ReplaceableConversationTransport | null;
   layer: SessionDataLayer;
+  statusFeed: NekStatusFeedHandle;
   refCount: number;
   keepWarmTimer: ReturnType<typeof setTimeout> | null;
   /** 本地 service 换代后被移出注册表的旧条目：末位 lease release 时立即 dispose。 */
@@ -97,6 +108,7 @@ function disposeEntry(entry: RegistryEntry): void {
     clearTimeout(entry.keepWarmTimer);
     entry.keepWarmTimer = null;
   }
+  entry.statusFeed.dispose();
   entry.layer.dispose();
 }
 
@@ -129,7 +141,8 @@ function releaseEntry(entry: RegistryEntry): void {
     if (registry.get(entry.key) === entry) {
       registry.delete(entry.key);
     }
-    entry.layer.dispose();
+    // 与流式传输一起回收 status feed：keep-warm 到期后不能再有订阅或 store 残留。
+    disposeEntry(entry);
     logger.lifecycle.info("v4 workspace connection keep-warm expired", {
       event: "v4.workspace_connection.keep_warm_expired",
       key: entry.key,
@@ -201,6 +214,11 @@ export function acquireWorkspaceConnection(
       ? new ReplaceableConversationTransport(initialTransport)
       : null;
     const transport = replaceableTransport ?? initialTransport;
+    const statusFeed = createNekStatusFeed(agentService, {
+      workspacePath: scope.workspacePath,
+      ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+      ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+    });
     entry = {
       key,
       agentService,
@@ -208,6 +226,7 @@ export function acquireWorkspaceConnection(
       transport,
       replaceableTransport,
       layer: new SessionDataLayer({ transport }),
+      statusFeed,
       refCount: 1,
       keepWarmTimer: null,
       stale: false,
@@ -246,6 +265,12 @@ export function acquireWorkspaceConnection(
       }
       entry.agentService = agentService;
       entry.agentServiceGeneration = incomingServiceGeneration;
+      entry.statusFeed.dispose();
+      entry.statusFeed = createNekStatusFeed(agentService, {
+        workspacePath: scope.workspacePath,
+        ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+        ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+      });
       entry.replaceableTransport.replace(
         createAgentConversationTransport(agentService, {
           workspacePath: scope.workspacePath,

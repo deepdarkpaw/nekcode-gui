@@ -173,6 +173,17 @@ export const useNekStatusStore = create<NekStatusStoreStateWithSession>((set) =>
       };
     });
   },
+  removeSession: (sessionKey: string) => {
+    set((state) => {
+      if (!state.sessions[sessionKey]) return state;
+      const sessions = { ...state.sessions };
+      delete sessions[sessionKey];
+      return {
+        sessions,
+        ...(state.currentSessionKey === sessionKey ? { currentSessionKey: null } : {}),
+      };
+    });
+  },
   setCurrentSession: (sessionKey: string | null, now = Date.now()) => {
     set((state) => {
       if (sessionKey === null) return { currentSessionKey: null };

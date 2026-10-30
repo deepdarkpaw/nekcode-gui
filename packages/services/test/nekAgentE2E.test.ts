@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
+import type { NekGuiInfo, NekStatusFrame, NekStatusFrameEvent } from "@zcode/shared/nek-protocol";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 
 const nekWorktree = process.env.NEK_RPC_WORKTREE;
@@ -78,6 +78,11 @@ test(
         askProjectTrust: () => true,
       });
       const target = { workspacePath: projectDir };
+      // nek status feed：必须在创建会话前订阅（打开会话时服务侧才补快照）。
+      const statusFrames: NekStatusFrame[] = [];
+      const statusSubscription = adapter.onDynamicNekStatusFrame(target)((frame) =>
+        statusFrames.push(frame),
+      );
       const created = await adapter.createNekSession({ workspacePath: projectDir });
       const frames: unknown[] = [];
       const frameSubscription = adapter.onDynamicConversationFrame(target)((frame) =>
@@ -96,10 +101,18 @@ test(
         },
       });
       await waitFor(() => hasAssistantAndToolRows(frames), 60_000);
+      await waitFor(() => hasStatusLifecycle(statusFrames, created.sessionId), 60_000);
+      assertStatusFrames(statusFrames, created.sessionId);
+      const stats = await adapter.getNekSessionStats({
+        ...target,
+        sessionId: created.sessionId,
+      });
+      assert.equal(stats.sessionId, created.sessionId);
       const summaries = await adapter.listNekSessions(target);
       assert.ok(summaries.some((summary) => summary.id === created.sessionId));
       const beforeResume = adapter.readNekSession({ ...target, sessionId: created.sessionId });
       await adapter.closeNekSession({ ...target, sessionId: created.sessionId });
+      await waitFor(() => statusFrames.some((frame) => frame.kind === "closed"), 10_000);
       const resumed = await adapter.resumeNekSession({
         workspacePath: projectDir,
         sessionPath:
@@ -109,6 +122,7 @@ test(
       });
       assert.deepEqual((await beforeResume).rows, resumed.conversation.rows);
       frameSubscription.dispose();
+      statusSubscription.dispose();
     } finally {
       if (adapter) await adapter.dispose();
       if (server) await close(server);
@@ -201,6 +215,34 @@ function hasAssistantAndToolRows(frames: readonly unknown[]): boolean {
   return (
     rows.some((row) => isRecord(row) && row.kind === "assistantText") &&
     rows.some((row) => isRecord(row) && row.kind === "toolCall")
+  );
+}
+
+function statusEvents(frames: readonly NekStatusFrame[], sessionId: string): NekStatusFrameEvent[] {
+  return frames.flatMap((frame) =>
+    frame.kind === "event" && frame.sessionKey === sessionId ? [frame.event] : [],
+  );
+}
+
+function hasStatusLifecycle(frames: readonly NekStatusFrame[], sessionId: string): boolean {
+  const types = new Set(statusEvents(frames, sessionId).map((event) => event.type));
+  return types.has("agent_start") && (types.has("message_end") || types.has("agent_settled"));
+}
+
+function assertStatusFrames(frames: readonly NekStatusFrame[], sessionId: string): void {
+  const snapshot = frames.find(
+    (frame) => frame.kind === "snapshot" && frame.sessionKey === sessionId,
+  );
+  assert.ok(snapshot, "real nek E2E did not publish a status snapshot");
+  if (snapshot?.kind !== "snapshot") throw new Error("expected a status snapshot frame");
+  assert.equal(snapshot.snapshot.sessionKey, sessionId);
+  assert.ok(Array.isArray(snapshot.snapshot.state.todos));
+  assert.equal(typeof snapshot.snapshot.stats.sessionId, "string");
+  const types = statusEvents(frames, sessionId).map((event) => event.type);
+  assert.ok(types.includes("agent_start"), `missing agent_start: ${types.join(",")}`);
+  assert.ok(
+    types.includes("agent_settled") || types.includes("message_end"),
+    `missing run end event: ${types.join(",")}`,
   );
 }
 

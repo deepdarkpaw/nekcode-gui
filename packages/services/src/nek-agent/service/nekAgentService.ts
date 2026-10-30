@@ -9,6 +9,7 @@ import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMeth
 import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
+
 import {
   isNekSessionSnapshot,
   type NekAgentServiceOptions,
@@ -148,6 +149,16 @@ export class NekAgentService
       async () => await commands.getStats(this.commandContext(), sessionKey),
     );
 
+  /**
+   * 外部命令实现（状态 feed 等）复用的会话租约入口：取记录、持进程引用、交还命令层。
+   *
+   * 适配器层不直接调用 protected 的 `withSession`；这里把"一次命令 = 一次租约"的规则
+   * 收口到服务内部，空闲进程因此仍可被进程池回收。
+   */
+  runSessionCommand<T>(sessionKey: string, run: commands.NekAgentCommandRunner<T>): Promise<T> {
+    return this.withSession(sessionKey, async () => await run(this.commandContext()));
+  }
+
   readonly getCommands: NekAgentServiceCommandMethods["getCommands"] = async (sessionKey) =>
     await this.withSession(
       sessionKey,
@@ -260,6 +271,13 @@ export class NekAgentService
     const record = this.resolveRecord(sessionKey);
     return record ? this.publicSession(record) : undefined;
   }
+
+  listOpenSessions(cwd: string): NekSession[] {
+    return [...this.sessions.values()]
+      .filter((r) => r.cwd === cwd)
+      .map((r) => this.publicSession(r));
+  }
+
   commandContext(): NekAgentCommandContext {
     return {
       writableTarget: (sessionKey) => this.commandTarget(sessionKey, true),

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { QueueContents } from "./queue.js";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
@@ -5,6 +6,7 @@ import { NekRetryBannerView } from "./NekRetryBannerView.js";
 import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
+import { useNekStatusActions } from "@/nek/statusFeed/statusActions.js";
 import { useNekStatusStore } from "./store.js";
 
 export interface NekSessionStatusCallbacks {
@@ -31,6 +33,24 @@ export interface NekSessionStatusSlotProps {
 }
 
 export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatusSlotProps) {
+  // ST-5：把当前打开的会话标为 current，store 的 LRU 淘汰不会把它挤掉。
+  useEffect(() => {
+    useNekStatusStore.getState().setCurrentSession(sessionKey);
+  }, [sessionKey]);
+  // 只依赖 agent 服务的动作由 status feed 直接提供（定义见 statusFeed/statusActions.ts）；
+  // pane 传入的 callbacks 负责需要 composer / 侧栏 / 行跳转的那几个动作。
+  const statusActions = useNekStatusActions(sessionKey);
+  const effectiveCallbacks = statusActions
+    ? {
+        ...callbacks,
+        clearQueue: statusActions.clearQueue,
+        requeue: statusActions.requeue,
+        abort: statusActions.abort,
+        abortRetry: statusActions.abortRetry,
+        abortCompaction: statusActions.abortCompaction,
+        onCompact: statusActions.compact,
+      }
+    : callbacks;
   const active = useNekStatusStore((state) => {
     const status = state.sessions[sessionKey];
     if (!status) return false;
@@ -49,34 +69,34 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
     <div data-status-view="session-status-slot" className="flex min-w-0 flex-col gap-1.5">
       <NekRetryBannerView
         sessionKey={sessionKey}
-        abortRetry={callbacks.abortRetry}
-        abort={callbacks.abort}
+        abortRetry={effectiveCallbacks.abortRetry}
+        abort={effectiveCallbacks.abort}
       />
       <NekCompactionBannerView
         sessionKey={sessionKey}
-        abortCompaction={callbacks.abortCompaction}
+        abortCompaction={effectiveCallbacks.abortCompaction}
       />
       <NekTodoPanelView
         sessionKey={sessionKey}
-        onOpenPlan={callbacks.onOpenPlan}
-        onJumpToTodo={callbacks.onJumpToTodo}
-        canJumpToTodo={callbacks.canJumpToTodo}
+        onOpenPlan={effectiveCallbacks.onOpenPlan}
+        onJumpToTodo={effectiveCallbacks.onJumpToTodo}
+        canJumpToTodo={effectiveCallbacks.canJumpToTodo}
       />
       <NekQueueBarView
         sessionKey={sessionKey}
-        clearQueue={callbacks.clearQueue}
-        requeue={callbacks.requeue}
-        getComposerText={callbacks.getComposerText}
-        setComposerText={callbacks.setComposerText}
-        focusComposerAtEnd={callbacks.focusComposerAtEnd}
+        clearQueue={effectiveCallbacks.clearQueue}
+        requeue={effectiveCallbacks.requeue}
+        getComposerText={effectiveCallbacks.getComposerText}
+        setComposerText={effectiveCallbacks.setComposerText}
+        focusComposerAtEnd={effectiveCallbacks.focusComposerAtEnd}
       />
       <NekRunningSubagentsBarView
         sessionKey={sessionKey}
-        onStop={callbacks.onStopSubagent}
-        onStopAll={callbacks.onStopAllSubagents}
-        onFocusSubagent={callbacks.onFocusSubagent}
+        onStop={effectiveCallbacks.onStopSubagent}
+        onStopAll={effectiveCallbacks.onStopAllSubagents}
+        onFocusSubagent={effectiveCallbacks.onFocusSubagent}
       />
-      <NekUsageIndicatorView sessionKey={sessionKey} onCompact={callbacks.onCompact} />
+      <NekUsageIndicatorView sessionKey={sessionKey} onCompact={effectiveCallbacks.onCompact} />
     </div>
   );
 }

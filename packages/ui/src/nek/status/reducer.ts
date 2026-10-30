@@ -1,9 +1,12 @@
 import type { NekRpcEvent, NekState, NekSubagentRecord } from "@zcode/shared/nek-protocol";
-import type {
-  NekSessionStatus,
-  NekStatusDirectEvent,
-  NekStatusEvent,
-  NekStatusEventOutput,
+import {
+  NEK_STATUS_MAX_PLANS,
+  NEK_STATUS_MAX_QUEUE_ITEMS,
+  NEK_STATUS_MAX_TODOS,
+  type NekSessionStatus,
+  type NekStatusDirectEvent,
+  type NekStatusEvent,
+  type NekStatusEventOutput,
 } from "./types.js";
 import { abortRunningSubagents, mergeStateSubagents, upsertSubagent } from "./subagentReducer.js";
 import {
@@ -49,6 +52,7 @@ function normalizeEvent(event: NekStatusEvent): NekStatusDirectEvent | null {
     event.type === "nek.state" ||
     event.type === "nek.subagent" ||
     event.type === "session_stats" ||
+    event.type === "session_snapshot" ||
     event.type === "session_opened" ||
     event.type === "process_exit"
   ) {
@@ -117,8 +121,8 @@ export function reduceNekStatusEvent(
           {
             ...merged.state,
             mode: event.payload.mode,
-            todos: [...event.payload.todos],
-            plans: [...event.payload.plans],
+            todos: event.payload.todos.slice(0, NEK_STATUS_MAX_TODOS),
+            plans: event.payload.plans.slice(-NEK_STATUS_MAX_PLANS),
             activePlanPath: event.payload.activePlanPath,
           },
           now,
@@ -152,6 +156,36 @@ export function reduceNekStatusEvent(
         ),
         output: EMPTY_OUTPUT,
       };
+    case "session_snapshot": {
+      // 快照是权威事实，但仍要遵守 ST-1/ST-2：子代理走 mergeStateSubagents（终态不回退）。
+      // 压缩原因与排队正文只在事件里有，所以快照只用来"收掉"已经结束的压缩横幅与空队列。
+      const merged = mergeStateSubagents(state, sessionKey, event.payload.state.subagents, now);
+      return {
+        state: updateTimestamp(
+          {
+            ...merged.state,
+            running: event.payload.running,
+            mode: event.payload.state.mode,
+            todos: event.payload.state.todos.slice(0, NEK_STATUS_MAX_TODOS),
+            plans: event.payload.state.plans.slice(-NEK_STATUS_MAX_PLANS),
+            activePlanPath: event.payload.state.activePlanPath,
+            compaction: event.payload.compacting ? merged.state.compaction : null,
+            queue:
+              event.payload.pendingMessageCount === 0
+                ? { steering: [], followUp: [] }
+                : merged.state.queue,
+            stats: event.payload.stats,
+            statsStale: false,
+            statsRefreshPending: false,
+          },
+          now,
+        ),
+        output: {
+          needsStatsRefresh: false,
+          ...(merged.events.length > 0 ? { subagentFinished: merged.events } : {}),
+        },
+      };
+    }
     case "session_opened":
       return withStatsRefresh(state, now);
     case "agent_start":
@@ -167,7 +201,10 @@ export function reduceNekStatusEvent(
         state: updateTimestamp(
           {
             ...state,
-            queue: { steering: [...event.steering], followUp: [...event.followUp] },
+            queue: {
+              steering: event.steering.slice(0, NEK_STATUS_MAX_QUEUE_ITEMS),
+              followUp: event.followUp.slice(0, NEK_STATUS_MAX_QUEUE_ITEMS),
+            },
           },
           now,
         ),

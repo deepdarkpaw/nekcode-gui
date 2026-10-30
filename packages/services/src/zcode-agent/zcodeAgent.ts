@@ -75,6 +75,10 @@ import type {
   NekAgentTypeInfo,
   NekExtensionUiResponse,
   NekInteractionFrame,
+  NekSessionStats,
+  NekStatusFrame,
+  NekStatusQueue,
+  NekStatusSnapshot,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
 import { createServiceDescriptor } from "../descriptors.js";
@@ -541,6 +545,30 @@ export interface IZCodeAgentService {
   onDynamicNekInteractionFrame(params: ZCodeAgentWorkspaceTarget): Event<NekInteractionFrame>;
   /** 回答一条交互请求；请求已被取消/结算时抛错，不静默丢弃。 */
   respondNekInteraction(params: ZCodeAgentRespondNekInteractionParams): Promise<void>;
+  // nek status feed
+  /**
+   * workspace 级 nek 会话状态帧；每帧都携带 renderer 可用的 sessionKey。
+   *
+   * 第一个订阅者会收到一次活会话快照（迟订阅补齐），之后是增量事件；最后一个订阅者
+   * 离开后服务侧停止转发。
+   */
+  onDynamicNekStatusFrame(params: ZCodeAgentWorkspaceTarget): Event<NekStatusFrame>;
+  /** 读取一次权威状态快照；只读（被占用）会话没有活进程，会抛错。 */
+  getNekStatusSnapshot(params: ZCodeAgentSessionTarget): Promise<NekStatusSnapshot>;
+  /** 刷新用量（US）：`agent_settled` / `compaction_end` / `message_end` 之后调用。 */
+  getNekSessionStats(params: ZCodeAgentSessionTarget): Promise<NekSessionStats>;
+  /** `clear_queue`：返回并清空队列（取回与清空共用同一次 RPC）。 */
+  clearNekQueue(params: ZCodeAgentSessionTarget): Promise<NekStatusQueue>;
+  /** 按原 kind 逐条重新入队（`steer` / `follow_up`）；中途失败会抛错。 */
+  requeueNekQueue(params: ZCodeAgentSessionTarget & { queue: NekStatusQueue }): Promise<void>;
+  /** 取消自动重试（`abort_retry`），不中止当前回合。 */
+  abortNekRetry(params: ZCodeAgentSessionTarget): Promise<void>;
+  /** 取消正在进行的压缩：nek 只有 `abort`，压缩跟随同一个 abort 信号。 */
+  abortNekCompaction(params: ZCodeAgentSessionTarget): Promise<void>;
+  /** 中止当前回合（重试横幅的汇总重试取消、停止按钮共用）。 */
+  abortNekSession(params: ZCodeAgentSessionTarget): Promise<void>;
+  /** 手动压缩上下文（用量指示器的"压缩上下文"）。 */
+  compactNekSession(params: ZCodeAgentSessionTarget): Promise<void>;
   /**
    * CLI 进程级资源样本，带 services 打的 lane 标签（CLI 自己不知道 lane）。
    * 使用 dynamic event 避免 RPC 服务在无人订阅时缓冲周期事件；

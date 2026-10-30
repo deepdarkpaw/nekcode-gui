@@ -1,16 +1,24 @@
-import type {
-  NekAgentSessionEvent,
-  NekMode,
-  NekPlanSummary,
-  NekRpcEvent,
-  NekSessionStats,
-  NekState,
-  NekSubagentRecord,
-  NekTodo,
+import {
+  NEK_STATUS_FRAME_MAX_PLANS,
+  NEK_STATUS_FRAME_MAX_QUEUE_ITEMS,
+  NEK_STATUS_FRAME_MAX_SUBAGENTS,
+  NEK_STATUS_FRAME_MAX_TODOS,
+  type NekAgentSessionEvent,
+  type NekMode,
+  type NekPlanSummary,
+  type NekRpcEvent,
+  type NekSessionStats,
+  type NekState,
+  type NekStatusSnapshot,
+  type NekSubagentRecord,
+  type NekTodo,
 } from "@zcode/shared/nek-protocol";
 
 export const NEK_STATUS_MAX_SESSIONS = 20;
-export const NEK_STATUS_MAX_SUBAGENTS = 50;
+export const NEK_STATUS_MAX_TODOS = NEK_STATUS_FRAME_MAX_TODOS;
+export const NEK_STATUS_MAX_PLANS = NEK_STATUS_FRAME_MAX_PLANS;
+export const NEK_STATUS_MAX_QUEUE_ITEMS = NEK_STATUS_FRAME_MAX_QUEUE_ITEMS;
+export const NEK_STATUS_MAX_SUBAGENTS = NEK_STATUS_FRAME_MAX_SUBAGENTS;
 export const NEK_STATUS_MAX_FINISHED_IDS = 200;
 export const NEK_STATUS_MAX_NOTICES = 50;
 export const NEK_STATUS_STATS_THROTTLE_MS = 1_000;
@@ -114,6 +122,8 @@ export type NekStatusDirectEvent =
   | { type: "nek.state"; payload: NekState }
   | { type: "nek.subagent"; payload: NekSubagentRecord }
   | { type: "session_stats"; payload: NekSessionStats }
+  /** 服务层补齐的权威快照（打开/恢复会话、renderer 迟订阅）。 */
+  | { type: "session_snapshot"; payload: NekStatusSnapshot }
   | { type: "session_opened" }
   | Extract<
       NekAgentSessionEvent,
@@ -121,9 +131,6 @@ export type NekStatusDirectEvent =
         type:
           | "agent_start"
           | "agent_settled"
-          | "message_end"
-          | "message_start"
-          | "message_end"
           | "queue_update"
           | "compaction_start"
           | "compaction_end"
@@ -134,6 +141,9 @@ export type NekStatusDirectEvent =
           | "summarization_retry_finished";
       }
     >
+  /** 消息边界只用于把用量置为过期（ST-7）；服务层已经把消息载荷丢掉。 */
+  | { type: "message_start" }
+  | { type: "message_end" }
   | { type: "process_exit" };
 
 export type NekStatusEvent = NekRpcEvent | NekStatusDirectEvent;
@@ -153,5 +163,6 @@ export interface NekStatusStoreState {
   markStopRequested: (sessionKey: string, id: string, now?: number) => void;
   clearStopRequested: (sessionKey: string, id: string) => void;
   clearRetry: (sessionKey: string) => void;
+  removeSession: (sessionKey: string) => void;
   reset: () => void;
 }
