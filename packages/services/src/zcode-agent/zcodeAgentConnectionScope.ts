@@ -690,6 +690,8 @@ export function createZCodeAgentConnectionScope(
       await base.setConnectionFlowStateV4(withTrustedConnection(params, forwarded));
     },
     // nek interaction feed
+    // 这里只校验连接是否打开，不要求 v4 握手：项目信任确认发生在创建会话之前，渲染层
+    // 必须在握手/建会话之前就能收到交互帧（否则 nek 侧会按"无人订阅"立即取消）。
     onDynamicNekInteractionFrame(params) {
       assertOpen();
       return base.onDynamicNekInteractionFrame(workspaceTarget(params));
