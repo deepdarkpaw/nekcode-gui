@@ -9,7 +9,12 @@ import type {
   INekSettingsHostApi,
   IRemoteInteractionHostApi,
 } from "@zcode/shared/nek-protocol";
-import type { NekIpcEvent, NekIpcRequest } from "@zcode/shared";
+import {
+  nekIpcSubscriptionListenerIndex,
+  type NekIpcEvent,
+  type NekIpcRequest,
+  type NekIpcScope,
+} from "@zcode/shared";
 import type { NekSettingsApis } from "./NekSettingsContext.js";
 import { toNekConfigApiError } from "./nekErrors.js";
 
@@ -28,11 +33,8 @@ interface NekIpcBridge {
   onRemoteInteractionEvent(listener: (payload: unknown) => void): () => void;
 }
 
-type Scope = "config" | "settings-host" | "remote-interaction";
+type Scope = NekIpcScope;
 
-const CONFIG_SUBSCRIPTIONS = new Set(["onLoginEvent", "onReloadResult", "watch"]);
-const HOST_SUBSCRIPTIONS = new Set(["onHostsChanged"]);
-const REMOTE_SUBSCRIPTIONS = new Set(["onRemotePrompt", "onRemoteConnectionStatus"]);
 const LOG_METHODS = new Set(["installLocalNek", "installNek", "runNekUpdate"]);
 
 function readBridge(): NekIpcBridge | null {
@@ -137,17 +139,19 @@ class NekIpcClient {
     };
   }
 
-  createApi<T extends object>(scope: Scope, subscriptions: ReadonlySet<string>): T {
+  createApi<T extends object>(scope: Scope): T {
     return new Proxy(
       {},
       {
         get: (_target, property) => {
           const method = methodName(property);
           return (...rawArgs: unknown[]) => {
-            if (subscriptions.has(method)) {
-              const listener = rawArgs.pop();
+            const listenerIndex = nekIpcSubscriptionListenerIndex(scope, method);
+            if (listenerIndex !== undefined) {
+              const listener = rawArgs[listenerIndex];
               if (typeof listener !== "function") throw new Error(`${method} listener is required`);
-              return this.subscribe(scope, method, rawArgs, listener as (value: unknown) => void);
+              const args = rawArgs.filter((_value, index) => index !== listenerIndex);
+              return this.subscribe(scope, method, args, listener as (value: unknown) => void);
             }
             const withLog = LOG_METHODS.has(method) && typeof rawArgs.at(-1) === "function";
             const streamListener = withLog ? rawArgs.pop() : undefined;
@@ -196,8 +200,8 @@ export function createDesktopNekSettingsApis(): NekSettingsApis | null {
   if (!bridge) return null;
   const client = new NekIpcClient(bridge);
   return {
-    config: client.createApi<INekConfigApi>("config", CONFIG_SUBSCRIPTIONS),
-    host: client.createApi<INekSettingsHostApi>("settings-host", HOST_SUBSCRIPTIONS),
+    config: client.createApi<INekConfigApi>("config"),
+    host: client.createApi<INekSettingsHostApi>("settings-host"),
     isMock: false,
   };
 }
@@ -206,5 +210,5 @@ export function createDesktopRemoteInteractionApi(): IRemoteInteractionHostApi |
   const bridge = readBridge();
   if (!bridge) return null;
   const client = new NekIpcClient(bridge);
-  return client.createApi<IRemoteInteractionHostApi>("remote-interaction", REMOTE_SUBSCRIPTIONS);
+  return client.createApi<IRemoteInteractionHostApi>("remote-interaction");
 }
