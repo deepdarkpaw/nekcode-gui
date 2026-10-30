@@ -421,15 +421,19 @@ function V4ComposerModelControlsImpl({
   // 有可选组时正常显示；无组但有「管理模型」入口时也显示，避免用户零模型入口。
   const modelMenuVisible = modelSelectGroups.length > 0 || showManageModelsAction;
   const providerSubmenuClassName = undefined;
-  const modelMenuAvailable = !disabled && !recoveryPending && modelMenuVisible;
   useNekActionHandlers(
     {
-      // nek `app.tools.expand`/`app.thinking.*` 与本工具条共享同一份动作表：
-      // 这里只登记模型菜单与思考等级，fold 切换由 SessionPane 负责。
+      // nek 动作表里与本工具条相关的两条：模型菜单（Ctrl+L）与思考等级（Shift+Tab）。
+      // 工具输出 / thinking 的全局折叠由 SessionPane 登记，分屏时不在这里重复。
       "app.model.select": {
-        enabled: modelMenuAvailable,
         run: () => {
-          if (!modelMenuAvailable) return false;
+          if (disabled || recoveryPending || !modelMenuVisible) {
+            logger.debug("[V4ComposerToolbar] 模型菜单热键未打开模型菜单", {
+              hasModelOption: modelSelectGroups.length > 0,
+              modelMenuDisabled: disabled || recoveryPending,
+            });
+            return false;
+          }
           handleOpenModelMenuShortcut();
           return true;
         },
