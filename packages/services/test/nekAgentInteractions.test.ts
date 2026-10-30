@@ -32,6 +32,10 @@ interface FakeProcess {
 function fakeProcess(
   kind: "control" | "session",
   extensionUi?: NekExtensionUiHandler,
+  projectTrust: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" } = {
+    trusted: null,
+    defaultProjectTrust: "ask",
+  },
 ): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -54,7 +58,7 @@ function fakeProcess(
       let data: unknown = {};
       if (kind === "control") {
         if (command.type === "get_project_trust") {
-          data = { cwd: command.cwd, trusted: null, defaultProjectTrust: "ask", resources: [] };
+          data = { cwd: command.cwd, resources: [], ...projectTrust };
         } else if (command.type === "list_sessions") {
           data = { sessions: [] };
         }
@@ -267,5 +271,43 @@ test("nek cancelling a session dialog publishes a cancel frame and answers nek",
     );
   } finally {
     await service.dispose();
+  }
+});
+
+test("an unattached renderer channel is a wiring error, but recorded trust still opens", async () => {
+  const askControl = fakeProcess("control");
+  const untrusted = new NekAgentService({
+    guiInfo,
+    createControlProcess: () => askControl.process,
+    createSessionProcess: (request) => fakeProcess("session", request.extensionUi).process,
+  });
+  try {
+    await assert.rejects(
+      untrusted.createSession({ cwd: "/workspace" }),
+      /no renderer is subscribed to the nek interaction channel/u,
+    );
+  } finally {
+    await untrusted.dispose();
+  }
+
+  // 已经记录过的信任不需要询问，也不该因为渲染层没订阅而失败。
+  const trustedControl = fakeProcess("control", undefined, {
+    trusted: true,
+    defaultProjectTrust: "ask",
+  });
+  const trusted = new NekAgentService({
+    guiInfo,
+    createControlProcess: () => trustedControl.process,
+    createSessionProcess: (request) => fakeProcess("session", request.extensionUi).process,
+  });
+  try {
+    const created = await trusted.createSession({ cwd: "/workspace" });
+    assert.equal(created.readonly, false);
+    assert.deepEqual(
+      trustedControl.commands.map((command) => command.type),
+      ["get_project_trust"],
+    );
+  } finally {
+    await trusted.dispose();
   }
 });

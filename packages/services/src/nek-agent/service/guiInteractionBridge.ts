@@ -98,6 +98,10 @@ export class NekGuiInteractionBridge {
     this.timers = options.timers ?? DEFAULT_TIMERS;
   }
 
+  hasSubscribers(): boolean {
+    return this.subscribers.size > 0;
+  }
+
   /** 渲染层订阅交互帧；返回 detach。没有订阅者时 nek 的 dialog 会立刻按取消收口。 */
   onFrame(listener: (frame: NekInteractionFrame) => void): () => void {
     this.subscribers.add(listener);

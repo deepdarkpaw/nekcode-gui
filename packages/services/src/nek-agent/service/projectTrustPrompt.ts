@@ -74,17 +74,26 @@ export function createProjectTrustPrompt(
  * 已记录的决定（含 `defaultProjectTrust: always/never`）不询问；拒绝直接抛错，
  * 错误信息包含"确认信任后重试"，调用方可以原样重试。
  */
-export async function resolveProjectTrustApproval(options: {
-  client: NekRpcClient;
+export interface ResolveProjectApprovalOptions {
+  /** 控制进程（每台机器一个）：信任状态与落盘都走它。 */
+  ensureControl: () => Promise<{ client: NekRpcClient }>;
   askProjectTrust: NekTrustPrompt;
   cwd: string;
-}): Promise<boolean> {
+  /** 询问前的可用性检查：通道没接上时抛接线错误，而不是当成"用户拒绝"。 */
+  assertCanAsk?: () => void;
+}
+
+export async function resolveProjectApprovalThroughControl(
+  options: ResolveProjectApprovalOptions,
+): Promise<boolean> {
   const { cwd } = options;
-  const trust = await options.client.call({ type: "get_project_trust", cwd });
+  const control = await options.ensureControl();
+  const trust = await control.client.call({ type: "get_project_trust", cwd });
   const decision = projectTrustDecision(trust);
   if (decision !== "ask") return decision === "trusted";
+  options.assertCanAsk?.();
   const approved = await options.askProjectTrust({ trust, cwd });
   if (!approved) throw new Error(`project trust denied for ${cwd}; confirm trust and retry`);
-  await options.client.call({ type: "set_project_trust", cwd, trusted: true });
+  await control.client.call({ type: "set_project_trust", cwd, trusted: true });
   return true;
 }

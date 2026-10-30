@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { NekSessionSummary } from "@zcode/shared/nek-protocol";
+import type {
+  NekExtensionUiResponse,
+  NekInteractionFrame,
+  NekSessionSummary,
+} from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMethods.js";
 import * as commands from "./nekAgentServiceCommands.js";
@@ -30,6 +34,22 @@ export class NekAgentService
   constructor(options: NekAgentServiceOptions) {
     super(options);
   }
+  /**
+   * 渲染层订阅交互帧（nek 的 dialog / structured / notify 都从这里出去）。
+   *
+   * 返回 detach；最后一个订阅者离开后，nek 侧的 dialog 请求会立刻按取消收口，
+   * 不再等一个永远不会来的回答。
+   */
+  onInteractionEvent(listener: (frame: NekInteractionFrame) => void): () => void {
+    return this.interactions.onFrame(listener);
+  }
+
+  /** 渲染层回答交互请求；未知 id（已取消或已结算）返回 `false`。 */
+  respondInteraction(response: NekExtensionUiResponse): boolean {
+    this.assertAlive();
+    return this.interactions.respond(response);
+  }
+
   // ---- 输入 ----
 
   readonly sendPrompt: NekAgentServiceCommandMethods["sendPrompt"] = async (input) =>

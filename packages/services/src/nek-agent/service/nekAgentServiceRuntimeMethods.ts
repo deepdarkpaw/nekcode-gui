@@ -1,8 +1,6 @@
 import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type {
   NekAgentMessage,
-  NekExtensionUiResponse,
-  NekInteractionFrame,
   NekInteractionScope,
   NekRpcEvent,
   NekSessionEntry,
@@ -14,7 +12,10 @@ import type { NekProcessPool, NekProcessPoolEvent } from "../nekProcessPool.js";
 import { createNekRpcProcess, type NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import { NekGuiInteractionBridge } from "./guiInteractionBridge.js";
-import { createProjectTrustPrompt, resolveProjectTrustApproval } from "./projectTrustPrompt.js";
+import {
+  createProjectTrustPrompt,
+  resolveProjectApprovalThroughControl,
+} from "./projectTrustPrompt.js";
 import { isNekState } from "./types.js";
 import {
   NEK_LONG_RUNNING_COMMANDS,
@@ -44,6 +45,8 @@ export abstract class NekAgentServiceRuntimeBase {
   protected readonly customExtensionUi: NekExtensionUiHandler | undefined;
   protected readonly interactions: NekGuiInteractionBridge;
   protected readonly askProjectTrust: NekAgentServiceOptions["askProjectTrust"];
+  /** 信任确认是否只能走渲染层交互通道（注入回调或自定义 handler 时不是）。 */
+  protected readonly trustThroughInteractions: boolean;
   protected readonly defaultCwd: string;
   protected readonly pool: NekProcessPool<NekRpcProcess>;
   protected readonly pendingCreates = new Map<string, NekSessionProcessCreateOptions>();
@@ -63,6 +66,7 @@ export abstract class NekAgentServiceRuntimeBase {
       maxPending: this.config.events.pendingInteractions,
       ...(this.logger ? { logger: this.logger } : {}),
     });
+    this.trustThroughInteractions = !options.askProjectTrust && !options.extensionUi;
     this.askProjectTrust =
       options.askProjectTrust ?? createProjectTrustPrompt((scope) => this.extensionUiFor(scope));
     this.pool =
@@ -87,22 +91,6 @@ export abstract class NekAgentServiceRuntimeBase {
   onEvent(listener: (event: NekAgentServiceEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
-  }
-
-  /**
-   * 渲染层订阅交互帧。
-   *
-   * 返回 detach；最后一个订阅者离开后，nek 侧的 dialog 请求会立刻按取消收口，
-   * 不再等一个永远不会来的回答。
-   */
-  onInteractionEvent(listener: (frame: NekInteractionFrame) => void): () => void {
-    return this.interactions.onFrame(listener);
-  }
-
-  /** 渲染层回答交互请求；未知 id（已取消或已结算）返回 `false`。 */
-  respondInteraction(response: NekExtensionUiResponse): boolean {
-    this.assertAlive();
-    return this.interactions.respond(response);
   }
 
   protected emit(event: NekAgentServiceEvent): void {
@@ -164,12 +152,20 @@ export abstract class NekAgentServiceRuntimeBase {
    */
   protected async resolveProjectApproval(cwd: string): Promise<boolean> {
     if (!this.askProjectTrust) throw new Error(`project trust decision required for ${cwd}`);
-    const control = await this.pool.ensureControl();
-    return await resolveProjectTrustApproval({
-      client: control.client,
-      askProjectTrust: this.askProjectTrust,
+    return await resolveProjectApprovalThroughControl({
       cwd,
+      askProjectTrust: this.askProjectTrust,
+      ensureControl: async () => await this.pool.ensureControl(),
+      assertCanAsk: () => this.assertInteractionChannel(cwd),
     });
+  }
+
+  /** 信任确认只能走渲染层时，没有订阅者就是接线问题，不能当成"用户拒绝"。 */
+  private assertInteractionChannel(cwd: string): void {
+    if (!this.trustThroughInteractions || this.interactions.hasSubscribers()) return;
+    throw new Error(
+      `project trust decision required for ${cwd}, but no renderer is subscribed to the nek interaction channel`,
+    );
   }
 
   protected async acquireProcess(
