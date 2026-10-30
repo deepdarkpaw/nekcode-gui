@@ -27,6 +27,12 @@ import {
   installRemoteNek,
   type IRemoteBackend,
 } from "@zcode/server/remote";
+import {
+  createRemoteNekConfigHostExecutor,
+  readRemoteConfigPaths,
+  type NekRemoteConfigConnection,
+} from "../host/nekConfigRemoteExecutor.js";
+import type { NekConfigHostExecutor } from "../../../services/src/nek-config-api/hostExecutor.js";
 
 interface StoredHost {
   connectionId: string;
@@ -37,6 +43,11 @@ interface StoredHost {
 
 type HostListener = () => void;
 type LogListener = (line: string) => void;
+
+interface ConnectedRemote {
+  backend: IRemoteBackend;
+  executor: NekConfigHostExecutor;
+}
 
 const GUI_DIR = join(homedir(), ".nek", "gui");
 const HOSTS_PATH = join(GUI_DIR, "hosts.json");
@@ -122,6 +133,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     string,
     { controller: AbortController; backend: IRemoteBackend }
   >();
+  private readonly connectedRemotes = new Map<string, ConnectedRemote>();
   private hosts: StoredHost[] | undefined;
 
   constructor(private readonly locator = new NekLocator()) {}
@@ -157,27 +169,57 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     const hosts = await this.readHosts();
     const next = hosts.filter((host) => host.connectionId !== connectionId);
     if (next.length === hosts.length) return;
+    await this.disconnectRemote(connectionId);
     await this.persistHosts(next);
     this.emitHostsChanged();
   }
 
   async connectHost(connectionId: string): Promise<void> {
     const host = await this.requireHost(connectionId);
-    const result = await this.testHost(connectionId);
-    if (!result.ok) throw new Error(result.message);
-    host.fingerprints = host.fingerprints.some((item) => item.fingerprint === result.fingerprint)
-      ? host.fingerprints
-      : [
-          ...host.fingerprints,
-          { fingerprint: result.fingerprint, keyType: "unknown", addedAt: Date.now() },
-        ];
-    await this.persistHosts(await this.readHosts());
-    this.emitHostsChanged();
+    await this.disconnectRemote(connectionId);
+    const backend = await createRemoteBackend(host.target);
+    try {
+      const detected = await detectRemoteNek(backend);
+      if (detected.status !== "ready") throw new Error(detected.error ?? detected.status);
+      const paths = await readRemoteConfigPaths(backend as unknown as NekRemoteConfigConnection);
+      const executor = createRemoteNekConfigHostExecutor({
+        id: `remote:${connectionId}`,
+        home: paths.home,
+        agentDir: paths.agentDir,
+        connection: backend as unknown as NekRemoteConfigConnection,
+      });
+      this.connectedRemotes.set(connectionId, { backend, executor });
+      host.fingerprints = host.fingerprints.some((item) => item.fingerprint === "unknown")
+        ? host.fingerprints
+        : [
+            ...host.fingerprints,
+            { fingerprint: "unknown", keyType: "unknown", addedAt: Date.now() },
+          ];
+      await this.persistHosts(await this.readHosts());
+      this.emitHostsChanged();
+    } catch (error) {
+      await backend.dispose();
+      throw error;
+    }
   }
 
   async disconnectHost(connectionId: string): Promise<void> {
     await this.requireHost(connectionId);
+    await this.disconnectRemote(connectionId);
     this.emitHostsChanged();
+  }
+
+  configExecutor(connectionId: string): NekConfigHostExecutor | undefined {
+    return this.connectedRemotes.get(connectionId)?.executor;
+  }
+
+  dispose(): void {
+    for (const connectionId of this.connectedRemotes.keys())
+      void this.disconnectRemote(connectionId);
+    for (const item of this.remoteInstallControllers.values()) void item.backend.dispose();
+    this.connectedRemotes.clear();
+    this.remoteInstallControllers.clear();
+    this.hostListeners.clear();
   }
 
   async testHost(connectionId: string): Promise<NekHostTestResult> {
@@ -362,6 +404,13 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     await this.openPath({ kind: "local" }, app.getPath("logs"));
   }
 
+  private async disconnectRemote(connectionId: string): Promise<void> {
+    const connected = this.connectedRemotes.get(connectionId);
+    if (!connected) return;
+    this.connectedRemotes.delete(connectionId);
+    await connected.backend.dispose();
+  }
+
   private async readHosts(): Promise<StoredHost[]> {
     this.hosts ??= await readJson(HOSTS_PATH, []);
     return this.hosts;
@@ -385,8 +434,14 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       target: host.target,
       authMethod: "agent",
       fingerprints: host.fingerprints,
-      state: "disconnected",
-      nek: { state: "unknown" },
+      state: this.connectedRemotes.has(host.connectionId) ? "connected" : "disconnected",
+      nek: this.connectedRemotes.has(host.connectionId)
+        ? {
+            state: "ready",
+            version: "unknown",
+            agentDir: this.connectedRemotes.get(host.connectionId)?.executor.agentDir() ?? "",
+          }
+        : { state: "unknown" },
     };
   }
 

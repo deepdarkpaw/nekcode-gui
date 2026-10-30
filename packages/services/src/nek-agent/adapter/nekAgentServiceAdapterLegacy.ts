@@ -1,5 +1,6 @@
 import type {
   ClientHello,
+  ToolCallRow,
   V4ConversationPlansResult,
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
@@ -12,7 +13,9 @@ import type {
   V4ConversationAttachmentStatResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { toNekImages } from "./attachmentImages.js";
+import type { NekPlanSummary } from "@zcode/shared/nek-protocol";
 import type { NekSessionCommandEnvelope } from "./types.js";
+import { isNekState } from "../service/types.js";
 import {
   bindingSnapshot,
   emptyEvent,
@@ -29,6 +32,43 @@ import {
   unsupported,
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
+
+const MAX_CONVERSATION_PLANS = 100;
+
+function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const plan = value as Partial<NekPlanSummary & { markdown: string }>;
+  return (
+    typeof plan.path === "string" &&
+    typeof plan.name === "string" &&
+    typeof plan.overview === "string" &&
+    typeof plan.revision === "number" &&
+    (plan.status === "draft" || plan.status === "ready") &&
+    Array.isArray(plan.todos) &&
+    typeof plan.markdown === "string"
+  );
+}
+
+function planRow(
+  plan: NekPlanSummary & { markdown: string },
+  rowId: number,
+  createdAt: number,
+): ToolCallRow {
+  return {
+    rowId,
+    turnId: `nek-plan:${plan.path}`,
+    entityId: `nek-plan:${plan.path}`,
+    kind: "toolCall",
+    toolCallId: plan.path,
+    toolName: "nek.plan",
+    status: "success",
+    inputText: JSON.stringify(plan),
+    input: plan,
+    output: { text: plan.markdown },
+    createdAt,
+    createdAtSeq: rowId,
+  };
+}
 
 export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarget): LegacyMethods {
   const methods: LegacyMethods = {
@@ -77,6 +117,21 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
     },
     async listSessionSubagents() {
       return { revision: 0, childSessionIds: [], running: [], ended: { total: 0, items: [] } };
+    },
+    async stopSubagent(input) {
+      const sessionKey = target.resolveSessionKey(input, input.sessionId);
+      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      return await target.service.stopSubagent({ sessionKey, id: input.id });
+    },
+    async getSubagentTranscript(input) {
+      const sessionKey = target.resolveSessionKey(input, input.sessionId);
+      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      return await target.service.getSubagentTranscript({ sessionKey, id: input.id });
+    },
+    async listAgentTypes(input) {
+      const sessionKey = target.resolveSessionKey(input, input.sessionId);
+      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      return await target.service.listAgentTypes(sessionKey);
     },
     async getTaskTokenUsage(input) {
       const sessionKey = target.resolveSessionKey(input, input.sessionId);
@@ -232,11 +287,36 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
         hasMore: window.length < rows.length,
       };
     },
-    conversationPlansV4: async (input): Promise<V4ConversationPlansResult> => ({
-      plans: [],
-      atSeq: 0,
-      atLogEpoch: `nek:${workspaceKey(input)}`,
-    }),
+    async conversationPlansV4(input): Promise<V4ConversationPlansResult> {
+      const sessionKey = target.resolveSessionKey(input, input.sessionId);
+      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const commandTarget = target.service.commandContext().target(sessionKey);
+      const stateResponse = await commandTarget.client.call({
+        type: "extension_call",
+        method: "nek.get_state",
+      });
+      if (!isNekState(stateResponse.result))
+        throw new Error("nek returned an invalid state snapshot");
+      const summaries = stateResponse.result.plans.slice(-MAX_CONVERSATION_PLANS).reverse();
+      const plans = await Promise.all(
+        summaries.map(async (summary, index) => {
+          const response = await commandTarget.client.call({
+            type: "extension_call",
+            method: "nek.get_plan",
+            params: { path: summary.path },
+          });
+          if (!isPlanWithMarkdown(response.result))
+            throw new Error(`nek returned an invalid plan: ${summary.path}`);
+          return planRow(response.result, index, Date.now());
+        }),
+      );
+      const snapshot = target.service.conversationSnapshot(sessionKey);
+      return {
+        plans,
+        atSeq: snapshot.seq,
+        atLogEpoch: snapshot.logEpoch,
+      };
+    },
     backgroundBashOutputV4: () => unsupported("backgroundBashOutputV4"),
     conversationFileChangesV4: () =>
       unsupported<V4ConversationFileChangesResult>("conversationFileChangesV4"),

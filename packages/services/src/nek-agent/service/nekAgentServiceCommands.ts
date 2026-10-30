@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  NekAgentTypeInfo,
   NekBashResult,
   NekCompactionResult,
   NekCycleModelResult,
@@ -11,6 +12,7 @@ import type {
   NekSessionEntry,
   NekSessionStats,
   NekSessionTreeNode,
+  NekSubagentRecord,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
@@ -179,6 +181,44 @@ export async function setMode(
       params: { mode: input.mode },
     })
   ).result;
+}
+
+export async function stopSubagent(
+  context: NekAgentCommandContext,
+  input: { sessionKey: string; id: string },
+): Promise<{ status: NekSubagentRecord["status"] }> {
+  return (
+    await context.writableTarget(input.sessionKey).client.call({
+      type: "extension_call",
+      method: "nek.stop_subagent",
+      params: { id: input.id },
+    })
+  ).result as { status: NekSubagentRecord["status"] };
+}
+
+export async function getSubagentTranscript(
+  context: NekAgentCommandContext,
+  input: { sessionKey: string; id: string },
+): Promise<{ messages: unknown[] }> {
+  return (
+    await context.target(input.sessionKey).client.call({
+      type: "extension_call",
+      method: "nek.get_subagent_transcript",
+      params: { id: input.id },
+    })
+  ).result as { messages: unknown[] };
+}
+
+export async function listAgentTypes(
+  context: NekAgentCommandContext,
+  sessionKey: string,
+): Promise<{ types: NekAgentTypeInfo[] }> {
+  return (
+    await context.target(sessionKey).client.call({
+      type: "extension_call",
+      method: "nek.list_agent_types",
+    })
+  ).result as { types: NekAgentTypeInfo[] };
 }
 
 export async function getCommands(

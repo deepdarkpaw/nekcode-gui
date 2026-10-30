@@ -170,6 +170,26 @@ export class NekAgentService
       async () => await commands.reload(this.commandContext(), sessionKey),
     );
 
+  readonly stopSubagent: NekAgentServiceCommandMethods["stopSubagent"] = async (input) =>
+    await this.withSession(
+      input.sessionKey,
+      async () => await commands.stopSubagent(this.commandContext(), input),
+    );
+
+  readonly getSubagentTranscript: NekAgentServiceCommandMethods["getSubagentTranscript"] = async (
+    input,
+  ) =>
+    await this.withSession(
+      input.sessionKey,
+      async () => await commands.getSubagentTranscript(this.commandContext(), input),
+    );
+
+  readonly listAgentTypes: NekAgentServiceCommandMethods["listAgentTypes"] = async (sessionKey) =>
+    await this.withSession(
+      sessionKey,
+      async () => await commands.listAgentTypes(this.commandContext(), sessionKey),
+    );
+
   // ---- 会话树与历史 ----
 
   readonly navigateTree: NekAgentServiceCommandMethods["navigateTree"] = async (input) =>

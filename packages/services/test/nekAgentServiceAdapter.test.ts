@@ -77,7 +77,55 @@ function fakeProcess(kind: "control" | "session"): {
           cost: 0,
         };
       } else if (command.type === "extension_call") {
-        data = { result: { mode: "agent", todos: [], plans: [], subagents: [] } };
+        if (command.method === "nek.stop_subagent") data = { result: { status: "aborted" } };
+        else if (command.method === "nek.get_subagent_transcript")
+          data = { result: { messages: [{ role: "assistant", content: "done" }] } };
+        else if (command.method === "nek.list_agent_types")
+          data = {
+            result: {
+              types: [
+                {
+                  name: "worker",
+                  description: "Worker",
+                  source: "builtin",
+                  readonly: true,
+                  background: true,
+                  autonomous: false,
+                },
+              ],
+            },
+          };
+        else if (command.method === "nek.get_plan")
+          data = {
+            result: {
+              path: "/workspace/.nek/plans/ship.plan.md",
+              name: "Ship",
+              overview: "Ship the feature",
+              revision: 2,
+              status: "ready",
+              todos: [{ id: "todo-1", content: "Implement" }],
+              markdown: "# Ship\n\n- Implement",
+            },
+          };
+        else if (command.method === "nek.get_state")
+          data = {
+            result: {
+              mode: "agent",
+              todos: [],
+              plans: [
+                {
+                  path: "/workspace/.nek/plans/ship.plan.md",
+                  name: "Ship",
+                  overview: "Ship the feature",
+                  revision: 2,
+                  status: "ready",
+                  todos: [{ id: "todo-1", content: "Implement" }],
+                },
+              ],
+              subagents: [],
+            },
+          };
+        else data = { result: { mode: "agent", todos: [], plans: [], subagents: [] } };
       } else if (command.type === "get_available_models") {
         data = { models: [] };
       } else if (command.type === "get_commands") {
@@ -244,6 +292,83 @@ const IZCODE_METHODS = [
   "disposeWorkspace",
   "disposeAll",
 ] as const satisfies readonly (keyof IZCodeAgentService)[];
+
+test("maps nek plan snapshots into the v4 plan result", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const created = await adapter.createNekSession(target);
+    const result = await adapter.conversationPlansV4({
+      ...target,
+      sessionId: created.sessionId,
+    });
+    assert.equal(result.plans.length, 1);
+    assert.equal(result.plans[0]?.toolName, "nek.plan");
+    assert.equal(result.plans[0]?.output?.text, "# Ship\n\n- Implement");
+    assert.ok(result.atSeq >= 0);
+    assert.ok(
+      session.commands.some(
+        (command) => command.type === "extension_call" && command.method === "nek.get_plan",
+      ),
+    );
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("routes subagent stop, transcript, and agent type RPCs through the adapter", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const created = await adapter.createNekSession(target);
+    assert.deepEqual(
+      await adapter.stopSubagent({ ...target, sessionId: created.sessionId, id: "child-1" }),
+      { status: "aborted" },
+    );
+    assert.deepEqual(
+      await adapter.getSubagentTranscript({
+        ...target,
+        sessionId: created.sessionId,
+        id: "child-1",
+      }),
+      { messages: [{ role: "assistant", content: "done" }] },
+    );
+    assert.deepEqual(await adapter.listAgentTypes({ ...target, sessionId: created.sessionId }), {
+      types: [
+        {
+          name: "worker",
+          description: "Worker",
+          source: "builtin",
+          readonly: true,
+          background: true,
+          autonomous: false,
+        },
+      ],
+    });
+    assert.deepEqual(
+      session.commands
+        .filter((command) => command.type === "extension_call")
+        .map((command) => command.method),
+      ["nek.get_state", "nek.stop_subagent", "nek.get_subagent_transcript", "nek.list_agent_types"],
+    );
+  } finally {
+    await adapter.dispose();
+  }
+});
 
 test("node factory returns an IZCodeAgentService with every method", () => {
   const control = fakeProcess("control");

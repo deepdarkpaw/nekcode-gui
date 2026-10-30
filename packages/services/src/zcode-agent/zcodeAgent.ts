@@ -71,6 +71,7 @@ import type {
   V4WorkspaceConfigSubscribeResult,
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
+import type { NekAgentTypeInfo, NekSubagentRecord } from "@zcode/shared/nek-protocol";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export * from "./zcodeAgentWorkspaceParams.js";
@@ -148,6 +149,14 @@ export interface ZCodeAgentListSessionSubagentsParams extends ZCodeAgentSessionT
   endedLimit?: number;
   /** 远程 workspace 的宿主连接身份；只用于选择现有 Host，不进入 CLI wire query。 */
   remoteSessionId?: string;
+}
+
+export interface ZCodeAgentStopSubagentParams extends ZCodeAgentSessionTarget {
+  id: string;
+}
+
+export interface ZCodeAgentSubagentTranscriptParams extends ZCodeAgentSessionTarget {
+  id: string;
 }
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
@@ -456,6 +465,13 @@ export interface IZCodeAgentService {
   listSessionSubagents(
     params: ZCodeAgentListSessionSubagentsParams,
   ): Promise<ZCodeSessionSubagentsResult>;
+  stopSubagent(
+    params: ZCodeAgentStopSubagentParams,
+  ): Promise<{ status: NekSubagentRecord["status"] }>;
+  getSubagentTranscript(
+    params: ZCodeAgentSubagentTranscriptParams,
+  ): Promise<{ messages: unknown[] }>;
+  listAgentTypes(params: ZCodeAgentSessionTarget): Promise<{ types: NekAgentTypeInfo[] }>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;
   readSessionMessages(

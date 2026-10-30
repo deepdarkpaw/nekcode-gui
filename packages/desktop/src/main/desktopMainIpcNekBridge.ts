@@ -43,7 +43,7 @@ export async function createNekConfigHostBridge(logger: {
   const hosts = createLocalNekConfigTargetHost({
     remotes: {
       list: async () => (await hostApi.listHosts()).map(targetInfoOf),
-      executor: () => undefined,
+      executor: (connectionId) => hostApi.configExecutor(connectionId),
     },
   });
   const configApi = new NekConfigApi({
@@ -54,6 +54,9 @@ export async function createNekConfigHostBridge(logger: {
   return {
     configApi,
     hostApi,
-    dispose: () => configApi.dispose(),
+    dispose: () => {
+      configApi.dispose();
+      hostApi.dispose();
+    },
   };
 }

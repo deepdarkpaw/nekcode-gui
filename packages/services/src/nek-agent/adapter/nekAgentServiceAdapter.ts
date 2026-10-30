@@ -62,6 +62,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly resumeSession: IZCodeAgentService["resumeSession"];
   declare readonly listSessions: IZCodeAgentService["listSessions"];
   declare readonly listSessionSubagents: IZCodeAgentService["listSessionSubagents"];
+  declare readonly stopSubagent: IZCodeAgentService["stopSubagent"];
+  declare readonly getSubagentTranscript: IZCodeAgentService["getSubagentTranscript"];
+  declare readonly listAgentTypes: IZCodeAgentService["listAgentTypes"];
   declare readonly getTaskTokenUsage: IZCodeAgentService["getTaskTokenUsage"];
   declare readonly readSession: IZCodeAgentService["readSession"];
   declare readonly readSessionMessages: IZCodeAgentService["readSessionMessages"];

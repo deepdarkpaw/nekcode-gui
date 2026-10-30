@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type {
   NekAgentMessage,
+  NekExtensionUiDialogRequest,
   NekRpcEvent,
   NekSessionEntry,
   NekSessionSnapshot,
@@ -46,6 +48,23 @@ function lockLabelOf(holder: NekSessionSnapshot["lockedBy"]): string {
   return `nek ${holder.kind} (${holder.hostname}:${holder.pid})`;
 }
 
+function createProjectTrustPrompt(
+  handler: NekExtensionUiHandler | undefined,
+): NekAgentServiceOptions["askProjectTrust"] {
+  if (!handler?.dialog) return undefined;
+  return async ({ cwd, signal }) => {
+    const request: NekExtensionUiDialogRequest = {
+      type: "extension_ui_request",
+      id: `project-trust-${randomUUID()}`,
+      method: "confirm",
+      title: "是否信任此项目？",
+      message: `信任 ${cwd} 将允许 nek 加载项目设置、资源和扩展。`,
+    };
+    const answer = await handler.dialog(request, signal ?? new AbortController().signal);
+    return answer !== undefined && "confirmed" in answer ? answer.confirmed : false;
+  };
+}
+
 /**
  * 会话记录表、进程池接线、事件路由与投影器装载。
  *
@@ -70,7 +89,7 @@ export abstract class NekAgentServiceRuntimeBase {
     this.config = options.runtimeConfig ?? DEFAULT_GUI_RUNTIME_CONFIG;
     this.logger = options.logger;
     this.extensionUi = options.extensionUi;
-    this.askProjectTrust = options.askProjectTrust;
+    this.askProjectTrust = options.askProjectTrust ?? createProjectTrustPrompt(this.extensionUi);
     this.defaultCwd = options.cwd ?? process.cwd();
     this.pool =
       options.processPool ??
@@ -158,7 +177,10 @@ export abstract class NekAgentServiceRuntimeBase {
     if (trust.defaultProjectTrust === "always") return true;
     if (trust.defaultProjectTrust === "never") return false;
     if (!this.askProjectTrust) throw new Error(`project trust decision required for ${cwd}`);
-    return await this.askProjectTrust({ trust, cwd });
+    const approved = await this.askProjectTrust({ trust, cwd });
+    if (!approved) throw new Error(`project trust denied for ${cwd}; confirm trust and retry`);
+    await control.client.call({ type: "set_project_trust", cwd, trusted: true });
+    return true;
   }
 
   protected async acquireProcess(
