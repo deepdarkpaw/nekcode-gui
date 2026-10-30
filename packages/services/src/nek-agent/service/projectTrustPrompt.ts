@@ -74,7 +74,7 @@ export function createProjectTrustPrompt(
  * 已记录的决定（含 `defaultProjectTrust: always/never`）不询问；拒绝直接抛错，
  * 错误信息包含"确认信任后重试"，调用方可以原样重试。
  */
-export interface ResolveProjectApprovalOptions {
+interface ResolveProjectApprovalOptions {
   /** 控制进程（每台机器一个）：信任状态与落盘都走它。 */
   ensureControl: () => Promise<{ client: NekRpcClient }>;
   askProjectTrust: NekTrustPrompt;

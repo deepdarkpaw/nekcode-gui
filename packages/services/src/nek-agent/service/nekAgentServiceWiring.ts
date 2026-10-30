@@ -1,8 +1,8 @@
 /**
- * NekAgentService 的进程池与投影器装配。
+ * NekAgentService 的装配件：进程池、投影器，以及共用的命令分类与展示标签。
  *
- * 两者都只是"按运行参数构造一件事"，放在这里让 `nekAgentServiceRuntimeMethods.ts`
- * 只保留会话状态机本身（该文件已接近 400 行上限）。
+ * 这些都属于"按运行参数构造/映射一件事"，放在这里让
+ * `nekAgentServiceRuntimeMethods.ts` 只保留会话状态机本身（该文件已接近 400 行上限）。
  */
 import type { GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type { NekInteractionScope, NekSessionSnapshot } from "@zcode/shared/nek-protocol";
