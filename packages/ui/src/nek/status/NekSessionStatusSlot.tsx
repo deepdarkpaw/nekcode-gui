@@ -5,6 +5,7 @@ import { NekRetryBannerView } from "./NekRetryBannerView.js";
 import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
+import { getNekStatusActions } from "@/nek/statusFeed/statusFeed.js";
 import { useNekStatusStore } from "./store.js";
 
 export interface NekSessionStatusCallbacks {
@@ -31,6 +32,17 @@ export interface NekSessionStatusSlotProps {
 }
 
 export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatusSlotProps) {
+  const statusActions = getNekStatusActions(sessionKey);
+  const effectiveCallbacks = statusActions
+    ? {
+        ...callbacks,
+        clearQueue: statusActions.clearQueue,
+        requeue: statusActions.requeue,
+        abortRetry: statusActions.abortRetry,
+        abortCompaction: statusActions.abortCompaction,
+        onCompact: statusActions.compact,
+      }
+    : callbacks;
   const active = useNekStatusStore((state) => {
     const status = state.sessions[sessionKey];
     if (!status) return false;
@@ -49,34 +61,34 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
     <div data-status-view="session-status-slot" className="flex min-w-0 flex-col gap-1.5">
       <NekRetryBannerView
         sessionKey={sessionKey}
-        abortRetry={callbacks.abortRetry}
-        abort={callbacks.abort}
+        abortRetry={effectiveCallbacks.abortRetry}
+        abort={effectiveCallbacks.abort}
       />
       <NekCompactionBannerView
         sessionKey={sessionKey}
-        abortCompaction={callbacks.abortCompaction}
+        abortCompaction={effectiveCallbacks.abortCompaction}
       />
       <NekTodoPanelView
         sessionKey={sessionKey}
-        onOpenPlan={callbacks.onOpenPlan}
-        onJumpToTodo={callbacks.onJumpToTodo}
-        canJumpToTodo={callbacks.canJumpToTodo}
+        onOpenPlan={effectiveCallbacks.onOpenPlan}
+        onJumpToTodo={effectiveCallbacks.onJumpToTodo}
+        canJumpToTodo={effectiveCallbacks.canJumpToTodo}
       />
       <NekQueueBarView
         sessionKey={sessionKey}
-        clearQueue={callbacks.clearQueue}
-        requeue={callbacks.requeue}
-        getComposerText={callbacks.getComposerText}
-        setComposerText={callbacks.setComposerText}
-        focusComposerAtEnd={callbacks.focusComposerAtEnd}
+        clearQueue={effectiveCallbacks.clearQueue}
+        requeue={effectiveCallbacks.requeue}
+        getComposerText={effectiveCallbacks.getComposerText}
+        setComposerText={effectiveCallbacks.setComposerText}
+        focusComposerAtEnd={effectiveCallbacks.focusComposerAtEnd}
       />
       <NekRunningSubagentsBarView
         sessionKey={sessionKey}
-        onStop={callbacks.onStopSubagent}
-        onStopAll={callbacks.onStopAllSubagents}
-        onFocusSubagent={callbacks.onFocusSubagent}
+        onStop={effectiveCallbacks.onStopSubagent}
+        onStopAll={effectiveCallbacks.onStopAllSubagents}
+        onFocusSubagent={effectiveCallbacks.onFocusSubagent}
       />
-      <NekUsageIndicatorView sessionKey={sessionKey} onCompact={callbacks.onCompact} />
+      <NekUsageIndicatorView sessionKey={sessionKey} onCompact={effectiveCallbacks.onCompact} />
     </div>
   );
 }

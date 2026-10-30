@@ -75,6 +75,10 @@ import type {
   NekAgentTypeInfo,
   NekExtensionUiResponse,
   NekInteractionFrame,
+  NekSessionStats,
+  NekStatusFrame,
+  NekStatusQueue,
+  NekStatusSnapshot,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
 import { createServiceDescriptor } from "../descriptors.js";
@@ -541,6 +545,16 @@ export interface IZCodeAgentService {
   onDynamicNekInteractionFrame(params: ZCodeAgentWorkspaceTarget): Event<NekInteractionFrame>;
   /** 回答一条交互请求；请求已被取消/结算时抛错，不静默丢弃。 */
   respondNekInteraction(params: ZCodeAgentRespondNekInteractionParams): Promise<void>;
+  // nek status feed
+  /** workspace 级 nek 会话状态帧；每帧都携带 renderer 可用的 sessionKey。 */
+  onDynamicNekStatusFrame(params: ZCodeAgentWorkspaceTarget): Event<NekStatusFrame>;
+  getNekStatusSnapshot(params: ZCodeAgentSessionTarget): Promise<NekStatusSnapshot>;
+  getNekSessionStats(params: ZCodeAgentSessionTarget): Promise<NekSessionStats>;
+  clearNekQueue(params: ZCodeAgentSessionTarget): Promise<NekStatusQueue>;
+  requeueNekQueue(params: ZCodeAgentSessionTarget & { queue: NekStatusQueue }): Promise<void>;
+  abortNekRetry(params: ZCodeAgentSessionTarget): Promise<void>;
+  abortNekCompaction(params: ZCodeAgentSessionTarget): Promise<void>;
+  compactNekSession(params: ZCodeAgentSessionTarget): Promise<void>;
   /**
    * CLI 进程级资源样本，带 services 打的 lane 标签（CLI 自己不知道 lane）。
    * 使用 dynamic event 避免 RPC 服务在无人订阅时缓冲周期事件；

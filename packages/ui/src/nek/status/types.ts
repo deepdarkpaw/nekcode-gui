@@ -1,16 +1,23 @@
-import type {
-  NekAgentSessionEvent,
-  NekMode,
-  NekPlanSummary,
-  NekRpcEvent,
-  NekSessionStats,
-  NekState,
-  NekSubagentRecord,
-  NekTodo,
+import {
+  NEK_STATUS_FRAME_MAX_PLANS,
+  NEK_STATUS_FRAME_MAX_QUEUE_ITEMS,
+  NEK_STATUS_FRAME_MAX_SUBAGENTS,
+  NEK_STATUS_FRAME_MAX_TODOS,
+  type NekAgentSessionEvent,
+  type NekMode,
+  type NekPlanSummary,
+  type NekRpcEvent,
+  type NekSessionStats,
+  type NekState,
+  type NekSubagentRecord,
+  type NekTodo,
 } from "@zcode/shared/nek-protocol";
 
 export const NEK_STATUS_MAX_SESSIONS = 20;
-export const NEK_STATUS_MAX_SUBAGENTS = 50;
+export const NEK_STATUS_MAX_TODOS = NEK_STATUS_FRAME_MAX_TODOS;
+export const NEK_STATUS_MAX_PLANS = NEK_STATUS_FRAME_MAX_PLANS;
+export const NEK_STATUS_MAX_QUEUE_ITEMS = NEK_STATUS_FRAME_MAX_QUEUE_ITEMS;
+export const NEK_STATUS_MAX_SUBAGENTS = NEK_STATUS_FRAME_MAX_SUBAGENTS;
 export const NEK_STATUS_MAX_FINISHED_IDS = 200;
 export const NEK_STATUS_MAX_NOTICES = 50;
 export const NEK_STATUS_STATS_THROTTLE_MS = 1_000;
@@ -153,5 +160,6 @@ export interface NekStatusStoreState {
   markStopRequested: (sessionKey: string, id: string, now?: number) => void;
   clearStopRequested: (sessionKey: string, id: string) => void;
   clearRetry: (sessionKey: string) => void;
+  removeSession: (sessionKey: string) => void;
   reset: () => void;
 }

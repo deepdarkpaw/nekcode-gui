@@ -1,9 +1,12 @@
 import type { NekRpcEvent, NekState, NekSubagentRecord } from "@zcode/shared/nek-protocol";
-import type {
-  NekSessionStatus,
-  NekStatusDirectEvent,
-  NekStatusEvent,
-  NekStatusEventOutput,
+import {
+  NEK_STATUS_MAX_PLANS,
+  NEK_STATUS_MAX_QUEUE_ITEMS,
+  NEK_STATUS_MAX_TODOS,
+  type NekSessionStatus,
+  type NekStatusDirectEvent,
+  type NekStatusEvent,
+  type NekStatusEventOutput,
 } from "./types.js";
 import { abortRunningSubagents, mergeStateSubagents, upsertSubagent } from "./subagentReducer.js";
 import {
@@ -117,8 +120,8 @@ export function reduceNekStatusEvent(
           {
             ...merged.state,
             mode: event.payload.mode,
-            todos: [...event.payload.todos],
-            plans: [...event.payload.plans],
+            todos: event.payload.todos.slice(0, NEK_STATUS_MAX_TODOS),
+            plans: event.payload.plans.slice(-NEK_STATUS_MAX_PLANS),
             activePlanPath: event.payload.activePlanPath,
           },
           now,
@@ -167,7 +170,10 @@ export function reduceNekStatusEvent(
         state: updateTimestamp(
           {
             ...state,
-            queue: { steering: [...event.steering], followUp: [...event.followUp] },
+            queue: {
+              steering: event.steering.slice(0, NEK_STATUS_MAX_QUEUE_ITEMS),
+              followUp: event.followUp.slice(0, NEK_STATUS_MAX_QUEUE_ITEMS),
+            },
           },
           now,
         ),

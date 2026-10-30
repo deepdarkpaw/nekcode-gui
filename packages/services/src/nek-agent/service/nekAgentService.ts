@@ -3,6 +3,8 @@ import type {
   NekExtensionUiResponse,
   NekInteractionFrame,
   NekSessionSummary,
+  NekStatusQueue,
+  NekStatusSnapshot,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMethods.js";
@@ -11,6 +13,7 @@ import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentSe
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
 import {
   isNekSessionSnapshot,
+  isNekState,
   type NekAgentServiceOptions,
   type NekConversationListener,
   type NekMode,
@@ -148,6 +151,46 @@ export class NekAgentService
       async () => await commands.getStats(this.commandContext(), sessionKey),
     );
 
+  /** 读取状态 feed 的权威快照；不复用对话投影，避免状态卡被内容帧延迟。 */
+  async getStatusSnapshot(sessionKey: string): Promise<NekStatusSnapshot> {
+    const record = this.requireRecord(sessionKey);
+    return await this.withSession(sessionKey, async () => {
+      const target = this.commandContext().target(sessionKey);
+      const [state, stats, extension] = await Promise.all([
+        target.client.call({ type: "get_state" }),
+        target.client.call({ type: "get_session_stats" }),
+        target.client.call({ type: "extension_call", method: "nek.get_state" }),
+      ]);
+      if (!isNekState(extension.result)) {
+        throw new Error("nek returned an invalid status state snapshot");
+      }
+      return {
+        sessionKey: record.sessionId,
+        running: state.isStreaming,
+        state: extension.result,
+        stats,
+      };
+    });
+  }
+
+  async requeueStatusQueue(sessionKey: string, queue: NekStatusQueue): Promise<void> {
+    const target = this.commandContext().writableTarget(sessionKey);
+    for (const message of queue.steering) await target.client.call({ type: "steer", message });
+    for (const message of queue.followUp) await target.client.call({ type: "follow_up", message });
+  }
+
+  async abortRetry(sessionKey: string): Promise<void> {
+    await this.commandContext().writableTarget(sessionKey).client.call({ type: "abort_retry" });
+  }
+
+  async abortCompaction(sessionKey: string): Promise<void> {
+    await commands.abort(this.commandContext(), sessionKey);
+  }
+
+  async compactStatus(sessionKey: string): Promise<void> {
+    await commands.compact(this.commandContext(), { sessionKey });
+  }
+
   readonly getCommands: NekAgentServiceCommandMethods["getCommands"] = async (sessionKey) =>
     await this.withSession(
       sessionKey,
@@ -260,6 +303,13 @@ export class NekAgentService
     const record = this.resolveRecord(sessionKey);
     return record ? this.publicSession(record) : undefined;
   }
+
+  listOpenSessions(cwd: string): NekSession[] {
+    return [...this.sessions.values()]
+      .filter((record) => record.cwd === cwd)
+      .map((record) => this.publicSession(record));
+  }
+
   commandContext(): NekAgentCommandContext {
     return {
       writableTarget: (sessionKey) => this.commandTarget(sessionKey, true),

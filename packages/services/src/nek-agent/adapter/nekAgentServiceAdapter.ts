@@ -3,7 +3,11 @@ import type {
   NekAgentMessage,
   NekInteractionFrame,
   NekMode,
+  NekSessionStats,
   NekSessionSummary,
+  NekStatusFrame,
+  NekStatusQueue,
+  NekStatusSnapshot,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type {
@@ -24,6 +28,7 @@ import { makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
+import { NekAgentStatusChannel } from "./nekAgentStatusChannel.js";
 import { NekAgentServiceTopics } from "./nekAgentServiceTopics.js";
 import type {
   NekAgentServiceAdapterApi,
@@ -121,6 +126,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   readonly service: NekAgentService;
   private readonly topics: NekAgentServiceTopics;
   private readonly interactions: NekAgentInteractionChannel;
+  private readonly status: NekAgentStatusChannel;
   private readonly bindings = new Map<string, NekSessionBinding>();
   private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
   private readonly conversationEmitters = new Map<
@@ -143,6 +149,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       options.maxV4Subscriptions,
     );
     this.interactions = new NekAgentInteractionChannel(this.service);
+    this.status = new NekAgentStatusChannel(this.service, options.logger);
     Object.assign(this, createNekLegacyMethods(this));
   }
 
@@ -169,6 +176,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       ...(input.mode ? { mode: input.mode } : {}),
     });
     this.bind(target, result);
+    this.status.publish(target, result.sessionKey);
     return result;
   }
 
@@ -182,6 +190,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       cwd: input.workspacePath,
     });
     this.bind(target, result);
+    this.status.publish(target, result.sessionKey);
     return result;
   }
 
@@ -295,6 +304,59 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     input: Parameters<IZCodeAgentService["respondNekInteraction"]>[0],
   ): Promise<void> => await this.interactions.respond(input.response);
 
+  // nek status feed
+  onDynamicNekStatusFrame = (target: NekWorkspaceTarget): Event<NekStatusFrame> =>
+    this.status.onDynamic(target);
+
+  getNekStatusSnapshot = async (
+    input: Parameters<IZCodeAgentService["getNekStatusSnapshot"]>[0],
+  ): Promise<NekStatusSnapshot> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    return await this.service.getStatusSnapshot(binding.sessionKey);
+  };
+
+  getNekSessionStats = async (
+    input: Parameters<IZCodeAgentService["getNekSessionStats"]>[0],
+  ): Promise<NekSessionStats> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    return await this.service.getStats(binding.sessionKey);
+  };
+
+  clearNekQueue = async (
+    input: Parameters<IZCodeAgentService["clearNekQueue"]>[0],
+  ): Promise<NekStatusQueue> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    return await this.service.clearQueue(binding.sessionKey);
+  };
+
+  requeueNekQueue = async (
+    input: Parameters<IZCodeAgentService["requeueNekQueue"]>[0],
+  ): Promise<void> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    await this.service.requeueStatusQueue(binding.sessionKey, input.queue);
+  };
+
+  abortNekRetry = async (
+    input: Parameters<IZCodeAgentService["abortNekRetry"]>[0],
+  ): Promise<void> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    await this.service.abortRetry(binding.sessionKey);
+  };
+
+  abortNekCompaction = async (
+    input: Parameters<IZCodeAgentService["abortNekCompaction"]>[0],
+  ): Promise<void> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    await this.service.abortCompaction(binding.sessionKey);
+  };
+
+  compactNekSession = async (
+    input: Parameters<IZCodeAgentService["compactNekSession"]>[0],
+  ): Promise<void> => {
+    const binding = this.requireBinding(input, input.sessionId);
+    await this.service.compactStatus(binding.sessionKey);
+  };
+
   onDynamicConversationFrame(target: NekWorkspaceTarget): Event<ConversationTopicWireCandidate> {
     return this.conversationEmitter(workspaceKey(target)).event;
   }
@@ -385,6 +447,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     for (const emitter of this.conversationEmitters.values()) emitter.dispose();
     this.conversationEmitters.clear();
     this.interactions.dispose();
+    this.status.dispose();
     await this.topics.dispose();
     this.bindings.clear();
     await this.service.dispose();

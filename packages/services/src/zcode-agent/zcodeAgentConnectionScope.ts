@@ -828,6 +828,11 @@ export function createZCodeAgentConnectionScope(
     async resyncConversationV4(params) {
       return resyncOwned("conversation", params);
     },
+    // nek status feed
+    onDynamicNekStatusFrame(params) {
+      assertOpen();
+      return base.onDynamicNekStatusFrame(workspaceTarget(params));
+    },
     onDynamicConversationFrame(params) {
       return routedEvent<ConversationTopicWireCandidate>(
         "conversation",
