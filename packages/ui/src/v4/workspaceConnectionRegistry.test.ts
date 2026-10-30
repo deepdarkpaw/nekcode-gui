@@ -86,6 +86,12 @@ function createFakeAgentService() {
     abortNekCompaction: vi.fn(),
     abortNekSession: vi.fn(),
     compactNekSession: vi.fn(),
+    // nek interaction feed
+    onDynamicNekInteractionFrame: vi.fn(() => () => ({ dispose: () => {} })),
+    respondNekInteraction: vi.fn(),
+    stopSubagent: vi.fn(),
+    getSubagentTranscript: vi.fn(),
+    listAgentTypes: vi.fn(),
     onDynamicLocalTtftFacts: vi.fn(() => () => ({ dispose: () => {} })),
     onAgentRuntimeRestarted: vi.fn(() => ({ dispose: () => {} })),
   };
