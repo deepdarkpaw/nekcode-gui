@@ -35,6 +35,14 @@ export type NekActionId =
 /** 作用域：composer = 输入框聚焦时生效；global = 窗口级。 */
 export type NekActionScope = "composer" | "global";
 
+/**
+ * 全局动作的键盘派发阶段（composer 动作固定 bubble，不受此字段影响）。
+ *
+ * - `capture`（默认）：窗口先手，适合浏览器的默认行为要压制的键（Ctrl+O 打开文件等）；
+ * - `bubble`：内层组件先手，适合「Esc 只关最内层」这类必须让对话框 / 提及面板先消费的键。
+ */
+export type NekActionDispatchPhase = "capture" | "bubble";
+
 /** 快捷键页分组。 */
 export type NekActionCategory = "input" | "modeModel" | "displayNavigation" | "other";
 
@@ -53,10 +61,20 @@ export interface NekActionDefinition {
   readonly desktopNoteId?: string;
   /** 输入框聚焦时是否允许全局动作抢占输入法/编辑器按键。 */
   readonly allowInEditable?: boolean;
+  /** 全局动作的键盘派发阶段（默认 capture）。 */
+  readonly dispatchPhase?: NekActionDispatchPhase;
   /** 当前 GUI 尚未提供目标时，设置中心用于解释不可用原因。 */
   readonly disabledReason?: NekActionDisabledReason;
 }
 
+/**
+ * 动作表。
+ *
+ * 说明：`tui.input.submit` / `tui.input.newLine` / `app.message.followUp` 三条输入动作由
+ * composer 自己的绑定表执行（`shortcuts/composerShortcuts.ts` + Lexical `KeyboardPlugin`），
+ * 派发器不重复消费 Enter —— 否则用户把 composerSend 改绑成非 Enter 键后，裸 Enter 会
+ * 被动作表抢先当成发送。
+ */
 export const NEK_ACTIONS: readonly NekActionDefinition[] = [
   {
     id: "tui.input.submit",
@@ -85,6 +103,8 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["Escape"],
     allowInEditable: true,
+    // Esc 只关最内层：对话框、mention/slash 面板先消费，未被消费才停止生成。
+    dispatchPhase: "bubble",
   },
   {
     id: "app.message.dequeue",
@@ -114,7 +134,6 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+l"],
     legacyCommandId: "openModelMenu",
-    disabledReason: { id: "ui.action.unavailable.modelPicker" },
   },
   {
     id: "app.tools.expand",
@@ -195,6 +214,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     category: "other",
     scope: "global",
     defaultBindings: ["Alt+i"],
+    disabledReason: { id: "ui.action.unavailable.interactionFocus" },
   },
 ];
 

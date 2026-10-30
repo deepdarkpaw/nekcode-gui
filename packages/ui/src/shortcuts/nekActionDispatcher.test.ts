@@ -4,6 +4,7 @@ import {
   dispatchNekAction,
   registerNekActionHandlers,
   resetNekActionHandlersForTest,
+  resolveNekActionDispatchPhase,
   resolveNekActionKeyboardEvent,
 } from "./nekActionDispatcher.js";
 import { resolveEffectiveActionBindings, getNekActionDisabledReason } from "./actionRegistry.js";
@@ -58,7 +59,7 @@ describe("nek action dispatch", () => {
     ).toBe("tui.altScreen.search");
   });
 
-  it("K4: composer scope resolves Shift+Tab only while editing", () => {
+  it("K4: composer scope resolves Shift+Tab only while editing and only in the bubble phase", () => {
     expect(
       resolveNekActionKeyboardEvent(
         event({ key: "Tab", shiftKey: true }),
@@ -73,8 +74,18 @@ describe("nek action dispatch", () => {
         resolveEffectiveActionBindings(),
         true,
         win,
+        "bubble",
       ),
     ).toBe("app.thinking.cycle");
+    expect(
+      resolveNekActionKeyboardEvent(
+        event({ key: "Tab", shiftKey: true }),
+        resolveEffectiveActionBindings(),
+        true,
+        win,
+        "capture",
+      ),
+    ).toBe(null);
   });
 
   it("K5: dispatch runs the focused handler and does not run it twice after cleanup", () => {
@@ -101,11 +112,39 @@ describe("nek action dispatch", () => {
   });
 
   it("K7: registry marks unavailable targets with a reason instead of claiming success", () => {
-    expect(getNekActionDisabledReason("app.model.select")).toEqual({
-      id: "ui.action.unavailable.modelPicker",
-    });
     expect(getNekActionDisabledReason("app.editor.external")).toEqual({
       id: "ui.action.unavailable.externalEditor",
     });
+    expect(getNekActionDisabledReason("gui.interaction.focus")).toEqual({
+      id: "ui.action.unavailable.interactionFocus",
+    });
+  });
+
+  it("K8: a handler that reports no target is not handled, so the key stays untouched", () => {
+    const run = vi.fn(() => false);
+    registerNekActionHandlers({ "tui.altScreen.previousPrompt": { run } });
+    expect(dispatchNekAction("tui.altScreen.previousPrompt")).toBe(false);
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("K9: Esc defers to inner handlers while other global actions stay in the capture phase", () => {
+    expect(resolveNekActionDispatchPhase("app.interrupt")).toBe("bubble");
+    expect(resolveNekActionDispatchPhase("app.tools.expand")).toBe("capture");
+    expect(resolveNekActionDispatchPhase("app.thinking.cycle")).toBe("bubble");
+    const bindings = resolveEffectiveActionBindings();
+    expect(
+      resolveNekActionKeyboardEvent(event({ key: "Escape" }), bindings, true, win, "capture"),
+    ).toBe(null);
+    expect(
+      resolveNekActionKeyboardEvent(event({ key: "Escape" }), bindings, true, win, "bubble"),
+    ).toBe("app.interrupt");
+  });
+
+  it("K10: the handler receives the originating keyboard event", () => {
+    const run = vi.fn(() => true);
+    registerNekActionHandlers({ "app.interrupt": { run } });
+    const keyboardEvent = {} as KeyboardEvent;
+    expect(dispatchNekAction("app.interrupt", keyboardEvent)).toBe(true);
+    expect(run).toHaveBeenCalledWith({ event: keyboardEvent });
   });
 });
