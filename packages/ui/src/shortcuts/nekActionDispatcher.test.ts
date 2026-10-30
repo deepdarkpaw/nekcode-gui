@@ -49,14 +49,33 @@ describe("nek action dispatch", () => {
     ).toBe(null);
   });
 
-  it("K3: editable targets only admit actions explicitly allowed by the action definition", () => {
+  it("K3: editable targets keep registered actions but never swallow a typed capital letter", () => {
     const bindings = resolveEffectiveActionBindings();
+    // 显示类动作（折叠 / 搜索 / 转写区跳转）在输入框里照样生效。
     expect(
       resolveNekActionKeyboardEvent(event({ key: "o", ctrlKey: true }), bindings, true, win),
-    ).toBe(null);
+    ).toBe("app.tools.expand");
     expect(
       resolveNekActionKeyboardEvent(event({ key: "f", ctrlKey: true }), bindings, true, win),
     ).toBe("tui.altScreen.search");
+    // 用户把动作改绑成 Shift+字母后，输入框里必须让路给大写字面输入。
+    const rebindable = resolveEffectiveActionBindings({ "app.model.select": ["Shift+g"] });
+    expect(
+      resolveNekActionKeyboardEvent(
+        event({ key: "G", code: "KeyG", shiftKey: true }),
+        rebindable,
+        true,
+        win,
+      ),
+    ).toBe(null);
+    expect(
+      resolveNekActionKeyboardEvent(
+        event({ key: "G", code: "KeyG", shiftKey: true }),
+        rebindable,
+        false,
+        win,
+      ),
+    ).toBe("app.model.select");
   });
 
   it("K4: composer scope resolves Shift+Tab only while editing and only in the bubble phase", () => {

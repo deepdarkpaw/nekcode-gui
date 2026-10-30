@@ -12,9 +12,11 @@ import { useEffect, useRef } from "react";
 import type { KeyboardShortcutPlatformInfo } from "@/lib/keyboardShortcuts.js";
 import {
   isEditableShortcutEventTarget,
+  isShiftOnlyPrintableBinding,
   isShortcutRecordingActive,
   type ShortcutBindingEvent,
 } from "./bindings.js";
+import { matchesActionBinding } from "./actionBinding.js";
 import {
   matchActionEvent,
   resolveEffectiveActionBindings,
@@ -73,13 +75,38 @@ export function resolveNekActionKeyboardEvent(
 ): NekActionId | null {
   const globalActionId = matchActionEvent(event, effective, "global", platformInfo);
   if (globalActionId !== null) {
+    // 全局动作要显式声明可在可编辑元素内生效。
     if (editableTarget && !getNekAction(globalActionId).allowInEditable) return null;
+    if (
+      editableTarget &&
+      matchesShiftOnlyPrintable(event, effective, globalActionId, platformInfo)
+    ) {
+      return null;
+    }
     return resolveNekActionDispatchPhase(globalActionId) === phase ? globalActionId : null;
   }
   if (!editableTarget) return null;
   const composerActionId = matchActionEvent(event, effective, "composer", platformInfo);
   if (composerActionId === null) return null;
+  // composer 动作本来就只在输入框里生效，只需保证不抢「打字」这一类物理事件。
+  if (matchesShiftOnlyPrintable(event, effective, composerActionId, platformInfo)) return null;
   return resolveNekActionDispatchPhase(composerActionId) === phase ? composerActionId : null;
+}
+
+/**
+ * 命中的是不是「纯 Shift + 可打印字符」绑定（如 Shift+f）：它和用户打大写字母是同一个
+ * 物理事件，输入框里必须让路，否则用户打不出这个字符（沿用 useAppKeyboard 的历史语义）。
+ */
+function matchesShiftOnlyPrintable(
+  event: ShortcutBindingEvent,
+  effective: EffectiveActionBindings,
+  actionId: NekActionId,
+  platformInfo?: KeyboardShortcutPlatformInfo,
+): boolean {
+  return effective[actionId].some(
+    (binding) =>
+      isShiftOnlyPrintableBinding(binding) && matchesActionBinding(event, binding, platformInfo),
+  );
 }
 
 /** 注册一个 pane/app 的当前动作处理器；cleanup 后不会残留旧 pane 的回调。 */

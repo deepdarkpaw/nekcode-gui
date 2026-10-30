@@ -3263,7 +3263,7 @@ const zhCN: Record<string, string> = {
   "shortcuts.action.note.followUp": "nek 在 Windows 终端默认 Ctrl+Q；桌面端统一为 Alt+Enter",
   "shortcuts.action.note.dequeue": "nek 在 Windows 终端默认 Alt+Q；桌面端统一为 Alt+↑",
   "shortcuts.action.note.sessionNew": "nek 终端未绑定默认键；桌面端沿用 Ctrl+N 惯例",
-  "shortcuts.action.note.editorExternal": "nek 中打开外部编辑器；桌面端打开内置大编辑器",
+  "shortcuts.action.note.editorExternal": "nek 中打开外部编辑器；桌面端的大编辑器尚未实现",
   "shortcuts.action.conflict.invalid": "不支持的按键组合",
   "shortcuts.action.conflict.reserved": "该组合由系统或编辑操作保留",
   "shortcuts.action.conflict.occupied": "已被「{action}」占用",

@@ -3454,7 +3454,7 @@ const enUS: Record<string, string> = {
   "shortcuts.action.note.sessionNew":
     "Unbound in the nek terminal; the desktop app follows the Ctrl+N convention",
   "shortcuts.action.note.editorExternal":
-    "Opens an external editor in nek; the desktop app opens the built-in large editor",
+    "Opens an external editor in nek; the desktop large editor is not implemented yet",
   "shortcuts.action.conflict.invalid": "Unsupported key combination",
   "shortcuts.action.conflict.reserved": "Reserved for system or editing actions",
   "shortcuts.action.conflict.occupied": 'Already used by "{action}"',

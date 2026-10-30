@@ -134,18 +134,23 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+l"],
     legacyCommandId: "openModelMenu",
+    allowInEditable: true,
   },
   {
     id: "app.tools.expand",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+o"],
+    // 输入框聚焦时也生效（nek fullscreen 语义：显示类动作照样打得开）。
+    allowInEditable: true,
   },
   {
     id: "app.thinking.toggle",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+t"],
+    // 同上：写草稿时也能折叠/展开 thinking。
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.search",
@@ -160,24 +165,29 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+ArrowUp"],
+    // 转写区显示动作优先于编辑器（nek fullscreen 语义）。
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.nextPrompt",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+ArrowDown"],
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.top",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+Home"],
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.bottom",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+End"],
+    allowInEditable: true,
   },
   {
     id: "app.session.new",
@@ -186,6 +196,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     defaultBindings: ["CmdOrCtrl+n"],
     legacyCommandId: "newTask",
     desktopNoteId: "shortcuts.action.note.sessionNew",
+    allowInEditable: true,
   },
   {
     id: "gui.settings.open",
@@ -193,6 +204,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+,"],
     legacyCommandId: "openSettings",
+    allowInEditable: true,
   },
   {
     id: "app.editor.external",
@@ -208,6 +220,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+k"],
     legacyCommandId: "openCommandCenter",
+    allowInEditable: true,
   },
   {
     id: "gui.interaction.focus",
