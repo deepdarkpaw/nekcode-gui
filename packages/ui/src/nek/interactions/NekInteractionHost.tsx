@@ -22,6 +22,10 @@ export interface NekInteractionHostProps {
   onOpenPlanFile?: (path: string) => Promise<void> | void;
   focusComposer?: () => void;
   onLostText?: (text: string) => void;
+  respondNekInteraction?: (params: {
+    requestId: string;
+    response: NekExtensionUiResponse;
+  }) => Promise<void>;
 }
 
 function extensionResponse(
@@ -39,6 +43,7 @@ export function NekInteractionHost({
   onOpenPlanFile,
   focusComposer,
   onLostText,
+  respondNekInteraction,
 }: NekInteractionHostProps) {
   const { intl } = useZCodeIntl();
   const activeRequest = store((state) => state.sessions[sessionKey]?.queue[0]?.request);
@@ -46,12 +51,19 @@ export function NekInteractionHost({
     Math.max(0, (state.sessions[sessionKey]?.queue.length ?? 0) - 1),
   );
   const settle = useCallback(
-    (response: NekExtensionUiResponse) => {
-      if (!store.getState().settle(sessionKey, response.id, response)) {
-        throw new Error(`Interaction ${response.id} is no longer pending.`);
-      }
+    async (response: NekExtensionUiResponse) => {
+      const accepted = await store.getState().settleAsync(
+        sessionKey,
+        response.id,
+        response,
+        respondNekInteraction
+          ? async (_sessionKey, nextResponse) =>
+              await respondNekInteraction({ requestId: nextResponse.id, response: nextResponse })
+          : undefined,
+      );
+      if (!accepted) throw new Error(`Interaction ${response.id} is no longer pending.`);
     },
-    [sessionKey, store],
+    [respondNekInteraction, sessionKey, store],
   );
   if (!activeRequest) return null;
 

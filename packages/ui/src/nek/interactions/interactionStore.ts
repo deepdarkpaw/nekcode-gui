@@ -46,7 +46,10 @@ export interface InteractionSessionState extends InteractionQueueState {
   clockMs: number;
 }
 
-export type InteractionResponder = (sessionKey: string, response: NekExtensionUiResponse) => void;
+export type InteractionResponder = (
+  sessionKey: string,
+  response: NekExtensionUiResponse,
+) => unknown | Promise<unknown>;
 export type InteractionEffectHandler = (sessionKey: string, effect: NekExtensionUiEffect) => void;
 
 export interface NekInteractionStoreOptions {
@@ -63,6 +66,12 @@ export interface NekInteractionStore {
   enqueueExtensionRequest: (sessionKey: string, request: NekExtensionUiRequest) => boolean;
   updateDraft: (sessionKey: string, requestId: string, draft: unknown) => boolean;
   settle: (sessionKey: string, requestId: string, response: NekExtensionUiResponse) => boolean;
+  settleAsync: (
+    sessionKey: string,
+    requestId: string,
+    response: NekExtensionUiResponse,
+    responder?: InteractionResponder,
+  ) => Promise<boolean>;
   cancelByUser: (sessionKey: string, requestId: string) => boolean;
   cancelByHost: (sessionKey: string, requestId: string) => boolean;
   cancelById: (requestId: string) => boolean;
@@ -115,6 +124,7 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
     options.clearIntervalFn ??
     ((handle) => clearInterval(handle as ReturnType<typeof setInterval>));
   let intervalHandle: unknown = null;
+  const settlingIds = new Set<string>();
 
   const store = create<NekInteractionStore>((set, get) => {
     const flushQueueEffects = (sessionKey: string): void => {
@@ -238,7 +248,30 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         const session = get().sessions[sessionKey];
         if (!session?.queue.some((record) => record.request.id === requestId)) return false;
         applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "settled" });
-        options.respond(sessionKey, response);
+        void Promise.resolve(options.respond(sessionKey, response)).catch((error: unknown) => {
+          logger.warn("[NekInteractionStore] response delivery failed", error);
+        });
+        refreshTicker();
+        return true;
+      },
+      settleAsync: async (sessionKey, requestId, response, responder = options.respond) => {
+        const session = get().sessions[sessionKey];
+        if (
+          !session?.queue.some((record) => record.request.id === requestId) ||
+          settlingIds.has(requestId)
+        ) {
+          return false;
+        }
+        settlingIds.add(requestId);
+        try {
+          await responder(sessionKey, response);
+        } finally {
+          settlingIds.delete(requestId);
+        }
+        if (!get().sessions[sessionKey]?.queue.some((record) => record.request.id === requestId)) {
+          return false;
+        }
+        applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "settled" });
         refreshTicker();
         return true;
       },
@@ -370,6 +403,7 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
       shutdown: () => {
         if (intervalHandle !== null) clearIntervalFn(intervalHandle);
         intervalHandle = null;
+        settlingIds.clear();
       },
     } satisfies NekInteractionStore;
   });

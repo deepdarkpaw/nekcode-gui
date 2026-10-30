@@ -26,6 +26,8 @@ import type { PaneWorkspaceScope } from "@/v4/paneLayoutStore.js";
 import { SessionDataLayer } from "@/v4/sessionDataLayer.js";
 import { acquireWorkspaceConnection } from "@/v4/workspaceConnectionRegistry.js";
 import type { AttachmentUploadOptions } from "@/v4/attachmentUploadTransaction.js";
+import { NekAgentFeedProvider } from "@/nek/feed/nekAgentFeed.js";
+import { NekWorkspaceInteractionHost } from "@/nek/feed/NekWorkspaceInteractionHost.js";
 
 export interface V4ConversationContextValue {
   layer: SessionDataLayer;
@@ -131,6 +133,14 @@ function ReadyV4PaneConversationProvider({
 }) {
   const agentService = services.zcodeAgentService;
   const platform = usePlatform();
+  const feedTarget = useMemo(
+    () => ({
+      workspacePath: scope.workspacePath,
+      ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+      ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+    }),
+    [scope.remoteSessionId, scope.workspaceIdentity, scope.workspacePath],
+  );
 
   // 与 workspace 级 Provider 相同的 useMemo 同步建连模式（renderer 无 StrictMode，
   // memo 双调不存在）；dep 变化时先建新租约再在 effect cleanup 释放旧租约——
@@ -189,11 +199,14 @@ function ReadyV4PaneConversationProvider({
 
   return (
     <ServiceProvider services={services}>
-      <ConversationDiagnosticPaneAttachment services={services} scope={scope}>
-        <V4ConversationContext.Provider value={bundle.value}>
-          {children}
-        </V4ConversationContext.Provider>
-      </ConversationDiagnosticPaneAttachment>
+      <NekAgentFeedProvider service={agentService} target={feedTarget}>
+        <NekWorkspaceInteractionHost workspacePath={scope.workspacePath} />
+        <ConversationDiagnosticPaneAttachment services={services} scope={scope}>
+          <V4ConversationContext.Provider value={bundle.value}>
+            {children}
+          </V4ConversationContext.Provider>
+        </ConversationDiagnosticPaneAttachment>
+      </NekAgentFeedProvider>
     </ServiceProvider>
   );
 }

@@ -67,7 +67,15 @@ export class NekAgentInteractionChannel {
   }
 
   private publish(frame: NekInteractionFrame): void {
-    const emitter = this.emitters.get(workspaceKey({ workspacePath: frame.scope.workspacePath }));
-    emitter?.fire(frame);
+    const sessionId =
+      frame.scope.sessionId ??
+      (frame.scope.sessionKey ? this.service.getSession(frame.scope.sessionKey)?.sessionId : undefined);
+    const mappedFrame: NekInteractionFrame = sessionId
+      ? { ...frame, scope: { ...frame.scope, sessionId } }
+      : frame;
+    const emitter = this.emitters.get(
+      workspaceKey({ workspacePath: mappedFrame.scope.workspacePath }),
+    );
+    emitter?.fire(mappedFrame);
   }
 }

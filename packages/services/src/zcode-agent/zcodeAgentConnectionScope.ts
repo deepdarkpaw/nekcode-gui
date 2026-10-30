@@ -30,6 +30,15 @@ export interface ZCodeAgentV4ConnectionContext {
   role?: "terminal-client" | "trusted-host-relay";
 }
 
+// nek interaction feed
+export const NEK_INTERACTION_FEED_METHODS = [
+  "onDynamicNekInteractionFrame",
+  "respondNekInteraction",
+  "stopSubagent",
+  "getSubagentTranscript",
+  "listAgentTypes",
+] as const satisfies readonly (keyof IZCodeAgentService)[];
+
 const TRUSTED_CONNECTION_FIELD = "__zcodeTrustedV4Connection";
 const TRUSTED_UNSUBSCRIBE_ROUTE_FIELD = "__zcodeTrustedV4UnsubscribeRoute";
 
@@ -679,6 +688,27 @@ export function createZCodeAgentConnectionScope(
         );
       if (!ownsRoute) throw new Error("fault.subscription.notOwned");
       await base.setConnectionFlowStateV4(withTrustedConnection(params, forwarded));
+    },
+    // nek interaction feed
+    onDynamicNekInteractionFrame(params) {
+      assertOpen();
+      return base.onDynamicNekInteractionFrame(workspaceTarget(params));
+    },
+    async respondNekInteraction(params) {
+      assertOpen();
+      return base.respondNekInteraction(params);
+    },
+    async stopSubagent(params) {
+      assertOpen();
+      return base.stopSubagent(params);
+    },
+    async getSubagentTranscript(params) {
+      assertOpen();
+      return base.getSubagentTranscript(params);
+    },
+    async listAgentTypes(params) {
+      assertOpen();
+      return base.listAgentTypes(params);
     },
     async sendConversationCommandV4(params) {
       assertOpen();
