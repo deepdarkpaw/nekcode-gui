@@ -122,6 +122,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.connectionMode.switchToStartPlan": "Switch to Start Plan",
   "chat.composer.contextSearchHint": "Type to search plugins, files, and chats",
   "chat.composer.contextShortcut": "Add context",
+  "chat.composer.pasteBlock.placeholder": "Paste #{index} · {lines} lines",
   "chat.composer.capabilityShortcut": "Choose capabilities",
   "chat.composer.skillShortcut": "Choose skills",
   "chat.composer.addSection": "Add",
@@ -3303,6 +3304,9 @@ const enUS: Record<string, string> = {
   "nek.status.usage.compact": "Compress context",
   "nek.status.usage.context": "{percent}% · {tokens}/{window}",
   "ui.action.busy": "The previous operation is still being processed",
+  "ui.action.unavailable.externalEditor": "The external editor is not connected in this GUI yet",
+  "ui.action.unavailable.interactionFocus":
+    "Pending requests keep their own focus target; shortcut focusing is not supported yet",
   "todo.panel.title": "Todo",
   "todo.panel.currentTask": "Current task",
   "todo.panel.completed": "Todo completed",
@@ -3450,7 +3454,7 @@ const enUS: Record<string, string> = {
   "shortcuts.action.note.sessionNew":
     "Unbound in the nek terminal; the desktop app follows the Ctrl+N convention",
   "shortcuts.action.note.editorExternal":
-    "Opens an external editor in nek; the desktop app opens the built-in large editor",
+    "Opens an external editor in nek; the desktop large editor is not implemented yet",
   "shortcuts.action.conflict.invalid": "Unsupported key combination",
   "shortcuts.action.conflict.reserved": "Reserved for system or editing actions",
   "shortcuts.action.conflict.occupied": 'Already used by "{action}"',

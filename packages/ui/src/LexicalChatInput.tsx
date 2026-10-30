@@ -57,7 +57,7 @@ import {
 } from "./mentions/nodes/PromptMentionNode.js";
 import { logger } from "./logger.js";
 
-import { navigatePromptHistory } from "./lib/promptHistory.js";
+import { navigatePromptHistory, shouldHandlePromptHistoryNavigation } from "./lib/promptHistory.js";
 import type { MentionItemData } from "@/mentions/mentionTypes.js";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 
@@ -617,8 +617,9 @@ function KeyboardPlugin({
           return true;
         }
 
-        // Shift+Enter，以及未启用反转投递时的 Ctrl/Meta+Enter 继续换行。
-        if (event.shiftKey || event.ctrlKey || event.metaKey) {
+        // Shift+Enter，以及未启用反转投递时的 Ctrl/Meta+Enter 继续换行；
+        // Alt+Enter 不是文本输入，放行给 nek 动作派发器（`app.message.followUp`）。
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
           return false;
         }
 
@@ -992,6 +993,7 @@ function PromptHistoryPlugin({
 }) {
   const [editor] = useLexicalComposerContext();
   const historyIndexRef = useRef<number | null>(null);
+  const draftBeforeHistoryRef = useRef<string | null>(null);
   const applyingHistoryRef = useRef(false);
 
   useEffect(() => {
@@ -1023,6 +1025,7 @@ function PromptHistoryPlugin({
 
       if (getEditorMarkdown(editorState) !== entries[currentIndex]) {
         historyIndexRef.current = null;
+        draftBeforeHistoryRef.current = null;
       }
     });
   }, [editor, entries]);
@@ -1070,20 +1073,41 @@ function PromptHistoryPlugin({
 
       const text = getEditorMarkdown(editor.getEditorState());
       const currentIndex = historyIndexRef.current;
+      let atEditorStart = text.length === 0;
+      editor.getEditorState().read(() => {
+        atEditorStart = isCollapsedSelectionAtEditorStart();
+      });
 
-      // 历史导航只在“空输入”或“已经进入历史浏览态”时接管上下键，
-      // 避免抢走多行输入原本的光标移动行为。
-      if (currentIndex === null && text.length > 0) {
+      // 历史导航只在“空输入”、光标位于首行起点或已经进入历史浏览态时接管上下键，
+      // 避免抢走多行输入中间位置原本的光标移动行为。
+      if (
+        !shouldHandlePromptHistoryNavigation({
+          text,
+          atEditorStart,
+          currentIndex,
+        })
+      ) {
         return false;
+      }
+      if (currentIndex === null && text.length > 0 && direction === "up") {
+        draftBeforeHistoryRef.current = text;
       }
 
       const result = navigatePromptHistory(entries, currentIndex, direction);
+      const nextValue =
+        direction === "down" && result.nextIndex === null && draftBeforeHistoryRef.current !== null
+          ? draftBeforeHistoryRef.current
+          : result.nextValue;
+      if (direction === "down" && result.nextIndex === null) {
+        draftBeforeHistoryRef.current = null;
+      }
       if (!result.shouldHandle) {
+        draftBeforeHistoryRef.current = null;
         return false;
       }
 
       event.preventDefault();
-      applyHistoryEntry(result.nextIndex, result.nextValue);
+      applyHistoryEntry(result.nextIndex, nextValue);
       return true;
     },
     [applyHistoryEntry, disabled, editor, entries],

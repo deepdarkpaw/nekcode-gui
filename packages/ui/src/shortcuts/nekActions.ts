@@ -35,8 +35,21 @@ export type NekActionId =
 /** 作用域：composer = 输入框聚焦时生效；global = 窗口级。 */
 export type NekActionScope = "composer" | "global";
 
+/**
+ * 全局动作的键盘派发阶段（composer 动作固定 bubble，不受此字段影响）。
+ *
+ * - `capture`（默认）：窗口先手，适合浏览器的默认行为要压制的键（Ctrl+O 打开文件等）；
+ * - `bubble`：内层组件先手，适合「Esc 只关最内层」这类必须让对话框 / 提及面板先消费的键。
+ */
+export type NekActionDispatchPhase = "capture" | "bubble";
+
 /** 快捷键页分组。 */
 export type NekActionCategory = "input" | "modeModel" | "displayNavigation" | "other";
+
+export interface NekActionDisabledReason {
+  readonly id: string;
+  readonly values?: Readonly<Record<string, string | number>>;
+}
 
 export interface NekActionDefinition {
   readonly id: NekActionId;
@@ -46,8 +59,22 @@ export interface NekActionDefinition {
   readonly legacyCommandId?: ShortcutCommandId;
   /** 与 nek 终端默认键不同的说明（i18n key）。 */
   readonly desktopNoteId?: string;
+  /** 输入框聚焦时是否允许全局动作抢占输入法/编辑器按键。 */
+  readonly allowInEditable?: boolean;
+  /** 全局动作的键盘派发阶段（默认 capture）。 */
+  readonly dispatchPhase?: NekActionDispatchPhase;
+  /** 当前 GUI 尚未提供目标时，设置中心用于解释不可用原因。 */
+  readonly disabledReason?: NekActionDisabledReason;
 }
 
+/**
+ * 动作表。
+ *
+ * 说明：`tui.input.submit` / `tui.input.newLine` / `app.message.followUp` 三条输入动作由
+ * composer 自己的绑定表执行（`shortcuts/composerShortcuts.ts` + Lexical `KeyboardPlugin`），
+ * 派发器不重复消费 Enter —— 否则用户把 composerSend 改绑成非 Enter 键后，裸 Enter 会
+ * 被动作表抢先当成发送。
+ */
 export const NEK_ACTIONS: readonly NekActionDefinition[] = [
   {
     id: "tui.input.submit",
@@ -70,7 +97,15 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     defaultBindings: ["Alt+Enter"],
     desktopNoteId: "shortcuts.action.note.followUp",
   },
-  { id: "app.interrupt", category: "input", scope: "global", defaultBindings: ["Escape"] },
+  {
+    id: "app.interrupt",
+    category: "input",
+    scope: "global",
+    defaultBindings: ["Escape"],
+    allowInEditable: true,
+    // Esc 只关最内层：对话框、mention/slash 面板先消费，未被消费才停止生成。
+    dispatchPhase: "bubble",
+  },
   {
     id: "app.message.dequeue",
     category: "input",
@@ -84,6 +119,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["Alt+m"],
     legacyCommandId: "cycleSessionMode",
+    allowInEditable: true,
   },
   {
     id: "app.thinking.cycle",
@@ -98,18 +134,23 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+l"],
     legacyCommandId: "openModelMenu",
+    allowInEditable: true,
   },
   {
     id: "app.tools.expand",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+o"],
+    // 输入框聚焦时也生效（nek fullscreen 语义：显示类动作照样打得开）。
+    allowInEditable: true,
   },
   {
     id: "app.thinking.toggle",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+t"],
+    // 同上：写草稿时也能折叠/展开 thinking。
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.search",
@@ -117,30 +158,36 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+f"],
     legacyCommandId: "findInTask",
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.previousPrompt",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+ArrowUp"],
+    // 转写区显示动作优先于编辑器（nek fullscreen 语义）。
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.nextPrompt",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+ArrowDown"],
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.top",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+Home"],
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.bottom",
     category: "displayNavigation",
     scope: "global",
     defaultBindings: ["CmdOrCtrl+End"],
+    allowInEditable: true,
   },
   {
     id: "app.session.new",
@@ -149,6 +196,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     defaultBindings: ["CmdOrCtrl+n"],
     legacyCommandId: "newTask",
     desktopNoteId: "shortcuts.action.note.sessionNew",
+    allowInEditable: true,
   },
   {
     id: "gui.settings.open",
@@ -156,6 +204,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+,"],
     legacyCommandId: "openSettings",
+    allowInEditable: true,
   },
   {
     id: "app.editor.external",
@@ -163,6 +212,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+g"],
     desktopNoteId: "shortcuts.action.note.editorExternal",
+    disabledReason: { id: "ui.action.unavailable.externalEditor" },
   },
   {
     id: "gui.commandPalette.open",
@@ -170,12 +220,14 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+k"],
     legacyCommandId: "openCommandCenter",
+    allowInEditable: true,
   },
   {
     id: "gui.interaction.focus",
     category: "other",
     scope: "global",
     defaultBindings: ["Alt+i"],
+    disabledReason: { id: "ui.action.unavailable.interactionFocus" },
   },
 ];
 

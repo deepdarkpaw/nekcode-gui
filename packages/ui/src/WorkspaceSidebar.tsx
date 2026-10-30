@@ -87,7 +87,7 @@ import {
   readSidebarPurposeSectionPreferences,
   reorderSidebarPurposeSections,
 } from "@/lib/sidebarPurposeSectionPreferences.js";
-import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
+import { useActionShortcutLabel } from "@/shortcuts/useActionShortcuts.js";
 
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import {
@@ -337,7 +337,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
       })
     : undefined;
   const setTheme = useZCodeStore((state) => state.setTheme);
-  const commandCenterShortcutLabel = useShortcutCommandLabel("openCommandCenter");
+  const commandCenterShortcutLabel = useActionShortcutLabel("gui.commandPalette.open");
   const tabs = useTabStore((state) => state.tabs);
   const activateTab = useTabStore((state) => state.activateTab);
   const closeTab = useTabStore((state) => state.closeTab);

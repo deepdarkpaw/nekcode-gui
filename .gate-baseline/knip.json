@@ -278,19 +278,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000devDependencies\u0000packages/ui/package.json\u0000@testing-library/dom",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000devDependencies\u0000packages/ui/package.json\u0000@testing-library/react",
-      "count": 1
-    },
-    {
       "key": "knip\u0000devDependencies\u0000packages/ui/package.json\u0000@types/qrcode",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000devDependencies\u0000packages/ui/package.json\u0000happy-dom",
       "count": 1
     },
     {
@@ -1134,47 +1122,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/dialogFocus.ts\u0000pickFirstEmptyRequired",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/dialogFocus.ts\u0000pickFirstInvalid",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/lib/dialogFocus.ts\u0000readFieldFocusState",
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/displayFormat.ts\u0000formatRelativeTime",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000EMPTY_FOLD_SNAPSHOT",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000FOLD_OVERRIDE_LIMIT",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000resolveFoldOpen",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000setFoldGroupMode",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000setFoldOverride",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000toggleFoldGroupMode",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/foldState.ts\u0000useFoldStore",
       "count": 1
     },
     {
@@ -1230,6 +1182,18 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/ui/src/lib/typeToFocus.ts\u0000canReceiveTypedText",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/lib/typeToFocus.ts\u0000focusAtEnd",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/lib/typeToFocus.ts\u0000readTypeToFocusContext",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/ui/src/lib/workspaceSidePane.ts\u0000activateSidePaneTab",
       "count": 1
     },
@@ -1254,7 +1218,31 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/askQuestion.ts\u0000validateAskQuestionAnswers",
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionController.ts\u0000useNekMentionController",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000NEK_AGENT_MENTION_LIMIT",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000NEK_FILE_MENTION_LIMIT",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000NEK_MENTION_TARGET_CACHE_LIMIT",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000NEK_MENTION_TARGET_CACHE_TTL_MS",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000NEK_SKILL_MENTION_LIMIT",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000serializeNekMentionText",
       "count": 1
     },
     {
@@ -1266,11 +1254,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionQueue.ts\u0000CLOSED_REQUEST_LIMIT",
+      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionFocus.ts\u0000INTERACTION_FOCUS_ACTION_ID",
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionQueue.ts\u0000INTERACTION_QUEUE_LIMIT",
+      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/interactionQueue.ts\u0000CLOSED_REQUEST_LIMIT",
       "count": 1
     },
     {
@@ -1298,10 +1286,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/planReviewReducer.ts\u0000planBodyDefaultOpen",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/interactions/structuredResults.ts\u0000buildCancelledStructuredResponse",
       "count": 1
     },
@@ -1314,14 +1298,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/NekSubagentCardView.tsx\u0000NekSubagentCardView",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/NekSubagentTranscriptView.tsx\u0000NekSubagentTranscriptView",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/status/format.ts\u0000CONTEXT_DANGER_PERCENT",
       "count": 1
     },
@@ -1330,19 +1306,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/format.ts\u0000contextPercent",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/format.ts\u0000formatContextPercent",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/status/format.ts\u0000formatCost",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/format.ts\u0000retryRemainingMs",
       "count": 1
     },
     {
@@ -1378,10 +1342,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/queue.ts\u0000resolveDequeueShortcut",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/status/reducerUtils.ts\u0000isTerminalSubagentStatus",
       "count": 1
     },
@@ -1391,10 +1351,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/status/store.ts\u0000selectNekSessionStatus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/useSubagentTranscriptController.ts\u0000resolveTranscriptKey",
       "count": 1
     },
     {
@@ -1418,18 +1374,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingAccount.ts\u0000isUsableNekAuthStatus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingAccount.ts\u0000isUsableNekProvider",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingAccountController.ts\u0000createOnboardingAccountView",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingFlow.ts\u0000firstIncompleteStep",
       "count": 1
     },
@@ -1442,59 +1386,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingNek.ts\u0000createInitialNekStepState",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingNek.ts\u0000isNekStepDone",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingNek.ts\u0000statusFromDetection",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/onboardingNek.ts\u0000useNekStepControllerWithApi",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/onboarding/useNekOnboardingGate.ts\u0000readNekOnboardingGate",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/useNekOnboardingGate.ts\u0000shouldShowNekOnboarding",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/connectionStatusController.ts\u0000reduceRemoteConnectionStatus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/credentialController.ts\u0000INITIAL_CREDENTIAL_PROMPT_STATE",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/credentialController.ts\u0000reduceCredentialPrompt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/credentialController.ts\u0000resolveCredentialKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/hostKeyChangedController.ts\u0000INITIAL_HOST_KEY_CHANGED_STATE",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/hostKeyChangedController.ts\u0000reduceHostKeyChanged",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/hostKeyChangedController.ts\u0000resolveHostKeyChangedKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/hostKeyController.ts\u0000INITIAL_HOST_KEY_CONFIRM_STATE",
       "count": 1
     },
     {
@@ -1502,27 +1394,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/hostKeyController.ts\u0000reduceHostKeyConfirm",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/hostKeyController.ts\u0000resolveHostKeyConfirmKey",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/remoteInteraction.ts\u0000createActionRunner",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/remotePromptQueueStore.ts\u0000INITIAL_REMOTE_PROMPT_QUEUE_STATE",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/remotePromptQueueStore.ts\u0000REMOTE_PROMPT_QUEUE_LIMIT",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/remote/nek/remotePromptQueueStore.ts\u0000reduceRemotePromptQueue",
       "count": 1
     },
     {
@@ -1606,15 +1478,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/NekSettingsContext.tsx\u0000useNekTargetSelection",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/mock/mockMcp.ts\u0000projectMcpFile",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/mock/mockSeed.ts\u0000MOCK_PROJECT_CWD",
       "count": 1
     },
     {
@@ -1659,14 +1523,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/lib/apiKey.ts\u0000ENV_NAME_PATTERN",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/lib/apiKey.ts\u0000normalizeEnvName",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/lib/baseUrl.ts\u0000finalRequestUrl",
       "count": 1
     },
     {
@@ -1739,26 +1595,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/settingsPageConfig.ts\u0000SETTINGS_SECTIONS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/shortcuts/actionBinding.ts\u0000parseActionBinding",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/shortcuts/actionRegistry.ts\u0000findLegacyCommandConflicts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/shortcuts/actionRegistry.ts\u0000fromNekKeyId",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/shortcuts/actionRegistry.ts\u0000matchActionEvent",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/shortcuts/useActionShortcuts.ts\u0000getActionShortcutOverrides",
       "count": 1
     },
     {
@@ -2134,43 +1970,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/asyncAction.test.ts\u0000packages/ui/src/lib/asyncAction.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/dialogFocus.test.ts\u0000packages/ui/src/lib/dialogFocus.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/displayFormat.test.ts\u0000packages/ui/src/lib/displayFormat.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/editCommit.test.ts\u0000packages/ui/src/lib/editCommit.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/foldState.test.ts\u0000packages/ui/src/lib/foldState.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/imeComposition.test.ts\u0000packages/ui/src/lib/imeComposition.test.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/ui/src/lib/rendererZCodeEndpoint.ts\u0000packages/ui/src/lib/rendererZCodeEndpoint.ts",
       "count": 1
     },
     {
       "key": "knip\u0000files\u0000packages/ui/src/lib/teamPlanDisplayName.ts\u0000packages/ui/src/lib/teamPlanDisplayName.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/typeToFocus.test.ts\u0000packages/ui/src/lib/typeToFocus.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/lib/typeToFocus.ts\u0000packages/ui/src/lib/typeToFocus.ts",
       "count": 1
     },
     {
@@ -2182,135 +1986,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/ui/src/mentions/nekMentionController.test.ts\u0000packages/ui/src/mentions/nekMentionController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/mentions/nekMentionController.ts\u0000packages/ui/src/mentions/nekMentionController.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/mentions/nekMentionLogic.test.ts\u0000packages/ui/src/mentions/nekMentionLogic.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000packages/ui/src/mentions/nekMentionLogic.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/NekInteractionViews.test.tsx\u0000packages/ui/src/nek/interactions/NekInteractionViews.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/askQuestion.test.ts\u0000packages/ui/src/nek/interactions/askQuestion.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/askQuestionController.test.tsx\u0000packages/ui/src/nek/interactions/askQuestionController.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/dialogDeadline.test.tsx\u0000packages/ui/src/nek/interactions/dialogDeadline.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/extensionDialog.test.ts\u0000packages/ui/src/nek/interactions/extensionDialog.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/extensionDialogController.test.tsx\u0000packages/ui/src/nek/interactions/extensionDialogController.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/extensionUi.test.ts\u0000packages/ui/src/nek/interactions/extensionUi.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/interactionCommon.test.ts\u0000packages/ui/src/nek/interactions/interactionCommon.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/interactionFocus.test.ts\u0000packages/ui/src/nek/interactions/interactionFocus.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/interactionFocus.ts\u0000packages/ui/src/nek/interactions/interactionFocus.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/interactionQueue.test.ts\u0000packages/ui/src/nek/interactions/interactionQueue.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/interactionStore.test.ts\u0000packages/ui/src/nek/interactions/interactionStore.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/planReview.test.ts\u0000packages/ui/src/nek/interactions/planReview.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/planReviewController.test.tsx\u0000packages/ui/src/nek/interactions/planReviewController.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/switchMode.test.ts\u0000packages/ui/src/nek/interactions/switchMode.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/interactions/switchModeController.test.tsx\u0000packages/ui/src/nek/interactions/switchModeController.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/NekStatusViews.test.tsx\u0000packages/ui/src/nek/status/NekStatusViews.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/controllerTestUtils.ts\u0000packages/ui/src/nek/status/controllerTestUtils.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/ui/src/nek/status/focus.ts\u0000packages/ui/src/nek/status/focus.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/format.test.ts\u0000packages/ui/src/nek/status/format.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/queue.test.ts\u0000packages/ui/src/nek/status/queue.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/queueController.test.ts\u0000packages/ui/src/nek/status/queueController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/retryCompaction.test.ts\u0000packages/ui/src/nek/status/retryCompaction.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/statusControllers.test.ts\u0000packages/ui/src/nek/status/statusControllers.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/statusReducer.test.ts\u0000packages/ui/src/nek/status/statusReducer.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/subagentControllers.test.ts\u0000packages/ui/src/nek/status/subagentControllers.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/todoController.test.ts\u0000packages/ui/src/nek/status/todoController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/nek/status/transcriptController.test.ts\u0000packages/ui/src/nek/status/transcriptController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/NekOnboardingModal.test.tsx\u0000packages/ui/src/onboarding/NekOnboardingModal.test.tsx",
       "count": 1
     },
     {
@@ -2318,119 +1994,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAccount.test.ts\u0000packages/ui/src/onboarding/onboardingAccount.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingAction.test.tsx\u0000packages/ui/src/onboarding/onboardingAction.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingFlow.test.ts\u0000packages/ui/src/onboarding/onboardingFlow.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingFocus.test.ts\u0000packages/ui/src/onboarding/onboardingFocus.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingKeyboard.test.ts\u0000packages/ui/src/onboarding/onboardingKeyboard.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingNek.test.ts\u0000packages/ui/src/onboarding/onboardingNek.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/onboardingWorkspaceController.test.tsx\u0000packages/ui/src/onboarding/onboardingWorkspaceController.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/useNekOnboardingController.test.tsx\u0000packages/ui/src/onboarding/useNekOnboardingController.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/onboarding/useNekOnboardingGate.test.tsx\u0000packages/ui/src/onboarding/useNekOnboardingGate.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/remote/nek/NekRemotePromptHost.test.tsx\u0000packages/ui/src/remote/nek/NekRemotePromptHost.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/remote/nek/connectionStatusController.test.ts\u0000packages/ui/src/remote/nek/connectionStatusController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/remote/nek/credentialController.test.ts\u0000packages/ui/src/remote/nek/credentialController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/remote/nek/hostKeyChangedController.test.ts\u0000packages/ui/src/remote/nek/hostKeyChangedController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/remote/nek/hostKeyController.test.ts\u0000packages/ui/src/remote/nek/hostKeyController.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/remote/nek/remotePromptQueueStore.test.ts\u0000packages/ui/src/remote/nek/remotePromptQueueStore.test.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/ui/src/settings/SettingsResourceGroupHeader.tsx\u0000packages/ui/src/settings/SettingsResourceGroupHeader.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/api/dataHooks.test.tsx\u0000packages/ui/src/settings/nek/api/dataHooks.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/api/ipcClient.test.ts\u0000packages/ui/src/settings/nek/api/ipcClient.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/api/mock/mockHostApi.test.ts\u0000packages/ui/src/settings/nek/api/mock/mockHostApi.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/api/mock/mockNekConfigApi.test.ts\u0000packages/ui/src/settings/nek/api/mock/mockNekConfigApi.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/components/dialogs.test.tsx\u0000packages/ui/src/settings/nek/components/dialogs.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/i18n.test.ts\u0000packages/ui/src/settings/nek/i18n.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/lib/lib.test.ts\u0000packages/ui/src/settings/nek/lib/lib.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/pages/hosts/copyToHostDialog.test.tsx\u0000packages/ui/src/settings/nek/pages/hosts/copyToHostDialog.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/pages/pages.test.tsx\u0000packages/ui/src/settings/nek/pages/pages.test.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/nek/test/nekTestUtils.tsx\u0000packages/ui/src/settings/nek/test/nekTestUtils.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/shortcuts/actionRegistry.test.ts\u0000packages/ui/src/shortcuts/actionRegistry.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/v4/conversationTurnNavigatorPreview.test.ts\u0000packages/ui/src/v4/conversationTurnNavigatorPreview.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/src/v4/conversationTurnRenderUnits.test.ts\u0000packages/ui/src/v4/conversationTurnRenderUnits.test.ts",
       "count": 1
     },
     {
@@ -3122,10 +2686,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/lib/dialogFocus.ts\u0000FieldFocusState",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/lib/displayFormat.ts\u0000RelativeTimeDisplay",
       "count": 1
     },
@@ -3139,10 +2699,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/lib/foldState.ts\u0000FoldSnapshot",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/lib/imeComposition.ts\u0000ImeKeyEventLike",
       "count": 1
     },
     {
@@ -3167,6 +2723,30 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/logger.ts\u0000LogLevel",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/mentions/nekMentionController.ts\u0000NekMentionController",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/mentions/nekMentionController.ts\u0000NekMentionControllerProps",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/mentions/nekMentionController.ts\u0000NekMentionEvent",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/mentions/nekMentionController.ts\u0000NekMentionState",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000MentionTargetsCache",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/mentions/nekMentionLogic.ts\u0000NekMentionHighlight",
       "count": 1
     },
     {
@@ -3518,15 +3098,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/onboarding/onboardingFlow.ts\u0000OnboardingFlowEvent",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/onboarding/onboardingKeyboard.ts\u0000OnboardingKeyCommand",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/onboarding/onboardingKeyboard.ts\u0000OnboardingKeyInput",
       "count": 1
     },
     {
@@ -3822,7 +3394,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/shortcuts/nekActions.ts\u0000NekActionDefinition",
+      "key": "knip\u0000types\u0000packages/ui/src/shortcuts/nekActionDispatcher.ts\u0000NekActionHandler",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/shortcuts/nekActionDispatcher.ts\u0000NekActionHandlers",
       "count": 1
     },
     {
@@ -3851,6 +3427,10 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/v4/conversationShareAttempt.ts\u0000ConversationShareAttempt",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/ui/src/v4/conversationTurnNavigatorHelpers.ts\u0000ConversationTurnNavigatorQueryTarget",
       "count": 1
     },
     {

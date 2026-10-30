@@ -18,10 +18,18 @@ import {
   isNekActionId,
   type NekActionId,
   type NekActionScope,
+  type NekActionDefinition,
 } from "./nekActions.js";
 
 export type ActionShortcutOverrides = Readonly<Partial<Record<NekActionId, readonly string[]>>>;
 export type EffectiveActionBindings = Readonly<Record<NekActionId, readonly string[]>>;
+
+/** 静态动作目标能力；动态 pane 状态由动作派发器的 handler 再裁决。 */
+export function getNekActionDisabledReason(
+  actionId: NekActionId,
+): NekActionDefinition["disabledReason"] {
+  return getNekAction(actionId).disabledReason;
+}
 
 /** 合并默认绑定与用户覆盖。未知动作 id 被忽略。 */
 export function resolveEffectiveActionBindings(

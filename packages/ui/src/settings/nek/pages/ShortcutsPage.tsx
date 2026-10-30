@@ -276,6 +276,12 @@ export function ShortcutsPage() {
                           {t(action.desktopNoteId)}
                         </span>
                       ) : null}
+                      {action.disabledReason ? (
+                        // 当前 GUI 还没有这个动作的目标：直说原因，不让用户以为按键坏了。
+                        <span role="status" className="text-ui-xs text-foreground-subtlest">
+                          {t(action.disabledReason.id)}
+                        </span>
+                      ) : null}
                       {conflicted.has(action.id) ? (
                         <span role="alert" className="text-ui-xs text-destructive">
                           {t("settings.nek.shortcuts.conflict")}
