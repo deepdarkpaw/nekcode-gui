@@ -5,7 +5,9 @@ import type {
   NekCycleModelResult,
   NekMentionTargetInfo,
   NekModel,
+  NekAgentTypeInfo,
   NekReloadResult,
+  NekSubagentRecord,
   NekRpcSlashCommand,
   NekSessionEntry,
   NekSessionStats,
@@ -66,6 +68,15 @@ export interface NekAgentServiceCommandMethods {
   getMentionTargets(
     input: { sessionKey?: string; cwd?: string } | string,
   ): Promise<NekMentionTargetInfo[]>;
+  stopSubagent(input: {
+    sessionKey: string;
+    id: string;
+  }): Promise<{ status: NekSubagentRecord["status"] }>;
+  getSubagentTranscript(input: {
+    sessionKey: string;
+    id: string;
+  }): Promise<{ messages: unknown[] }>;
+  listAgentTypes(sessionKey: string): Promise<{ types: NekAgentTypeInfo[] }>;
   navigateTree(input: {
     sessionKey: string;
     entryId: string;

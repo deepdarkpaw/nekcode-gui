@@ -206,6 +206,39 @@ export type NekExtensionUiResponse =
   | { type: "extension_ui_response"; id: string; cancelled: true };
 
 // ============================================================================
+// GUI 交互桥（host → renderer）
+// ============================================================================
+
+/**
+ * 交互请求属于哪个工作区、哪个会话。
+ *
+ * 创建会话之前的项目信任确认没有会话：此时只有 `workspacePath`，GUI 用工作区级
+ * 确认框渲染，不允许把它塞进某个会话的交互队列。
+ */
+export interface NekInteractionScope {
+  workspacePath: string;
+  sessionKey?: string;
+  sessionId?: string;
+}
+
+/** 需要 GUI 回答的交互请求（dialog / structured）或只需展示的通知（fire-and-forget）。 */
+export interface NekInteractionRequestEvent {
+  scope: NekInteractionScope;
+  request: NekExtensionUiRequest;
+}
+
+/** nek 侧（或 host 超时）撤销了某个交互请求，GUI 关闭对应卡片。 */
+export interface NekInteractionCancelEvent {
+  scope: NekInteractionScope;
+  id: string;
+}
+
+/** 交互通道的一帧：新请求，或撤销某个还在等的请求。 */
+export type NekInteractionFrame =
+  | ({ kind: "request" } & NekInteractionRequestEvent)
+  | ({ kind: "cancel" } & NekInteractionCancelEvent);
+
+// ============================================================================
 // 事件联合
 // ============================================================================
 

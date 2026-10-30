@@ -14,6 +14,7 @@ const nekSchema = z.object({
   idleMinutes: positiveInt,
   stderrBufferKb: positiveInt,
   maxLineMb: positiveInt.max(1024),
+  maxConversationPlans: positiveInt.max(500),
 });
 
 const timeoutsSchema = z.object({
@@ -21,6 +22,8 @@ const timeoutsSchema = z.object({
   promptPreflightMs: positiveInt,
   longRunningMs: positiveInt,
   shutdownGraceMs: nonNegativeInt,
+  /** host 等渲染层回答一次交互请求（含项目信任）的上限。 */
+  interactionMs: positiveInt,
 });
 
 const eventsSchema = z.object({
@@ -29,6 +32,8 @@ const eventsSchema = z.object({
   queueEntries: positiveInt,
   draftEntries: positiveInt,
   eventBufferEntries: positiveInt,
+  /** 同时在等渲染层回答的交互请求上限（有界内存）。 */
+  pendingInteractions: positiveInt.max(256),
 });
 
 const remoteSchema = z.object({
@@ -75,12 +80,19 @@ export type GuiRuntimeConfig = {
 
 /** 内置默认值，与仓库 `config/config.yaml` 保持一致。 */
 export const DEFAULT_GUI_RUNTIME_CONFIG: GuiRuntimeConfig = {
-  nek: { maxSessionProcesses: 8, idleMinutes: 10, stderrBufferKb: 512, maxLineMb: 64 },
+  nek: {
+    maxSessionProcesses: 8,
+    idleMinutes: 10,
+    stderrBufferKb: 512,
+    maxLineMb: 64,
+    maxConversationPlans: 100,
+  },
   timeouts: {
     commandMs: 15_000,
     promptPreflightMs: 20_000,
     longRunningMs: 180_000,
     shutdownGraceMs: 1_500,
+    interactionMs: 300_000,
   },
   events: {
     streamFlushPerSecond: 20,
@@ -88,6 +100,7 @@ export const DEFAULT_GUI_RUNTIME_CONFIG: GuiRuntimeConfig = {
     queueEntries: 200,
     draftEntries: 20,
     eventBufferEntries: 5_000,
+    pendingInteractions: 32,
   },
   remote: {
     reconnectBackoffSeconds: [1, 2, 4, 8, 16],

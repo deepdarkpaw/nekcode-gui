@@ -91,6 +91,10 @@ function fakeProcess(
   sessionFile = "/tmp/session.jsonl",
   extensionUi?: NekExtensionUiHandler,
   lockHolder?: NekSessionSnapshot["lockedBy"],
+  projectTrust: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" } = {
+    trusted: null,
+    defaultProjectTrust: "ask",
+  },
 ): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -115,7 +119,7 @@ function fakeProcess(
       let data: unknown;
       if (kind === "control") {
         if (command.type === "get_project_trust") {
-          data = { cwd: command.cwd, trusted: null, defaultProjectTrust: "ask", resources: [] };
+          data = { cwd: command.cwd, ...projectTrust, resources: [] };
         } else if (command.type === "read_session_snapshot") {
           data = snapshot(true, lockHolder);
         } else if (command.type === "list_sessions") {
@@ -231,13 +235,15 @@ function fakeProcess(
 function serviceHarness(
   extensionUi?: NekExtensionUiHandler,
   lockHolder?: NekSessionSnapshot["lockedBy"],
+  askProjectTrust: () => boolean = () => true,
+  projectTrust?: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" },
 ) {
-  const control = fakeProcess("control", "/tmp/session.jsonl", undefined, lockHolder);
+  const control = fakeProcess("control", "/tmp/session.jsonl", undefined, lockHolder, projectTrust);
   const sessions: FakeProcess[] = [];
   const approvals: boolean[] = [];
   const service = new NekAgentService({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust,
     extensionUi,
     createControlProcess: () => control.process,
     createSessionProcess: (options) => {
@@ -262,7 +268,43 @@ test("creates a session after project trust approval and passes --approve", asyn
   assert.deepEqual(harness.approvals, [true]);
   assert.deepEqual(
     harness.control.commands.map((command) => command.type),
+    ["get_project_trust", "set_project_trust"],
+  );
+  await harness.service.dispose();
+});
+
+test("opens an already trusted project without prompting or rewriting trust", async () => {
+  const harness = serviceHarness(
+    undefined,
+    undefined,
+    () => {
+      throw new Error("already trusted projects must not prompt");
+    },
+    { trusted: true, defaultProjectTrust: "ask" },
+  );
+  const result = await harness.service.createSession({ cwd: "/workspace" });
+  assert.equal(result.readonly, false);
+  assert.deepEqual(
+    harness.control.commands.map((command) => command.type),
     ["get_project_trust"],
+  );
+  await harness.service.dispose();
+});
+
+test("rejects an untrusted project visibly and allows a later retry", async () => {
+  let approved = false;
+  const harness = serviceHarness(undefined, undefined, () => approved);
+  await assert.rejects(
+    harness.service.createSession({ cwd: "/workspace" }),
+    /project trust denied.*confirm trust and retry/u,
+  );
+  assert.equal(harness.sessions.length, 0);
+  approved = true;
+  const result = await harness.service.createSession({ cwd: "/workspace" });
+  assert.equal(result.readonly, false);
+  assert.deepEqual(
+    harness.control.commands.map((command) => command.type),
+    ["get_project_trust", "get_project_trust", "set_project_trust"],
   );
   await harness.service.dispose();
 });
@@ -680,7 +722,7 @@ test("lists, renames and deletes sessions through the control process", async ()
   assert.deepEqual(
     harness.control.commands
       .map((command) => command.type)
-      .filter((type) => type !== "get_project_trust"),
+      .filter((type) => type !== "get_project_trust" && type !== "set_project_trust"),
     ["list_sessions", "rename_session", "delete_session"],
   );
   assert.equal(harness.service.getSession(result.sessionKey), undefined, "删除后不再持有记录");

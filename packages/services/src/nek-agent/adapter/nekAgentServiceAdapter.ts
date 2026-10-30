@@ -1,6 +1,7 @@
 import { Emitter, type Event } from "@zcode/rpc";
 import type {
   NekAgentMessage,
+  NekInteractionFrame,
   NekMode,
   NekSessionSummary,
   NekThinkingLevel,
@@ -22,6 +23,7 @@ import type { NekSessionResult } from "../service/types.js";
 import { makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "./frameHelpers.js";
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
+import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
 import { NekAgentServiceTopics } from "./nekAgentServiceTopics.js";
 import type {
   NekAgentServiceAdapterApi,
@@ -62,6 +64,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly resumeSession: IZCodeAgentService["resumeSession"];
   declare readonly listSessions: IZCodeAgentService["listSessions"];
   declare readonly listSessionSubagents: IZCodeAgentService["listSessionSubagents"];
+  declare readonly stopSubagent: IZCodeAgentService["stopSubagent"];
+  declare readonly getSubagentTranscript: IZCodeAgentService["getSubagentTranscript"];
+  declare readonly listAgentTypes: IZCodeAgentService["listAgentTypes"];
   declare readonly getTaskTokenUsage: IZCodeAgentService["getTaskTokenUsage"];
   declare readonly readSession: IZCodeAgentService["readSession"];
   declare readonly readSessionMessages: IZCodeAgentService["readSessionMessages"];
@@ -115,6 +120,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly disposeAll: IZCodeAgentService["disposeAll"];
   readonly service: NekAgentService;
   private readonly topics: NekAgentServiceTopics;
+  private readonly interactions: NekAgentInteractionChannel;
   private readonly bindings = new Map<string, NekSessionBinding>();
   private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
   private readonly conversationEmitters = new Map<
@@ -136,6 +142,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       syncer,
       options.maxV4Subscriptions,
     );
+    this.interactions = new NekAgentInteractionChannel(this.service);
     Object.assign(this, createNekLegacyMethods(this));
   }
 
@@ -281,6 +288,13 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.conversationSubscriptions.delete(input.subscriptionId);
   }
 
+  onDynamicNekInteractionFrame = (target: NekWorkspaceTarget): Event<NekInteractionFrame> =>
+    this.interactions.onDynamic(target);
+
+  respondNekInteraction = async (
+    input: Parameters<IZCodeAgentService["respondNekInteraction"]>[0],
+  ): Promise<void> => await this.interactions.respond(input.response);
+
   onDynamicConversationFrame(target: NekWorkspaceTarget): Event<ConversationTopicWireCandidate> {
     return this.conversationEmitter(workspaceKey(target)).event;
   }
@@ -370,6 +384,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.conversationSubscriptions.clear();
     for (const emitter of this.conversationEmitters.values()) emitter.dispose();
     this.conversationEmitters.clear();
+    this.interactions.dispose();
     await this.topics.dispose();
     this.bindings.clear();
     await this.service.dispose();

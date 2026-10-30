@@ -71,6 +71,12 @@ import type {
   V4WorkspaceConfigSubscribeResult,
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
+import type {
+  NekAgentTypeInfo,
+  NekExtensionUiResponse,
+  NekInteractionFrame,
+  NekSubagentRecord,
+} from "@zcode/shared/nek-protocol";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export * from "./zcodeAgentWorkspaceParams.js";
@@ -143,11 +149,24 @@ export interface ZCodeAgentListSessionsParams extends ZCodeAgentWorkspaceTarget 
   limit?: number;
 }
 
+export interface ZCodeAgentRespondNekInteractionParams {
+  requestId: string;
+  response: NekExtensionUiResponse;
+}
+
 export interface ZCodeAgentListSessionSubagentsParams extends ZCodeAgentSessionTarget {
   endedCursor?: string;
   endedLimit?: number;
   /** 远程 workspace 的宿主连接身份；只用于选择现有 Host，不进入 CLI wire query。 */
   remoteSessionId?: string;
+}
+
+export interface ZCodeAgentStopSubagentParams extends ZCodeAgentSessionTarget {
+  id: string;
+}
+
+export interface ZCodeAgentSubagentTranscriptParams extends ZCodeAgentSessionTarget {
+  id: string;
 }
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
@@ -456,6 +475,13 @@ export interface IZCodeAgentService {
   listSessionSubagents(
     params: ZCodeAgentListSessionSubagentsParams,
   ): Promise<ZCodeSessionSubagentsResult>;
+  stopSubagent(
+    params: ZCodeAgentStopSubagentParams,
+  ): Promise<{ status: NekSubagentRecord["status"] }>;
+  getSubagentTranscript(
+    params: ZCodeAgentSubagentTranscriptParams,
+  ): Promise<{ messages: unknown[] }>;
+  listAgentTypes(params: ZCodeAgentSessionTarget): Promise<{ types: NekAgentTypeInfo[] }>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;
   readSessionMessages(
@@ -506,6 +532,15 @@ export interface IZCodeAgentService {
     params: ZCodeAgentRespondSessionRuntimePreferencesParams,
   ): Promise<void>;
   onDynamicSessionRuntimePreferencesRequest(): Event<ZCodeAgentSessionRuntimePreferencesRequest>;
+  /**
+   * nek 的扩展 UI 交互通道：dialog / structured / notify 统一从这里到渲染层。
+   *
+   * 按 workspace 发（新建会话前的项目信任确认没有会话）；dialog 请求会一直等
+   * `respondNekInteraction`，所以渲染层必须在创建会话前订阅。
+   */
+  onDynamicNekInteractionFrame(params: ZCodeAgentWorkspaceTarget): Event<NekInteractionFrame>;
+  /** 回答一条交互请求；请求已被取消/结算时抛错，不静默丢弃。 */
+  respondNekInteraction(params: ZCodeAgentRespondNekInteractionParams): Promise<void>;
   /**
    * CLI 进程级资源样本，带 services 打的 lane 标签（CLI 自己不知道 lane）。
    * 使用 dynamic event 避免 RPC 服务在无人订阅时缓冲周期事件；
