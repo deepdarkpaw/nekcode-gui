@@ -169,6 +169,28 @@ async function waitFor(check: () => boolean, timeoutMs = 2_000): Promise<void> {
   }
 }
 
+/** host 侧白名单口径：状态 feed 依赖的方法必须出现在 `IZCodeAgentService` 上。 */
+const STATUS_METHODS = [
+  "onDynamicNekStatusFrame",
+  "getNekStatusSnapshot",
+  "getNekSessionStats",
+  "clearNekQueue",
+  "requeueNekQueue",
+  "abortNekRetry",
+  "abortNekCompaction",
+  "abortNekSession",
+  "compactNekSession",
+] as const satisfies readonly (keyof IZCodeAgentService)[];
+
+test("host agent service exposes every status feed method", async () => {
+  const { service } = createAdapter();
+  try {
+    for (const method of STATUS_METHODS) assert.equal(typeof service[method], "function", method);
+  } finally {
+    await service.disposeAll();
+  }
+});
+
 test("publishes a status snapshot when a nek session opens", async () => {
   const { service, session } = createAdapter();
   const target = { workspacePath: "/workspace" };

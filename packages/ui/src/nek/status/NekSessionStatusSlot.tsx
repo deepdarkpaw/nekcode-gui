@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { QueueContents } from "./queue.js";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
@@ -32,7 +33,11 @@ export interface NekSessionStatusSlotProps {
 }
 
 export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatusSlotProps) {
-  // 只依赖 agent 服务的动作由 status feed 直接提供（订单见 statusFeed/statusActions.ts）；
+  // ST-5：把当前打开的会话标为 current，store 的 LRU 淘汰不会把它挤掉。
+  useEffect(() => {
+    useNekStatusStore.getState().setCurrentSession(sessionKey);
+  }, [sessionKey]);
+  // 只依赖 agent 服务的动作由 status feed 直接提供（定义见 statusFeed/statusActions.ts）；
   // pane 传入的 callbacks 负责需要 composer / 侧栏 / 行跳转的那几个动作。
   const statusActions = useNekStatusActions(sessionKey);
   const effectiveCallbacks = statusActions
