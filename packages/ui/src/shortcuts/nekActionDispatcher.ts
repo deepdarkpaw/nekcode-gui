@@ -21,11 +21,7 @@ import {
   type EffectiveActionBindings,
 } from "./actionRegistry.js";
 import { getActionShortcutOverrides } from "./useActionShortcuts.js";
-import {
-  getNekAction,
-  type NekActionDispatchPhase,
-  type NekActionId,
-} from "./nekActions.js";
+import { getNekAction, type NekActionDispatchPhase, type NekActionId } from "./nekActions.js";
 
 export type { NekActionDispatchPhase };
 
@@ -126,7 +122,10 @@ function currentHandler(actionId: NekActionId): NekActionHandler | null {
  * 只对已注册、enabled 且真正执行了目标的动作返回 true。
  * 返回 false 时调用方不得 preventDefault，避免「没反应还吞掉浏览器默认行为」。
  */
-export function dispatchNekAction(actionId: NekActionId, event: KeyboardEvent | null = null): boolean {
+export function dispatchNekAction(
+  actionId: NekActionId,
+  event: KeyboardEvent | null = null,
+): boolean {
   const handler = currentHandler(actionId);
   if (!handler || handler.enabled === false) return false;
   return handler.run({ event }) !== false;

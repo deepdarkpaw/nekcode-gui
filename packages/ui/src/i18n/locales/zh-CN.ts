@@ -3125,7 +3125,8 @@ const zhCN: Record<string, string> = {
   "nek.status.usage.context": "{percent}% · {tokens}/{window}",
   "ui.action.busy": "正在处理上一个操作",
   "ui.action.unavailable.externalEditor": "当前 GUI 尚未接通外部编辑器",
-  "ui.action.unavailable.interactionFocus": "待回答请求的焦点由交互卡片自己维护，暂不支持快捷键聚焦",
+  "ui.action.unavailable.interactionFocus":
+    "待回答请求的焦点由交互卡片自己维护，暂不支持快捷键聚焦",
   "todo.panel.title": "待办",
   "todo.panel.currentTask": "当前任务",
   "todo.panel.completed": "todo 已完成",

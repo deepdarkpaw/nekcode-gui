@@ -132,11 +132,14 @@ import {
 import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
-import { ContextAttachmentPill } from "@/v4/composer/ContextAttachmentPill.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
 import {
   createLargePasteBlock,
   expandLargePasteBlocks,
+  nextLargePasteBlockId,
+  pruneLargePasteBlocks,
+  readLargePasteBlocks,
+  writeLargePasteBlocks,
   type LargePasteBlock,
 } from "@/v4/composer/largePaste.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
@@ -606,16 +609,23 @@ function ConversationComposerImpl({
     onRuntimeLifecycle,
     disabled,
   });
-  const pasteBlocksRef = useRef<LargePasteBlock[]>([]);
-  const [pasteBlocks, setPasteBlocks] = useState<readonly LargePasteBlock[]>([]);
-  const nextPasteBlockIdRef = useRef(1);
+  // 大段粘贴折叠：正文只留在按 scope 的内存表里，编辑器里只出现占位标记。
+  const pasteScopeKey = `${workspaceKey} ${draftScopeId}`;
+  const pasteScopeKeyRef = useRef(pasteScopeKey);
+  pasteScopeKeyRef.current = pasteScopeKey;
+  const pasteBlocksRef = useRef<readonly LargePasteBlock[]>([]);
+  const commitPasteBlocks = useCallback((blocks: readonly LargePasteBlock[]) => {
+    pasteBlocksRef.current = blocks;
+    writeLargePasteBlocks(pasteScopeKeyRef.current, blocks);
+  }, []);
   const handleComposerPaste = useCallback(
     (event: ChatComposerPasteEvent) => {
       const text = event.clipboardData?.getData("text/plain") ?? "";
+      const existing = pasteBlocksRef.current;
       const block = createLargePasteBlock({
-        id: `paste-${nextPasteBlockIdRef.current++}`,
+        id: nextLargePasteBlockId(existing),
         text,
-        existing: pasteBlocksRef.current,
+        existing,
         formatMarker: (index, lineCount) =>
           intl.formatMessage(
             { id: "chat.composer.pasteBlock.placeholder" },
@@ -628,11 +638,11 @@ function ConversationComposerImpl({
       }
       event.preventDefault();
       event.stopPropagation?.();
-      pasteBlocksRef.current = [...pasteBlocksRef.current, block];
+      commitPasteBlocks([...existing, block]);
       inputApiRef.current?.appendText(block.marker);
       updateText(inputApiRef.current?.getMarkdown() ?? `${textRef.current}${block.marker}`);
     },
-    [attachmentsApi.handlePaste, intl, updateText],
+    [attachmentsApi.handlePaste, commitPasteBlocks, intl, updateText],
   );
   // 对齐旧版 useChatComposer：窗口级 dragover 会在指针进入 ChatView 前预先点亮
   // 整个聊天区与桌面草稿标题栏；workspace payload 的文案优先于系统附件。
@@ -933,6 +943,8 @@ function ConversationComposerImpl({
       workspaceIdentity,
       scopeId: draftScopeId,
     };
+    // 粘贴块随 scope 切换：新 scope 的标记行必须能找回自己的原文。
+    pasteBlocksRef.current = readLargePasteBlocks(pasteScopeKey);
 
     const draft = transferredDraft ?? composerDraft;
     const restoreDraftInto = (api: LexicalChatInputHandle) => {
@@ -974,6 +986,7 @@ function ConversationComposerImpl({
   }, [
     attachmentsApi.restoreSessionOwnedAttachments,
     draftScopeId,
+    pasteScopeKey,
     persistDraftNow,
     requestComposerFocus,
     snapshotDraftOfEditor,
@@ -1308,6 +1321,8 @@ function ConversationComposerImpl({
         if (contentRevisionRef.current === cleanupRevision) {
           inputApiRef.current?.clear();
           updateText("");
+          // 正文已交出去，本次折叠的原文不再需要留在内存里。
+          commitPasteBlocks([]);
         }
         attachmentsApi.clearAttachments(submittedAttachmentIds);
         // 与附件相同，只移除本次冻结的引用；等待期间新加入的引用属于下一条消息。
@@ -1345,6 +1360,7 @@ function ConversationComposerImpl({
       removeCodeCommentContext,
       removeConversationSelectionReference,
       sessionId,
+      commitPasteBlocks,
       snapshotDraftOfEditor,
       updateText,
       updateComposerContent,
@@ -1357,11 +1373,16 @@ function ConversationComposerImpl({
   const handleEditorChange = useCallback(
     (value: string) => {
       updateText(value);
+      // 标记行被删掉的粘贴块立即释放，不留下看不见的内存块。
+      const remaining = pruneLargePasteBlocks(value, pasteBlocksRef.current);
+      if (remaining.length !== pasteBlocksRef.current.length) {
+        commitPasteBlocks(remaining);
+      }
       // 正文先进入与 mode/model 相同的内存 Draft；防抖只负责补充最新 Lexical JSON。
       updateComposerContent({ text: value });
       scheduleDraftPersist();
     },
-    [scheduleDraftPersist, updateComposerContent, updateText],
+    [commitPasteBlocks, scheduleDraftPersist, updateComposerContent, updateText],
   );
 
   // 编辑器提交（Enter / 发送键 form submit 同路径）。返回 false：编辑器不自行 reset，
