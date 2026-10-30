@@ -12,12 +12,14 @@ import type {
   NekSessionEntry,
   NekSessionStats,
   NekSessionTreeNode,
+  NekStatusQueue,
+  NekStatusSnapshot,
   NekSubagentRecord,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
-import type { NekMode, NekPromptInput, NekThoughtLevel } from "./types.js";
+import { isNekState, type NekMode, type NekPromptInput, type NekThoughtLevel } from "./types.js";
 
 export interface NekAgentCommandTarget {
   client: NekRpcClient;
@@ -109,6 +111,59 @@ export async function retrieveQueue(
   sessionKey: string,
 ): Promise<{ steering: string[]; followUp: string[] }> {
   return await clearQueue(context, sessionKey);
+}
+
+/**
+ * 重新入队：nek 没有"整体恢复队列"命令，只能按原 kind 逐条送回 `steer` / `follow_up`。
+ *
+ * 单条失败即中断并把错误抛给调用方：队列已经在上一步被 `clear_queue` 清空，
+ * 中途静默继续会丢掉剩余的排队消息。
+ */
+export async function requeueQueue(
+  context: NekAgentCommandContext,
+  sessionKey: string,
+  queue: NekStatusQueue,
+): Promise<void> {
+  const target = context.writableTarget(sessionKey);
+  for (const message of queue.steering) await target.client.call({ type: "steer", message });
+  for (const message of queue.followUp) await target.client.call({ type: "follow_up", message });
+}
+
+/** 取消自动重试；nek 用 `abort_retry` 单独收口，不会中止当前回合。 */
+export async function abortRetry(
+  context: NekAgentCommandContext,
+  sessionKey: string,
+): Promise<void> {
+  await context.writableTarget(sessionKey).client.call({ type: "abort_retry" });
+}
+
+/**
+ * 状态 feed 的权威快照：`nek.get_state`（运行态）、`get_session_stats`（用量）、
+ * `extension_call nek.get_state`（todos/计划/子代理）一次取齐。
+ *
+ * 三份事实里任何一份失败都会让整次快照失败：状态卡宁可继续显示上一份，也不拼半个快照。
+ */
+export async function getStatusSnapshot(
+  context: NekAgentCommandContext,
+  sessionKey: string,
+): Promise<NekStatusSnapshot> {
+  const target = context.target(sessionKey);
+  const [state, stats, extension] = await Promise.all([
+    target.client.call({ type: "get_state" }),
+    target.client.call({ type: "get_session_stats" }),
+    target.client.call({ type: "extension_call", method: "nek.get_state" }),
+  ]);
+  if (!isNekState(extension.result)) {
+    throw new Error("nek returned an invalid status state snapshot");
+  }
+  return {
+    sessionKey: state.sessionId,
+    running: state.isStreaming,
+    compacting: state.isCompacting,
+    pendingMessageCount: state.pendingMessageCount,
+    state: extension.result,
+    stats,
+  };
 }
 
 export async function compact(

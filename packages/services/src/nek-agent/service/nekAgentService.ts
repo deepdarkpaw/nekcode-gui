@@ -3,17 +3,17 @@ import type {
   NekExtensionUiResponse,
   NekInteractionFrame,
   NekSessionSummary,
-  NekStatusQueue,
-  NekStatusSnapshot,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMethods.js";
 import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
+
+/** 在会话租约内执行的一次命令实现（`runSessionCommand` 的入参形状）。 */
+export type NekAgentCommandRunner<T> = (context: NekAgentCommandContext) => Promise<T>;
 import {
   isNekSessionSnapshot,
-  isNekState,
   type NekAgentServiceOptions,
   type NekConversationListener,
   type NekMode,
@@ -151,44 +151,14 @@ export class NekAgentService
       async () => await commands.getStats(this.commandContext(), sessionKey),
     );
 
-  /** 读取状态 feed 的权威快照；不复用对话投影，避免状态卡被内容帧延迟。 */
-  async getStatusSnapshot(sessionKey: string): Promise<NekStatusSnapshot> {
-    const record = this.requireRecord(sessionKey);
-    return await this.withSession(sessionKey, async () => {
-      const target = this.commandContext().target(sessionKey);
-      const [state, stats, extension] = await Promise.all([
-        target.client.call({ type: "get_state" }),
-        target.client.call({ type: "get_session_stats" }),
-        target.client.call({ type: "extension_call", method: "nek.get_state" }),
-      ]);
-      if (!isNekState(extension.result)) {
-        throw new Error("nek returned an invalid status state snapshot");
-      }
-      return {
-        sessionKey: record.sessionId,
-        running: state.isStreaming,
-        state: extension.result,
-        stats,
-      };
-    });
-  }
-
-  async requeueStatusQueue(sessionKey: string, queue: NekStatusQueue): Promise<void> {
-    const target = this.commandContext().writableTarget(sessionKey);
-    for (const message of queue.steering) await target.client.call({ type: "steer", message });
-    for (const message of queue.followUp) await target.client.call({ type: "follow_up", message });
-  }
-
-  async abortRetry(sessionKey: string): Promise<void> {
-    await this.commandContext().writableTarget(sessionKey).client.call({ type: "abort_retry" });
-  }
-
-  async abortCompaction(sessionKey: string): Promise<void> {
-    await commands.abort(this.commandContext(), sessionKey);
-  }
-
-  async compactStatus(sessionKey: string): Promise<void> {
-    await commands.compact(this.commandContext(), { sessionKey });
+  /**
+   * 外部命令实现（状态 feed 等）复用的会话租约入口：取记录、持进程引用、交还命令层。
+   *
+   * 适配器层不直接调用 protected 的 `withSession`；这里把"一次命令 = 一次租约"的规则
+   * 收口到服务内部，空闲进程因此仍可被进程池回收。
+   */
+  runSessionCommand<T>(sessionKey: string, run: NekAgentCommandRunner<T>): Promise<T> {
+    return this.withSession(sessionKey, async () => await run(this.commandContext()));
   }
 
   readonly getCommands: NekAgentServiceCommandMethods["getCommands"] = async (sessionKey) =>
@@ -306,8 +276,8 @@ export class NekAgentService
 
   listOpenSessions(cwd: string): NekSession[] {
     return [...this.sessions.values()]
-      .filter((record) => record.cwd === cwd)
-      .map((record) => this.publicSession(record));
+      .filter((r) => r.cwd === cwd)
+      .map((r) => this.publicSession(r));
   }
 
   commandContext(): NekAgentCommandContext {

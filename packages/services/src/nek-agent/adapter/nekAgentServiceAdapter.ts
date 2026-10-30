@@ -3,11 +3,7 @@ import type {
   NekAgentMessage,
   NekInteractionFrame,
   NekMode,
-  NekSessionStats,
   NekSessionSummary,
-  NekStatusFrame,
-  NekStatusQueue,
-  NekStatusSnapshot,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type {
@@ -19,16 +15,18 @@ import type {
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
 } from "@zcode/shared/zcode-protocol-v4";
+import { NekSessionBindings } from "./nekSessionBindings.js";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
 import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
-import { makeSubscriptionId, makeWireFrame, sessionMapKey, workspaceKey } from "./frameHelpers.js";
+import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
-import { NekAgentStatusChannel } from "./nekAgentStatusChannel.js";
+import type { NekAgentStatusChannel } from "./nekAgentStatusChannel.js";
+import { createNekAgentStatusFeed, type NekAgentStatusMethods } from "./nekAgentStatusMethods.js";
 import { NekAgentServiceTopics } from "./nekAgentServiceTopics.js";
 import type {
   NekAgentServiceAdapterApi,
@@ -50,8 +48,6 @@ interface ConversationSubscription {
   ordinal: number;
   detach: () => void;
 }
-
-const MAX_BINDINGS = 5_000;
 
 /**
  * 把 NekAgentService 接到现有 ZCode v4 host 面。
@@ -123,11 +119,24 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly onAgentRuntimeRestarted: IZCodeAgentService["onAgentRuntimeRestarted"];
   declare readonly disposeWorkspace: IZCodeAgentService["disposeWorkspace"];
   declare readonly disposeAll: IZCodeAgentService["disposeAll"];
+  // nek status feed（薄壳实现见 nekAgentStatusMethods.ts，经 Object.assign 挂上）
+  declare readonly onDynamicNekStatusFrame: NekAgentStatusMethods["onDynamicNekStatusFrame"];
+  declare readonly getNekStatusSnapshot: NekAgentStatusMethods["getNekStatusSnapshot"];
+  declare readonly getNekSessionStats: NekAgentStatusMethods["getNekSessionStats"];
+  declare readonly clearNekQueue: NekAgentStatusMethods["clearNekQueue"];
+  declare readonly requeueNekQueue: NekAgentStatusMethods["requeueNekQueue"];
+  declare readonly abortNekRetry: NekAgentStatusMethods["abortNekRetry"];
+  declare readonly abortNekCompaction: NekAgentStatusMethods["abortNekCompaction"];
+  declare readonly abortNekSession: NekAgentStatusMethods["abortNekSession"];
+  declare readonly compactNekSession: NekAgentStatusMethods["compactNekSession"];
   readonly service: NekAgentService;
   private readonly topics: NekAgentServiceTopics;
   private readonly interactions: NekAgentInteractionChannel;
   private readonly status: NekAgentStatusChannel;
-  private readonly bindings = new Map<string, NekSessionBinding>();
+  private readonly bindings = new NekSessionBindings();
+  /** 绑定解析（状态薄壳与命令层共用）；未打开的会话直接抛错。 */
+  readonly requireBinding = (target: NekWorkspaceTarget, sessionId: string): NekSessionBinding =>
+    this.bindings.require(target, sessionId);
   private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
   private readonly conversationEmitters = new Map<
     string,
@@ -149,8 +158,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       options.maxV4Subscriptions,
     );
     this.interactions = new NekAgentInteractionChannel(this.service);
-    this.status = new NekAgentStatusChannel(this.service, options.logger);
-    Object.assign(this, createNekLegacyMethods(this));
+    const statusFeed = createNekAgentStatusFeed(this, options.logger);
+    this.status = statusFeed.channel;
+    Object.assign(this, statusFeed.methods, createNekLegacyMethods(this));
   }
 
   async initialize(
@@ -175,7 +185,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.mode ? { mode: input.mode } : {}),
     });
-    this.bind(target, result);
+    this.bindings.bind(target, result);
     this.status.publish(target, result.sessionKey);
     return result;
   }
@@ -189,7 +199,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       sessionPath: input.sessionPath,
       cwd: input.workspacePath,
     });
-    this.bind(target, result);
+    this.bindings.bind(target, result);
     this.status.publish(target, result.sessionKey);
     return result;
   }
@@ -201,7 +211,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   async closeNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean> {
     const binding = this.requireBinding(input, input.sessionId);
     const result = await this.service.closeSession(binding.sessionKey);
-    this.bindings.delete(sessionMapKey(input, input.sessionId));
+    this.bindings.remove(input, input.sessionId);
+    // nek status feed：会话关闭后 renderer 必须丢掉本地状态，不能继续显示上一次的行。
+    this.status.publishClosed(binding.target, binding.sessionId);
     return result;
   }
 
@@ -304,59 +316,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     input: Parameters<IZCodeAgentService["respondNekInteraction"]>[0],
   ): Promise<void> => await this.interactions.respond(input.response);
 
-  // nek status feed
-  onDynamicNekStatusFrame = (target: NekWorkspaceTarget): Event<NekStatusFrame> =>
-    this.status.onDynamic(target);
-
-  getNekStatusSnapshot = async (
-    input: Parameters<IZCodeAgentService["getNekStatusSnapshot"]>[0],
-  ): Promise<NekStatusSnapshot> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    return await this.service.getStatusSnapshot(binding.sessionKey);
-  };
-
-  getNekSessionStats = async (
-    input: Parameters<IZCodeAgentService["getNekSessionStats"]>[0],
-  ): Promise<NekSessionStats> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    return await this.service.getStats(binding.sessionKey);
-  };
-
-  clearNekQueue = async (
-    input: Parameters<IZCodeAgentService["clearNekQueue"]>[0],
-  ): Promise<NekStatusQueue> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    return await this.service.clearQueue(binding.sessionKey);
-  };
-
-  requeueNekQueue = async (
-    input: Parameters<IZCodeAgentService["requeueNekQueue"]>[0],
-  ): Promise<void> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    await this.service.requeueStatusQueue(binding.sessionKey, input.queue);
-  };
-
-  abortNekRetry = async (
-    input: Parameters<IZCodeAgentService["abortNekRetry"]>[0],
-  ): Promise<void> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    await this.service.abortRetry(binding.sessionKey);
-  };
-
-  abortNekCompaction = async (
-    input: Parameters<IZCodeAgentService["abortNekCompaction"]>[0],
-  ): Promise<void> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    await this.service.abortCompaction(binding.sessionKey);
-  };
-
-  compactNekSession = async (
-    input: Parameters<IZCodeAgentService["compactNekSession"]>[0],
-  ): Promise<void> => {
-    const binding = this.requireBinding(input, input.sessionId);
-    await this.service.compactStatus(binding.sessionKey);
-  };
-
   onDynamicConversationFrame(target: NekWorkspaceTarget): Event<ConversationTopicWireCandidate> {
     return this.conversationEmitter(workspaceKey(target)).event;
   }
@@ -412,9 +371,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
         service: this.service,
         createSession: async (request) => await this.createNekSession(request),
         requireBinding: (target, sessionId) => this.requireBinding(target, sessionId),
-        removeBinding: (target, sessionId) => {
-          this.bindings.delete(sessionMapKey(target, sessionId));
-        },
+        removeBinding: (target, sessionId) => this.bindings.remove(target, sessionId),
       },
       input,
     );
@@ -454,35 +411,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   }
 
   resolveSessionKey(target: NekWorkspaceTarget, sessionId?: string): string | undefined {
-    if (sessionId) return this.bindings.get(sessionMapKey(target, sessionId))?.sessionKey;
-    const candidate = [...this.bindings.values()].find(
-      (binding) => binding.target.workspacePath === target.workspacePath,
-    );
-    return candidate?.sessionKey;
-  }
-
-  private bind(target: NekWorkspaceTarget, result: NekSessionResult): void {
-    if (this.bindings.size >= MAX_BINDINGS)
-      throw new Error(`nek session binding limit exceeded (${MAX_BINDINGS})`);
-    this.bindings.set(sessionMapKey(target, result.sessionId), {
-      target,
-      sessionKey: result.sessionKey,
-      sessionId: result.sessionId,
-      ...(result.sessionPath ? { sessionPath: result.sessionPath } : {}),
-    });
-  }
-
-  private requireBinding(target: NekWorkspaceTarget, sessionId: string): NekSessionBinding {
-    const direct = this.bindings.get(sessionMapKey(target, sessionId));
-    if (direct) return direct;
-    const binding = [...this.bindings.values()].find(
-      (candidate) =>
-        candidate.target.workspacePath === target.workspacePath &&
-        candidate.sessionId === sessionId,
-    );
-    if (!binding)
-      throw new Error(`nek session ${sessionId} is not open in ${target.workspacePath}`);
-    return binding;
+    return this.bindings.resolve(target, sessionId);
   }
 
   private assertSubscriptionCapacity(): void {
