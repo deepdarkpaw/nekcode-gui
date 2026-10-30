@@ -17,6 +17,7 @@ import {
   readUpdateInfo,
   releaseUpdateInfoNames,
   sourceUpdateInfoName,
+  stringifyUpdateInfo,
   updateInfoChannelName,
 } from "../../packages/desktop/scripts/desktop-update-info.mjs";
 
@@ -241,9 +242,8 @@ export async function assembleReleaseAssets({
   for (const { flavor, platform, arch, documents: bucket } of documents.values()) {
     // x64 元数据在前：合并后 path/sha512 兼容字段指向主下载产物，files[] 顺序稳定。
     bucket.sort((left, right) => left.file.localeCompare(right.file));
-    const merged = mergeUpdateInfo(bucket);
     const name = updateInfoChannelName(platform, flavor, arch);
-    await writeFile(join(destination, name), merged.serialized);
+    await writeFile(join(destination, name), await stringifyUpdateInfo(mergeUpdateInfo(bucket)));
     written.push(name);
   }
   return written.sort();

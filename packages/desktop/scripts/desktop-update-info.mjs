@@ -10,7 +10,14 @@
  * 完全由字符串与 YAML 文档驱动，可以独立测试，不需要 artifact 命名与 gh 上传上下文。
  */
 import { readFile } from "node:fs/promises";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+
+/**
+ * `yaml` 按需加载：desktop-release.mjs 的 `check-version` 在 CI 的 checks job 里跑于依赖安装之前
+ * （标签错误要快速失败，不该先花一次 pnpm install），顶层静态导入会让那一步直接 MODULE_NOT_FOUND。
+ */
+async function loadYaml() {
+  return import("yaml");
+}
 
 /**
  * 平台后缀：Windows 历史上的通道文件名不带平台后缀，Linux 为 `-linux`
@@ -55,7 +62,8 @@ export function releaseUpdateInfoNames(identities) {
 }
 
 export async function readUpdateInfo(file) {
-  const document = parseYaml(await readFile(file, "utf8"));
+  const { parse } = await loadYaml();
+  const document = parse(await readFile(file, "utf8"));
   if (typeof document !== "object" || document === null || Array.isArray(document))
     throw new Error(`Update info is not a mapping: ${file}`);
   return { document, file };
@@ -118,7 +126,13 @@ export function mergeUpdateInfo(documents) {
     sha512: asString(primary.document?.sha512) || primaryFile.sha512,
     ...(releaseDate ? { releaseDate } : {}),
   };
-  return { document: merged, serialized: stringifyYaml(merged) };
+  return merged;
+}
+
+/** 序列化合并后的更新元数据（electron-updater 直接从 YAML 读，字段名必须与上游一致）。 */
+export async function stringifyUpdateInfo(document) {
+  const { stringify } = await loadYaml();
+  return stringify(document);
 }
 
 export function asUpdateInfoString(value) {

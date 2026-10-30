@@ -375,20 +375,20 @@ test("merging per-architecture metadata keeps both installers and rejects mismat
       file: "arm64/latest.yml",
     },
   ]);
-  assert.equal(merged.document.version, version);
+  assert.equal(merged.version, version);
   assert.deepEqual(
-    merged.document.files.map((file) => file.url),
+    merged.files.map((file) => file.url),
     [x64, arm64],
   );
-  assert.equal(merged.document.path, x64);
-  assert.equal(merged.document.sha512, "a");
-  assert.equal(merged.document.releaseDate, "2026-01-02T00:00:00.000Z");
+  assert.equal(merged.path, x64);
+  assert.equal(merged.sha512, "a");
+  assert.equal(merged.releaseDate, "2026-01-02T00:00:00.000Z");
   // 重复 url 只保留一份（同一架构被收集两次时不能让 files[] 出现重复项）。
   const deduped = mergeUpdateInfo([
     { document: { version, files: [{ url: x64, sha512: "a", size: 1 }] }, file: "a/latest.yml" },
     { document: { version, files: [{ url: x64, sha512: "a", size: 1 }] }, file: "b/latest.yml" },
   ]);
-  assert.equal(deduped.document.files.length, 1);
+  assert.equal(deduped.files.length, 1);
   assert.throws(
     () =>
       mergeUpdateInfo([
