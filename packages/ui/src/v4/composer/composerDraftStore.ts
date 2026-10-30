@@ -10,7 +10,12 @@
 // 与「v4 composer 不做附件草稿持久化」的裁决一致）。
 import { logger } from "@/logger.js";
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared";
-import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
+import {
+  attachmentRefSchema,
+  submissionModeSchema,
+  type AttachmentRef,
+  type SubmissionMode,
+} from "@zcode/shared/zcode-protocol-v4";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 
 export interface V4ComposerDraft {
@@ -24,6 +29,8 @@ export interface V4ComposerDraft {
   lastPlanTransitionId?: string;
   lastPermissionGrantId?: string;
   modelSelection?: ModelSelection;
+  /** 已完成上传的引用；内容本体仍由 host/runtime 持有。 */
+  attachments?: readonly AttachmentRef[];
   /** 首次分享导入等待公共新任务初始化；不能由空 Session snapshot 抢先填充。 */
   initializeFromNewTask?: true;
   updatedAt: number;
@@ -36,6 +43,11 @@ interface V4DraftFile {
 
 const STORAGE_KEY_PREFIX = "zcode-v4-composer-drafts:v1:";
 export const V4_DRAFT_SCOPE_ROOT = "__draft__";
+/** 最多保存 50 个会话草稿，避免长期工作区占满 renderer localStorage。 */
+export const MAX_V4_DRAFT_SCOPES = 50;
+/** 单条正文最多 128 KiB；编辑器 JSON 超出剩余预算时不落盘 JSON。 */
+export const MAX_V4_DRAFT_TEXT_BYTES = 128 * 1024;
+export const MAX_V4_DRAFT_ATTACHMENTS = 8;
 const warnedStorageKeys = new Set<string>();
 
 function warnStorageFailure(key: string, error: unknown) {
@@ -73,10 +85,13 @@ function readDraftFile(key: string): V4DraftFile {
       return { version: 1, scopes: {} };
     }
     const scopes = Object.fromEntries(
-      Object.entries(parsed.scopes).flatMap(([scopeId, value]) => {
-        const draft = readDraft(value);
-        return draft ? [[scopeId, draft]] : [];
-      }),
+      Object.entries(parsed.scopes)
+        .flatMap(([scopeId, value]) => {
+          const draft = readDraft(value);
+          return draft ? [[scopeId, draft] as const] : [];
+        })
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+        .slice(0, MAX_V4_DRAFT_SCOPES),
     );
     return { version: 1, scopes };
   } catch (error) {
@@ -87,6 +102,21 @@ function readDraftFile(key: string): V4DraftFile {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  if (new TextEncoder().encode(value).byteLength <= maxBytes) return value;
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (new TextEncoder().encode(value.slice(0, middle)).byteLength <= maxBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return value.slice(0, low);
 }
 
 function readDraft(value: unknown): V4ComposerDraft | null {
@@ -114,11 +144,19 @@ function readDraft(value: unknown): V4ComposerDraft | null {
     ["files", "skills", "commands", "subagents", "sessions", "plugins"].includes(
       String(mention.category),
     );
+  const text = truncateUtf8(value.text, MAX_V4_DRAFT_TEXT_BYTES);
+  const editorStateJson =
+    typeof value.editorStateJson === "string" &&
+    new TextEncoder().encode(value.editorStateJson).byteLength <= MAX_V4_DRAFT_TEXT_BYTES
+      ? value.editorStateJson
+      : undefined;
+  const parsedAttachments = attachmentRefSchema.array().safeParse(value.attachments);
+  const attachments = parsedAttachments.success
+    ? parsedAttachments.data.slice(0, MAX_V4_DRAFT_ATTACHMENTS)
+    : undefined;
   return {
-    text: value.text,
-    ...(typeof value.editorStateJson === "string"
-      ? { editorStateJson: value.editorStateJson }
-      : {}),
+    text,
+    ...(editorStateJson ? { editorStateJson } : {}),
     ...(hasMention ? { mention: mention as unknown as ComposerMentionPrefill } : {}),
     ...(mode.success ? { mode: mode.data === "plan" ? ("agent" as const) : mode.data } : {}),
     ...(typeof value.planEnabled === "boolean"
@@ -133,11 +171,30 @@ function readDraft(value: unknown): V4ComposerDraft | null {
       ? { lastPlanTransitionId: value.lastPlanTransitionId }
       : {}),
     ...(modelSelection ? { modelSelection } : {}),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
     ...(value.initializeFromNewTask === true && !mode.success
       ? { initializeFromNewTask: true as const }
       : {}),
     updatedAt:
       typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt) ? value.updatedAt : 0,
+  };
+}
+
+function normalizeDraftForStorage(
+  draft: Omit<V4ComposerDraft, "updatedAt">,
+): Omit<V4ComposerDraft, "updatedAt"> {
+  const text = truncateUtf8(draft.text, MAX_V4_DRAFT_TEXT_BYTES);
+  const editorStateJson =
+    draft.editorStateJson &&
+    new TextEncoder().encode(draft.editorStateJson).byteLength <= MAX_V4_DRAFT_TEXT_BYTES
+      ? draft.editorStateJson
+      : undefined;
+  const attachments = draft.attachments?.slice(0, MAX_V4_DRAFT_ATTACHMENTS);
+  return {
+    ...draft,
+    text,
+    ...(editorStateJson ? { editorStateJson } : { editorStateJson: undefined }),
+    ...(attachments && attachments.length > 0 ? { attachments } : { attachments: undefined }),
   };
 }
 
@@ -151,7 +208,12 @@ function writeDraftFile(key: string, file: V4DraftFile) {
       storage.removeItem(key);
       return true;
     }
-    storage.setItem(key, JSON.stringify(file));
+    const boundedScopes = Object.fromEntries(
+      Object.entries(file.scopes)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+        .slice(0, MAX_V4_DRAFT_SCOPES),
+    );
+    storage.setItem(key, JSON.stringify({ version: 1, scopes: boundedScopes }));
     warnedStorageKeys.delete(key);
     return true;
   } catch (error) {
@@ -188,11 +250,13 @@ export function persistV4ComposerDraft(
     !draft.mention &&
     !draft.mode &&
     !draft.modelSelection &&
+    !draft.attachments?.length &&
     !draft.initializeFromNewTask
   ) {
     delete file.scopes[scopeId];
   } else {
-    file.scopes[scopeId] = { ...draft, updatedAt: Date.now() };
+    const normalized = normalizeDraftForStorage(draft);
+    file.scopes[scopeId] = { ...normalized, updatedAt: Date.now() };
   }
   return writeDraftFile(key, file);
 }

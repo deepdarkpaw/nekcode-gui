@@ -106,7 +106,6 @@ import {
   type ConversationComposerSendResult,
 } from "@/v4/ConversationComposer.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
-import { shouldIgnoreEscapeForStopGeneration } from "@/v4/composer/escapeStop.js";
 import { ConversationDraftEmptyState } from "@/v4/ConversationDraftEmptyState.js";
 import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHeader.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
@@ -180,6 +179,8 @@ import {
   type V4VisibleSlashCommand,
 } from "@/v4/slashCommands.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
+import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
+import { useFoldStore } from "@/lib/foldState.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
 import { useConversationProjection } from "@/v4/useConversationProjection.js";
 import { usePendingCommandRecovery } from "@/v4/usePendingCommandRecovery.js";
@@ -954,6 +955,8 @@ export function SessionPane({
     useState<ComposerRestoreRequest | null>(null);
   const nextComposerRestoreRequestIdRef = useRef(1);
   const timelineScrollToBottomRef = useRef<(() => void) | null>(null);
+  const timelineScrollToTopRef = useRef<(() => void) | null>(null);
+  const timelineScrollToPromptRef = useRef<((direction: "previous" | "next") => void) | null>(null);
   const timelineScrollToQueryRef = useRef<
     ((target: { unitIndex: number; rowId: number }) => void) | null
   >(null);
@@ -3057,6 +3060,45 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
+  useNekActionHandlers(
+    {
+      "app.interrupt": {
+        enabled: Boolean(sessionId && snapshotRef.current?.control.canStop),
+        run: () => handleStop("escape"),
+      },
+      "nek.plan.toggle": {
+        enabled: !readOnly,
+        run: () => handleSwitchMode(draftConfig.planEnabled ? "agent" : "plan"),
+      },
+      "app.tools.expand": {
+        enabled: !readOnly,
+        run: () => useFoldStore.getState().toggleGroup("toolOutput"),
+      },
+      "app.thinking.toggle": {
+        enabled: !readOnly,
+        run: () => useFoldStore.getState().toggleGroup("thinking"),
+      },
+      "tui.altScreen.previousPrompt": {
+        enabled: Boolean(!readOnly && timelineScrollToPromptRef.current),
+        run: () => timelineScrollToPromptRef.current?.("previous"),
+      },
+      "tui.altScreen.nextPrompt": {
+        enabled: Boolean(!readOnly && timelineScrollToPromptRef.current),
+        run: () => timelineScrollToPromptRef.current?.("next"),
+      },
+      "tui.altScreen.top": {
+        enabled: Boolean(!readOnly && timelineScrollToTopRef.current),
+        run: () => timelineScrollToTopRef.current?.(),
+      },
+      "tui.altScreen.bottom": {
+        enabled: Boolean(!readOnly && timelineScrollToBottomRef.current),
+        run: () => timelineScrollToBottomRef.current?.(),
+      },
+    },
+    focused && !readOnly,
+    100,
+  );
+
   const handlePauseGoal = useCallback(() => {
     const current = snapshotRef.current;
     if (!sessionId || !current?.availability.pauseGoal.allowed) return;
@@ -3076,23 +3118,6 @@ export function SessionPane({
       }
     });
   }, [dispatchCommand, sessionId]);
-
-  // composer parity：Esc → stop（旧 useChatViewEffects「Escape 停止生成」语义保真：
-  // 事件路径含 dialog / defaultPrevented 时跳过；mention/slash 面板打开时 Lexical 已
-  // preventDefault，本 handler 自然让路）。仅 focused pane 监听：
-  // 「stop 等危险操作永远作用于明确的 pane，快捷键走 focused pane」。
-  useEffect(() => {
-    if (!focused || readOnly) return;
-    if (!sessionId || !snapshot?.control.canStop) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (shouldIgnoreEscapeForStopGeneration(event)) return;
-      event.preventDefault();
-      handleStop("escape");
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focused, handleStop, readOnly, sessionId, snapshot?.control.canStop]);
 
   // handleStop 带 source 参数（button / escape 两个调用点），但 ConversationComposer 是 memo：
   // 直接写 onStop={() => handleStop("button")} 每次 render 都换引用，memo 白做，而 composer
@@ -4032,6 +4057,8 @@ export function SessionPane({
         ) : (
             <ConversationTimeline
               scrollToBottomActionRef={timelineScrollToBottomRef}
+              scrollToTopActionRef={timelineScrollToTopRef}
+              scrollToPromptActionRef={timelineScrollToPromptRef}
               scrollToQueryActionRef={timelineScrollToQueryRef}
               selectionPanelLayoutContainerRef={conversationLayoutContainerRef}
               rows={timelineSnapshot?.rows.window ?? []}

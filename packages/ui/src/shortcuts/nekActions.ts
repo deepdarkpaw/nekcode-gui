@@ -38,6 +38,11 @@ export type NekActionScope = "composer" | "global";
 /** 快捷键页分组。 */
 export type NekActionCategory = "input" | "modeModel" | "displayNavigation" | "other";
 
+export interface NekActionDisabledReason {
+  readonly id: string;
+  readonly values?: Readonly<Record<string, string | number>>;
+}
+
 export interface NekActionDefinition {
   readonly id: NekActionId;
   readonly category: NekActionCategory;
@@ -46,6 +51,10 @@ export interface NekActionDefinition {
   readonly legacyCommandId?: ShortcutCommandId;
   /** 与 nek 终端默认键不同的说明（i18n key）。 */
   readonly desktopNoteId?: string;
+  /** 输入框聚焦时是否允许全局动作抢占输入法/编辑器按键。 */
+  readonly allowInEditable?: boolean;
+  /** 当前 GUI 尚未提供目标时，设置中心用于解释不可用原因。 */
+  readonly disabledReason?: NekActionDisabledReason;
 }
 
 export const NEK_ACTIONS: readonly NekActionDefinition[] = [
@@ -70,7 +79,13 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     defaultBindings: ["Alt+Enter"],
     desktopNoteId: "shortcuts.action.note.followUp",
   },
-  { id: "app.interrupt", category: "input", scope: "global", defaultBindings: ["Escape"] },
+  {
+    id: "app.interrupt",
+    category: "input",
+    scope: "global",
+    defaultBindings: ["Escape"],
+    allowInEditable: true,
+  },
   {
     id: "app.message.dequeue",
     category: "input",
@@ -84,6 +99,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["Alt+m"],
     legacyCommandId: "cycleSessionMode",
+    allowInEditable: true,
   },
   {
     id: "app.thinking.cycle",
@@ -98,6 +114,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+l"],
     legacyCommandId: "openModelMenu",
+    disabledReason: { id: "ui.action.unavailable.modelPicker" },
   },
   {
     id: "app.tools.expand",
@@ -117,6 +134,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+f"],
     legacyCommandId: "findInTask",
+    allowInEditable: true,
   },
   {
     id: "tui.altScreen.previousPrompt",
@@ -163,6 +181,7 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+g"],
     desktopNoteId: "shortcuts.action.note.editorExternal",
+    disabledReason: { id: "ui.action.unavailable.externalEditor" },
   },
   {
     id: "gui.commandPalette.open",

@@ -9,6 +9,7 @@ import { useAppPanels } from "@/hooks/useAppPanels.js";
 import { useGitAutoRefresh } from "@/hooks/useGitAutoRefresh.js";
 import { useGitRepository } from "@/hooks/useGitRepository.js";
 import { useAppKeyboard } from "@/hooks/useAppKeyboard.js";
+import { useNekActionHandlers, useNekActionKeyboard } from "@/shortcuts/nekActionDispatcher.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceActiveTaskState } from "@/hooks/useWorkspaceActiveTaskState.js";
 import { useEnsureWorkspaceMcpLoaded } from "@/hooks/useEnsureWorkspaceMcpLoaded.js";
@@ -786,11 +787,15 @@ export function App({
   const canPrimaryNavigationBack = canTaskNavBack;
   const shellPanelIds = useMemo(() => ["sidebar", "content"], []);
 
+  useNekActionKeyboard();
+  useNekActionHandlers({
+    "app.session.new": { run: () => runVisibleWorkspaceCommand(() => handleCreateTaskIfWritable()) },
+    "gui.settings.open": { run: openSettingsTab },
+    "gui.commandPalette.open": { run: handleOpenQuickPick },
+    "tui.altScreen.search": { run: handleOpenTaskFind },
+  });
+
   useAppKeyboard({
-    openCommandCenter: handleOpenQuickPick,
-    // 打开设置页：与设置入口按钮共用 tabStore.openSettingsTab；默认 ⌘,/Ctrl+,（系统惯例）
-    openSettings: openSettingsTab,
-    findInTask: handleOpenTaskFind,
     toggleSidebar: () => runVisibleWorkspaceCommand(handleToggleSidebar),
     switchTheme: handleSwitchTheme,
     toggleTerminal: () => runVisibleWorkspaceCommand(handleToggleTerminalIfWritable),

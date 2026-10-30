@@ -82,7 +82,10 @@ import {
   ChatMediaAttachmentPreviewDialog,
   type ChatMediaAttachmentPreviewTarget,
 } from "@/ChatMediaAttachmentPreviewDialog.js";
-import type { LexicalChatInputHandle } from "@/LexicalChatInput.js";
+import type {
+  ChatComposerPasteEvent,
+  LexicalChatInputHandle,
+} from "@/LexicalChatInput.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -133,6 +136,11 @@ import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
+import {
+  createLargePasteBlock,
+  expandLargePasteBlocks,
+  type LargePasteBlock,
+} from "@/v4/composer/largePaste.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { CodeCommentAttachmentChip } from "@/v4/composer/CodeCommentAttachmentChip.js";
 import { removeCodeCommentPreview } from "@/v4/composer/codeCommentPreviewSync.js";
@@ -600,6 +608,33 @@ function ConversationComposerImpl({
     onRuntimeLifecycle,
     disabled,
   });
+  const pasteBlocksRef = useRef<LargePasteBlock[]>([]);
+  const nextPasteBlockIdRef = useRef(1);
+  const handleComposerPaste = useCallback(
+    (event: ChatComposerPasteEvent) => {
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      const block = createLargePasteBlock({
+        id: `paste-${nextPasteBlockIdRef.current++}`,
+        text,
+        existing: pasteBlocksRef.current,
+        formatMarker: (index, lineCount) =>
+          intl.formatMessage(
+            { id: "chat.composer.pasteBlock.placeholder" },
+            { index, lines: lineCount },
+          ),
+      });
+      if (!block) {
+        attachmentsApi.handlePaste(event);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation?.();
+      pasteBlocksRef.current = [...pasteBlocksRef.current, block];
+      inputApiRef.current?.appendText(block.marker);
+      updateText(inputApiRef.current?.getMarkdown() ?? `${textRef.current}${block.marker}`);
+    },
+    [attachmentsApi.handlePaste, intl, updateText],
+  );
   // 对齐旧版 useChatComposer：窗口级 dragover 会在指针进入 ChatView 前预先点亮
   // 整个聊天区与桌面草稿标题栏；workspace payload 的文案优先于系统附件。
   const { externalFileDragging, workspaceFileDragging } = usePromptEditorDragState({
@@ -703,8 +738,12 @@ function ConversationComposerImpl({
   const snapshotDraftOfEditor = useCallback((): {
     text: string;
     editorStateJson?: string;
+    attachments?: readonly AttachmentRef[];
   } => {
     const currentText = textRef.current;
+    const attachments = attachmentsApi.attachments.flatMap((item) =>
+      item.attachmentRef ? [item.attachmentRef] : [],
+    );
     let editorStateJson: string | undefined;
     try {
       const editorState = inputApiRef.current?.getEditorState();
@@ -712,10 +751,12 @@ function ConversationComposerImpl({
     } catch (error) {
       logger.warn(`[v4-composer] 草稿 editorState 序列化失败: ${String(error)}`);
     }
-    return currentText.trim()
-      ? { text: currentText, ...(editorStateJson ? { editorStateJson } : {}) }
-      : { text: "" };
-  }, []);
+    return {
+      text: currentText,
+      ...(editorStateJson ? { editorStateJson } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
+    };
+  }, [attachmentsApi.attachments]);
 
   const persistDraftNow = useCallback(
     (scopeId: string) => {
@@ -912,6 +953,9 @@ function ConversationComposerImpl({
           },
         }),
       );
+      if (draft.attachments?.length) {
+        attachmentsApi.restoreSessionOwnedAttachments(draft.attachments);
+      }
     };
     const applyDraft = () => {
       const api = inputApiRef.current;
@@ -929,6 +973,7 @@ function ConversationComposerImpl({
     return undefined;
     // 依赖收敛到 scope/workspace：draft 恢复只应发生在 scope 切换或 workspace 切换。
   }, [
+    attachmentsApi.restoreSessionOwnedAttachments,
     draftScopeId,
     persistDraftNow,
     requestComposerFocus,
@@ -1070,7 +1115,8 @@ function ConversationComposerImpl({
       existingLocalTtft?: LocalTtftContext,
       requestedDelivery?: "startNow" | "queue" | "guide",
     ) => {
-      const trimmed = textRef.current.trim();
+      const expandedText = expandLargePasteBlocks(textRef.current, pasteBlocksRef.current);
+      const trimmed = expandedText.trim();
       const submittedQueueItemIds =
         snapshotRef.current?.queue.items.map((item) => item.queueItemId) ?? [];
       const hasPendingAttachments = attachmentsApi.attachments.length > 0;
@@ -2036,7 +2082,7 @@ function ConversationComposerImpl({
           className="p-0"
           onChange={handleEditorChange}
           onSubmit={handleEditorSubmit}
-          onPaste={attachmentsApi.handlePaste}
+          onPaste={handleComposerPaste}
         />
         {attachmentsApi.attachmentError ? (
           <p className="flex items-start gap-2 p-3 text-ui-base text-warning">

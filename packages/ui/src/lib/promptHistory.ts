@@ -1,4 +1,23 @@
 export const MAX_PROMPT_HISTORY = 30;
+export const MAX_PROMPT_HISTORY_ENTRY_BYTES = 64 * 1024;
+
+function truncatePromptHistoryEntry(entry: string): string {
+  const encoded = new TextEncoder().encode(entry);
+  if (encoded.byteLength <= MAX_PROMPT_HISTORY_ENTRY_BYTES) return entry;
+  let low = 0;
+  let high = entry.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (
+      new TextEncoder().encode(entry.slice(0, middle)).byteLength <= MAX_PROMPT_HISTORY_ENTRY_BYTES
+    ) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return entry.slice(0, low);
+}
 
 type PromptHistoryDirection = "up" | "down";
 
@@ -13,7 +32,7 @@ export function appendPromptHistoryEntry(
   entry: string,
   limit = MAX_PROMPT_HISTORY,
 ): string[] {
-  const trimmed = entry.trim();
+  const trimmed = truncatePromptHistoryEntry(entry.trim());
   if (!trimmed) {
     return [...entries];
   }
@@ -51,11 +70,10 @@ export function navigatePromptHistory(
   }
 
   if (currentIndex === null) {
-    const nextIndex = entries.length - 1;
     return {
-      nextIndex,
-      nextValue: entries[nextIndex] ?? "",
-      shouldHandle: true,
+      nextIndex: null,
+      nextValue: "",
+      shouldHandle: false,
     };
   }
 

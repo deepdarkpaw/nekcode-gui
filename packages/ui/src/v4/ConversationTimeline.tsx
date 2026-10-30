@@ -48,6 +48,7 @@ import {
 } from "@/v4/conversationTurnRenderUnits.js";
 import { ConversationTurnRenderUnitCache } from "@/v4/conversationTurnRenderUnitCache.js";
 import {
+  resolveAdjacentConversationTurnQuery,
   resolveConversationTurnNavigatorActiveQueryRowId,
   resolveConversationTurnNavigatorHydrationRetryDelayMs,
   shouldHydrateConversationTurnNavigatorDirectory,
@@ -315,6 +316,12 @@ interface ConversationTimelineProps {
   sessionPhase?: SessionPhase;
   /** 宿主可调用的一次性“滚动到底部”动作；不持有 conversation 或跨 renderer 状态。 */
   scrollToBottomActionRef?: { current: (() => void) | null };
+  /** 宿主可调用的一次性“滚动到顶部”动作。 */
+  scrollToTopActionRef?: { current: (() => void) | null };
+  /** 宿主可调用的相邻用户轮次跳转动作。 */
+  scrollToPromptActionRef?: {
+    current: ((direction: "previous" | "next") => void) | null;
+  };
   /** 宿主可调用的一次性 query 定位动作；不改变分享面板 view。 */
   scrollToQueryActionRef?: {
     current: ((target: { unitIndex: number; rowId: number }) => void) | null;
@@ -376,6 +383,8 @@ function ConversationTimelineImpl({
   onSearchResultHighlightDone,
   sessionPhase,
   scrollToBottomActionRef,
+  scrollToTopActionRef,
+  scrollToPromptActionRef,
   scrollToQueryActionRef,
   selectionActions,
   shareSelection,
@@ -430,6 +439,18 @@ function ConversationTimelineImpl({
   );
   const turnNavigatorQueryRowIdsRef = useRef(turnNavigatorQueryRowIds);
   turnNavigatorQueryRowIdsRef.current = turnNavigatorQueryRowIds;
+  const turnNavigatorQueryTargetsRef = useRef(
+    renderUnits.flatMap((unit, unitIndex) =>
+      unit.visibleUserInputs
+        .filter((row) => row.origin === "realUser")
+        .map((row) => ({ unitIndex, rowId: row.rowId })),
+    ),
+  );
+  turnNavigatorQueryTargetsRef.current = renderUnits.flatMap((unit, unitIndex) =>
+    unit.visibleUserInputs
+      .filter((row) => row.origin === "realUser")
+      .map((row) => ({ unitIndex, rowId: row.rowId })),
+  );
   const centeredEmptyLayout = centerEmptyStateWithDock && renderUnits.length === 0;
   const responsiveCenteredEmptyLayout = centeredEmptyLayout && !compactEmptyStateWithDock;
   // 高频值经 ref 供稳定回调读取（不进依赖数组）。
@@ -1251,6 +1272,24 @@ function ConversationTimelineImpl({
     virtualizer,
   ]);
 
+  const handleScrollToTop = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    clearUserScrollIntent();
+    markProgrammaticScroll();
+    commitFollowing(false);
+    element.scrollTop = 0;
+    lastObservedScrollTopRef.current = element.scrollTop;
+    syncTurnNavigatorViewport(element);
+    cacheCurrentScrollMemoryState(element);
+  }, [
+    cacheCurrentScrollMemoryState,
+    clearUserScrollIntent,
+    commitFollowing,
+    markProgrammaticScroll,
+    syncTurnNavigatorViewport,
+  ]);
+
   const handleBackToBottom = useCallback(() => {
     pendingDetachedScrollRestoreRef.current = null;
     clearUserScrollIntent();
@@ -1271,6 +1310,16 @@ function ConversationTimelineImpl({
       }
     };
   }, [handleBackToBottom, scrollToBottomActionRef]);
+
+  useLayoutEffect(() => {
+    if (!scrollToTopActionRef) return;
+    scrollToTopActionRef.current = handleScrollToTop;
+    return () => {
+      if (scrollToTopActionRef.current === handleScrollToTop) {
+        scrollToTopActionRef.current = null;
+      }
+    };
+  }, [handleScrollToTop, scrollToTopActionRef]);
 
   const scrollToQuery = useCallback(
     (target: { unitIndex: number; rowId: number }, behavior: ScrollBehavior = "auto") => {
@@ -1355,6 +1404,24 @@ function ConversationTimelineImpl({
       }
     };
   }, [scrollToQuery, scrollToQueryActionRef]);
+
+  useLayoutEffect(() => {
+    if (!scrollToPromptActionRef) return;
+    const action = (direction: "previous" | "next") => {
+      const target = resolveAdjacentConversationTurnQuery(
+        turnNavigatorQueryTargetsRef.current,
+        turnNavigatorViewport.activeQueryRowId,
+        direction,
+      );
+      if (target) scrollToQuery(target);
+    };
+    scrollToPromptActionRef.current = action;
+    return () => {
+      if (scrollToPromptActionRef.current === action) {
+        scrollToPromptActionRef.current = null;
+      }
+    };
+  }, [scrollToPromptActionRef, scrollToQuery, turnNavigatorViewport.activeQueryRowId]);
 
   useEffect(
     () => () => {
