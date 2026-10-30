@@ -33,7 +33,7 @@ export interface NekRemoteConfigConnection {
 }
 
 /** 远端配置运行环境：探测一次，`createRemoteNekConfigHostExecutor` 复用。 */
-export interface NekRemoteConfigRuntime {
+interface NekRemoteConfigRuntime {
   home: string;
   agentDir: string;
   /** 远端 node 可执行文件的绝对路径（或 PATH 上的 `node`）。 */
@@ -253,7 +253,7 @@ function asContent(value: unknown): string | null {
   return content;
 }
 
-export interface CreateRemoteNekConfigHostExecutorOptions {
+interface CreateRemoteNekConfigHostExecutorOptions {
   id: string;
   runtime: NekRemoteConfigRuntime;
   connection: NekRemoteConfigConnection;

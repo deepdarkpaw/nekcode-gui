@@ -18,12 +18,12 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 
-export interface NekGuiInteractionBridgeTimers {
+interface NekGuiInteractionBridgeTimers {
   setTimeout: (callback: () => void, delayMs: number) => unknown;
   clearTimeout: (handle: unknown) => void;
 }
 
-export interface NekGuiInteractionBridgeOptions {
+interface NekGuiInteractionBridgeOptions {
   /** 渲染层一直不回答时的上限（毫秒）；请求自带 `timeout` 时取两者较小值。 */
   timeoutMs: number;
   /** 同时在等的请求上限，超出按取消收口（有界内存）。 */
@@ -98,14 +98,6 @@ export class NekGuiInteractionBridge {
     this.timers = options.timers ?? DEFAULT_TIMERS;
   }
 
-  get pendingCount(): number {
-    return this.pending.size;
-  }
-
-  get subscriberCount(): number {
-    return this.subscribers.size;
-  }
-
   /** 渲染层订阅交互帧；返回 detach。没有订阅者时 nek 的 dialog 会立刻按取消收口。 */
   onFrame(listener: (frame: NekInteractionFrame) => void): () => void {
     this.subscribers.add(listener);
@@ -171,8 +163,9 @@ export class NekGuiInteractionBridge {
     fallback: unknown,
   ): Promise<unknown> {
     const id = request.id;
-    if (!this.canAsk()) return fallback;
+    if (signal.aborted || !this.canAsk()) return fallback;
     const answer = new Promise<unknown>((resolve) => {
+      const onAbort = () => escalate("was cancelled by nek");
       const settle = (value: unknown) => {
         signal.removeEventListener("abort", onAbort);
         resolve(value);
@@ -181,13 +174,14 @@ export class NekGuiInteractionBridge {
         this.options.logger?.warn(`interaction ${id} ${reason}; answering cancelled`);
         this.cancel(scope, id);
       };
-      const onAbort = () => escalate("was cancelled by nek");
-      signal.addEventListener("abort", onAbort, { once: true });
-      const timer = this.timers.setTimeout(
+      const entry: PendingInteraction = { scope, timer: undefined, fallback, settle };
+      // 先登记再起定时器：注入的定时器实现可能是同步的，不能让它抢在登记之前。
+      this.pending.set(id, entry);
+      entry.timer = this.timers.setTimeout(
         () => escalate("timed out"),
         requestTimeoutMs(request, this.options),
       );
-      this.pending.set(id, { scope, timer, fallback, settle });
+      signal.addEventListener("abort", onAbort, { once: true });
     });
     this.publish({ kind: "request", scope, request });
     return await answer;

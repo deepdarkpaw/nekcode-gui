@@ -16,7 +16,7 @@ import type {
   NekSessionRecord,
 } from "./types.js";
 
-export interface NekAgentProcessPoolOptions {
+interface NekAgentProcessPoolOptions {
   config: GuiRuntimeConfig;
   logger: NekAgentServiceOptions["logger"];
   defaultCwd: string;

@@ -9,6 +9,8 @@ import {
 interface ConnectedRemote {
   backend: IRemoteBackend;
   executor: NekConfigHostExecutor;
+  /** `nek gui-info` 报出的版本，用于主机列表展示。 */
+  nekVersion: string;
 }
 
 /**
@@ -33,7 +35,11 @@ export class NekRemoteConfigConnectionRegistry {
         runtime,
         connection: backend,
       });
-      this.connections.set(connectionId, { backend, executor });
+      this.connections.set(connectionId, {
+        backend,
+        executor,
+        nekVersion: detected.info?.nekVersion ?? "unknown",
+      });
     } catch (error) {
       // 连接失败必须回到"未连接"状态，否则界面会以为远端配置可读。
       await backend.dispose();
@@ -54,6 +60,10 @@ export class NekRemoteConfigConnectionRegistry {
 
   executor(connectionId: string): NekConfigHostExecutor | undefined {
     return this.connections.get(connectionId)?.executor;
+  }
+
+  nekVersion(connectionId: string): string | undefined {
+    return this.connections.get(connectionId)?.nekVersion;
   }
 
   async dispose(): Promise<void> {

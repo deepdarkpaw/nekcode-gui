@@ -405,7 +405,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       nek: this.remoteConfigs.has(host.connectionId)
         ? {
             state: "ready",
-            version: "unknown",
+            version: this.remoteConfigs.nekVersion(host.connectionId) ?? "unknown",
             agentDir: this.remoteConfigs.executor(host.connectionId)?.agentDir() ?? "",
           }
         : { state: "unknown" },

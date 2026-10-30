@@ -16,9 +16,9 @@ import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekTrustPrompt } from "./types.js";
 
 /** 一个目录的信任状态：已记录决定就直接用，没记录才需要问。 */
-export type NekProjectTrustDecision = "trusted" | "denied" | "ask";
+type NekProjectTrustDecision = "trusted" | "denied" | "ask";
 
-export function projectTrustDecision(trust: NekProjectTrust): NekProjectTrustDecision {
+function projectTrustDecision(trust: NekProjectTrust): NekProjectTrustDecision {
   if (trust.trusted === true) return "trusted";
   if (trust.trusted === false) return "denied";
   if (trust.defaultProjectTrust === "always") return "trusted";
