@@ -1,5 +1,26 @@
+import { NEK_IPC_SUBSCRIPTION_LISTENER_INDEX } from "@zcode/shared";
+import type {
+  INekConfigApi,
+  INekSettingsHostApi,
+  IRemoteInteractionHostApi,
+} from "@zcode/shared/nek-protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDesktopNekSettingsApis } from "./ipcClient.js";
+
+/** 编译期核对：表中每个方法在契约里都存在，且该位置的参数是函数。不匹配时类型为 never。 */
+type ListenerSlotsMatch<Api, Table extends Readonly<Record<string, number>>> = [
+  {
+    [Method in keyof Table]: Method extends keyof Api
+      ? Api[Method] extends (...args: infer Params) => unknown
+        ? Params[Table[Method]] extends (...args: never[]) => unknown
+          ? true
+          : false
+        : false
+      : false;
+  }[keyof Table],
+] extends [true]
+  ? true
+  : never;
 
 type Request = {
   requestId: string;
@@ -74,6 +95,49 @@ describe("desktop nek IPC client", () => {
     dispose();
     await Promise.resolve();
     expect(requests.at(-1)).toMatchObject({ operation: "unsubscribe", args: ["subscription-1"] });
+  });
+
+  it("takes the listener from its contract position when trailing args follow it", async () => {
+    const requests: Request[] = [];
+    const eventListeners = new Set<(payload: unknown) => void>();
+    const bridge = createBridge((request) => {
+      requests.push(request);
+      return Promise.resolve({ ok: true, value: "subscription-1" });
+    }, eventListeners);
+    globalWithBridge.zcode = { nekIpc: bridge };
+    const apis = createDesktopNekSettingsApis()!;
+    const changes: unknown[] = [];
+    apis.config.watch({ kind: "local" }, (change) => changes.push(change), "/repo");
+    for (const listener of eventListeners) {
+      listener({
+        requestId: requests[0]!.requestId,
+        event: "subscription",
+        payload: { file: "y" },
+      });
+    }
+    await Promise.resolve();
+    expect(requests[0]).toMatchObject({
+      operation: "subscribe",
+      method: "watch",
+      args: [{ kind: "local" }, "/repo"],
+    });
+    expect(changes).toEqual([{ file: "y" }]);
+  });
+
+  it("keeps the listener table aligned with the contract signatures", () => {
+    const config: ListenerSlotsMatch<
+      INekConfigApi,
+      typeof NEK_IPC_SUBSCRIPTION_LISTENER_INDEX.config
+    > = true;
+    const host: ListenerSlotsMatch<
+      INekSettingsHostApi,
+      (typeof NEK_IPC_SUBSCRIPTION_LISTENER_INDEX)["settings-host"]
+    > = true;
+    const remote: ListenerSlotsMatch<
+      IRemoteInteractionHostApi,
+      (typeof NEK_IPC_SUBSCRIPTION_LISTENER_INDEX)["remote-interaction"]
+    > = true;
+    expect([config, host, remote]).toEqual([true, true, true]);
   });
 
   it("streams install logs on the request and removes the callback from args", async () => {

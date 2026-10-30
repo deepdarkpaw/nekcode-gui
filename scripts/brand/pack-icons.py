@@ -29,4 +29,7 @@ for name in ["dmg_background.png", "dmg_background@2x.png"]:
     shutil.copyfile(out / name, build / name)
 for size in [16, 24, 32, 48, 64, 128, 256, 512, 1024]:
     shutil.copyfile(out / f"app-{size}.png", build / "icons" / f"{size}x{size}.png")
-print(f"packed icons into {build}")
+# renderer 内的应用标志：index.html 启动占位、启动徽标、关于页与 Windows 左上角共用这一张。
+renderer_logo = Path("packages/desktop/src/renderer/public/logo/icons/512x512.png")
+shutil.copyfile(out / "app-512.png", renderer_logo)
+print(f"packed icons into {build} and {renderer_logo}")
