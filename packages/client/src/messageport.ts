@@ -4,7 +4,7 @@ import type { IServiceAccessor } from "@zcode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
 import { isRendererProductionBuild } from "./rendererLoggingEnv.js";
 import {
-  reportSubscriptionFailure,
+  attachSubscriptionFailureHandling,
   type ServiceConnectionOptions,
 } from "./serviceConnectionLog.js";
 
@@ -29,7 +29,7 @@ export interface MessagePortServiceConnection {
  */
 export function createMessagePortServiceConnection(
   port: MessagePort,
-  options: ServiceConnectionOptions = {},
+  options: ServiceConnectionOptions,
 ): MessagePortServiceConnection {
   logMessagePortDebug("[messageport] creating protocol and client...");
   const protocol = new MessagePortProtocol(port);
@@ -37,9 +37,9 @@ export function createMessagePortServiceConnection(
   client.onDidInitialize(() => {
     logMessagePortDebug("[messageport] ChannelClient received Initialize from server");
   });
-  // 这是 renderer 侧唯一一处订阅失败收口：一条事件 → 既有日志通道。
-  // 连接不因此终结（其它 channel 仍然可用），需要该流的调用方重新 listen() 即可重试。
-  client.onDidSubscriptionError((failure) => reportSubscriptionFailure(failure, options.log));
+  // 这是 renderer 侧唯一一处订阅失败收口：一条事件 → 宿主可见状态 + 诊断日志。
+  // 连接不因此终结（其它 channel 仍然可用），重试走 `failure.retry()`（同一批订阅者）。
+  attachSubscriptionFailureHandling(client, options);
   logMessagePortDebug("[messageport] client created, waiting for Initialize...");
 
   const services = new RemoteServiceAccess(client);
@@ -65,7 +65,7 @@ export function createMessagePortServiceConnection(
  */
 export function connectViaMessagePort(
   port: MessagePort,
-  options?: ServiceConnectionOptions,
+  options: ServiceConnectionOptions,
 ): IServiceAccessor {
   return createMessagePortServiceConnection(port, options).services;
 }

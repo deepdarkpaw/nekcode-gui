@@ -2,12 +2,16 @@
  * 连接级订阅失败收口。
  *
  * `IChannel.listen` 只返回 `Event<T>`：订阅方没有 terminal 回调，帧流死掉与"暂时没有帧"
- * 在类型上不可区分。所以 `ChannelClient.onDidSubscriptionError` 是唯一的失败通道，每个真实
- * 连接（MessagePort / WebSocket / 远端 SSH host）都必须把它接到自己既有的日志通道上，
- * 再由日志层的隐私过滤保留错误类型与源码栈帧。
+ * 在类型上不可区分。`ChannelClient.onDidSubscriptionError` 是唯一的失败通道，每个真实连接
+ * （MessagePort / WebSocket / 远端 SSH host）都必须把它接到自己既有的处理上：
  *
- * 这里只定义形状与转发，不决定策略：订阅失败不终结连接，一条死流不影响同一连接上的其它
- * channel；需要该流的调用方重新 `listen()` 会拿到新的请求 id，等同于重试。
+ * - `onSubscriptionFailure`（**必需**）：用户可见状态与手动重试入口，由宿主接既有提示/连接
+ *   状态组件，重试用 `IChannelSubscriptionFailure.retry()` 重新建立同一条订阅；
+ * - `log`（可选）：隐私过滤后的诊断日志（保留错误类型与源码栈帧）。
+ *
+ * 这里只做转发与上报兜底，不决定 UI 策略：订阅失败不终结连接，一条死流不影响同一连接上的
+ * 其它 channel 与 RPC。上报本身是旁路——任何一步抛错都不能回到协议分发栈，也不能中断
+ * 后续失败与帧投递；上报失败用本包既有的 console 通道记录（过滤后只剩类型与栈帧）。
  */
 import { safeLogArgs } from "@zcode/shared";
 import type { IChannelSubscriptionFailure } from "@zcode/rpc";
@@ -16,24 +20,44 @@ import type { IChannelSubscriptionFailure } from "@zcode/rpc";
 export type ServiceConnectionLog = (level: "info" | "warn" | "error", args: unknown[]) => void;
 
 export interface ServiceConnectionOptions {
-  /** 订阅失败的落点；未注入时退回 console，不静默丢弃。 */
+  /** 订阅失败的可见状态入口；宿主必须接上（不能只有日志）。 */
+  onSubscriptionFailure: (failure: IChannelSubscriptionFailure) => void;
+  /** 订阅失败的诊断日志落点。 */
   log?: ServiceConnectionLog;
 }
 
-/**
- * 订阅失败的唯一上报形状。
- *
- * 只带固定消息与原始错误：channel/event 这类动态标识会被日志层的隐私过滤丢弃，
- * 定位靠错误类型与源码栈帧（与 `[rpc:listen] failed` 同一口径）。
- */
-export function reportSubscriptionFailure(
+/** 订阅失败的唯一日志形状：固定消息 + 原始错误（channel/event 由日志层隐私过滤丢弃）。 */
+function reportSubscriptionFailure(
   failure: IChannelSubscriptionFailure,
   log?: ServiceConnectionLog,
 ): void {
-  const args = ["[rpc:subscription] failed", failure.error];
-  if (log) {
-    log("warn", args);
-    return;
+  if (!log) return;
+  try {
+    log("warn", ["[rpc:subscription] failed", failure.error]);
+  } catch (error) {
+    console.error(...safeLogArgs(["[rpc:subscription] log failed", error]));
   }
-  console.warn(...safeLogArgs(args));
+}
+
+/**
+ * 把一个 ChannelClient 的订阅失败接到宿主：先可见状态，再诊断日志。
+ *
+ * 两步分别收口异常，保证一次上报失败不会中断后续订阅失败与其它 channel 的帧投递。
+ */
+export function attachSubscriptionFailureHandling(
+  client: {
+    onDidSubscriptionError(listener: (failure: IChannelSubscriptionFailure) => void): {
+      dispose(): void;
+    };
+  },
+  options: ServiceConnectionOptions,
+): void {
+  client.onDidSubscriptionError((failure) => {
+    try {
+      options.onSubscriptionFailure(failure);
+    } catch (error) {
+      console.error(...safeLogArgs(["[rpc:subscription] handler failed", error]));
+    }
+    reportSubscriptionFailure(failure, options.log);
+  });
 }

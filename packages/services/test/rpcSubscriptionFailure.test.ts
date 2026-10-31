@@ -162,6 +162,89 @@ test("同一订阅的重复错误回包只上报一次，迟到帧被忽略", as
   server.dispose();
 });
 
+test("失败后 retry() 重新建立同一条订阅，原订阅者继续收帧", async () => {
+  let allow = false;
+  const sinks: Emitter<number>[] = [];
+  let listenCount = 0;
+  const { client, server } = createConnection((instance) => {
+    instance.registerChannel("svc", {
+      async call() {
+        return null;
+      },
+      listen() {
+        listenCount += 1;
+        if (!allow) throw new Error("attach failed");
+        const sink = new Emitter<number>();
+        sinks.push(sink);
+        return sink.event;
+      },
+    });
+  });
+
+  const failures: IChannelSubscriptionFailure[] = [];
+  client.onDidSubscriptionError((failure) => failures.push(failure));
+  const frames: number[] = [];
+  const subscription = client.getChannel<IChannel>("svc").listen<number>("onTick")((value) =>
+    frames.push(value),
+  );
+  await tick();
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0]?.isLive(), true);
+
+  // 失败态不会自动重试：再等一轮仍只有一次 EventListen。
+  await tick();
+  assert.equal(listenCount, 1);
+
+  allow = true;
+  failures[0]!.retry();
+  await tick();
+  assert.equal(listenCount, 2);
+  sinks[0]!.fire(42);
+  // 同一个监听者收到帧：调用方不需要自己重新订阅，也不会多出一条没人监听的流。
+  assert.deepEqual(frames, [42]);
+
+  // 重建之后的重复 retry 是空操作（状态已经是 pending）。
+  failures[0]!.retry();
+  await tick();
+  assert.equal(listenCount, 2);
+
+  subscription.dispose();
+  assert.equal(failures[0]?.isLive(), false);
+  // 全部退订后 retry 不再发请求。
+  failures[0]!.retry();
+  await tick();
+  assert.equal(listenCount, 2);
+  client.dispose();
+  server.dispose();
+});
+
+test("dispose 之后的失败对象不能重试、不会向已终结的连接发请求", async () => {
+  let listenCount = 0;
+  const { client, server } = createConnection((instance) => {
+    instance.registerChannel("svc", {
+      async call() {
+        return null;
+      },
+      listen() {
+        listenCount += 1;
+        throw new Error("attach failed");
+      },
+    });
+  });
+  const failures: IChannelSubscriptionFailure[] = [];
+  client.onDidSubscriptionError((failure) => failures.push(failure));
+  client.getChannel<IChannel>("svc").listen("onTick")(() => undefined);
+  await tick();
+  assert.equal(failures.length, 1);
+
+  client.dispose();
+  assert.equal(failures[0]?.isLive(), true);
+  failures[0]!.retry();
+  await tick();
+  assert.equal(listenCount, 1);
+  server.dispose();
+});
+
 test("未知 channel 的事件订阅在超时后回错误包，不再是死流", async () => {
   const { client, server } = createConnection(() => undefined, 5);
   const failures: IChannelSubscriptionFailure[] = [];

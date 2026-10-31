@@ -241,35 +241,73 @@ test("phase 抖动、error 与 locked 都不是恢复信号", () => {
   lifecycle.dispose();
 });
 
-test("不同 workspace 的代际互相独立，代际表有界且淘汰不串台", () => {
+test("不同 workspace 领取互不重复、单调递增的代际票据", () => {
   const harness = createRuntimeHarness();
   const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
   const { frames } = collect(lifecycle);
 
-  const workspaces = Array.from(
-    { length: NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES + 8 },
-    (_, index) => `/workspace/p${index}`,
+  harness.attach("a", "/workspace/a");
+  harness.attach("b", "/workspace/b");
+  harness.attach("c", "/workspace/c");
+  const generations = frames.map((frame) => frame.runtimeIdentity.generation);
+  assert.equal(new Set(generations).size, 3);
+  assert.deepEqual(
+    generations,
+    [...generations].sort((left, right) => left - right),
   );
-  for (const cwd of workspaces) harness.attach(`s:${cwd}`, cwd);
-  assert.equal(frames.length, workspaces.length);
-  assert.ok(frames.every((frame) => frame.runtimeIdentity.generation === 1));
+  lifecycle.dispose();
+});
 
-  // 最近用过的 workspace 仍按自己的记忆推进：淘汰只回退到初值，不会串用别人的代际。
-  const recent = workspaces.at(-1)!;
+test("活跃 workspace 不被回收；冷 workspace 的 identity 查询挤不掉它的代际", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("hot", "/workspace/hot");
+  const hotGeneration = frames[0]?.runtimeIdentity.generation;
+  assert.equal(lifecycle.getIdentity("/workspace/hot").generation, hotGeneration);
+
+  // 大量冷 workspace（只查询、不起进程）也会占表；不能把活跃 workspace 的记忆淘汰掉。
+  for (let index = 0; index < NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES * 2; index += 1) {
+    assert.ok(lifecycle.getIdentity(`/cold/${index}`).generation > 0);
+  }
+  assert.equal(lifecycle.getIdentity("/workspace/hot").generation, hotGeneration);
+
+  // 记忆还在：崩溃时报告的仍是同一个代际，而不是重建后的新号。
   frames.length = 0;
-  harness.crash(`s:${recent}`);
-  assert.deepEqual(shape(frames), [["unavailable", 1]]);
-  harness.attach(`s:${recent}`, recent);
+  harness.crash("hot");
+  assert.deepEqual(shape(frames), [["unavailable", hotGeneration]]);
+  lifecycle.dispose();
+});
+
+test("慢 workspace 在新 workspace 高频使用后回来，代际不回退也不重复", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("slow", "/workspace/slow");
+  harness.crash("slow");
+  const firstGeneration = frames[0]?.runtimeIdentity.generation;
   assert.deepEqual(shape(frames), [
-    ["unavailable", 1],
-    ["available", 2],
+    ["available", firstGeneration],
+    ["unavailable", firstGeneration],
   ]);
 
-  // 查询是只读的：大量冷 workspace 的 identity 读取不能挤掉活跃 workspace 的代际。
+  // 用一个远超表容量的 workspace 轮换把它挤出记忆（每个都建立并崩溃）。
   for (let index = 0; index < NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES * 2; index += 1) {
-    assert.equal(lifecycle.getIdentity(`/cold/${index}`).generation, 1);
+    harness.attach(`churn-${index}`, `/workspace/churn-${index}`);
+    harness.crash(`churn-${index}`);
   }
-  assert.equal(lifecycle.getIdentity(recent).generation, 2);
+
+  frames.length = 0;
+  harness.attach("slow", "/workspace/slow");
+  const recovered = frames[0]?.runtimeIdentity.generation;
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0]?.state, "available");
+  // 关键：淘汰过记忆也不能回到旧号，观察者不会把新代当成旧代。
+  assert.ok(recovered !== undefined);
+  assert.ok(recovered > firstGeneration, `${recovered} should be greater than ${firstGeneration}`);
+  assert.equal(lifecycle.getIdentity("/workspace/slow").generation, recovered);
   lifecycle.dispose();
 });
 

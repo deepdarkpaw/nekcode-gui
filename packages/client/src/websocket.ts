@@ -9,7 +9,7 @@ import {
 import type { IServiceAccessor } from "@zcode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
 import {
-  reportSubscriptionFailure,
+  attachSubscriptionFailureHandling,
   type ServiceConnectionOptions,
 } from "./serviceConnectionLog.js";
 
@@ -65,7 +65,7 @@ function wrapBrowserWebSocket(ws: WebSocket): ISocket {
 
 export function connectViaWebSocket(
   wsUrl: string,
-  options?: WebSocketConnectionOptions,
+  options: WebSocketConnectionOptions,
 ): Promise<IServiceAccessor> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -77,7 +77,7 @@ export function connectViaWebSocket(
       }
     });
     ws.addEventListener("close", (event) => {
-      options?.onClose?.({
+      options.onClose?.({
         code: event.code,
         reason: event.reason,
         wasClean: event.wasClean,
@@ -96,7 +96,7 @@ export function connectViaWebSocket(
 
     ws.addEventListener("open", () => {
       settled = true;
-      options?.onOpenSocket?.(ws);
+      options.onOpenSocket?.(ws);
       const socket = wrapBrowserWebSocket(ws);
       resolve(connectViaProtocol(new SocketProtocol(socket), options));
     });
@@ -105,10 +105,10 @@ export function connectViaWebSocket(
 
 export function connectViaProtocol(
   protocol: IMessagePassingProtocol,
-  options: ServiceConnectionOptions = {},
+  options: ServiceConnectionOptions,
 ): IServiceAccessor {
   const client = new ChannelClient(protocol);
-  // 与 MessagePort 连接同一条收口：订阅失败进入调用方日志通道，连接本身继续可用。
-  client.onDidSubscriptionError((failure) => reportSubscriptionFailure(failure, options.log));
+  // 与 MessagePort 连接同一条收口：可见状态 + 日志，连接本身继续可用。
+  attachSubscriptionFailureHandling(client, options);
   return new RemoteServiceAccess(client);
 }

@@ -10,6 +10,7 @@ import {
   ZCodeIntlProvider,
   registerBaseWorkspaceServices,
   registerRemoteWorkspaceSession,
+  registerRpcSubscriptionFault,
   createRemoteWorkspaceDisconnectedError,
   playTaskNotificationSound,
 } from "@zcode/ui";
@@ -17,12 +18,11 @@ import "@zcode/ui/styles.css";
 import {
   connectViaMessagePort,
   createMessagePortServiceConnection,
-  type ServiceConnectionLog,
+  type ServiceConnectionOptions,
 } from "@zcode/client";
 import {
   InternalChannels,
   databaseStartupStateSchema,
-  safeLogArgs,
   type DatabaseStartupControl,
   parseLaunchMarks,
   LAUNCH_MARKS_QUERY_KEY,
@@ -144,22 +144,37 @@ const desktopPlatform = createDesktopPlatform({ isLocalDevelopmentRuntime });
 initializeDesktopLocalTtft(desktopPlatform);
 
 /**
- * RPC 订阅失败统一落到既有 renderer 日志通道（main 写盘，隐私过滤在写入前完成）。
+ * RPC 订阅失败的 renderer 出口：既有结构化诊断 + 既有提示状态（headless）。
  *
  * `IChannel.listen` 没有 terminal 回调，服务端拒绝订阅时订阅方只会拿到一条永远没有帧的
- * Event。连接 owner 必须消费 `ChannelClient.onDidSubscriptionError`，否则界面卡在加载态
- * 且没有任何可查证据；这里只记录，不终结连接、不影响其它 channel。
+ * Event。只记日志等于把界面留在加载态，所以这里注册一份可见状态（由既有 toast 呈现并带
+ * 重试），同时用 `desktopPlatform.reportDiagnostic` 记录一条 renderer 诊断——错误类型与
+ * 源码栈帧由产生失败的一侧（host 的 `[rpc:listen] failed`）保留。
+ *
+ * 失败不终结连接，也不影响其它 channel；重试走 `failure.retry()` 重新建立同一条订阅。
  */
-const reportServiceConnectionLog: ServiceConnectionLog = (level, args) => {
-  // 上报本身不能抛进协议分发栈：升级后的新窗口可能跑在缺少 `log` 桥的旧 preload 上，
-  // 上报失败退回 console（与 desktopPlatform 对可选 bridge 成员的口径一致），
-  // 事实本身仍然被报告，不静默丢弃。
-  const log = window.zcode.log;
-  if (typeof log === "function") {
-    log(level, args);
-    return;
-  }
-  console.warn(...safeLogArgs(args));
+const reportServiceSubscriptionFailure: ServiceConnectionOptions["onSubscriptionFailure"] = (
+  failure,
+) => {
+  // 订阅者已经全部退订的流不需要打扰用户。
+  if (!failure.isLive()) return;
+  desktopPlatform.reportDiagnostic?.({
+    name: "error",
+    component: "renderer",
+    status: "error",
+    metrics: { count: 1 },
+  });
+  registerRpcSubscriptionFault({
+    id: `${failure.channelName}::${failure.event}`,
+    channelName: failure.channelName,
+    event: failure.event,
+    // 重新建立同一条订阅（ChannelClient 保留订阅者）；不是新建空 emitter。
+    retry: () => failure.retry(),
+  });
+};
+
+const serviceConnectionOptions: ServiceConnectionOptions = {
+  onSubscriptionFailure: reportServiceSubscriptionFailure,
 };
 
 /**
@@ -231,9 +246,10 @@ function registerRemoteWorkspaceServicePort(params: RemoteWorkspaceServicePortRe
     return;
   }
 
-  const remoteConnection = createMessagePortServiceConnection(params.port, {
-    log: reportServiceConnectionLog,
-  });
+  const remoteConnection = createMessagePortServiceConnection(
+    params.port,
+    serviceConnectionOptions,
+  );
   const remoteServices = remoteConnection.services;
   const services = buildRemoteWorkspaceSessionServices(
     baseServicesForRemoteSessions,
@@ -316,7 +332,7 @@ function handleServicePortMessage(event: MessageEvent): void {
 
 function initializeBusinessRoot(port: MessagePort): void {
   appInitialized = true;
-  const services = connectViaMessagePort(port, { log: reportServiceConnectionLog });
+  const services = connectViaMessagePort(port, serviceConnectionOptions);
   baseServicesForRemoteSessions = services;
   registerBaseWorkspaceServices(services);
   flushPendingRemoteWorkspaceServicePorts();

@@ -58,11 +58,24 @@ export type IRawResponse =
   | { type: ResponseType.PromiseErrorObj; id: number; data: any }
   | { type: ResponseType.EventFire; id: number; data: any };
 
-/** 服务端拒绝建立事件订阅时通知客户端的事实；此时该订阅已失效，不会再有帧。 */
+/**
+ * 服务端拒绝建立事件订阅时通知客户端的事实。
+ *
+ * 此时该订阅已失效、不会再有帧，但订阅者的回调仍然挂在客户端这一侧：`retry()` 会重新向
+ * 服务端建立**同一条逻辑订阅**（新请求 id、同一批监听者），成功后的帧继续投给原订阅者。
+ * 调用方不需要（也不应该）自己再造一个没人监听的 emitter。
+ */
 export interface IChannelSubscriptionFailure {
   channelName: string;
   event: string;
   error: Error;
+  /** 该订阅是否仍有人监听；订阅者全部退订后不需要提示，也不需要重试。 */
+  isLive(): boolean;
+  /**
+   * 重新建立订阅。只在"失败且仍有人监听"时生效，重复调用或被退订后调用都是空操作——
+   * 这是手动重试，不会自动循环。
+   */
+  retry(): void;
 }
 
 export type IHandler = (response: IRawResponse) => void;
