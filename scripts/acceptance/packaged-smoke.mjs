@@ -5,11 +5,10 @@
  * 用法：node scripts/acceptance/packaged-smoke.mjs [--app <可执行文件>] [--keep]
  * 退出码：0 通过；1 失败（原因打印到 stderr，截图与日志留在 sandbox 目录）。
  */
-import { readdirSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { createSandbox, freePort, launchApp, stopApp } from "./lib/app.mjs";
+import { createSandbox, defaultExecutable, freePort, launchApp, stopApp } from "./lib/app.mjs";
 import { connectRenderer, evaluate, screenshot, waitForPage } from "./lib/cdp.mjs";
 
 /** renderer 错误边界的固定文案（zh-CN / en-US）。 */
@@ -18,28 +17,12 @@ const MOUNTED =
   "document.getElementById('root')?.children.length > 0 && document.body.innerText.trim().length > 20";
 const SETTLE_MS = 8_000;
 
-function defaultExecutable() {
-  const root = resolve("packages/desktop/dist");
-  if (process.platform === "win32") {
-    const dir = join(root, "win-unpacked");
-    const exe = readdirSync(dir).find((name) => /^nekcode.*\.exe$/iu.test(name));
-    if (!exe) throw new Error(`no nekcode executable in ${dir}`);
-    return join(dir, exe);
-  }
-  if (process.platform === "linux") {
-    const dir = join(root, "linux-unpacked");
-    const bin = readdirSync(dir).find((name) => /^nekcode/iu.test(name));
-    if (!bin) throw new Error(`no nekcode binary in ${dir}`);
-    return join(dir, bin);
-  }
-  throw new Error(`pass --app on ${process.platform}`);
-}
-
 async function runSmoke(executable, sandbox) {
   const cdpPort = await freePort();
   const child = launchApp({ executable, sandbox, cdpPort, withNekShim: false });
+  let session;
   try {
-    const session = await connectRenderer(cdpPort);
+    session = await connectRenderer(cdpPort);
     await waitForPage(session, MOUNTED, "renderer mounted", 60_000);
     await new Promise((done) => setTimeout(done, SETTLE_MS));
     await screenshot(session, join(sandbox.screenshots, "smoke-home.png"));
@@ -48,12 +31,23 @@ async function runSmoke(executable, sandbox) {
       `new RegExp(${JSON.stringify(ERROR_BOUNDARY_PATTERN)}).test(document.body.innerText)`,
     );
     const exceptions = session.problems.filter((problem) => problem.kind === "exception");
-    session.close();
     const failures = [];
     if (boundary) failures.push("renderer error boundary is showing");
     for (const problem of exceptions) failures.push(`uncaught: ${problem.text.split("\n")[0]}`);
+    const log = await readFile(join(sandbox.root, "app.log"), "utf8");
+    if (/uncaughtException|MaxListenersExceededWarning/u.test(log)) {
+      failures.push("uncaught exception or listener leak in app.log");
+    }
+    for (const problem of session.problems) {
+      if (/MaxListenersExceededWarning/u.test(problem.text)) failures.push(problem.text);
+    }
+    await writeFile(
+      join(sandbox.root, "renderer-problems.json"),
+      JSON.stringify(session.problems, null, 2),
+    );
     return { failures, warnings: session.problems.filter((p) => p.kind !== "exception") };
   } finally {
+    session?.close();
     stopApp(child);
   }
 }

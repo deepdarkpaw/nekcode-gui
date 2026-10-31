@@ -1,165 +1,115 @@
-/**
- * 验收用的 renderer DOM 操作与断言助手：全部走页面内真实点击/输入，不注入产品后门。
- * 失败一律抛错，不吞异常。
- */
+/** CDP 页面操作：目标必须可见、可用且未被遮挡；找不到目标就失败，不改点其他按钮。 */
 import { evaluate, waitForPage } from "./cdp.mjs";
 
 const ERROR_BOUNDARY = /应用界面出了点问题|Something went wrong in the app/u;
 
-/** 页面纯文本。 */
 export async function pageText(session) {
   return await evaluate(session, "document.body.innerText");
 }
 
-/** 断言渲染层没有错误边界、没有未捕获异常。 */
 export async function assertNoRendererFailure(session) {
-  const text = await pageText(session);
-  if (ERROR_BOUNDARY.test(text)) throw new Error("renderer error boundary is visible");
-  const exception = session.problems.find((problem) => problem.kind === "exception");
-  if (exception) throw new Error(`uncaught renderer exception: ${exception.text}`);
+  if (ERROR_BOUNDARY.test(await pageText(session)))
+    throw new Error("renderer error boundary is visible");
+  const failure = session.problems.find(
+    (problem) => problem.kind === "exception" || /MaxListenersExceededWarning/u.test(problem.text),
+  );
+  if (failure) throw new Error(`renderer failure: ${failure.text}`);
 }
 
-/** 元素是否存在。 */
-export async function exists(session, selector) {
-  return await evaluate(session, `document.querySelector(${JSON.stringify(selector)}) !== null`);
-}
-
-/** 点击可见按钮（按可见文本精确或包含匹配）。 */
-export async function clickButton(session, text, { contains = false } = {}) {
-  const wanted = JSON.stringify(text);
-  await evaluate(
+/** 所有点击共用一个几何/禁用/遮挡检查，确保 Chromium 收到真实鼠标事件。 */
+async function clickTarget(session, expression) {
+  const rect = await evaluate(
     session,
     `(() => {
-      const wanted = ${wanted};
-      const button = [...document.querySelectorAll("button")].find((candidate) => {
-        const label = candidate.innerText.trim();
-        return !candidate.disabled && ${contains ? "label.includes(wanted)" : "label === wanted"};
-      });
-      if (!button) throw new Error("enabled button not found: " + wanted);
-      button.click();
-    })()`,
+    const element = ${expression};
+    if (!(element instanceof HTMLElement)) throw new Error('click target not found');
+    if (element.matches(':disabled, [aria-disabled="true"]')) throw new Error('click target is disabled');
+    element.scrollIntoView({ block: 'center' });
+    const box = element.getBoundingClientRect();
+    if (!box.width || !box.height) throw new Error('click target is not visible');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    if (!element.contains(document.elementFromPoint(x, y))) throw new Error('click target is covered');
+    return { x, y };
+  })()`,
   );
-}
-
-/** 按 data-testid 点击（`exact=false` 时按前缀匹配）。 */
-export async function clickTestId(session, testId, { exact = true, index = 0 } = {}) {
-  const testIdJson = JSON.stringify(testId);
-  await evaluate(
-    session,
-    `(() => {
-      const selector = ${exact ? '`[data-testid="${testIdJson}"]`' : '`[data-testid^="${testIdJson}"]`'};
-      const element = document.querySelectorAll(selector)[${index}];
-      if (!(element instanceof HTMLElement)) throw new Error("testid target not found: " + ${testIdJson});
-      element.click();
-    })()`,
-  );
-}
-
-/** 在坐标上派发一次真实鼠标点击（Radix 之类只认真实指针事件的控件要用）。 */
-export async function dispatchMouseClick(session, rect) {
-  const base = { x: rect.x, y: rect.y, button: "left", clickCount: 1 };
-  await session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y });
+  const base = { ...rect, button: "left", clickCount: 1 };
+  await session.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...rect });
   await session.send("Input.dispatchMouseEvent", { type: "mousePressed", ...base });
   await session.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...base });
 }
 
-/** 用真实鼠标事件点击选择器命中的元素。 */
 export async function clickAt(session, selector) {
-  const rect = await evaluate(
-    session,
-    `(() => {
-      const element = document.querySelector(${JSON.stringify(selector)});
-      if (!(element instanceof HTMLElement)) throw new Error("element not found: " + ${JSON.stringify(selector)});
-      element.scrollIntoView({ block: "center" });
-      const box = element.getBoundingClientRect();
-      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    })()`,
-  );
-  await dispatchMouseClick(session, rect);
+  await clickTarget(session, `document.querySelector(${JSON.stringify(selector)})`);
 }
 
-/** 用真实鼠标事件点击文本匹配的 option 元素（下拉菜单项）。 */
+export async function clickButton(session, text) {
+  await clickTarget(
+    session,
+    `[...document.querySelectorAll('button')].find((button) =>
+    !button.disabled && button.getClientRects().length > 0 && button.innerText.trim() === ${JSON.stringify(text)})`,
+  );
+}
+
 export async function clickOptionAt(session, text) {
-  const rect = await evaluate(
+  await clickTarget(
     session,
-    `(() => {
-      const wanted = ${JSON.stringify(text)};
-      const option = [...document.querySelectorAll('[role="option"]')].find((item) =>
-        item instanceof HTMLElement && item.innerText.includes(wanted),
-      );
-      if (!(option instanceof HTMLElement)) throw new Error("option not found: " + wanted);
-      option.scrollIntoView({ block: "center" });
-      const box = option.getBoundingClientRect();
-      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    })()`,
-  );
-  await dispatchMouseClick(session, rect);
-}
-
-/** 在卡片里按序号或文本点击按钮；卡片用 data-testid 定位（index 支持负数，-1 是最后一个）。 */
-export async function clickCardButton(session, cardTestId, { text, index } = {}) {
-  const card = JSON.stringify(cardTestId);
-  const wanted = JSON.stringify(text ?? "");
-  await evaluate(
-    session,
-    `(() => {
-      const card = document.querySelector('[data-testid="' + ${card} + '"]');
-      if (!(card instanceof HTMLElement)) throw new Error("card not found: " + ${card});
-      const buttons = [...card.querySelectorAll("button")].filter((candidate) => !candidate.disabled);
-      if (buttons.length === 0) throw new Error("card has no enabled button: " + ${card});
-      const target = ${index === undefined ? `buttons.find((candidate) => candidate.innerText.includes(${wanted})) ?? buttons.at(-1)` : `${index} < 0 ? buttons.at(${index}) : buttons[${index}]`};
-      if (!(target instanceof HTMLElement)) throw new Error("card button not found: " + ${wanted});
-      target.click();
-    })()`,
+    `[...document.querySelectorAll('[role="option"]')].find((option) =>
+    option.getClientRects().length > 0 && option.innerText.includes(${JSON.stringify(text)}))`,
   );
 }
 
-/** 在输入框里输入文本（先聚焦，再走 insertText 以兼容 Lexical）。 */
+/** 替换完整输入；contenteditable 使用 DOM selection，不拼接上一条草稿。 */
 export async function fillInput(session, selector, text) {
   await evaluate(
     session,
     `(() => {
-      const element = document.querySelector(${JSON.stringify(selector)});
-      if (!(element instanceof HTMLElement)) throw new Error("input not found: " + ${JSON.stringify(selector)});
-      element.focus();
-      if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
-        element.select?.();
-      }
-    })()`,
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!(element instanceof HTMLElement)) throw new Error('input not found');
+    element.focus();
+    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+      element.select();
+    } else if (element.isContentEditable) {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else throw new Error('target is not editable');
+  })()`,
   );
   await session.send("Input.insertText", { text });
 }
 
-/** 等待页面出现某段文本。 */
-export async function waitForText(session, text, label, timeoutMs = 30_000) {
+export async function waitForText(session, text, label = text, timeoutMs = 30_000) {
   await waitForPage(
     session,
     `document.body.innerText.includes(${JSON.stringify(text)})`,
-    label ?? text,
+    label,
     timeoutMs,
   );
 }
 
-/** 等待文本消失。 */
-export async function waitForTextGone(session, text, label, timeoutMs = 30_000) {
+export async function waitForTextGone(session, text, label = `no ${text}`, timeoutMs = 30_000) {
   await waitForPage(
     session,
     `!document.body.innerText.includes(${JSON.stringify(text)})`,
-    label ?? `no ${text}`,
+    label,
     timeoutMs,
   );
 }
 
-/** 等待某个选择器出现（或消失）。 */
 export async function waitForSelector(
   session,
   selector,
-  label,
+  label = selector,
   timeoutMs = 30_000,
   present = true,
 ) {
-  const expression = present
-    ? `document.querySelector(${JSON.stringify(selector)}) !== null`
-    : `document.querySelector(${JSON.stringify(selector)}) === null`;
-  await waitForPage(session, expression, label ?? selector, timeoutMs);
+  await waitForPage(
+    session,
+    `document.querySelector(${JSON.stringify(selector)}) ${present ? "!==" : "==="} null`,
+    label,
+    timeoutMs,
+  );
 }
