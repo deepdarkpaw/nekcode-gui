@@ -5,6 +5,7 @@
 import { createServer } from "node:http";
 
 export const MOCK_FINAL_TEXT = "The workspace listing is complete.";
+const MAX_REQUESTS = 200;
 
 function chunk(delta, finishReason = null) {
   return { choices: [{ delta, finish_reason: finishReason }] };
@@ -34,17 +35,21 @@ function finalTurn() {
 /** 启动服务，返回 `{ baseUrl, requests, close }`。 */
 export async function startMockLlm() {
   const requests = [];
+  let requestCount = 0;
   const server = createServer((request, response) => {
     const body = [];
     request.on("data", (part) => body.push(part));
     request.on("end", () => {
-      requests.push({ url: request.url, bytes: Buffer.concat(body).length });
+      requestCount += 1;
+      if (requests.length < MAX_REQUESTS) {
+        requests.push({ url: request.url, bytes: Buffer.concat(body).length });
+      }
       response.writeHead(200, {
         "content-type": "text/event-stream",
         connection: "close",
         "cache-control": "no-cache",
       });
-      const events = requests.length % 2 === 1 ? firstTurn() : finalTurn();
+      const events = requestCount % 2 === 1 ? firstTurn() : finalTurn();
       for (const event of events) response.write(`data: ${JSON.stringify(event)}\n\n`);
       response.end("data: [DONE]\n\n");
     });
