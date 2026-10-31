@@ -18,10 +18,7 @@ import type {
 import { NekSessionBindings } from "./nekSessionBindings.js";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
-import type {
-  IZCodeAgentService,
-  ZCodeModelProviderAvailability,
-} from "../../zcode-agent/zcodeAgent.js";
+import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
@@ -147,15 +144,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     string,
     Emitter<ConversationTopicWireCandidate>
   >();
-  /** 渲染层草稿门禁的权威回答：nek 自己有没有可用模型（薄壳见 nekAgentServiceAdapterLegacy）。 */
-  readonly readModelAvailability: () => Promise<ZCodeModelProviderAvailability>;
 
   constructor(options: NekAgentServiceAdapterOptions) {
     this.service = new NekAgentService(options);
-    this.readModelAvailability = createNekModelAvailabilityReader(
-      options.readModelAvailability,
-      options.guiInfo?.agentDir,
-    );
     const syncer =
       options.sessionIndexSyncer ??
       new NekSessionIndexSyncer({
@@ -171,7 +162,11 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.interactions = new NekAgentInteractionChannel(this.service);
     const statusFeed = createNekAgentStatusFeed(this, options.logger);
     this.status = statusFeed.channel;
-    Object.assign(this, statusFeed.methods, createNekLegacyMethods(this));
+    const readModelAvailability = createNekModelAvailabilityReader(
+      options.readModelAvailability,
+      options.guiInfo?.agentDir,
+    );
+    Object.assign(this, statusFeed.methods, createNekLegacyMethods(this, readModelAvailability));
   }
 
   async initialize(

@@ -2,10 +2,7 @@ import type { Event } from "@zcode/rpc";
 import type { HelloMessage, V4ConversationRowsRangeResult } from "@zcode/shared/zcode-protocol-v4";
 import { V4_WIRE_PROTOCOL_VERSION } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionSummary } from "@zcode/shared/nek-protocol";
-import type {
-  IZCodeAgentService,
-  ZCodeModelProviderAvailability,
-} from "../../zcode-agent/zcodeAgent.js";
+import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import type { NekAgentServiceAdapterApi, NekWorkspaceTarget } from "./types.js";
@@ -13,8 +10,6 @@ import { workspaceKey } from "./frameHelpers.js";
 
 export interface NekAgentServiceAdapterLegacyTarget extends NekAgentServiceAdapterApi {
   readonly service: NekAgentService;
-  /** models.json / settings.json 读取入口（工厂按定位到的 agentDir 注入）。 */
-  readonly readModelAvailability: () => Promise<ZCodeModelProviderAvailability>;
   resolveSessionKey(target: NekWorkspaceTarget, sessionId?: string): string | undefined;
 }
 

@@ -42,7 +42,12 @@ function toolTurn(callId, name, args, preamble) {
     chunk({ role: "assistant", content: preamble ?? "" }),
     chunk({
       tool_calls: [
-        { index: 0, id: callId, type: "function", function: { name, arguments: JSON.stringify(args) } },
+        {
+          index: 0,
+          id: callId,
+          type: "function",
+          function: { name, arguments: JSON.stringify(args) },
+        },
       ],
     }),
     chunk({}, "tool_calls"),

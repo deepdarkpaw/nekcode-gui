@@ -47,7 +47,7 @@ export async function clickTestId(session, testId, { exact = true, index = 0 } =
   await evaluate(
     session,
     `(() => {
-      const selector = ${exact ? "`[data-testid=\"${testIdJson}\"]`" : "`[data-testid^=\"${testIdJson}\"]`"};
+      const selector = ${exact ? '`[data-testid="${testIdJson}"]`' : '`[data-testid^="${testIdJson}"]`'};
       const element = document.querySelectorAll(selector)[${index}];
       if (!(element instanceof HTMLElement)) throw new Error("testid target not found: " + ${testIdJson});
       element.click();
@@ -55,7 +55,15 @@ export async function clickTestId(session, testId, { exact = true, index = 0 } =
   );
 }
 
-/** 用真实鼠标事件点击选择器命中的元素（Radix Select 之类只认真实指针事件的控件）。 */
+/** 在坐标上派发一次真实鼠标点击（Radix 之类只认真实指针事件的控件要用）。 */
+export async function dispatchMouseClick(session, rect) {
+  const base = { x: rect.x, y: rect.y, button: "left", clickCount: 1 };
+  await session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y });
+  await session.send("Input.dispatchMouseEvent", { type: "mousePressed", ...base });
+  await session.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...base });
+}
+
+/** 用真实鼠标事件点击选择器命中的元素。 */
 export async function clickAt(session, selector) {
   const rect = await evaluate(
     session,
@@ -67,13 +75,28 @@ export async function clickAt(session, selector) {
       return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     })()`,
   );
-  const base = { x: rect.x, y: rect.y, button: "left", clickCount: 1 };
-  await session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y });
-  await session.send("Input.dispatchMouseEvent", { type: "mousePressed", ...base });
-  await session.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...base });
+  await dispatchMouseClick(session, rect);
 }
 
-/** 在卡片里按序号或文本点击按钮；卡片用 data-testid 定位。 */
+/** 用真实鼠标事件点击文本匹配的 option 元素（下拉菜单项）。 */
+export async function clickOptionAt(session, text) {
+  const rect = await evaluate(
+    session,
+    `(() => {
+      const wanted = ${JSON.stringify(text)};
+      const option = [...document.querySelectorAll('[role="option"]')].find((item) =>
+        item instanceof HTMLElement && item.innerText.includes(wanted),
+      );
+      if (!(option instanceof HTMLElement)) throw new Error("option not found: " + wanted);
+      option.scrollIntoView({ block: "center" });
+      const box = option.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    })()`,
+  );
+  await dispatchMouseClick(session, rect);
+}
+
+/** 在卡片里按序号或文本点击按钮；卡片用 data-testid 定位（index 支持负数，-1 是最后一个）。 */
 export async function clickCardButton(session, cardTestId, { text, index } = {}) {
   const card = JSON.stringify(cardTestId);
   const wanted = JSON.stringify(text ?? "");
@@ -84,7 +107,7 @@ export async function clickCardButton(session, cardTestId, { text, index } = {})
       if (!(card instanceof HTMLElement)) throw new Error("card not found: " + ${card});
       const buttons = [...card.querySelectorAll("button")].filter((candidate) => !candidate.disabled);
       if (buttons.length === 0) throw new Error("card has no enabled button: " + ${card});
-      const target = ${index === undefined ? `buttons.find((candidate) => candidate.innerText.includes(${wanted})) ?? buttons.at(-1)` : `buttons[${index}]`};
+      const target = ${index === undefined ? `buttons.find((candidate) => candidate.innerText.includes(${wanted})) ?? buttons.at(-1)` : `${index} < 0 ? buttons.at(${index}) : buttons[${index}]`};
       if (!(target instanceof HTMLElement)) throw new Error("card button not found: " + ${wanted});
       target.click();
     })()`,
@@ -128,7 +151,13 @@ export async function waitForTextGone(session, text, label, timeoutMs = 30_000) 
 }
 
 /** 等待某个选择器出现（或消失）。 */
-export async function waitForSelector(session, selector, label, timeoutMs = 30_000, present = true) {
+export async function waitForSelector(
+  session,
+  selector,
+  label,
+  timeoutMs = 30_000,
+  present = true,
+) {
   const expression = present
     ? `document.querySelector(${JSON.stringify(selector)}) !== null`
     : `document.querySelector(${JSON.stringify(selector)}) === null`;
