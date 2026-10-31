@@ -21,7 +21,7 @@ describe("Nek interaction effect sink", () => {
   let store: ReturnType<typeof createNekInteractionStore>;
   let notify: ReturnType<typeof vi.fn<(message: string, level: string) => void>>;
   let replaceComposerText: ReturnType<typeof vi.fn<(text: string) => void>>;
-  let logger: { warn: ReturnType<typeof vi.fn> };
+  let warnSpy: ReturnType<typeof vi.fn<(message: string, context?: unknown) => void>>;
   const formatMessage = (id: string) => `i18n:${id}`;
 
   function drain(options: { withComposer?: boolean } = {}) {
@@ -30,7 +30,7 @@ describe("Nek interaction effect sink", () => {
       sessionKey: "session-a",
       formatMessage,
       notify,
-      logger,
+      logger: { warn: warnSpy },
       ...(options.withComposer === false ? {} : { replaceComposerText }),
     });
   }
@@ -39,7 +39,7 @@ describe("Nek interaction effect sink", () => {
     store = createNekInteractionStore({ respond: vi.fn(), onEffect: vi.fn() });
     notify = vi.fn<(message: string, level: string) => void>();
     replaceComposerText = vi.fn<(text: string) => void>();
-    logger = { warn: vi.fn() };
+    warnSpy = vi.fn<(message: string, context?: unknown) => void>();
   });
 
   it("FF notify: surfaces the message through the injected toast with its level", () => {
@@ -59,14 +59,12 @@ describe("Nek interaction effect sink", () => {
   });
 
   it("FF set_editor_text: replaces the composer text through the injected insert", () => {
-    store
-      .getState()
-      .handleFireAndForget("session-a", {
-        type: "extension_ui_request",
-        id: "e1",
-        method: "set_editor_text",
-        text: "prefilled",
-      });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "e1",
+      method: "set_editor_text",
+      text: "prefilled",
+    });
 
     drain();
     expect(replaceComposerText).toHaveBeenCalledWith("prefilled");
@@ -74,50 +72,42 @@ describe("Nek interaction effect sink", () => {
   });
 
   it("FF set_editor_text: without a composer host the drop is logged, not silent", () => {
-    store
-      .getState()
-      .handleFireAndForget("session-a", {
-        type: "extension_ui_request",
-        id: "e1",
-        method: "set_editor_text",
-        text: "prefilled",
-      });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "e1",
+      method: "set_editor_text",
+      text: "prefilled",
+    });
 
     drain({ withComposer: false });
     expect(replaceComposerText).not.toHaveBeenCalled();
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(warnSpy).toHaveBeenCalledWith(
       "[NekInteractionStore] set_editor_text without a composer host",
       { sessionKey: "session-a", id: "e1" },
     );
   });
 
   it("FF setStatus/setWidget/setTitle: update session state without inventing a toast", () => {
-    store
-      .getState()
-      .handleFireAndForget("session-a", {
-        type: "extension_ui_request",
-        id: "s1",
-        method: "setStatus",
-        statusKey: "mode",
-        statusText: "plan",
-      });
-    store
-      .getState()
-      .handleFireAndForget("session-a", {
-        type: "extension_ui_request",
-        id: "w1",
-        method: "setWidget",
-        widgetKey: "widget",
-        widgetLines: ["line one", "line two"],
-      });
-    store
-      .getState()
-      .handleFireAndForget("session-a", {
-        type: "extension_ui_request",
-        id: "t1",
-        method: "setTitle",
-        title: "Renamed",
-      });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "s1",
+      method: "setStatus",
+      statusKey: "mode",
+      statusText: "plan",
+    });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "w1",
+      method: "setWidget",
+      widgetKey: "widget",
+      widgetLines: ["line one", "line two"],
+    });
+    store.getState().handleFireAndForget("session-a", {
+      type: "extension_ui_request",
+      id: "t1",
+      method: "setTitle",
+      title: "Renamed",
+    });
 
     expect(drain()).toBe(3);
     expect(notify).not.toHaveBeenCalled();

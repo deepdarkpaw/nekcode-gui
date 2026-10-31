@@ -22,6 +22,11 @@ import type { NekInteractionStoreApi } from "./interactionStore.js";
 
 export type NekEffectNotifyLevel = "info" | "warning" | "error";
 
+/** 诊断出口的最小面（测试注入用）；默认实现是项目 logger。 */
+export interface NekEffectSinkLogger {
+  warn: (message: string, context?: unknown) => void;
+}
+
 export interface NekInteractionEffectSinkOptions {
   store: NekInteractionStoreApi;
   sessionKey: string;
@@ -31,7 +36,7 @@ export interface NekInteractionEffectSinkOptions {
   replaceComposerText?: (text: string) => void;
   /** 展示一条提示；默认实现由宿主注入现有 toast。 */
   notify: (message: string, level: NekEffectNotifyLevel) => void;
-  logger?: { warn: (...args: unknown[]) => void };
+  logger?: NekEffectSinkLogger;
 }
 
 /**
@@ -62,7 +67,7 @@ function applyEffect(
     sessionKey: string;
     replaceComposerText?: (text: string) => void;
     notify: (message: string, level: NekEffectNotifyLevel) => void;
-    logger: { warn: (...args: unknown[]) => void };
+    logger: NekEffectSinkLogger;
   },
 ): void {
   switch (effect.kind) {
