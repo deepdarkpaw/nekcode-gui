@@ -236,12 +236,22 @@ jobs:
       - name: Package and verify desktop
         run: pnpm bundle:desktop -- --os "$ZCODE_TARGET_OS" --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
       - name: Packaged startup smoke
+        # 可执行文件名随 flavor 变（nekcode / nekcode-preview），由脚本在 win-unpacked 里自检。
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             xvfb-run -a node scripts/acceptance/packaged-smoke.mjs
           else
-            node scripts/acceptance/packaged-smoke.mjs --app "packages/desktop/dist/win-unpacked/nekcode-preview.exe"
+            node scripts/acceptance/packaged-smoke.mjs
           fi
+      - name: Collect installers
+        run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-${{ matrix.flavor }}-${{ matrix.target.platform }}-${{ matrix.target.arch }}
+          path: dist/release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
       - name: Upload packaged smoke artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -252,15 +262,6 @@ jobs:
             ${{ runner.temp }}/nekcode-acceptance-*
           if-no-files-found: warn
           retention-days: 7
-      - name: Collect installers
-        run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: desktop-${{ matrix.flavor }}-${{ matrix.target.platform }}-${{ matrix.target.arch }}
-          path: dist/release-assets/*
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
 
   build-macos:
     name: Build (${{ matrix.flavor }} mac ${{ matrix.target.arch }})
@@ -335,9 +336,20 @@ jobs:
       - name: Package and verify desktop
         run: pnpm bundle:desktop -- --os mac --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
       - name: Packaged startup smoke
+        # mac 产物目录名与 .app 名都随 arch/flavor 变，先 glob 定位再把路径交给脚本。
         run: |
-          node scripts/acceptance/packaged-smoke.mjs \
-            --app "packages/desktop/dist/mac-${ZCODE_TARGET_ARCH}/nekcode.app/Contents/MacOS/nekcode"
+          APP=$(ls -d packages/desktop/dist/mac*/nekcode*.app/Contents/MacOS/nekcode* | head -1)
+          test -n "$APP" || { echo "packaged app not found"; ls -d packages/desktop/dist/*; exit 1; }
+          node scripts/acceptance/packaged-smoke.mjs --app "$APP"
+      - name: Collect installers
+        run: node scripts/ci/desktop-release.mjs collect mac "$ZCODE_TARGET_ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-${{ matrix.flavor }}-mac-${{ matrix.target.arch }}
+          path: dist/release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
       - name: Upload packaged smoke artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -348,15 +360,6 @@ jobs:
             ${{ runner.temp }}/nekcode-acceptance-*
           if-no-files-found: warn
           retention-days: 7
-      - name: Collect installers
-        run: node scripts/ci/desktop-release.mjs collect mac "$ZCODE_TARGET_ARCH"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: desktop-${{ matrix.flavor }}-mac-${{ matrix.target.arch }}
-          path: dist/release-assets/*
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
 
   release:
     name: Draft release
