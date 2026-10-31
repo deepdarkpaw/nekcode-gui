@@ -170,6 +170,7 @@ import type {
 import type { SessionLease } from "@/v4/sessionDataLayer.js";
 import { V4InteractionDialogs } from "@/v4/V4InteractionDialogs.js";
 import {
+  createNekPaneStatusCallbacks,
   NekSessionStatusSlot,
   type NekSessionStatusCallbacks,
 } from "@/nek/status/index.js";
@@ -1541,31 +1542,22 @@ export function SessionPane({
     },
     [handleOpenSubagentSession, sessionId],
   );
+  // 状态卡的 pane 级回调：子代理 RPC 走 feed，其余都落到当前 pane 的真实行为上。
+  // 只依赖 agent 服务的动作（abort / compact / 队列）由 status feed 直接登记，不在这里转发。
   const nekStatusCallbacksForPane = useMemo<NekSessionStatusCallbacks | undefined>(() => {
     if (!sessionId) return undefined;
-    return {
-      ...nekStatusCallbacks,
-      onStopSubagent: nekStatusCallbacks?.onStopSubagent ?? subagentFeed.onStop,
-      fetchTranscript: nekStatusCallbacks?.fetchTranscript ?? subagentFeed.fetchTranscript,
-      onStopAllSubagents:
-        nekStatusCallbacks?.onStopAllSubagents ??
-        (async (ids) => {
-          await Promise.all(ids.map((id) => subagentFeed.onStop(id)));
-        }),
-      onFocusSubagent: nekStatusCallbacks?.onFocusSubagent ?? handleFocusNekSubagent,
-      onOpenPlan: nekStatusCallbacks?.onOpenPlan ?? handleOpenNekPlan,
-      onJumpToTodo: nekStatusCallbacks?.onJumpToTodo ?? handleJumpToNekTodo,
-      canJumpToTodo: nekStatusCallbacks?.canJumpToTodo ?? canJumpToNekTodo,
-      clearQueue: nekStatusCallbacks?.clearQueue ?? (async () => ({ steering: [], followUp: [] })),
-      requeue: nekStatusCallbacks?.requeue ?? (async () => undefined),
-      getComposerText: nekStatusCallbacks?.getComposerText ?? getComposerText,
-      setComposerText: nekStatusCallbacks?.setComposerText ?? setComposerText,
-      focusComposerAtEnd: nekStatusCallbacks?.focusComposerAtEnd ?? focusComposerAtEnd,
-      abortRetry: nekStatusCallbacks?.abortRetry ?? (async () => undefined),
-      abort: nekStatusCallbacks?.abort ?? (async () => undefined),
-      abortCompaction: nekStatusCallbacks?.abortCompaction ?? (async () => undefined),
-      onCompact: nekStatusCallbacks?.onCompact ?? (async () => undefined),
-    };
+    if (nekStatusCallbacks) return nekStatusCallbacks;
+    return createNekPaneStatusCallbacks({
+      stopSubagent: subagentFeed.onStop,
+      fetchTranscript: subagentFeed.fetchTranscript,
+      focusSubagent: handleFocusNekSubagent,
+      openPlan: handleOpenNekPlan,
+      jumpToTodo: handleJumpToNekTodo,
+      canJumpToTodo: canJumpToNekTodo,
+      getComposerText,
+      setComposerText,
+      focusComposerAtEnd,
+    });
   }, [
     canJumpToNekTodo,
     focusComposerAtEnd,

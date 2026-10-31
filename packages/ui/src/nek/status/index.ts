@@ -11,6 +11,10 @@ export type {
   NekSessionStatusCallbacks,
   NekSessionStatusSlotProps,
 } from "./NekSessionStatusSlot.js";
+export {
+  createNekPaneStatusCallbacks,
+  type NekPaneStatusCallbackSources,
+} from "./paneStatusCallbacks.js";
 export { NekSubagentCardView } from "./NekSubagentCardView.js";
 export type { NekSubagentCardViewProps } from "./NekSubagentCardView.js";
 export { NekSubagentTranscriptView } from "./NekSubagentTranscriptView.js";
