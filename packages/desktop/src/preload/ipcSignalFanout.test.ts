@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createIpcSignalFanout, type IpcSignalSource } from "./ipcSignalFanout.js";
+import {
+  createIpcSignalFanout,
+  MAX_IPC_SIGNAL_SUBSCRIBERS,
+  type IpcSignalSource,
+} from "./ipcSignalFanout.js";
 
 class FakeIpcSignalSource implements IpcSignalSource {
   private readonly listeners = new Set<() => void>();
@@ -57,6 +61,58 @@ test("releasing one settings subscriber does not detach the shared listener", ()
   assert.equal(fanout.subscriberCount(), 1);
 
   second();
+  assert.equal(source.listenerCount(), 0);
+  assert.equal(fanout.subscriberCount(), 0);
+});
+
+test("subscribing the same callback twice keeps the other registration alive", () => {
+  const source = new FakeIpcSignalSource();
+  const fanout = createIpcSignalFanout(source, "zcode:settings-changed");
+  const calls: string[] = [];
+  const shared = () => calls.push("shared");
+  const releaseFirst = fanout.subscribe(shared);
+  const releaseSecond = fanout.subscribe(shared);
+
+  assert.equal(fanout.subscriberCount(), 2);
+  releaseFirst();
+  source.emit();
+  assert.deepEqual(calls, ["shared"]);
+
+  releaseSecond();
+  assert.equal(source.listenerCount(), 0);
+});
+
+test("a released subscriber stops receiving signals, and re-subscribing pairs on/remove", () => {
+  const source = new FakeIpcSignalSource();
+  const fanout = createIpcSignalFanout(source, "zcode:settings-changed");
+  const calls: number[] = [];
+  const release = fanout.subscribe(() => calls.push(1));
+  source.emit();
+  release();
+  source.emit();
+
+  const second = fanout.subscribe(() => calls.push(2));
+  source.emit();
+  second();
+
+  assert.deepEqual(calls, [1, 2]);
+  assert.equal(source.onCount, 2);
+  assert.equal(source.removeCount, 2);
+  assert.equal(source.listenerCount(), 0);
+});
+
+test("the fanout rejects subscriptions beyond the bounded limit", () => {
+  const source = new FakeIpcSignalSource();
+  const fanout = createIpcSignalFanout(source, "zcode:settings-changed");
+  const disposers = Array.from({ length: MAX_IPC_SIGNAL_SUBSCRIBERS }, () =>
+    fanout.subscribe(() => undefined),
+  );
+
+  assert.equal(source.listenerCount(), 1);
+  assert.throws(() => fanout.subscribe(() => undefined), /exceeded 64 subscribers/u);
+  assert.equal(source.listenerCount(), 1);
+
+  for (const dispose of disposers) dispose();
   assert.equal(source.listenerCount(), 0);
   assert.equal(fanout.subscriberCount(), 0);
 });

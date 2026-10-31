@@ -950,8 +950,6 @@ export function SessionPane({
   const autoLoadIncompleteTurnCursorRef = useRef<string | null>(null);
   snapshotRef.current = snapshot;
   const composerDraftStateRef = useRef({ hasContent: false, busy: false });
-  const composerDraftRef = useRef(composerDraft);
-  composerDraftRef.current = composerDraft;
   const paneRootRef = useRef<HTMLDivElement>(null);
   const [queueEditOperation, setQueueEditOperation] = useState<{
     queueItemId: string;
@@ -1105,6 +1103,9 @@ export function SessionPane({
     agentStartupAllowed: draftAgentStartupAllowed,
     modelSelectionService,
   });
+  // 稳定的"当前草稿文本"读取器：队列取回/编辑要在 latest 草稿上拼接，不能每键重建回调。
+  const composerDraftRef = useRef(composerDraft);
+  composerDraftRef.current = composerDraft;
   const modelSelectionView =
     modelSelectionRead.state.status === "ready" ? modelSelectionRead.state.view : null;
   const draftModelSelectionRevisionRef = useRef<number | null>(null);
