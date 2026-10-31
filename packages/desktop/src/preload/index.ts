@@ -35,7 +35,9 @@ import type {
 } from "@zcode/shared";
 import { InternalChannels, PlatformChannels, formatZCodeRendererProcessName } from "@zcode/shared";
 import { createNekIpcPreloadBridge } from "./nekIpc.js";
+import { createIpcSignalFanout } from "./ipcSignalFanout.js";
 
+const settingsChanged = createIpcSignalFanout(ipcRenderer, PlatformChannels.SettingsChanged);
 const updateReadyCallbacks = new Set<(version: string) => void>();
 const updateStateCallbacks = new Set<(payload: UpdateStatePayload) => void>();
 const postUpdateReleaseNotesCallbacks = new Set<(payload: PostUpdateReleaseNotesPayload) => void>();
@@ -405,11 +407,7 @@ contextBridge.exposeInMainWorld("zcode", {
   getZCodeStdioTapDevState: (): Promise<ZCodeStdioTapDevState> =>
     ipcRenderer.invoke(PlatformChannels.GetZCodeStdioTapDevState),
   /** 注册 main 进程修改 settings 后的通知，返回 disposer */
-  onSettingsChanged: (callback: () => void): (() => void) => {
-    const handler = () => callback();
-    ipcRenderer.on(PlatformChannels.SettingsChanged, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.SettingsChanged, handler);
-  },
+  onSettingsChanged: (callback: () => void): (() => void) => settingsChanged.subscribe(callback),
   /** 注册应用语言变化，返回 disposer */
   onApplicationLocaleChanged: (callback: (locale: Locale) => void): (() => void) => {
     const handler = (_event: unknown, locale: Locale) => callback(locale);
