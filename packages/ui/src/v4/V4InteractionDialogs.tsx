@@ -37,6 +37,8 @@ interface V4InteractionDialogsProps {
   snapshot: ConversationSnapshot | null;
   onCommandSettled?: (commandId: string) => void;
   onPlanInteractionAccepted?: (interactionId: string) => void;
+  onOpenPlanFile?: (path: string) => Promise<void> | void;
+  focusComposer?: () => void;
 }
 
 /** 通用 Dialog 只渲染 userInput：workspaceHookReview 由 Settings/Hooks 行内处理。 */
@@ -103,6 +105,8 @@ export function V4InteractionDialogs({
   snapshot,
   onCommandSettled,
   onPlanInteractionAccepted,
+  onOpenPlanFile,
+  focusComposer,
 }: V4InteractionDialogsProps) {
   const { sendCommand } = useV4Conversation();
   const connectWorkspaceHookCommands = useWorkspaceHookReviewStore((state) => state.connect);
@@ -301,7 +305,15 @@ export function V4InteractionDialogs({
     }
   }, [pending?.autoResolution, pending?.interactionId, sendSnoozeOnce]);
 
-  const nekInteractionHost = <NekInteractionHost sessionKey={sessionId} />;
+  const nekInteractionHost = (
+    <NekInteractionHost
+      sessionKey={sessionId}
+      workspacePath={workspacePath}
+      workspaceIdentity={workspaceIdentity}
+      onOpenPlanFile={onOpenPlanFile}
+      focusComposer={focusComposer}
+    />
+  );
   if (!pending) {
     return nekInteractionHost;
   }

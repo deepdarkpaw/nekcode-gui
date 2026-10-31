@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import type {
   NekAskQuestionPayload,
   NekExtensionUiDialogRequest,
@@ -7,7 +7,9 @@ import type {
   NekStructuredUiRequest,
   NekSwitchModePayload,
 } from "@zcode/shared/nek-protocol";
+import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { ActiveElementInfo } from "./interactionCommon.js";
 import { NekAskQuestionCard } from "./NekAskQuestionCard.js";
 import { NekExtensionDialogCard } from "./NekExtensionDialogCard.js";
@@ -18,6 +20,8 @@ import { useNekInteractionStore, type NekInteractionStoreApi } from "./interacti
 export interface NekInteractionHostProps {
   sessionKey: string;
   store?: NekInteractionStoreApi;
+  workspacePath?: string;
+  workspaceIdentity?: string;
   activeElement?: ActiveElementInfo;
   onOpenPlanFile?: (path: string) => Promise<void> | void;
   focusComposer?: () => void;
@@ -35,12 +39,40 @@ function extensionResponse(
 export function NekInteractionHost({
   sessionKey,
   store = useNekInteractionStore,
+  workspacePath,
+  workspaceIdentity,
   activeElement,
   onOpenPlanFile,
   focusComposer,
   onLostText,
 }: NekInteractionHostProps) {
   const { intl } = useZCodeIntl();
+  const effectCount = store((state) => state.sessions[sessionKey]?.effects.length ?? 0);
+  const noticeCount = store((state) => state.sessions[sessionKey]?.notices.length ?? 0);
+  useEffect(() => {
+    if (effectCount > 0) {
+      for (const effect of store.getState().takeEffects(sessionKey)) {
+        if (effect.kind === "toast") {
+          toast(effect.message, { variant: effect.level === "error" ? "warning" : effect.level });
+        } else if (effect.kind === "setStatus" && effect.statusText?.trim()) {
+          toast(`${effect.statusKey}: ${effect.statusText}`, { variant: "info" });
+        } else if (effect.kind === "setWidget" && effect.widgetLines?.length) {
+          toast(effect.widgetLines.join("\n"), { variant: "info" });
+        } else if (effect.kind === "setTitle" && effect.title.trim()) {
+          toast(effect.title, { variant: "info" });
+        } else if (effect.kind === "replaceComposerText" && workspacePath) {
+          useZCodeSessionStore
+            .getState()
+            .requestComposerTextInsert(workspacePath, effect.text, workspaceIdentity);
+        }
+      }
+    }
+    if (noticeCount > 0) {
+      for (const notice of store.getState().takeNotices(sessionKey)) {
+        toast(intl.formatMessage({ id: notice.id }));
+      }
+    }
+  }, [effectCount, intl, noticeCount, sessionKey, store, workspaceIdentity, workspacePath]);
   const activeRequest = store((state) => state.sessions[sessionKey]?.queue[0]?.request);
   const queueLength = store((state) =>
     Math.max(0, (state.sessions[sessionKey]?.queue.length ?? 0) - 1),

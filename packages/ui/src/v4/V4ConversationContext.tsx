@@ -1,6 +1,7 @@
 import { ConversationDiagnosticPaneAttachment } from "@/v4/diagnostics/ConversationDiagnosticAttachment.js";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -20,6 +21,9 @@ import type {
 import type { IServiceAccessor } from "@zcode/services";
 import { ServiceProvider } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { logger } from "@/logger.js";
+import type { NekStatusEventOutput } from "@/nek/status/types.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import type { ConversationAttachmentReadParams, ConversationTransport } from "@/v4/transport.js";
 import type { PaneWorkspaceScope } from "@/v4/paneLayoutStore.js";
@@ -80,6 +84,8 @@ export function useHasV4Conversation(): boolean {
 interface V4PaneConversationProviderProps {
   /** pane 绑定的 primary workspace（连接路由键）。 */
   scope: PaneWorkspaceScope;
+  /** workspace 级交互卡只由 primary pane 渲染，避免分屏重复。 */
+  primaryPane?: boolean;
   children: ReactNode;
 }
 
@@ -94,7 +100,11 @@ interface V4PaneConversationProviderProps {
  * 另起独立 runtime（远控保护约束）。重连 ready 后 services 换新引用 → 注册表保持
  * 原 layer/transport 身份，并在 commit 阶段单向激活最新 proxy。
  */
-export function V4PaneConversationProvider({ scope, children }: V4PaneConversationProviderProps) {
+export function V4PaneConversationProvider({
+  scope,
+  primaryPane = false,
+  children,
+}: V4PaneConversationProviderProps) {
   const targetResolution = useWorkspaceServicesResolution(
     scope.workspacePath,
     scope.remoteSessionId ?? null,
@@ -118,7 +128,11 @@ export function V4PaneConversationProvider({ scope, children }: V4PaneConversati
   // remoteSessionId 后若仍把原 scope 传给 registry，会以 __base__ 和远端 endpoint
   // 各建一份数据层，终态可能落到非可见 store。ready 后统一使用解析后的 scope。
   return (
-    <ReadyV4PaneConversationProvider scope={resolvedScope} services={targetResolution.services}>
+    <ReadyV4PaneConversationProvider
+      scope={resolvedScope}
+      services={targetResolution.services}
+      primaryPane={primaryPane}
+    >
       {children}
     </ReadyV4PaneConversationProvider>
   );
@@ -127,12 +141,42 @@ export function V4PaneConversationProvider({ scope, children }: V4PaneConversati
 function ReadyV4PaneConversationProvider({
   scope,
   services,
+  primaryPane,
   children,
-}: Pick<V4PaneConversationProviderProps, "scope" | "children"> & {
+}: Pick<V4PaneConversationProviderProps, "scope" | "children" | "primaryPane"> & {
   services: IServiceAccessor;
 }) {
   const agentService = services.zcodeAgentService;
   const platform = usePlatform();
+  const { intl } = useZCodeIntl();
+  const onStatusOutput = useCallback(
+    (sessionKey: string, output: NekStatusEventOutput) => {
+      for (const event of output.subagentFinished ?? []) {
+        const completed = event.status === "completed";
+        try {
+          platform.showTaskNotification({
+            taskId: sessionKey,
+            status: completed ? "completed" : "failed",
+            title: intl.formatMessage({
+              id: completed ? "notification.subagentCompleted" : "notification.subagentFailed",
+            }),
+            body: intl.formatMessage(
+              {
+                id: completed
+                  ? "notification.subagentCompletedBody"
+                  : "notification.subagentFailedBody",
+              },
+              { description: event.description },
+            ),
+          });
+        } catch (error) {
+          logger.warn("[nek-status] failed to dispatch subagent notification", { error, sessionKey });
+        }
+      }
+    },
+    [intl, platform],
+  );
+  const statusFeedOptions = useMemo(() => ({ onOutput: onStatusOutput }), [onStatusOutput]);
   const feedTarget = useMemo(
     () => ({
       workspacePath: scope.workspacePath,
@@ -154,6 +198,7 @@ function ReadyV4PaneConversationProvider({
       },
       agentService,
       scope.remoteSessionId ? undefined : platform.createLocalMediaPreviewUrl,
+      statusFeedOptions,
     );
     return {
       lease,
@@ -181,6 +226,7 @@ function ReadyV4PaneConversationProvider({
     agentService,
     platform.createLocalMediaPreviewUrl,
     scope.workspacePath,
+    statusFeedOptions,
     scope.workspaceIdentity,
     scope.remoteSessionId,
   ]);
@@ -200,7 +246,7 @@ function ReadyV4PaneConversationProvider({
   return (
     <ServiceProvider services={services}>
       <NekAgentFeedProvider service={agentService} target={feedTarget}>
-        <NekWorkspaceInteractionHost workspacePath={scope.workspacePath} />
+        {primaryPane ? <NekWorkspaceInteractionHost workspacePath={scope.workspacePath} /> : null}
         <ConversationDiagnosticPaneAttachment services={services} scope={scope}>
           <V4ConversationContext.Provider value={bundle.value}>
             {children}

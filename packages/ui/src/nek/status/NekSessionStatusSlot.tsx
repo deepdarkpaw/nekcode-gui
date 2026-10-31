@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { QueueContents } from "./queue.js";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
@@ -6,12 +6,15 @@ import { NekRetryBannerView } from "./NekRetryBannerView.js";
 import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
+import { NekSubagentCardView } from "./NekSubagentCardView.js";
+import { NekSubagentTranscriptView } from "./NekSubagentTranscriptView.js";
 import { useNekStatusActions } from "@/nek/statusFeed/statusActions.js";
 import { useNekStatusStore } from "./store.js";
 
 export interface NekSessionStatusCallbacks {
   onStopSubagent: (id: string) => Promise<void>;
   onStopAllSubagents?: (ids: string[]) => Promise<void>;
+  fetchTranscript: (id: string) => Promise<{ messages: unknown[] }>;
   onFocusSubagent: (id: string) => void;
   onOpenPlan: (path: string) => Promise<void> | void;
   onJumpToTodo: (id: string) => void;
@@ -40,6 +43,7 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
   // 只依赖 agent 服务的动作由 status feed 直接提供（定义见 statusFeed/statusActions.ts）；
   // pane 传入的 callbacks 负责需要 composer / 侧栏 / 行跳转的那几个动作。
   const statusActions = useNekStatusActions(sessionKey);
+  const [transcriptId, setTranscriptId] = useState<string | null>(null);
   const effectiveCallbacks = statusActions
     ? {
         ...callbacks,
@@ -51,10 +55,14 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
         onCompact: statusActions.compact,
       }
     : callbacks;
+  const subagentIds = useNekStatusStore(
+    (state) => state.sessions[sessionKey]?.subagents.order ?? [],
+  );
   const active = useNekStatusStore((state) => {
     const status = state.sessions[sessionKey];
     if (!status) return false;
     return (
+      subagentIds.length > 0 ||
       status.todos.length > 0 ||
       status.queue.steering.length > 0 ||
       status.queue.followUp.length > 0 ||
@@ -82,6 +90,24 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
         onJumpToTodo={effectiveCallbacks.onJumpToTodo}
         canJumpToTodo={effectiveCallbacks.canJumpToTodo}
       />
+      {transcriptId ? (
+        <NekSubagentTranscriptView
+          sessionKey={sessionKey}
+          id={transcriptId}
+          fetchTranscript={effectiveCallbacks.fetchTranscript}
+          onBack={() => setTranscriptId(null)}
+        />
+      ) : (
+        subagentIds.map((id) => (
+          <NekSubagentCardView
+            key={id}
+            sessionKey={sessionKey}
+            id={id}
+            onStop={effectiveCallbacks.onStopSubagent}
+            onOpenTranscript={setTranscriptId}
+          />
+        ))
+      )}
       <NekQueueBarView
         sessionKey={sessionKey}
         clearQueue={effectiveCallbacks.clearQueue}

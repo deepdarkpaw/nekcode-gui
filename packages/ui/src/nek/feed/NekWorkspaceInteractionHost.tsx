@@ -5,5 +5,5 @@ import { NekInteractionHost } from "@/nek/interactions/NekInteractionHost.js";
  * 由这个宿主渲染。它挂在 pane 的 feed provider 下面，回答走同一个 feed。
  */
 export function NekWorkspaceInteractionHost({ workspacePath }: { workspacePath: string }) {
-  return <NekInteractionHost sessionKey={workspacePath} />;
+  return <NekInteractionHost sessionKey={workspacePath} workspacePath={workspacePath} />;
 }

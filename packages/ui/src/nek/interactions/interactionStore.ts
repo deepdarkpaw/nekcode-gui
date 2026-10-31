@@ -401,5 +401,12 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
 /** Renderer-wide queue hook; transport wiring supplies requests and response callbacks. */
 export const useNekInteractionStore = createNekInteractionStore({
   respond: () => undefined,
-  onEffect: () => undefined,
+  onEffect: (sessionKey, effect) => {
+    // NekInteractionHost drains the bounded effect outbox into the existing toast/composer UI.
+    logger.debug("[NekInteractionStore] fire-and-forget effect queued", {
+      sessionKey,
+      kind: effect.kind,
+      id: effect.id,
+    });
+  },
 });

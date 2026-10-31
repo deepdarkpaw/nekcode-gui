@@ -13,7 +13,11 @@ import type {
 } from "@zcode/services";
 import { logger } from "@/logger.js";
 import { useNekStatusStore } from "@/nek/status/store.js";
-import { NEK_STATUS_MAX_SESSIONS, NEK_STATUS_STATS_THROTTLE_MS } from "@/nek/status/types.js";
+import {
+  NEK_STATUS_MAX_SESSIONS,
+  NEK_STATUS_STATS_THROTTLE_MS,
+  type NekStatusEventOutput,
+} from "@/nek/status/types.js";
 import {
   deleteNekStatusActions,
   setNekStatusActions,
@@ -35,6 +39,10 @@ export type NekStatusFeedAgentService = Pick<
 
 export interface NekStatusFeedHandle {
   dispose: () => void;
+}
+
+export interface NekStatusFeedOptions {
+  onOutput?: (sessionKey: string, output: NekStatusEventOutput) => void;
 }
 
 function sessionTarget(
@@ -70,6 +78,7 @@ class NekStatusFeed implements NekStatusFeedHandle {
   constructor(
     private readonly agentService: NekStatusFeedAgentService,
     private readonly target: ZCodeAgentWorkspaceTarget,
+    private readonly options: NekStatusFeedOptions,
   ) {}
 
   start(): void {
@@ -102,10 +111,15 @@ class NekStatusFeed implements NekStatusFeedHandle {
     this.trackSession(frame.sessionKey);
     const store = useNekStatusStore.getState();
     if (frame.kind === "snapshot") {
-      store.consumeEvent(frame.sessionKey, { type: "session_snapshot", payload: frame.snapshot });
+      const output = store.consumeEvent(frame.sessionKey, {
+        type: "session_snapshot",
+        payload: frame.snapshot,
+      });
+      this.options.onOutput?.(frame.sessionKey, output);
       return;
     }
     const output = store.consumeEvent(frame.sessionKey, frame.event);
+    this.options.onOutput?.(frame.sessionKey, output);
     if (output.needsStatsRefresh) this.runStatsRefresh(frame.sessionKey);
     else this.syncStatsRefresh(frame.sessionKey);
   }
@@ -193,8 +207,9 @@ class NekStatusFeed implements NekStatusFeedHandle {
 export function createNekStatusFeed(
   agentService: NekStatusFeedAgentService,
   target: ZCodeAgentWorkspaceTarget,
+  options: NekStatusFeedOptions = {},
 ): NekStatusFeedHandle {
-  const feed = new NekStatusFeed(agentService, target);
+  const feed = new NekStatusFeed(agentService, target, options);
   feed.start();
   return feed;
 }

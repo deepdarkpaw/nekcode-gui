@@ -13,7 +13,11 @@ import { ReplaceableConversationTransport } from "@/v4/replaceableConversationTr
 import { SessionDataLayer } from "@/v4/sessionDataLayer.js";
 import type { ConversationTransport } from "@/v4/transport.js";
 import { logger } from "@/logger.js";
-import { createNekStatusFeed, type NekStatusFeedHandle } from "@/nek/statusFeed/statusFeed.js";
+import {
+  createNekStatusFeed,
+  type NekStatusFeedHandle,
+  type NekStatusFeedOptions,
+} from "@/nek/statusFeed/statusFeed.js";
 
 /** 注册表需要的 agentService 窄面（= conversation transport 的依赖面，便于测试注入）。 */
 export type WorkspaceConnectionAgentService = Pick<
@@ -171,6 +175,7 @@ export function acquireWorkspaceConnection(
   scope: WorkspaceConnectionScope,
   agentService: WorkspaceConnectionAgentService,
   createLocalMediaPreviewUrl?: (path: string) => string,
+  statusFeedOptions: NekStatusFeedOptions = {},
 ): WorkspaceConnectionLease {
   const key = buildWorkspaceConnectionKey(scope);
   const existing = registry.get(key);
@@ -214,11 +219,15 @@ export function acquireWorkspaceConnection(
       ? new ReplaceableConversationTransport(initialTransport)
       : null;
     const transport = replaceableTransport ?? initialTransport;
-    const statusFeed = createNekStatusFeed(agentService, {
-      workspacePath: scope.workspacePath,
-      ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
-      ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
-    });
+    const statusFeed = createNekStatusFeed(
+      agentService,
+      {
+        workspacePath: scope.workspacePath,
+        ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+        ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+      },
+      statusFeedOptions,
+    );
     entry = {
       key,
       agentService,
@@ -266,11 +275,15 @@ export function acquireWorkspaceConnection(
       entry.agentService = agentService;
       entry.agentServiceGeneration = incomingServiceGeneration;
       entry.statusFeed.dispose();
-      entry.statusFeed = createNekStatusFeed(agentService, {
-        workspacePath: scope.workspacePath,
-        ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
-        ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
-      });
+      entry.statusFeed = createNekStatusFeed(
+        agentService,
+        {
+          workspacePath: scope.workspacePath,
+          ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+          ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+        },
+        statusFeedOptions,
+      );
       entry.replaceableTransport.replace(
         createAgentConversationTransport(agentService, {
           workspacePath: scope.workspacePath,

@@ -73,6 +73,7 @@ function setStats() {
 function callbacks(overrides: Partial<NekSessionStatusCallbacks> = {}): NekSessionStatusCallbacks {
   return {
     onStopSubagent: vi.fn(async () => undefined),
+    fetchTranscript: vi.fn(async () => ({ messages: [] })),
     onFocusSubagent: vi.fn(),
     onOpenPlan: vi.fn(),
     onJumpToTodo: vi.fn(),
