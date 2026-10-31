@@ -3127,6 +3127,9 @@ const zhCN: Record<string, string> = {
   "nek.status.usage.compacting": "正在压缩",
   "nek.status.usage.compact": "压缩上下文",
   "nek.status.usage.context": "{percent}% · {tokens}/{window}",
+  "nek.interaction.cancelledByHost": "请求已被撤销",
+  "nek.interaction.timedOut": "请求已超时",
+  "nek.interaction.timedOutDiscarded": "请求已超时，未提交的内容已丢弃",
   "ui.action.busy": "正在处理上一个操作",
   "ui.action.unavailable.externalEditor": "当前 GUI 尚未接通外部编辑器",
   "ui.action.unavailable.interactionFocus":

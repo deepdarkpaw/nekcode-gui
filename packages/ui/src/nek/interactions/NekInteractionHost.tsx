@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { ActiveElementInfo } from "./interactionCommon.js";
+import { drainNekInteractionEffects, type NekEffectNotifyLevel } from "./interactionEffectSink.js";
 import { NekAskQuestionCard } from "./NekAskQuestionCard.js";
 import { NekExtensionDialogCard } from "./NekExtensionDialogCard.js";
 import { NekPlanReviewCard } from "./NekPlanReviewCard.js";
@@ -47,32 +48,32 @@ export function NekInteractionHost({
   onLostText,
 }: NekInteractionHostProps) {
   const { intl } = useZCodeIntl();
-  const effectCount = store((state) => state.sessions[sessionKey]?.effects.length ?? 0);
-  const noticeCount = store((state) => state.sessions[sessionKey]?.notices.length ?? 0);
+  // fire-and-forget（notify / set_editor_text）与一次性提示（「请求已被撤销」）的出站队列：
+  // 直接订阅 store，不依赖某次渲染，宿主挂在哪个 pane 都能及时消费。
+  const drainEffects = useCallback(() => {
+    drainNekInteractionEffects({
+      store,
+      sessionKey,
+      formatMessage: (id) => intl.formatMessage({ id }),
+      notify: (message: string, level: NekEffectNotifyLevel) => {
+        // 现有 toast 只有 info/warning 两档语义色；错误提示沿用 warning，避免新造样式。
+        toast(message, { variant: level === "error" ? "warning" : level });
+      },
+      ...(workspacePath
+        ? {
+            replaceComposerText: (text: string) => {
+              useZCodeSessionStore
+                .getState()
+                .requestComposerTextInsert(workspacePath, text, workspaceIdentity);
+            },
+          }
+        : {}),
+    });
+  }, [intl, sessionKey, store, workspaceIdentity, workspacePath]);
   useEffect(() => {
-    if (effectCount > 0) {
-      for (const effect of store.getState().takeEffects(sessionKey)) {
-        if (effect.kind === "toast") {
-          toast(effect.message, { variant: effect.level === "error" ? "warning" : effect.level });
-        } else if (effect.kind === "setStatus" && effect.statusText?.trim()) {
-          toast(`${effect.statusKey}: ${effect.statusText}`, { variant: "info" });
-        } else if (effect.kind === "setWidget" && effect.widgetLines?.length) {
-          toast(effect.widgetLines.join("\n"), { variant: "info" });
-        } else if (effect.kind === "setTitle" && effect.title.trim()) {
-          toast(effect.title, { variant: "info" });
-        } else if (effect.kind === "replaceComposerText" && workspacePath) {
-          useZCodeSessionStore
-            .getState()
-            .requestComposerTextInsert(workspacePath, effect.text, workspaceIdentity);
-        }
-      }
-    }
-    if (noticeCount > 0) {
-      for (const notice of store.getState().takeNotices(sessionKey)) {
-        toast(intl.formatMessage({ id: notice.id }));
-      }
-    }
-  }, [effectCount, intl, noticeCount, sessionKey, store, workspaceIdentity, workspacePath]);
+    drainEffects();
+    return store.subscribe(drainEffects);
+  }, [drainEffects, store]);
   const activeRequest = store((state) => state.sessions[sessionKey]?.queue[0]?.request);
   const queueLength = store((state) =>
     Math.max(0, (state.sessions[sessionKey]?.queue.length ?? 0) - 1),

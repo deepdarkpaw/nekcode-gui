@@ -402,7 +402,7 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
 export const useNekInteractionStore = createNekInteractionStore({
   respond: () => undefined,
   onEffect: (sessionKey, effect) => {
-    // NekInteractionHost drains the bounded effect outbox into the existing toast/composer UI.
+    // 出站队列由 interactionEffectSink 接到现有 toast / composer；这里只留诊断记录。
     logger.debug("[NekInteractionStore] fire-and-forget effect queued", {
       sessionKey,
       kind: effect.kind,

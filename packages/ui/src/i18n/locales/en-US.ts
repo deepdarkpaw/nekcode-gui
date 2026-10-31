@@ -3307,6 +3307,9 @@ const enUS: Record<string, string> = {
   "nek.status.usage.compacting": "Compression is in progress",
   "nek.status.usage.compact": "Compress context",
   "nek.status.usage.context": "{percent}% · {tokens}/{window}",
+  "nek.interaction.cancelledByHost": "The request was cancelled",
+  "nek.interaction.timedOut": "The request timed out",
+  "nek.interaction.timedOutDiscarded": "The request timed out; unsent content was discarded",
   "ui.action.busy": "The previous operation is still being processed",
   "ui.action.unavailable.externalEditor": "The external editor is not connected in this GUI yet",
   "ui.action.unavailable.interactionFocus":

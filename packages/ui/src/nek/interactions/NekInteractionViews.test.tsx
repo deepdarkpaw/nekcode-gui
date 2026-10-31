@@ -9,11 +9,14 @@ import type {
   NekInteractionFrame,
 } from "@zcode/shared/nek-protocol";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
+import { toast } from "@/components/ui/toast.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { NekAgentFeedProvider } from "@/nek/feed/nekAgentFeed.js";
 import { NekAskQuestionCard } from "./NekAskQuestionCard.js";
 import { NekInteractionHost } from "./NekInteractionHost.js";
 import { createNekInteractionStore } from "./interactionStore.js";
+
+vi.mock("@/components/ui/toast.js", () => ({ toast: vi.fn() }));
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -222,5 +225,48 @@ describe("Nek interaction views", () => {
     });
     await waitFor(() => expect(card.queryByTestId("nek-ask-question-card")).toBeNull());
     rendered.unmount();
+  });
+
+  it("FF: a notify request reaches the existing toast host", () => {
+    const store = createStore();
+    const rendered = render(<NekInteractionHost sessionKey="session-1" store={store} />, {
+      wrapper,
+    });
+
+    act(() => {
+      store.getState().handleFireAndForget("session-1", {
+        type: "extension_ui_request",
+        id: "notify-1",
+        method: "notify",
+        message: "Plan mode enabled",
+        notifyType: "warning",
+      });
+    });
+
+    expect(vi.mocked(toast)).toHaveBeenCalledWith("Plan mode enabled", { variant: "warning" });
+    expect(store.getState().sessions["session-1"]?.effects).toEqual([]);
+    rendered.unmount();
+    store.getState().shutdown();
+  });
+
+  it("00-common §5.2: a host-cancelled request toasts the localized one-shot notice", () => {
+    const store = createStore();
+    store.getState().enqueue("session-1", {
+      type: "extension_ui_request",
+      id: "gone",
+      method: "input",
+      title: "Which file?",
+    });
+    const rendered = render(<NekInteractionHost sessionKey="session-1" store={store} />, {
+      wrapper,
+    });
+
+    act(() => {
+      store.getState().cancelStaleById("gone");
+    });
+
+    expect(vi.mocked(toast)).toHaveBeenCalledWith("The request was cancelled", { variant: "info" });
+    rendered.unmount();
+    store.getState().shutdown();
   });
 });
