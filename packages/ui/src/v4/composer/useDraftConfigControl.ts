@@ -146,6 +146,7 @@ export function useDraftConfigControl(params: {
     "remote-waiting",
     {
       selection: draft.modelSelection ?? null,
+      workspacePath,
     },
   );
   const modelSelectionView =
@@ -415,7 +416,8 @@ export function useDraftConfigControl(params: {
       const parsedSelection = modelProvider
         ? modelSelectionSchema.parse({ providerId: modelProvider, modelId: model })
         : parseModelPickerValue(model);
-      // 用户点击模型只确定模型身份；Reasoning 没有默认值，保持为空并等待用户选择。
+      // 用户点击模型只确定模型身份与它自己的默认档位（事实来源给出的 defaultReasoningLevel），
+      // 之后仍可从该模型的 reasoningLevels 改档位。
       const modelSelection = modelSelectionView
         ? (completeNewModelSelection(modelSelectionView, parsedSelection) ?? parsedSelection)
         : parsedSelection;

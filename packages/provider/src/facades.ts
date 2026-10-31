@@ -22,6 +22,7 @@ import {
 import type { ProviderRegistryView } from "./registry.js";
 import type { ProviderConfigResolution, RegistryModelConfigObject } from "./resolver.js";
 import type { EffectiveModelSelectionResult } from "./effective-model-selection.js";
+import type { ModelSelectionPreferredIssue } from "./model-selection-config.js";
 import type { ModelSelection } from "./registry.js";
 import type {
   ProviderRegistryServiceChangedEvent,
@@ -178,6 +179,12 @@ export interface ModelSelectionModelView {
    * `ModelSelection.options.reasoningLevel` 只能取这里的值；空数组表示没有可提交的等级。
    */
   readonly reasoningLevels: readonly string[];
+  /**
+   * 该模型的默认思考等级：事实来源的模型级覆盖 → 默认等级，按来源自己的规则夹到受支持等级
+   * （nek：`modelThinkingLevels` → `defaultThinkingLevel` → `clampThinkingLevel`）。
+   * `reasoningLevels` 为空时缺省。
+   */
+  readonly defaultReasoningLevel?: string;
   readonly supportsImage: boolean;
 }
 
@@ -190,12 +197,22 @@ export interface ModelSelectionProviderView {
 
 export interface ModelSelectionViewInput {
   readonly selection: ModelSelection | null;
+  /**
+   * 目标机器上的 workspace 根目录。事实来源按它合并项目级配置（nek：
+   * `<workspace>/.nek/settings.json` 覆盖全局默认模型/思考等级）。
+   */
+  readonly workspacePath?: string;
 }
 
 export interface ModelSelectionView extends Partial<EffectiveModelSelectionResult> {
   readonly revision: number;
   readonly providers: readonly ModelSelectionProviderView[];
   readonly preferredSelection?: ModelSelection;
+  /**
+   * 配置里的显式默认模型不可用。此时不给 `preferredSelection`，也不静默改用别的服务商：
+   * 调用方必须让用户重新选择（nek 自己在启动回合时会回落首个可用模型，GUI 不复制该隐式行为）。
+   */
+  readonly preferredSelectionIssue?: ModelSelectionPreferredIssue;
 }
 
 export class ProviderSettingsFacade {

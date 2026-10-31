@@ -6,6 +6,8 @@ import { validateModelSelectionOptions, type ModelSelection } from "./registry.j
 export interface ModelSelectionCandidateModel {
   readonly modelId: string;
   readonly reasoningLevels: readonly string[];
+  /** 事实来源给出的该模型默认档位（已按来源规则夹到受支持等级）。 */
+  readonly defaultReasoningLevel?: string;
 }
 
 export interface ModelSelectionCandidateProvider {

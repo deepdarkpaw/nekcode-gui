@@ -496,7 +496,6 @@ export function createLocalServices(options: {
   });
   const modelSelectionService: NekModelSelectionService = createNekModelSelectionService({
     facts: nekModelFacts,
-    log: nekModelLog,
   });
   // mcpSync/hooks 里引用 zcodeAgentService 的闭包是惰性调用，声明顺序不影响初始化。
   const skillsService = createSkillsService({ isDesktopRuntime: true });
@@ -527,10 +526,15 @@ export function createLocalServices(options: {
   });
   const gitCommitMessageGenerator = new GitCommitMessageGenerator({
     currentModelProvider: {
-      async readCurrentModel() {
-        // Git sidecar 属于目标 Environment；初始模型直接读取同一 Host View，
-        // 不再通过临时 Agent workspace state 反推模型与 reasoning。
-        return (await modelSelectionService.getView()).preferredSelection ?? null;
+      async readCurrentModel(params) {
+        // Git sidecar 属于目标 Environment；初始模型直接读取同一 Host View（带 workspace 根，
+        // 让项目级 settings 的默认模型也参与推荐），不再通过临时 Agent workspace state 反推。
+        return (
+          (await modelSelectionService.getView({
+            selection: null,
+            workspacePath: params.workspacePath,
+          })).preferredSelection ?? null
+        );
       },
     },
     textGenerator: {

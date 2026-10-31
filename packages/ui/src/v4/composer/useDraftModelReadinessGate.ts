@@ -15,21 +15,23 @@ interface DraftModelReadinessGate {
   /** 只有 readiness 已确认时，才允许进入 workspace prepare/prewarm。 */
   agentStartupAllowed: boolean;
   error: ZCodeUiError | null;
+  /** 只关闭横幅：不改词 admission 事实（被拦住的状态仍然拦住首发）。 */
   dismissError(): void;
   /** 重新读取事实来源（读取失败/配置刚被修好时使用）。 */
   retry(): void;
   /** 首发 admission 的权威复查；false 表示应保留 composer 并返回 blocked。 */
   ensureReadyForSend(): Promise<boolean>;
-  /** Host 门禁在 UI 复查后竞态命中时，将同一错误重新投影到草稿横幅。 */
+  /** Host 门禁在 UI 复查后竞态命中时，把同一裁决重新投影到草稿横幅。 */
   markProviderNotReady(): void;
 }
 
 interface GateState {
   readonly key: string;
+  /** 用户关掉了横幅。只影响展示。 */
   readonly dismissed: boolean;
-  /** Host 门禁竞态命中：同一裁决用配置需求横幅重新呈现，annotation 不静默消失。 */
+  /** Host 拒绝过本次草稿：事实没变之前不能因为“关掉横幅”就放行。 */
   readonly blocked: boolean;
-  /** 首发复查得到的读取失败；下一次成功读取或用户重试时清除。 */
+  /** 首发复查得到的读取失败。 */
   readonly failure: Error | null;
 }
 
@@ -45,8 +47,8 @@ function readinessOf(
  * V4 草稿的 provider/model admission。
  *
  * 模型事实只有一份：目标 Host 的 `ModelSelectionService.getView()`（生产环境由 nek 的
- * models.json / settings.json 与控制进程模型目录派生）。这里不再读 GUI registry，也不再
- * 从 Agent 服务另问一次“有没有模型”。
+ * models.json / settings.json 与控制进程模型目录派生）。这里不读 GUI registry，也不向
+ * Agent 服务另问一次“有没有模型”。
  */
 export function useDraftModelReadinessGate(params: {
   workspacePath: string;
@@ -59,14 +61,20 @@ export function useDraftModelReadinessGate(params: {
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
   const enabled = sessionId === null && isZCodeAgentProvider(displayProvider);
   const gateKey = `${workspaceIdentity?.trim() || workspacePath}\u0000${displayProvider}`;
-  // 与 Composer/Submission 同一个 Host getView 结果；远端未就绪时不读 Local Host。
-  const read = useModelSelectionServiceView(modelSelectionService, enabled, "remote-waiting");
+  // 与 Composer/Submission 同一次 getView（同一个 workspace 根，项目级配置合并一致）。
+  const read = useModelSelectionServiceView(modelSelectionService, enabled, "remote-waiting", {
+    selection: null,
+    workspacePath,
+  });
   const [state, setState] = useState<GateState>(() => ({ key: gateKey, ...INITIAL_GATE_STATE }));
   const current = state.key === gateKey ? state : { key: gateKey, ...INITIAL_GATE_STATE };
   const readFailure = read.state.status === "error" ? read.state.error : null;
   const failure = current.failure ?? readFailure;
 
-  // 读取结果变化即视为新的裁决：旧的“已忽略/被拦住”投影不能盖住新事实。
+  // 只有读取结果本身变了（就绪/失败/版本）才是一次新裁决；同内容重读不能把用户关掉的
+  // 横幅或 Host 的拒绝抹掉。
+  const readStatus = read.state.status;
+  const readRevision = read.state.status === "ready" ? read.state.view.revision : null;
   useEffect(() => {
     setState((previous) =>
       previous.key === gateKey &&
@@ -74,7 +82,7 @@ export function useDraftModelReadinessGate(params: {
         ? { key: gateKey, ...INITIAL_GATE_STATE }
         : previous,
     );
-  }, [read.state, gateKey]);
+  }, [gateKey, readStatus, readRevision]);
 
   const status: DraftModelReadinessStatus = !enabled
     ? "ready"
@@ -92,7 +100,7 @@ export function useDraftModelReadinessGate(params: {
   const ensureReadyForSend = useCallback(async (): Promise<boolean> => {
     if (!enabled || !modelSelectionService) return true;
     try {
-      const view = await modelSelectionService.getView();
+      const view = await modelSelectionService.getView({ selection: null, workspacePath });
       if (readinessOf(view) === "ready") {
         setState({ key: gateKey, ...INITIAL_GATE_STATE });
         return true;
@@ -118,7 +126,11 @@ export function useDraftModelReadinessGate(params: {
   }, [enabled, gateKey, modelSelectionService, read, workspacePath]);
 
   const dismissError = useCallback(() => {
-    setState({ key: gateKey, ...INITIAL_GATE_STATE, dismissed: true });
+    // 只改展示：blocked/失败/缺模型的判断不变，首发仍然被拦住，直到事实变化或用户重试成功。
+    setState((previous) => {
+      const base = previous.key === gateKey ? previous : { key: gateKey, ...INITIAL_GATE_STATE };
+      return { ...base, dismissed: true };
+    });
   }, [gateKey]);
 
   const retry = useCallback(() => {
@@ -127,7 +139,7 @@ export function useDraftModelReadinessGate(params: {
   }, [gateKey, read]);
 
   const markProviderNotReady = useCallback(() => {
-    // 不在这里重读：事实没变时重读只会把同一条裁决再抹掉一次。下一次 watch 变化或用户
+    // 不在这里重读：事实没变时重读只会把同一条裁决再抹掉一次。下一次失效信号或用户
     // 重试/再发送时才重新裁决。
     setState({ key: gateKey, ...INITIAL_GATE_STATE, blocked: true });
   }, [gateKey]);

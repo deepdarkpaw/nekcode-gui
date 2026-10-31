@@ -111,7 +111,11 @@ export type ProviderSettingsConnectivityTester = (
 ) => Promise<ModelConnectivityResult>;
 
 export interface IModelSelectionService {
-  readonly onDidChange: Event<ModelSelectionView>;
+  /**
+   * 模型事实的失效信号：**不携带快照**。收到后调用方重新 `getView()`，读取失败由那次调用
+   * 自己承担（error 状态可见、可重试）。事件即事实会让 UI 多一份陈旧状态。
+   */
+  readonly onDidChange: Event<void>;
   getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView>;
 }
 
