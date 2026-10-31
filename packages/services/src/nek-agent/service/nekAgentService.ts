@@ -51,6 +51,11 @@ export class NekAgentService
     return this.interactions.respond(response);
   }
 
+  /** renderer workspace 订阅全部释放时，立即取消该 workspace 的阻塞请求。 */
+  cancelWorkspaceInteractions(workspacePath: string): void {
+    this.interactions.cancelWorkspace(workspacePath);
+  }
+
   // ---- 输入 ----
 
   readonly sendPrompt: NekAgentServiceCommandMethods["sendPrompt"] = async (input) =>

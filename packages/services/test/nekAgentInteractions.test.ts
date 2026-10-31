@@ -239,6 +239,22 @@ test("an unanswered interaction is cancelled on timeout instead of hanging nek",
   }
 });
 
+test("cancelling a workspace answers every pending interaction as cancelled", async () => {
+  const { service, frames } = harness();
+  try {
+    const pending = service.createSession({ cwd: "/workspace" });
+    await waitFor(() => frames.some((frame) => frame.kind === "request"), "the trust request");
+    service.cancelWorkspaceInteractions("/workspace");
+    await assert.rejects(pending, /project trust denied for \/workspace/u);
+    assert.ok(
+      frames.some((frame) => frame.kind === "cancel"),
+      "workspace cancellation must publish a cancel frame",
+    );
+  } finally {
+    await service.dispose();
+  }
+});
+
 test("nek cancelling a session dialog publishes a cancel frame and answers nek", async () => {
   const { sessions, service, frames } = harness({ askProjectTrust: () => true });
   try {
