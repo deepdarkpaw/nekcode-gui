@@ -109,6 +109,14 @@ export type NekAgentServiceEvent =
       session: NekSession;
       event: NekRpcEvent;
     }
+  /**
+   * 会话记录刚挂上一个可用的 nek 进程：新会话、恢复会话，或池回收后按会话文件重连。
+   *
+   * 这是 workspace runtime 恢复的唯一事实来源。phase 事件不能代替它：新建会话的
+   * phase 从 `idle` 开始、重连后仍是 `idle`，`setPhase` 遇到相同值不会发 `state`，
+   * 用 phase 推断恢复会让观察者永久休眠。
+   */
+  | { type: "process_attached"; session: NekSession }
   | { type: "process_exit"; session: NekSession; exit: NekRpcProcessExit }
   | { type: "resume_notice"; session: NekSession; message: "正在继续上次中断的回合" };
 

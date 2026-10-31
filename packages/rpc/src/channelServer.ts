@@ -247,10 +247,8 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
 
     const timer = setTimeout(() => {
       console.error(`Unknown channel: ${request.channelName}`);
-      if (request.type !== RequestType.Promise) {
-        return;
-      }
-
+      // Promise 与事件订阅共用同一份错误回包：EventListen 若只打日志不回包，客户端会
+      // 拿到一条永远没有帧、也没有失败事实的死流（订阅方没有任何 terminal 回调）。
       this.sendResponse({
         id: request.id,
         data: {

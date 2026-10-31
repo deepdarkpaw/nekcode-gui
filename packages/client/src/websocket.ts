@@ -8,6 +8,10 @@ import {
 } from "@zcode/rpc";
 import type { IServiceAccessor } from "@zcode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
+import {
+  reportSubscriptionFailure,
+  type ServiceConnectionOptions,
+} from "./serviceConnectionLog.js";
 
 export interface WebSocketConnectionCloseEvent {
   code: number;
@@ -15,7 +19,7 @@ export interface WebSocketConnectionCloseEvent {
   wasClean: boolean;
 }
 
-interface WebSocketConnectionOptions {
+interface WebSocketConnectionOptions extends ServiceConnectionOptions {
   onClose?: (event: WebSocketConnectionCloseEvent) => void;
   onOpenSocket?: (socket: WebSocket) => void;
 }
@@ -94,12 +98,17 @@ export function connectViaWebSocket(
       settled = true;
       options?.onOpenSocket?.(ws);
       const socket = wrapBrowserWebSocket(ws);
-      resolve(connectViaProtocol(new SocketProtocol(socket)));
+      resolve(connectViaProtocol(new SocketProtocol(socket), options));
     });
   });
 }
 
-export function connectViaProtocol(protocol: IMessagePassingProtocol): IServiceAccessor {
+export function connectViaProtocol(
+  protocol: IMessagePassingProtocol,
+  options: ServiceConnectionOptions = {},
+): IServiceAccessor {
   const client = new ChannelClient(protocol);
+  // 与 MessagePort 连接同一条收口：订阅失败进入调用方日志通道，连接本身继续可用。
+  client.onDidSubscriptionError((failure) => reportSubscriptionFailure(failure, options.log));
   return new RemoteServiceAccess(client);
 }

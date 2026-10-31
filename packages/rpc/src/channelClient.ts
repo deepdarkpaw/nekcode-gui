@@ -62,8 +62,13 @@ export class ChannelClient implements IChannelClient, IDisposable {
 
   private readonly _onDidSubscriptionError = new Emitter<IChannelSubscriptionFailure>();
   /**
-   * 服务端拒绝建立事件订阅时触发。订阅方必须把它当"连接还在但这条流已死"处理：
-   * 静默等帧会让状态卡与任务列表永久停在加载态。
+   * 服务端拒绝建立事件订阅时触发。这是订阅失败的**唯一**上报通道：
+   *
+   * `IChannel.listen` 只返回 `Event<T>`，订阅方没有 terminal 回调，帧流死掉与"暂时没有帧"
+   * 在类型上不可区分。因此连接 owner 必须消费这条事件，把它收进既有的诊断/错误通道，
+   * 而不是让状态卡与任务列表永久停在加载态。
+   *
+   * 重试边界：重新 `listen()` 会分配新的请求 id 与新的 emitter，旧流已死不阻塞新订阅。
    */
   readonly onDidSubscriptionError = this._onDidSubscriptionError.event;
 
@@ -166,6 +171,11 @@ export class ChannelClient implements IChannelClient, IDisposable {
     const emitter = new Emitter<any>({
       onWillAddFirstListener: () => {
         const doRequest = () => {
+          // 与 Promise 请求同一口径：dispose/cancel 可能发生在 Initialize 之前，此时
+          // 不能再向已终结的传输发 EventListen，也不能把 emitter 留在 activeRequests 里。
+          if (this.isDisposed) {
+            return;
+          }
           this.activeRequests.add(emitter);
           this.sendRequest(RequestType.EventListen, id, channelName, name, arg);
         };
@@ -183,14 +193,16 @@ export class ChannelClient implements IChannelClient, IDisposable {
       },
     });
 
+    // 先登记 handler 再允许订阅：`emitter.event(...)` 的 onWillAddFirstListener 会在订阅
+    // 当下就发出 EventListen，同步回包（内存协议、同进程 echo）必须能在这里找到 handler。
     this.handlers.set(id, (response) => {
       if (
         response.type === ResponseType.PromiseError ||
         response.type === ResponseType.PromiseErrorObj
       ) {
-        // 服务端拒绝订阅：这条流不会再有帧。必须显式收口（dispose emitter 会让订阅方
-        // 停止等待），并把失败事实交给 onDidSubscriptionError，而不是把错误对象当成
-        // 业务帧 fire 给订阅者。
+        // 服务端拒绝订阅：这条流不会再有帧。按 "handler → 活跃请求 → emitter" 的顺序收口，
+        // 保证同一 id 的第二份错误回包（协议层重复投递）在 handler 已被删除后自然变成空操作，
+        // 也不会再向服务端发 EventDispose（服务端本来就没登记这条订阅）。
         this.handlers.delete(id);
         this.activeRequests.delete(emitter);
         emitter.dispose();
@@ -305,6 +317,8 @@ export class ChannelClient implements IChannelClient, IDisposable {
     }
     this.activeRequests.clear();
     this.pendingRejections.clear();
+    // 事件订阅的 handler 不在 pendingRejections 里，单独清掉，避免终结后的连接继续留表。
+    this.handlers.clear();
     this._onDidInitialize.dispose();
     this._onDidSubscriptionError.dispose();
   }

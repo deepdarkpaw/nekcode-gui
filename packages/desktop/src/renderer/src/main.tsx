@@ -14,7 +14,11 @@ import {
   playTaskNotificationSound,
 } from "@zcode/ui";
 import "@zcode/ui/styles.css";
-import { connectViaMessagePort, createMessagePortServiceConnection } from "@zcode/client";
+import {
+  connectViaMessagePort,
+  createMessagePortServiceConnection,
+  type ServiceConnectionLog,
+} from "@zcode/client";
 import {
   InternalChannels,
   databaseStartupStateSchema,
@@ -139,6 +143,17 @@ const desktopPlatform = createDesktopPlatform({ isLocalDevelopmentRuntime });
 initializeDesktopLocalTtft(desktopPlatform);
 
 /**
+ * RPC 订阅失败统一落到既有 renderer 日志通道（main 写盘，隐私过滤在写入前完成）。
+ *
+ * `IChannel.listen` 没有 terminal 回调，服务端拒绝订阅时订阅方只会拿到一条永远没有帧的
+ * Event。连接 owner 必须消费 `ChannelClient.onDidSubscriptionError`，否则界面卡在加载态
+ * 且没有任何可查证据；这里只记录，不终结连接、不影响其它 channel。
+ */
+const reportServiceConnectionLog: ServiceConnectionLog = (level, args) => {
+  window.zcode.log(level, args);
+};
+
+/**
  * 等待 preload 通过 window.postMessage 转发 MessagePort。
  *
  * MessagePort 不能经过 contextBridge（会丢失原生方法），
@@ -207,7 +222,9 @@ function registerRemoteWorkspaceServicePort(params: RemoteWorkspaceServicePortRe
     return;
   }
 
-  const remoteConnection = createMessagePortServiceConnection(params.port);
+  const remoteConnection = createMessagePortServiceConnection(params.port, {
+    log: reportServiceConnectionLog,
+  });
   const remoteServices = remoteConnection.services;
   const services = buildRemoteWorkspaceSessionServices(
     baseServicesForRemoteSessions,
@@ -290,7 +307,7 @@ function handleServicePortMessage(event: MessageEvent): void {
 
 function initializeBusinessRoot(port: MessagePort): void {
   appInitialized = true;
-  const services = connectViaMessagePort(port);
+  const services = connectViaMessagePort(port, { log: reportServiceConnectionLog });
   baseServicesForRemoteSessions = services;
   registerBaseWorkspaceServices(services);
   flushPendingRemoteWorkspaceServicePorts();

@@ -222,6 +222,9 @@ async function connectRemoteUnchecked(
   const socket = wrapStdioStream(stream);
   const protocol = new SocketProtocol(socket);
   const client = new ChannelClient(protocol);
+  // 远端 host 的订阅失败进入本进程既有的连接日志（隐私过滤在同一 console 出口完成）。
+  // 一条订阅死掉不等于连接断开，不在这里终结 ChannelClient，其它 channel 仍可服务。
+  client.onDidSubscriptionError((failure) => log("[rpc:subscription] failed", failure.error));
   const services = new RemoteServiceAccess(client);
   let hasReportedRemoteClose = false;
   let hasStreamClosed = false;
