@@ -78,9 +78,14 @@ export async function checkInteractions(session, sandbox, mock) {
   const ask = '[data-testid="nek-ask-question-card"]';
   await waitForSelector(session, ask, "ask_question card", 90_000);
   await screenshot(session, join(sandbox.screenshots, "08-question-choice.png"));
+  // 单选点击即提交（交互规格 AQ-C1）；不再点击已经卸载的第一张卡的按钮。
   await clickOptionAt(session, MOCK_QUESTION_ANSWER_OPTION);
-  await clickAt(session, `${ask} [data-interaction-action="nek.interaction.question.submit"]`);
-  await waitForText(session, MOCK_SECOND_QUESTION_TEXT, "second question card", 60_000);
+  await waitForPage(
+    session,
+    `document.querySelector('${ask}')?.innerText.includes(${JSON.stringify(MOCK_SECOND_QUESTION_TEXT)})`,
+    "second question card",
+    60_000,
+  );
   await fillInput(session, `${ask} [data-interaction-focus="other"]`, MOCK_OTHER_ANSWER);
   await screenshot(session, join(sandbox.screenshots, "08-question-other.png"));
   await clickAt(session, `${ask} [data-interaction-action="nek.interaction.question.submit"]`);
@@ -92,7 +97,14 @@ export async function checkInteractions(session, sandbox, mock) {
   await waitForSelector(session, plan, "plan review card", 90_000);
   await screenshot(session, join(sandbox.screenshots, "08-plan-review.png"));
   await clickAt(session, `${plan} [data-interaction-action="nek.interaction.plan.implement"]`);
-  await waitForText(session, MOCK_FINAL_TEXT, "final assistant reply", 120_000);
+  const deadline = Date.now() + 30_000;
+  while (!mock.requests.some((request) => request.turn === "final")) {
+    const invalid = mock.requests.find((request) => request.turn === "invalid");
+    if (invalid) throw new Error(invalid.error);
+    if (Date.now() >= deadline) throw new Error("approved plan did not reach the mock model");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  await waitForText(session, MOCK_FINAL_TEXT, "final assistant reply", 60_000);
   if (!mock.requests.some((request) => request.turn === "final")) {
     throw new Error("mock did not receive the mode approval result");
   }

@@ -82,11 +82,33 @@ const askQuestionArguments = {
 
 const switchModeArguments = { explanation: "Plan the migration first.", target_mode_id: "plan" };
 
+/** nek 的扩展提示会映射成 user 消息，但纯 reminder 不是用户新开的一轮。 */
+function isReminderOnly(content) {
+  const text =
+    typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n")
+        : "";
+  if (!text.trim()) return false;
+  return (
+    text
+      .replace(/<system_reminder>[\s\S]*?<\/system_reminder>/gu, "")
+      .replace(/<plan_mode_guardrails>[\s\S]*?<\/plan_mode_guardrails>/gu, "")
+      .trim() === ""
+  );
+}
+
 /** 只读取最新用户回合的工具结果；旧回合的 switch_mode 不能覆盖后续停止测试。 */
 export function pickMockTurn(body) {
   const { messages } = JSON.parse(body);
   if (!Array.isArray(messages)) throw new Error("mock expects a messages array");
-  const userIndex = messages.findLastIndex((message) => message?.role === "user");
+  const userIndex = messages.findLastIndex(
+    (message) => message?.role === "user" && !isReminderOnly(message.content),
+  );
   const currentTurn = messages.slice(userIndex + 1);
   const lastTool = currentTurn.findLast((message) => message?.role === "tool");
   const toolCallId = lastTool?.tool_call_id;
@@ -109,7 +131,9 @@ export function pickMockTurn(body) {
   if (text.includes("Implement the plan.") && text.includes(MOCK_PLAN_TITLE)) return "final";
   if (text.includes(MOCK_LONG_PROMPT)) return "slow";
   if (text.includes(MOCK_FIRST_PROMPT)) return "first";
-  throw new Error("mock received an unrecognized conversation turn");
+  throw new Error(
+    `mock received an unrecognized conversation turn (last tool: ${toolCallId ?? "none"}; user: ${text.slice(0, 300)})`,
+  );
 }
 
 /**
@@ -144,6 +168,7 @@ export async function startMockLlm(options = {}) {
       try {
         turn = pickMockTurn(Buffer.concat(body).toString("utf8"));
       } catch (error) {
+        requests.push({ url: request.url, turn: "invalid", error: error.message, aborted: false });
         response.writeHead(400).end(error.message);
         return;
       }

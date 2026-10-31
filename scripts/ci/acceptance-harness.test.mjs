@@ -28,6 +28,21 @@ await test("mock routes only the latest user turn, not a previous completed tool
   );
 });
 
+await test("nek reminder-only user messages do not hide the approved implementation or a later user turn", () => {
+  const reminder = user([
+    { type: "text", text: "<system_reminder>Mode changed.</system_reminder>" },
+  ]);
+  const history = [
+    user(MOCK_FIRST_PROMPT),
+    tool("call_switch", "You are now in Plan mode."),
+    user(`Implement the plan.\n${MOCK_PLAN_TITLE}`),
+    reminder,
+  ];
+  assert.equal(pickMockTurn(body(history)), "final");
+  assert.equal(pickMockTurn(body([...history, user(MOCK_LONG_PROMPT), reminder])), "slow");
+  assert.throws(() => pickMockTurn(body([...history, user("unexpected user input"), reminder])));
+});
+
 await test("mock verifies both question answers and actual mode approval before continuing", () => {
   const prefix = [user(MOCK_FIRST_PROMPT)];
   assert.equal(pickMockTurn(body([...prefix, tool("call_ls", "README.md")])), "ask");
@@ -90,7 +105,9 @@ await test("mock rejects malformed or oversized requests instead of replying wit
     });
     assert.equal(large.status, 413);
     await large.text();
-    assert.equal(mock.requests.length, 0);
+    assert.equal(mock.requests.length, 1);
+    assert.equal(mock.requests[0].turn, "invalid");
+    assert.equal(typeof mock.requests[0].error, "string");
   } finally {
     await mock.close();
   }

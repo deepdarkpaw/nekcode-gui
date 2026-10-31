@@ -1666,6 +1666,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/services/src/nek-agent/projection/nekProjectionSnapshot.ts",
   "packages/services/src/nek-agent/projection/nekProjectionStore.ts",
   "packages/services/src/nek-agent/projection/nekRows.ts",
+  "packages/services/src/nek-agent/projection/nekSelectionMarkers.ts",
   "packages/services/src/nek-agent/service/guiInteractionBridge.ts",
   "packages/services/src/nek-agent/service/nekAgentService.ts",
   "packages/services/src/nek-agent/service/nekAgentServiceCommandMethods.ts",

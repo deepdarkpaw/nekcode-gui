@@ -74,6 +74,9 @@ jobs:
           pnpm vitest run packages/shared/src/zcode-protocol-v4
           pnpm vitest run --config packages/ui/vitest.holes.config.ts
           pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnRenderUnits.test.ts
+          pnpm vitest run packages/client/src/messageport.test.ts
+          pnpm --filter @zcode/ui exec vitest run src
+          node --import tsx --test packages/services/test/*.test.ts
       - name: Release tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node --test --test-isolation=none scripts/ci/*.test.mjs
