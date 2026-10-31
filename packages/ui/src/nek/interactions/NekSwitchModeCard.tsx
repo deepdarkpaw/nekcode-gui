@@ -1,5 +1,4 @@
 import type { NekSwitchModePayload } from "@zcode/shared/nek-protocol";
-import { ArrowRightIcon } from "lucide-react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useSwitchModeController, type SwitchModeControllerProps } from "./switchModeController.js";
 import { InteractionActionButton } from "./InteractionActionButton.js";
@@ -34,12 +33,8 @@ export function NekSwitchModeCard(props: NekSwitchModeCardProps) {
         <div className="flex flex-col gap-4 p-4">
           <div className="flex items-center gap-3">
             <h2 className="text-ui-lg font-medium text-foreground">
-              {intl.formatMessage(
-                { id: "nek.interaction.mode.title" },
-                { from: controller.view.from, to: controller.view.to },
-              )}
+              {intl.formatMessage({ id: "nek.interaction.mode.title" })}
             </h2>
-            <ArrowRightIcon className="size-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
           </div>
           {controller.view.explanation ? (
             <p className="whitespace-pre-wrap break-words text-ui-base text-foreground-subtle">

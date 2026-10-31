@@ -64,6 +64,13 @@ function enqueueAndRender(request: NekExtensionUiRequest) {
   return { rendered, responses, store };
 }
 
+/** 按动作 id 定位提交按钮（与界面语言无关）。 */
+function submitButton(root: ParentNode): HTMLButtonElement {
+  const button = root.querySelector('[data-interaction-action="nek.interaction.question.submit"]');
+  if (!(button instanceof HTMLButtonElement)) throw new Error("submit button is not rendered");
+  return button;
+}
+
 describe("Nek interaction views", () => {
   it("renders the four interaction card kinds through the host", () => {
     const cases: Array<[NekExtensionUiRequest, string]> = [
@@ -161,7 +168,7 @@ describe("Nek interaction views", () => {
       fireEvent.click(screen.getByRole("checkbox", { name: "Use API" }));
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "nek.interaction.question.submit" }));
+      fireEvent.click(submitButton(document));
     });
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain("transport failed"),
@@ -200,7 +207,7 @@ describe("Nek interaction views", () => {
       fireEvent.click(card.getByRole("checkbox", { name: "Use API" }));
     });
     await act(async () => {
-      fireEvent.click(card.getByRole("button", { name: "nek.interaction.question.submit" }));
+      fireEvent.click(submitButton(rendered.container));
     });
     expect(respondNekInteraction).toHaveBeenCalledWith({
       requestId: "ask-1",
