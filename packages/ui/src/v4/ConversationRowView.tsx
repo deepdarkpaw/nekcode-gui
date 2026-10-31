@@ -1714,6 +1714,20 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
             running: false,
           };
         }
+        if (marker.fromProvider === marker.toProvider && marker.fromModel === marker.toModel) {
+          return {
+            icon: MARKER_MODEL_ICON,
+            label: intl.formatMessage(
+              { id: "chat.modelChange.thinkingChanged" },
+              {
+                level: intl.formatMessage({
+                  id: `chat.toolbar.thoughtLevel.value.${marker.toThought}`,
+                }),
+              },
+            ),
+            running: false,
+          };
+        }
         return {
           icon: MARKER_MODEL_ICON,
           label: intl.formatMessage(

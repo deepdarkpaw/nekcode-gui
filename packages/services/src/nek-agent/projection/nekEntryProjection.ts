@@ -11,7 +11,6 @@ import {
   assistantThinkingBlocks,
   assistantToolCalls,
   buildAssistantTextRow,
-  buildModelChangeMarker,
   buildPlanArtifactRow,
   buildReasoningRow,
   buildTimelineMarkerRow,
@@ -28,6 +27,7 @@ import {
 import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProjectionSnapshot.js";
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
+import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 
 export type { NekProjectedSnapshot, NekSnapshotInput } from "./nekEntryShared.js";
 export { orderActiveBranch } from "./nekEntryShared.js";
@@ -52,7 +52,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
   let provider = input.state?.model?.provider ?? "";
   let model = input.state?.model?.id ?? "";
   let thought: string = input.state?.thinkingLevel ?? "";
-  let previousModel: { provider: string; model: string } | null = null;
+  let selectionCursor: Parameters<typeof projectSelectionEntry>[0] = {};
 
   // 同一 entityId 可能被先后投影两次（例如 toolCall 内容块与对应的 toolResult）：
   // 后者是同一行的状态更新，必须替换而不是再追加一行。
@@ -88,38 +88,26 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         if (typeof entry.name === "string" && entry.name !== "") title = entry.name;
         break;
       }
-      case "model_change": {
-        previousModel = { provider, model };
-        const rowId = allocator.resolve(`entry:${entry.id}`);
-        push(
-          buildTimelineMarkerRow(
-            identity(`entry:${entry.id}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-            buildModelChangeMarker({
-              ...(previousModel ? { from: previousModel } : {}),
-              to: { provider: entry.provider, model: entry.modelId },
-              toThought: thought,
-            }),
-            "lightBoundary",
-          ),
-        );
-        provider = entry.provider;
-        model = entry.modelId;
-        break;
-      }
+      case "model_change":
       case "thinking_level_change": {
-        thought = entry.thinkingLevel;
-        const rowId = allocator.resolve(`entry:${entry.id}`);
-        push(
-          buildTimelineMarkerRow(
-            identity(`entry:${entry.id}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-            buildModelChangeMarker({
-              ...(provider && model ? { from: { provider, model } } : {}),
-              to: { provider, model },
-              toThought: entry.thinkingLevel,
-            }),
-            "lightBoundary",
-          ),
-        );
+        const { next, marker } = projectSelectionEntry(selectionCursor, entry);
+        selectionCursor = next;
+        if (entry.type === "model_change") {
+          provider = entry.provider;
+          model = entry.modelId;
+        } else {
+          thought = entry.thinkingLevel;
+        }
+        if (marker) {
+          const rowId = allocator.resolve(`entry:${entry.id}`);
+          push(
+            buildTimelineMarkerRow(
+              identity(`entry:${entry.id}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
+              marker,
+              "lightBoundary",
+            ),
+          );
+        }
         break;
       }
       case "compaction": {

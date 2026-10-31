@@ -1,5 +1,7 @@
 import { SearchIcon } from "lucide-react";
 import { useMemo } from "react";
+import { normalizeZCodeToolName } from "@zcode/shared";
+import { ToolCallBody } from "../ToolCallBody.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { ToolLayout } from "../ToolLayout.js";
@@ -15,7 +17,13 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function getSearchPrimaryText(intl: IntlLike, input: unknown): string {
+export function getSearchPrimaryText(intl: IntlLike, input: unknown, toolName?: string): string {
+  if (normalizeZCodeToolName(toolName) === "ls") {
+    const path = isPlainRecord(input) && typeof input.path === "string" ? input.path.trim() : "";
+    return path
+      ? intl.formatMessage({ id: "chat.toolCall.search.listIn" }, { cwd: path })
+      : intl.formatMessage({ id: "chat.toolCall.search.list" });
+  }
   if (typeof input === "string") {
     const trimmed = input.trim();
     return trimmed.length > 0
@@ -90,7 +98,8 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCallNode, isRunning, statusLabel, errorText } = context;
   const { toolCall } = toolCallNode;
-  const searchPrimaryText = getSearchPrimaryText(intl, toolCall.input);
+  const isDirectoryListing = normalizeZCodeToolName(toolCall.toolName) === "ls";
+  const searchPrimaryText = getSearchPrimaryText(intl, toolCall.input, toolCall.toolName);
   const primaryText = useMemo(
     () => <span className="truncate">{searchPrimaryText}</span>,
     [searchPrimaryText],
@@ -102,12 +111,14 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
         toolId={toolCall.toolId}
         icon={SEARCH_TOOL_ICON}
         showIcon={context.showIcon !== false}
-        canToggle={false}
+        canToggle={isDirectoryListing}
         kindLabel={
           context.kindLabelOverride ??
-          intl.formatMessage({
-            id: isRunning ? "chat.toolCall.search.searching" : "chat.toolCall.kind.search",
-          })
+          (isDirectoryListing
+            ? "ls"
+            : intl.formatMessage({
+                id: isRunning ? "chat.toolCall.search.searching" : "chat.toolCall.kind.search",
+              }))
         }
         sourceLabel={context.sourceLabel}
         // search 的主文本直接拼成一句完整摘要，不再拆 secondaryText；
@@ -118,7 +129,23 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
         showFailureStatus={toolCall.status === "failed"}
         isRunning={isRunning}
         title={toolCall.title}
-        content={null}
+        renderContent={
+          isDirectoryListing
+            ? () => (
+                <ToolCallBody
+                  toolCall={toolCall}
+                  displayModel={context.displayModel}
+                  childToolList={context.childToolList}
+                  workspacePath={context.workspacePath}
+                  theme={context.theme}
+                  codePreviewSettings={context.codePreviewSettings}
+                  onOpenCodeViewer={context.onOpenCodeViewer}
+                  onOpenFileLink={context.onOpenFileLink}
+                  onOpenBrowserUrl={context.onOpenBrowserUrl}
+                />
+              )
+            : undefined
+        }
       />
       <ToolSnapshotFieldNotice
         refs={toolCall.snapshotRefs ?? []}

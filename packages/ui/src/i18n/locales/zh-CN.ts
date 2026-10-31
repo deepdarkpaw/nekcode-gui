@@ -2633,6 +2633,7 @@ const zhCN: Record<string, string> = {
   "chat.contextCompaction.completed": "上下文已压缩",
   "chat.modelChange.switched": "模型已切换 {from} → {to}",
   "chat.modelChange.using": "正在使用 {model}",
+  "chat.modelChange.thinkingChanged": "思考等级已切换为{level}",
   "chat.contextCompaction.completedAuto": "上下文已自动压缩",
   "chat.contextCompaction.failed": "上下文压缩失败",
   "chat.contextCompaction.interrupted": "上下文压缩已中断",
