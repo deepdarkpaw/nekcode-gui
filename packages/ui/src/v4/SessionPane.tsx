@@ -1071,6 +1071,7 @@ export function SessionPane({
     agentStartupAllowed: draftAgentStartupAllowed,
     error: draftModelReadinessError,
     dismissError: dismissDraftModelReadinessError,
+    retry: retryDraftModelReadiness,
     ensureReadyForSend: ensureDraftModelReadyForSend,
     markProviderNotReady: markDraftProviderNotReady,
   } = useDraftModelReadinessGate({
@@ -3539,6 +3540,8 @@ export function SessionPane({
       : null;
   // 自配模型的错误直接进入已有诊断横幅，不再由官方余额查询接管或隐藏。
   const composerError = draftModelReadinessError ?? sendSubmissionError ?? projectedComposerError;
+  // 只有模型事实读取失败需要重试按钮（重新读取同一个 getView）；缺模型的横幅走“配置模型”。
+  const composerErrorRetry = draftModelReadinessError ? retryDraftModelReadiness : undefined;
   useEffect(() => {
     setSendSubmissionError(null);
   }, [sessionId]);
@@ -3934,6 +3937,7 @@ export function SessionPane({
       onSendCompressionCommand={handleSendCompressionCommand}
       error={composerError}
       onDismissError={handleDismissComposerError}
+      onRetryError={composerErrorRetry}
       onOpenModelSettings={handleOpenModelSettings}
       suppressGoalCommands={selectionSideChat}
       appSlashCommands={appSlashCommands}

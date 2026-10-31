@@ -1,8 +1,4 @@
 import {
-  NodeModelSelectionConfigRepository,
-  createNodeModelSelectionFacade,
-} from "@zcode/provider-node";
-import {
   ProviderRegistryService,
   ProviderSettingsFacade,
   EmptyAccountProviderConfigSource,
@@ -14,11 +10,8 @@ import {
   type ProviderConfigRuntimeOptions,
 } from "./providerConfigRuntime.js";
 import {
-  createModelSelectionService,
   createProviderSettingsService,
-  type IModelSelectionService,
   type IProviderSettingsService,
-  type ModelSelectionConfiguredDefaultSource,
   type ProviderSettingsConnectivityTester,
 } from "./providerFacadeServices.js";
 import type { ProviderModelCatalogLister } from "./providerModelCatalog.js";
@@ -32,26 +25,24 @@ export interface ProviderRuntimeDependencies {
   readonly configRuntime: ProviderConfigRuntime;
   readonly testConnectivity?: ProviderSettingsConnectivityTester;
   readonly modelCatalog?: ProviderModelCatalogLister;
-  readonly modelSelectionConfiguredDefaultSource?: ModelSelectionConfiguredDefaultSource;
-  readonly disposeModelSelectionConfiguredDefaultSource?: () => void;
 }
 
-/** 组装一个进程内共享的 Provider Config、Registry 与 Facade。 */
+/**
+ * 组装一个进程内共享的 Provider Config、Registry 与设置 Facade。
+ *
+ * 模型选择不在这里：候选与默认值来自 nek 自己的配置与模型目录
+ * （见 `nekModelSelectionService.ts`），Registry 只服务旧的 provider_config.json 设置页。
+ */
 export class ProviderRuntime {
   readonly configService: ProviderConfigRuntime["configService"];
   readonly registryService: ProviderRegistryService;
   readonly providerSettings: IProviderSettingsService;
-  readonly modelSelection: IModelSelectionService;
   readonly #configRuntime: ProviderConfigRuntime;
-  readonly #modelSelectionRuntime: IModelSelectionService & { dispose(): void };
-  readonly #disposeModelSelectionConfiguredDefaultSource?: () => void;
   #startPromise: ReturnType<ProviderRegistryService["start"]> | null = null;
   #disposed = false;
 
   constructor(dependencies: ProviderRuntimeDependencies) {
     this.#configRuntime = dependencies.configRuntime;
-    this.#disposeModelSelectionConfiguredDefaultSource =
-      dependencies.disposeModelSelectionConfiguredDefaultSource;
     this.configService = this.#configRuntime.configService;
     const accountSource = new EmptyAccountProviderConfigSource(this.configService);
     this.registryService = new ProviderRegistryService({
@@ -67,12 +58,6 @@ export class ProviderRuntime {
       dependencies.testConnectivity,
       dependencies.modelCatalog,
     );
-    this.#modelSelectionRuntime = createModelSelectionService(
-      createNodeModelSelectionFacade(this.registryService),
-      ensureReady,
-      dependencies.modelSelectionConfiguredDefaultSource,
-    );
-    this.modelSelection = this.#modelSelectionRuntime;
   }
 
   start(): Promise<void> {
@@ -89,9 +74,7 @@ export class ProviderRuntime {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    this.#modelSelectionRuntime.dispose();
     this.registryService.dispose();
-    this.#disposeModelSelectionConfiguredDefaultSource?.();
     this.#configRuntime.dispose();
   }
 }
@@ -143,17 +126,7 @@ function createSettingsMutationTarget(
 export function createProviderRuntime(options: ProviderRuntimeOptions): ProviderRuntime {
   const { testConnectivity, modelCatalog, ...configRuntimeOptions } = options;
   const configRuntime = createProviderConfigRuntime(configRuntimeOptions);
-  const modelSelectionConfiguredDefaultSource = new NodeModelSelectionConfigRepository({
-    personalRepository: configRuntime.personalRepository,
-  });
-  return createProviderRuntimeFromConfigRuntime({
-    configRuntime,
-    testConnectivity,
-    modelCatalog,
-    modelSelectionConfiguredDefaultSource,
-    disposeModelSelectionConfiguredDefaultSource: () =>
-      modelSelectionConfiguredDefaultSource.dispose(),
-  });
+  return createProviderRuntimeFromConfigRuntime({ configRuntime, testConnectivity, modelCatalog });
 }
 
 export function createProviderRuntimeFromConfigRuntime(

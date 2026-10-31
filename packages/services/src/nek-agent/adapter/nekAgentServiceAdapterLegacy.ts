@@ -32,7 +32,6 @@ import {
   unsupported,
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
-import type { ZCodeModelProviderAvailability } from "../../zcode-agent/zcodeAgent.js";
 import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
@@ -70,10 +69,7 @@ function planRow(
   };
 }
 
-export function createNekLegacyMethods(
-  target: NekAgentServiceAdapterLegacyTarget,
-  readModelAvailability: () => Promise<ZCodeModelProviderAvailability>,
-): LegacyMethods {
+export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarget): LegacyMethods {
   const methods: LegacyMethods = {
     async prepareStorage() {
       await target.service.commandContext().control();
@@ -360,7 +356,6 @@ export function createNekLegacyMethods(
       return { dispose: detach };
     },
     onAgentRuntimeLifecycle: createNekAgentRuntimeLifecycle(target.service),
-    getModelProviderAvailability: () => readModelAvailability(),
     async disposeWorkspace(input) {
       const sessions = await target.listNekSessions(input);
       for (const summary of sessions) {

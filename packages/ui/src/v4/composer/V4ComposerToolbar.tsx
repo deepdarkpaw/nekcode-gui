@@ -50,7 +50,7 @@ import { useActionShortcutLabel } from "@/shortcuts/useActionShortcuts.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { logger } from "@/logger.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
-import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
+import { buildModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import {
   resolveDraftDisplayedConfig,
   resolveDraftModelThoughtOption,
@@ -186,31 +186,8 @@ function V4ComposerModelControlsImpl({
 
   const modelSelectGroups = useMemo<ModelSelectGroup[]>(() => {
     if (!modelSelectionView) return [];
-    return buildRegistryModelSelectGroups(displayProvider, modelSelectionView, {
-      apiKeyLabel: intl.formatMessage({ id: "settings.modelProvider.apiKey" }),
-      apiKeyBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.apiKeyBadge",
-      }),
-      codingPlanLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.codingPlan",
-      }),
-      codingPlanBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.codingPlanBadge",
-      }),
-      startPlanLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.startPlan",
-      }),
-      startPlanBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.startPlanBadge",
-      }),
-      teamPlanBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.teamPlanBadge",
-      }),
-      teamPlanFallbackLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.teamPlan",
-      }),
-    });
-  }, [displayProvider, intl, modelSelectionView]);
+    return buildModelSelectGroups(modelSelectionView);
+  }, [modelSelectionView]);
 
   // 修复：恢复「管理模型」入口（老版 onManageModels = 打开设置页并定位模型供应商区）。
   const handleOpenModelProviderSettings = useCallback(() => {
@@ -256,7 +233,7 @@ function V4ComposerModelControlsImpl({
     const providerName =
       modelSelectionView?.providers.find(
         (candidate) => candidate.providerId === effectiveConfig?.provider,
-      )?.providerName ?? undefined;
+      )?.displayName ?? undefined;
     return resolveV4ModelTriggerDisplay({
       modelGroups: modelSelectGroups,
       normalizedValue: normalizedModelValue,
@@ -291,12 +268,13 @@ function V4ComposerModelControlsImpl({
         decodedModelName: decoded?.modelName ?? null,
         draftMode,
       });
-      const selectedRegistryProvider = decoded?.providerId
-        ? modelSelectionView?.providers.find(
+      // 候选来自事实来源（nek）：出现在 View 里的服务商都由该来源判定可用，
+      // 不需要再用旧 Registry 的凭据/账号分类二次判断。
+      const customRecoveryEligible = decoded?.providerId
+        ? modelSelectionView?.providers.some(
             (candidate) => candidate.providerId === decoded.providerId,
-          )
-        : undefined;
-      const customRecoveryEligible = isApiKeyAccess(selectedRegistryProvider?.config.access);
+          ) === true
+        : false;
       if (
         configOptionsError &&
         decoded?.providerId &&
@@ -557,4 +535,3 @@ function V4ComposerModelControlsImpl({
 }
 
 export const V4ComposerModelControls = memo(V4ComposerModelControlsImpl);
-import { isApiKeyAccess } from "@zcode/provider";

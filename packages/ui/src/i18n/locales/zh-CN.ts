@@ -3040,6 +3040,7 @@ const zhCN: Record<string, string> = {
   "chat.error.expandDetails": "展开详情",
   "chat.error.collapseDetails": "收起详情",
   "chat.error.noAvailableModel": "请先配置一个可用模型。",
+  "chat.error.modelConfigUnreadable": "读取 nek 的模型配置失败，请检查 nek 配置后重试。",
   "chat.error.sendFailed": "发送失败，请稍后重试。",
   "chat.error.modelSettings": "模型设置",
   "chat.error.setModels": "配置模型",
