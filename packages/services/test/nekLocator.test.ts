@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 import {
+  createNekLocatorDeps,
   NekLocator,
   NekLocatorError,
   parseNekGuiInfo,
@@ -31,7 +34,7 @@ function guiInfo(overrides: Partial<NekGuiInfo> = {}): NekGuiInfo {
 }
 
 interface FakeDeps extends NekLocatorDeps {
-  runs: Array<{ file: string; args: string[] }>;
+  runs: Array<{ file: string; args: string[]; windowsVerbatimArguments: boolean }>;
   files: Map<string, { size: number; mtimeMs: number }>;
   payload: NekGuiInfo | string;
   exitCode: number;
@@ -48,7 +51,7 @@ function createDeps(options: {
 }): FakeDeps {
   const files = new Map<string, { size: number; mtimeMs: number }>();
   for (const path of options.files ?? []) files.set(path, { size: 10, mtimeMs: 1000 });
-  const runs: Array<{ file: string; args: string[] }> = [];
+  const runs: FakeDeps["runs"] = [];
   const deps: FakeDeps = {
     platform: options.platform ?? "linux",
     env: options.env ?? {},
@@ -59,8 +62,8 @@ function createDeps(options: {
     exitCode: options.exitCode ?? 0,
     stderr: options.stderr ?? "",
     statFile: async (path) => files.get(path) ?? null,
-    run: async (file, args) => {
-      runs.push({ file, args });
+    run: async (file, args, runOptions) => {
+      runs.push({ file, args, windowsVerbatimArguments: runOptions.windowsVerbatimArguments });
       const payload = deps.payload;
       return {
         code: deps.exitCode,
@@ -82,11 +85,55 @@ test("finds nek on PATH (Windows tries .cmd first)", async () => {
   const result = await locator.locate();
   assert.equal(result.launcherPath, "C:\\tools\\nek.cmd");
   assert.equal(result.info.nekVersion, "0.4.0");
-  // .cmd 必须经 cmd.exe /d /s /c，且整条命令行被引号包住。
+  // .cmd 必须经 cmd.exe /d /s /c，整条命令行再包一层引号（/s 会去掉它），并原样传递参数。
   assert.equal(deps.runs[0]?.file, "C:\\Windows\\cmd.exe");
   assert.deepEqual(deps.runs[0]?.args.slice(0, 3), ["/d", "/s", "/c"]);
-  assert.equal(deps.runs[0]?.args[3], '"C:\\tools\\nek.cmd" "gui-info" "--json"');
+  assert.equal(deps.runs[0]?.args[3], '""C:\\tools\\nek.cmd" "gui-info" "--json""');
+  assert.equal(deps.runs[0]?.windowsVerbatimArguments, true);
 });
+
+test("puts the meaningful stderr line into the failure message", async () => {
+  const deps = createDeps({
+    env: { PATH: join("/usr", "bin") },
+    files: [join("/usr", "bin", "nek")],
+    exitCode: 1,
+    stderr: [
+      "(node:33060) ExperimentalWarning: SQLite is an experimental feature",
+      "(Use `node --trace-warnings ...` to show where the warning was created)",
+      "Error: Unknown option: --json",
+    ].join("\n"),
+  });
+  await assert.rejects(new NekLocator(deps).locate(), (error: unknown) => {
+    assert.ok(error instanceof NekLocatorError);
+    assert.match(error.message, /exited with 1: Error: Unknown option: --json$/u);
+    return true;
+  });
+});
+
+test(
+  "runs a real .cmd launcher from a path with spaces through cmd.exe",
+  { skip: process.platform !== "win32" && "Windows-only: exercises cmd.exe quoting" },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "nek locator spaced "));
+    try {
+      const bin = join(root, "bin dir");
+      await mkdir(bin);
+      const payloadFile = join(root, "gui info.json");
+      await writeFile(payloadFile, JSON.stringify(guiInfo()));
+      // 回显参数校验：只有收到 `gui-info --json` 才输出 payload。
+      await writeFile(
+        join(bin, "nek.cmd"),
+        `@echo off\r\nif "%~1"=="gui-info" if "%~2"=="--json" (type "${payloadFile}" & exit /b 0)\r\necho bad args %* 1>&2\r\nexit /b 3\r\n`,
+      );
+      const deps = { ...createNekLocatorDeps(), env: { ...process.env, PATH: bin } };
+      const result = await new NekLocator(deps).locate();
+      assert.equal(result.launcherPath, join(bin, "nek.cmd"));
+      assert.equal(result.info.nekVersion, "0.4.0");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test("falls back to %LOCALAPPDATA%\\nekcode\\bin\\nek.cmd on Windows", async () => {
   const deps = createDeps({
@@ -196,14 +243,17 @@ test("toLocatorCommand leaves non-shim launchers untouched", () => {
   assert.deepEqual(toLocatorCommand(launcher, ["gui-info", "--json"], "linux"), {
     file: launcher,
     args: ["gui-info", "--json"],
+    windowsVerbatimArguments: false,
   });
   assert.deepEqual(toLocatorCommand(launcher, ["gui-info"], "darwin"), {
     file: launcher,
     args: ["gui-info"],
+    windowsVerbatimArguments: false,
   });
   // 非 win32 平台即使是 .cmd 也不套 cmd.exe（跨平台测试替身仍然按平台判定）。
   assert.deepEqual(toLocatorCommand(join("/opt", "nek.cmd"), ["gui-info"], "linux"), {
     file: join("/opt", "nek.cmd"),
     args: ["gui-info"],
+    windowsVerbatimArguments: false,
   });
 });

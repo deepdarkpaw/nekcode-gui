@@ -52,7 +52,7 @@ export interface NekLocatorDeps {
   run: (
     file: string,
     args: string[],
-    options: { timeoutMs: number },
+    options: { timeoutMs: number; windowsVerbatimArguments: boolean },
   ) => Promise<NekLocatorCommandResult>;
   log?: { warn: (...args: unknown[]) => void; debug?: (...args: unknown[]) => void };
 }
@@ -107,7 +107,12 @@ export function createNekLocatorDeps(): NekLocatorDeps {
         execFile(
           file,
           args,
-          { timeout: options.timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+          {
+            timeout: options.timeoutMs,
+            windowsHide: true,
+            maxBuffer: 4 * 1024 * 1024,
+            windowsVerbatimArguments: options.windowsVerbatimArguments,
+          },
           (error, stdout, stderr) => {
             const code =
               error &&
@@ -154,24 +159,29 @@ function defaultInstallCandidates(deps: NekLocatorDeps): string[] {
 }
 
 /**
+ * 可直接交给 execFile/spawn 的启动器命令。
+ *
  * Windows 上 `.cmd`/`.bat` 不是可执行映像，必须交给 `cmd.exe /d /s /c`。
- * 引用整个命令串（`/s` 的语义是"去掉最外层引号后原样交给 cmd"），避免空格路径被拆开。
+ * 引用整个命令串（`/s` 的语义是"去掉最外层引号后原样交给 cmd"），避免空格路径被拆开；
+ * 与 Node 自己的 `shell: true` 实现一致。此时 `windowsVerbatimArguments` 为 true：
+ * 命令串已按 cmd 规则加好引号，必须原样传递，否则 Node 会再把引号转义成 `\"`，
+ * cmd 报"文件名、目录名或卷标语法不正确"。
  */
 export function toLocatorCommand(
   launcherPath: string,
   args: readonly string[],
   platform: NodeJS.Platform,
   options: { comSpec?: string } = {},
-): { file: string; args: string[] } {
+): { file: string; args: string[]; windowsVerbatimArguments: boolean } {
   if (platform === "win32" && /\.(cmd|bat)$/iu.test(launcherPath)) {
     const commandLine = [launcherPath, ...args].map((part) => `"${part}"`).join(" ");
-    // /s + 整条命令串加引号：cmd 会去掉最外层引号后原样执行，带空格的路径不会被拆开。
     return {
       file: options.comSpec ?? process.env.ComSpec ?? "cmd.exe",
-      args: ["/d", "/s", "/c", commandLine],
+      args: ["/d", "/s", "/c", `"${commandLine}"`],
+      windowsVerbatimArguments: true,
     };
   }
-  return { file: launcherPath, args: [...args] };
+  return { file: launcherPath, args: [...args], windowsVerbatimArguments: false };
 }
 
 /** 解析 `gui-info` 的 stdout：先整体解析，失败再按行从后往前找（容忍安装脚本的噪声输出）。 */
@@ -306,7 +316,10 @@ export class NekLocator {
     this.deps.log?.debug?.("running nek gui-info", command.file, command.args);
     let result: NekLocatorCommandResult;
     try {
-      result = await this.deps.run(command.file, command.args, { timeoutMs });
+      result = await this.deps.run(command.file, command.args, {
+        timeoutMs,
+        windowsVerbatimArguments: command.windowsVerbatimArguments,
+      });
     } catch (error) {
       throw new NekLocatorError("failed", `failed to run ${launcherPath} gui-info --json`, {
         launcherPath,
@@ -314,10 +327,14 @@ export class NekLocator {
       });
     }
     if (result.code !== 0) {
+      const stderrSummary = summarizeStderr(result.stderr);
+      // 把 stderr 摘要带进消息：界面只显示 message，"Unknown option: --json"（nek 过旧）
+      // 这类原因必须让用户直接看到。
+      const reason = lastMeaningfulLine(stderrSummary);
       throw new NekLocatorError(
         "failed",
-        `${launcherPath} gui-info --json exited with ${result.code ?? "no code"}`,
-        { launcherPath, stderrSummary: summarizeStderr(result.stderr) },
+        `${launcherPath} gui-info --json exited with ${result.code ?? "no code"}${reason ? `: ${reason}` : ""}`,
+        { launcherPath, stderrSummary },
       );
     }
     const info = parseNekGuiInfo(result.stdout);
@@ -340,6 +357,16 @@ export function summarizeStderr(stderr: string, maxLines = 20, maxChars = 2048):
   const lines = stderr.split("\n").filter((line) => line.trim() !== "");
   const tail = lines.slice(-maxLines).join("\n");
   return tail.length > maxChars ? `${tail.slice(0, maxChars)}…` : tail;
+}
+
+/** stderr 中最后一条有意义的行（跳过 Node 运行时警告），最长 200 字符。 */
+function lastMeaningfulLine(stderrSummary: string): string {
+  const lines = stderrSummary
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^\(node:\d+\)|^\(Use `node --trace-/u.test(line));
+  const last = lines.at(-1) ?? "";
+  return last.length > 200 ? `${last.slice(0, 200)}…` : last;
 }
 
 /** 供启动器可达性探测用（测试与"检测安装"按钮）。 */
