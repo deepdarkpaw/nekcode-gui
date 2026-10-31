@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isZCodeAgentProvider, ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@zcode/shared";
-import type { IModelSelectionService, ModelSelectionView } from "@zcode/services";
+import type {
+  IModelSelectionService,
+  IZCodeAgentService,
+  ModelSelectionView,
+} from "@zcode/services";
 import {
   buildModelConfigMissingUiError,
   type ModelConfigMissingUiError,
 } from "@/lib/chatPrepareError.js";
+import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 
 type DraftModelReadinessStatus = "checking" | "ready" | "missing" | "check-failed";
@@ -26,10 +31,37 @@ interface DraftModelReadinessGate {
   markProviderNotReady(): void;
 }
 
+type AgentModelAvailability = "available" | "unavailable" | "unknown";
+
 function resolveModelSelectionReadinessStatus(
   view: ModelSelectionView,
 ): Extract<DraftModelReadinessStatus, "ready" | "missing"> {
   return view.providers.some((provider) => provider.models.length > 0) ? "ready" : "missing";
+}
+
+/**
+ * Agent 侧的模型事实。
+ *
+ * GUI 的 provider registry 在本产品里是 ZCode 遗留配置存储：nek build 的服务商与模型只写
+ * 进 nek 的 `models.json` / `settings.json`，registry 永远为空。只用 registry 判定会把
+ * “模型已配置好”误判成“没有可用模型”，首发直接被拦下。因此 registry 说没有模型时，
+ * 必须再问 Agent 自己。
+ */
+async function readAgentModelAvailability(
+  agentService: Pick<IZCodeAgentService, "getModelProviderAvailability"> | undefined,
+): Promise<AgentModelAvailability> {
+  const read = agentService?.getModelProviderAvailability;
+  // 单测 double 与旧 host 可能没有这个入口；缺失时保持原来的 registry 判定，不当作有模型。
+  if (typeof read !== "function") return "unknown";
+  try {
+    const availability = await read.call(agentService);
+    return availability.available ? "available" : "unavailable";
+  } catch (error) {
+    logger.warn("[v4-draft-readiness] agent 模型事实读取失败，回落 GUI registry 判定", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "unknown";
+  }
 }
 
 /**
@@ -47,6 +79,8 @@ export function useDraftModelReadinessGate(params: {
   modelSelectionService: Pick<IModelSelectionService, "getView" | "onDidChange">;
 }): DraftModelReadinessGate {
   const { workspacePath, workspaceIdentity, provider, sessionId, modelSelectionService } = params;
+  const services = useOptionalServices();
+  const agentService = services?.zcodeAgentService;
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
   const enabled = sessionId === null && isZCodeAgentProvider(displayProvider);
@@ -84,13 +118,23 @@ export function useDraftModelReadinessGate(params: {
     commitStatus("checking");
     let disposed = false;
     let registryEventVersion = 0;
+    const resolveReadiness = async (
+      view: ModelSelectionView,
+    ): Promise<DraftModelReadinessStatus> => {
+      if (resolveModelSelectionReadinessStatus(view) === "ready") return "ready";
+      const agent = await readAgentModelAvailability(agentService);
+      return agent === "available" ? "ready" : "missing";
+    };
     const applyStatus = (status: DraftModelReadinessStatus) => {
       if (disposed) return;
       commitStatus(status);
     };
+    const applyView = (view: ModelSelectionView) => {
+      void resolveReadiness(view).then(applyStatus);
+    };
     const subscription = modelSelectionService.onDidChange((view) => {
       registryEventVersion += 1;
-      applyStatus(resolveModelSelectionReadinessStatus(view));
+      applyView(view);
     });
     const initialReadVersion = registryEventVersion;
     void modelSelectionService
@@ -98,7 +142,7 @@ export function useDraftModelReadinessGate(params: {
       .then((view) => {
         // 读取在变更事件之前发起、之后才返回时，事件快照更新；禁止旧读取覆盖新状态。
         if (registryEventVersion !== initialReadVersion) return;
-        applyStatus(resolveModelSelectionReadinessStatus(view));
+        applyView(view);
       })
       .catch((error) => {
         handleReadinessFailure(error);
@@ -119,7 +163,7 @@ export function useDraftModelReadinessGate(params: {
       disposed = true;
       subscription?.dispose();
     };
-  }, [commitStatus, enabled, modelSelectionService, workspaceKey]);
+  }, [agentService, commitStatus, enabled, modelSelectionService, workspaceKey]);
 
   const effectiveState: DraftModelReadinessState =
     state.gateKey === gateKey
@@ -134,10 +178,14 @@ export function useDraftModelReadinessGate(params: {
     if (!enabled) return true;
     try {
       const view = await modelSelectionService.getView();
-      const status = resolveModelSelectionReadinessStatus(view);
+      const registryStatus = resolveModelSelectionReadinessStatus(view);
+      const agent =
+        registryStatus === "ready" ? "unknown" : await readAgentModelAvailability(agentService);
+      const status: DraftModelReadinessStatus = agent === "available" ? "ready" : registryStatus;
       commitStatus(status, { revealMissing: status === "missing" });
       if (status === "missing") {
         logger.info("[v4-draft-readiness] 无可用 provider/model，草稿首发在 UI admission 拒绝", {
+          agentModelAvailability: agent,
           providerCount: view.providers.length,
           revision: view.revision,
           workspaceKey,
@@ -154,7 +202,7 @@ export function useDraftModelReadinessGate(params: {
       });
       return true;
     }
-  }, [commitStatus, enabled, modelSelectionService, workspaceKey]);
+  }, [agentService, commitStatus, enabled, modelSelectionService, workspaceKey]);
 
   const error = useMemo(
     () =>

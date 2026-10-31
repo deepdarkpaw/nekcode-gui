@@ -356,6 +356,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return { dispose: detach };
     },
     onAgentRuntimeLifecycle: createNekAgentRuntimeLifecycle(target.service),
+    getModelProviderAvailability: async () => await target.readModelAvailability(),
     async disposeWorkspace(input) {
       const sessions = await target.listNekSessions(input);
       for (const summary of sessions) {

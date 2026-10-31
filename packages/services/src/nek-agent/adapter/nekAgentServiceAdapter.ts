@@ -18,10 +18,14 @@ import type {
 import { NekSessionBindings } from "./nekSessionBindings.js";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
-import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
+import type {
+  IZCodeAgentService,
+  ZCodeModelProviderAvailability,
+} from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
+import { createNekModelAvailabilityReader } from "./nekModelAvailability.js";
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
@@ -61,6 +65,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly onDynamicStorageStartupState: IZCodeAgentService["onDynamicStorageStartupState"];
   declare readonly syncAppRuntimePreferences: IZCodeAgentService["syncAppRuntimePreferences"];
   declare readonly getWorkspaceRuntimeIdentity: IZCodeAgentService["getWorkspaceRuntimeIdentity"];
+  declare readonly getModelProviderAvailability: IZCodeAgentService["getModelProviderAvailability"];
   declare readonly createSession: IZCodeAgentService["createSession"];
   declare readonly resumeSession: IZCodeAgentService["resumeSession"];
   declare readonly listSessions: IZCodeAgentService["listSessions"];
@@ -142,9 +147,15 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     string,
     Emitter<ConversationTopicWireCandidate>
   >();
+  /** 渲染层草稿门禁的权威回答：nek 自己有没有可用模型（薄壳见 nekAgentServiceAdapterLegacy）。 */
+  readonly readModelAvailability: () => Promise<ZCodeModelProviderAvailability>;
 
   constructor(options: NekAgentServiceAdapterOptions) {
     this.service = new NekAgentService(options);
+    this.readModelAvailability = createNekModelAvailabilityReader(
+      options.readModelAvailability,
+      options.guiInfo?.agentDir,
+    );
     const syncer =
       options.sessionIndexSyncer ??
       new NekSessionIndexSyncer({
