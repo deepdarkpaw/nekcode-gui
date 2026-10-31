@@ -120,14 +120,7 @@ async function createFromCommand(
   const model = asRecord(firstInput?.modelSelection ?? config?.modelSelection);
   const result = await context.createSession({
     workspacePath: target.workspacePath,
-    ...(model
-      ? {
-          model: {
-            provider: readString(model, "provider") ?? "",
-            modelId: readString(model, "modelId") ?? "",
-          },
-        }
-      : {}),
+    ...(model ? { model: modelSelectionOf(model) } : {}),
     ...(readString(config ?? {}, "thought")
       ? { thinking: thoughtLevel(readString(config ?? {}, "thought")) }
       : {}),
@@ -148,6 +141,24 @@ async function createFromCommand(
   });
 }
 
+/**
+ * 协议里的 ModelSelection 用 `providerId`，nek 的 `set_model` / 会话创建用 `provider`。
+ *
+ * 这里只做字段改名：漏读 `providerId` 会让 nek 收到 `/{modelId}`，首发直接被
+ * `Model not found` 拒绝。
+ */
+function modelSelectionOf(model: Record<string, unknown>): {
+  provider: string;
+  modelId: string;
+} {
+  const providerId = readString(model, "providerId");
+  const modelId = readString(model, "modelId");
+  if (!providerId || !modelId) {
+    throw new Error(`invalid model selection: provider=${providerId ?? ""} model=${modelId ?? ""}`);
+  }
+  return { provider: providerId, modelId };
+}
+
 async function applySelection(
   service: NekAgentService,
   sessionKey: string,
@@ -155,11 +166,7 @@ async function applySelection(
 ): Promise<void> {
   const model = asRecord(payload.modelSelection);
   if (model) {
-    await service.setModel({
-      sessionKey,
-      provider: readString(model, "provider") ?? "",
-      modelId: readString(model, "modelId") ?? "",
-    });
+    await service.setModel({ sessionKey, ...modelSelectionOf(model) });
   }
   if (readString(payload, "mode")) await setModeFromPayload(service, sessionKey, payload);
 }
