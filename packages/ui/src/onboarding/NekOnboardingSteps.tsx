@@ -54,7 +54,7 @@ export function OnboardingActionButton({
   );
   return (
     <ActionTooltip
-      label={label}
+      label={!action.enabled || action.error ? label : undefined}
       disabled={!action.enabled}
       disabledReason={reason}
       description={action.error}
@@ -135,7 +135,6 @@ function NekStep({ controller }: { controller: OnboardingController }) {
           label={formatOnboardingMessage(intl, "onboarding.nek.cancelInstall")}
           intl={intl}
           variant="ghost"
-          ref={controller.focus.ref("recheck")}
         />
         <OnboardingActionButton
           action={controller.actions.recheck}
@@ -148,14 +147,15 @@ function NekStep({ controller }: { controller: OnboardingController }) {
           action={controller.actions.copyCommand}
           label={formatOnboardingMessage(intl, "onboarding.nek.copyCommand")}
           intl={intl}
-          ref={controller.focus.ref("recheck")}
         />
       </div>
       <details
         className="rounded-xl border border-card-border bg-card p-3"
         open={nek.channel === "dev"}
       >
-        <summary className="cursor-pointer text-ui-sm font-medium">高级</summary>
+        <summary className="cursor-pointer text-ui-sm font-medium">
+          {formatOnboardingMessage(intl, "onboarding.nek.advanced")}
+        </summary>
         <div className="mt-3 flex items-center gap-2 text-ui-sm">
           {(["stable", "dev"] as const).map((channel) => (
             <label key={channel} className="flex items-center gap-1.5">
@@ -174,7 +174,7 @@ function NekStep({ controller }: { controller: OnboardingController }) {
       </details>
       {nek.log.length > 0 ? (
         <pre
-          aria-label="nek 安装日志"
+          aria-label={formatOnboardingMessage(intl, "onboarding.nek.installLog")}
           className="max-h-40 overflow-y-auto rounded-xl bg-surface p-3 font-mono text-ui-sm"
         >
           {nek.log.join("\n")}
@@ -241,19 +241,19 @@ function AccountStep({ controller }: { controller: OnboardingController }) {
           action={controller.actions.addProvider}
           label={formatOnboardingMessage(intl, "onboarding.account.addProvider")}
           intl={intl}
-          ref={controller.focus.ref("loginAnthropic")}
         />
         <OnboardingActionButton
           action={controller.actions.refreshAccount}
           label={formatOnboardingMessage(intl, "onboarding.nek.recheck")}
           intl={intl}
           variant="ghost"
-          ref={controller.focus.ref("loginAnthropic")}
         />
       </div>
       {account.providers.length > 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <p className="text-ui-sm font-medium">已配置服务商</p>
+          <p className="text-ui-sm font-medium">
+            {formatOnboardingMessage(intl, "onboarding.account.configuredProviders")}
+          </p>
           <ul className="mt-2 flex flex-wrap gap-2 text-ui-sm text-foreground-subtle">
             {account.providers.map((provider) => (
               <li key={provider} className="font-mono">
@@ -291,7 +291,7 @@ function WorkspaceStep({ controller }: { controller: OnboardingController }) {
     <section className="flex min-h-56 flex-col gap-4" aria-labelledby="nek-onboarding-workspace">
       <div className="rounded-xl border border-card-border bg-card p-4">
         <h3 id="nek-onboarding-workspace" className="text-ui-base font-medium">
-          已选工作区
+          {formatOnboardingMessage(intl, "onboarding.workspace.selected")}
         </h3>
         <p className="mt-2 break-all font-mono text-ui-sm text-foreground-subtle">
           {selectionLabel}
@@ -308,14 +308,12 @@ function WorkspaceStep({ controller }: { controller: OnboardingController }) {
           action={controller.actions.openRemote}
           label={formatOnboardingMessage(intl, "onboarding.workspace.openRemote")}
           intl={intl}
-          ref={controller.focus.ref("pickLocal")}
         />
         <OnboardingActionButton
           action={controller.actions.clearSelection}
           label={formatOnboardingMessage(intl, "onboarding.workspace.clearSelection")}
           intl={intl}
           variant="ghost"
-          ref={controller.focus.ref("pickLocal")}
         />
       </div>
     </section>
@@ -323,9 +321,9 @@ function WorkspaceStep({ controller }: { controller: OnboardingController }) {
 }
 
 export const ONBOARDING_STEP_LABELS: Record<OnboardingStep, string> = {
-  nek: "nek",
-  account: "账号",
-  workspace: "工作区",
+  nek: "onboarding.steps.nek",
+  account: "onboarding.steps.account",
+  workspace: "onboarding.steps.workspace",
 };
 
 export function OnboardingStepBody({ controller }: { controller: OnboardingController }) {
