@@ -246,29 +246,39 @@ test("客户端 dispose 之后不再上报订阅失败", async () => {
   server.dispose();
 });
 
-test("Initialize 之前 dispose：排队中的订阅不再发 EventListen，也不上报失败", async () => {
+test("Initialize 与 dispose 同 tick：排队中的订阅不再发 EventListen，也不上报失败", async () => {
   const sent: number[] = [];
-  const silent = new Emitter<VSBuffer>();
+  const inbound = new Emitter<VSBuffer>();
   const client = new ChannelClient({
     send: () => {
       sent.push(Date.now());
     },
-    onMessage: silent.event,
+    onMessage: inbound.event,
   });
 
   const failures: IChannelSubscriptionFailure[] = [];
   client.onDidSubscriptionError((failure) => failures.push(failure));
-  // Initialize 永远不到：订阅进入 whenInitialized() 的排队队列。
+  // Initialize 还没到：订阅进入 whenInitialized() 的排队队列。
   client.getChannel<IChannel>("svc").listen("onTick")(() => undefined);
-  await tick();
   assert.deepEqual(sent, []);
 
+  // Initialize 到达，它的 `.then(doRequest)` 仍排在微任务队列里；同一 tick 里 dispose。
+  inbound.fire(encodeInitialize());
   client.dispose();
   await tick();
-  // 队列里的订阅既不能发到已终结的传输，也不能凭空产生失败事件。
+
+  // 旧实现会在微任务里继续向已终结的传输发 EventListen，并把 emitter 留在 activeRequests。
   assert.deepEqual(sent, []);
   assert.deepEqual(failures, []);
 });
+
+/** 构造服务端 Initialize 回包：`[ResponseType.Initialize]` + 空 body。 */
+function encodeInitialize(): VSBuffer {
+  const writer = new BufferWriter();
+  serialize(writer, [200]);
+  serialize(writer, undefined);
+  return writer.buffer;
+}
 
 /**
  * 直接构造一份线上错误回包，用来验证重复投递的安全性。

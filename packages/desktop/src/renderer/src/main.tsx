@@ -22,6 +22,7 @@ import {
 import {
   InternalChannels,
   databaseStartupStateSchema,
+  safeLogArgs,
   type DatabaseStartupControl,
   parseLaunchMarks,
   LAUNCH_MARKS_QUERY_KEY,
@@ -150,7 +151,15 @@ initializeDesktopLocalTtft(desktopPlatform);
  * 且没有任何可查证据；这里只记录，不终结连接、不影响其它 channel。
  */
 const reportServiceConnectionLog: ServiceConnectionLog = (level, args) => {
-  window.zcode.log(level, args);
+  // 上报本身不能抛进协议分发栈：升级后的新窗口可能跑在缺少 `log` 桥的旧 preload 上，
+  // 上报失败退回 console（与 desktopPlatform 对可选 bridge 成员的口径一致），
+  // 事实本身仍然被报告，不静默丢弃。
+  const log = window.zcode.log;
+  if (typeof log === "function") {
+    log(level, args);
+    return;
+  }
+  console.warn(...safeLogArgs(args));
 };
 
 /**
