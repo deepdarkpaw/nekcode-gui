@@ -11,11 +11,14 @@ import type {
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentServiceOptions } from "../service/types.js";
+import type { ZCodeModelProviderAvailability } from "../../zcode-agent/zcodeAgent.js";
 
 export interface NekAgentServiceAdapterOptions extends NekAgentServiceOptions {
   /** GUI 元数据索引；未注入时使用有界内存索引。 */
   sessionIndexSyncer?: import("../index/nekSessionIndexSyncer.js").NekSessionIndexSyncer;
   maxV4Subscriptions?: number;
+  /** nek 侧模型事实读取；默认按已定位的 agentDir 读 models.json / settings.json。 */
+  readModelAvailability?: () => Promise<ZCodeModelProviderAvailability>;
 }
 
 export interface NekWorkspaceTarget {

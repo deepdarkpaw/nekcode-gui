@@ -22,6 +22,7 @@ import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
+import { createNekModelAvailabilityReader } from "./nekModelAvailability.js";
 import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
@@ -61,6 +62,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly onDynamicStorageStartupState: IZCodeAgentService["onDynamicStorageStartupState"];
   declare readonly syncAppRuntimePreferences: IZCodeAgentService["syncAppRuntimePreferences"];
   declare readonly getWorkspaceRuntimeIdentity: IZCodeAgentService["getWorkspaceRuntimeIdentity"];
+  declare readonly getModelProviderAvailability: IZCodeAgentService["getModelProviderAvailability"];
   declare readonly createSession: IZCodeAgentService["createSession"];
   declare readonly resumeSession: IZCodeAgentService["resumeSession"];
   declare readonly listSessions: IZCodeAgentService["listSessions"];
@@ -160,7 +162,11 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.interactions = new NekAgentInteractionChannel(this.service);
     const statusFeed = createNekAgentStatusFeed(this, options.logger);
     this.status = statusFeed.channel;
-    Object.assign(this, statusFeed.methods, createNekLegacyMethods(this));
+    const readModelAvailability = createNekModelAvailabilityReader(
+      options.readModelAvailability,
+      options.guiInfo?.agentDir,
+    );
+    Object.assign(this, statusFeed.methods, createNekLegacyMethods(this, readModelAvailability));
   }
 
   async initialize(

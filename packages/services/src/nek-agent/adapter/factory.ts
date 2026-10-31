@@ -2,6 +2,7 @@ import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekLocator } from "../nekLocator.js";
 import { NekAgentServiceAdapter } from "./nekAgentServiceAdapter.js";
 import type { NekAgentServiceAdapterOptions } from "./types.js";
+import { readNekModelAvailability } from "./nekModelAvailability.js";
 import { createNekRpcProcess } from "../nekRpcProcess.js";
 
 /**
@@ -19,6 +20,10 @@ export function createNekAgentServiceAdapter(
   };
   return new NekAgentServiceAdapter({
     ...serviceOptions,
+    // 模型事实与 nek 同源：只读已定位 agentDir 下的 models.json / settings.json。
+    readModelAvailability:
+      serviceOptions.readModelAvailability ??
+      (async () => await readNekModelAvailability((await locate()).agentDir)),
     createControlProcess:
       serviceOptions.createControlProcess ??
       (async () =>

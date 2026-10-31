@@ -50,8 +50,15 @@ export async function writeNekShim(sandbox, nodePath, cliPath) {
   });
 }
 
-/** 启动应用；stdout/stderr 写进 sandbox/app.log。 */
-export function launchApp({ executable, sandbox, cdpPort, extraEnv = {}, withNekShim }) {
+/** 启动应用；stdout/stderr 写进 sandbox/app.log。extraArgs 仅使用产品已有启动参数。 */
+export function launchApp({
+  executable,
+  sandbox,
+  cdpPort,
+  extraEnv = {},
+  withNekShim,
+  extraArgs = [],
+}) {
   const pathValue = process.env.PATH ?? process.env.Path ?? "";
   const env = {
     ...process.env,
@@ -66,7 +73,7 @@ export function launchApp({ executable, sandbox, cdpPort, extraEnv = {}, withNek
   delete env.Path;
   const child = spawn(
     executable,
-    [`--remote-debugging-port=${cdpPort}`, `--user-data-dir=${sandbox.userData}`],
+    [`--remote-debugging-port=${cdpPort}`, `--user-data-dir=${sandbox.userData}`, ...extraArgs],
     { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: false },
   );
   const log = createWriteStream(join(sandbox.root, "app.log"));

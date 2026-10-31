@@ -5,7 +5,9 @@ import type { IMessagePassingProtocol } from "./protocol.js";
 import {
   type IChannel,
   type IChannelClient,
+  type IChannelSubscriptionFailure,
   type IHandler,
+  type IRawErrorPayload,
   type IRawResponse,
   RequestType,
   ResponseType,
@@ -14,6 +16,34 @@ import {
 enum State {
   Uninitialized,
   Idle,
+}
+
+const ERROR_PASSTHROUGH_KEYS = [
+  "code",
+  "kind",
+  "status",
+  "retryAfterMs",
+  "data",
+  "detail",
+  "details",
+  "taskId",
+  "traceId",
+] as const;
+
+/** 把线上错误载荷还原成 Error；与 ChannelServer 的白名单字段一一对应。 */
+function createErrorFromPayload(payload: IRawErrorPayload): Error {
+  const error = new Error(payload.message) as Error & Record<string, unknown>;
+  error.name = payload.name;
+  if (payload.stack) {
+    error.stack = payload.stack.join("\n");
+  }
+  for (const key of ERROR_PASSTHROUGH_KEYS) {
+    const value = payload[key];
+    if (value !== undefined) {
+      error[key] = value;
+    }
+  }
+  return error;
 }
 
 export class ChannelClient implements IChannelClient, IDisposable {
@@ -29,6 +59,13 @@ export class ChannelClient implements IChannelClient, IDisposable {
 
   private readonly _onDidInitialize = new Emitter<void>();
   readonly onDidInitialize = this._onDidInitialize.event;
+
+  private readonly _onDidSubscriptionError = new Emitter<IChannelSubscriptionFailure>();
+  /**
+   * 服务端拒绝建立事件订阅时触发。订阅方必须把它当"连接还在但这条流已死"处理：
+   * 静默等帧会让状态卡与任务列表永久停在加载态。
+   */
+  readonly onDidSubscriptionError = this._onDidSubscriptionError.event;
 
   constructor(private protocol: IMessagePassingProtocol) {
     this.protocolListener = this.protocol.onMessage((msg) => this.onBuffer(msg));
@@ -83,29 +120,7 @@ export class ChannelClient implements IChannelClient, IDisposable {
             case ResponseType.PromiseError: {
               this.handlers.delete(id);
               this.pendingRejections.delete(id);
-              const error = new Error(response.data.message) as Error & Record<string, unknown>;
-              error.name = response.data.name;
-              if (response.data.stack) {
-                error.stack = response.data.stack.join("\n");
-              }
-              const passthroughKeys = [
-                "code",
-                "kind",
-                "status",
-                "retryAfterMs",
-                "data",
-                "detail",
-                "details",
-                "taskId",
-                "traceId",
-              ] as const;
-              for (const key of passthroughKeys) {
-                const value = response.data[key];
-                if (value !== undefined) {
-                  error[key] = value;
-                }
-              }
-              reject(error);
+              reject(createErrorFromPayload(response.data));
               return;
             }
             case ResponseType.PromiseErrorObj:
@@ -169,6 +184,26 @@ export class ChannelClient implements IChannelClient, IDisposable {
     });
 
     this.handlers.set(id, (response) => {
+      if (
+        response.type === ResponseType.PromiseError ||
+        response.type === ResponseType.PromiseErrorObj
+      ) {
+        // 服务端拒绝订阅：这条流不会再有帧。必须显式收口（dispose emitter 会让订阅方
+        // 停止等待），并把失败事实交给 onDidSubscriptionError，而不是把错误对象当成
+        // 业务帧 fire 给订阅者。
+        this.handlers.delete(id);
+        this.activeRequests.delete(emitter);
+        emitter.dispose();
+        this._onDidSubscriptionError.fire({
+          channelName,
+          event: name,
+          error:
+            response.type === ResponseType.PromiseError
+              ? createErrorFromPayload(response.data)
+              : new Error(String(response.data)),
+        });
+        return;
+      }
       emitter.fire((response as { data: any }).data);
     });
 
@@ -271,5 +306,6 @@ export class ChannelClient implements IChannelClient, IDisposable {
     this.activeRequests.clear();
     this.pendingRejections.clear();
     this._onDidInitialize.dispose();
+    this._onDidSubscriptionError.dispose();
   }
 }

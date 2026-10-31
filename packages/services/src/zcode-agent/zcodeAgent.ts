@@ -120,6 +120,16 @@ export interface ZCodeAgentWorkspaceRuntimeIdentity {
   workspaceKey: string;
 }
 
+/** Agent 侧可用的模型事实；只表达数量与默认选择，不携带 API Key 等凭据。 */
+export interface ZCodeModelProviderAvailability {
+  /** 至少有一个服务商提供至少一个模型。 */
+  available: boolean;
+  providerCount: number;
+  modelCount: number;
+  /** Agent 自己会用的默认选择（nek: settings.json 的 defaultProvider/defaultModel）。 */
+  defaultSelection?: { provider: string; model: string };
+}
+
 export const ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE = "ZCODE_AGENT_RUNTIME_UNAVAILABLE";
 
 export type ZCodeAgentRuntimePolicy = "start-if-needed" | "existing-only";
@@ -473,6 +483,15 @@ export interface IZCodeAgentService {
   getWorkspaceRuntimeIdentity(
     params: ZCodeAgentWorkspaceTarget,
   ): Promise<ZCodeAgentWorkspaceRuntimeIdentity>;
+  /**
+   * 该 Environment 里 Agent 真正可用的服务商/模型事实。
+   *
+   * 渲染层草稿首发门禁用它回答“能不能开始”：GUI 自己的 provider registry 在本产品里
+   * 是 ZCode 遗留配置存储，nek build 的服务商与模型只存在于 nek 的 `models.json` /
+   * `settings.json`，用前者判断会把“已配置好模型”误判成“没有可用模型”。
+   */
+  getModelProviderAvailability(): Promise<ZCodeModelProviderAvailability>;
+
   createSession(params: ZCodeAgentCreateSessionParams): Promise<ZCodeSessionStateSnapshot>;
   resumeSession(params: ZCodeAgentResumeSessionParams): Promise<ZCodeSessionStateSnapshot>;
   listSessions(params: ZCodeAgentListSessionsParams): Promise<ZCodeSessionInfo[]>;

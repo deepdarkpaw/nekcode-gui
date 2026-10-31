@@ -478,6 +478,10 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000packages/rpc/src/channelServer.ts\u0000toRpcErrorPayload",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000packages/services/src/fs/atomicFileUtils.ts\u0000atomicWriteJson",
       "count": 1
     },
@@ -1702,15 +1706,43 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/app.mjs\u0000writeNekShim",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000scripts/acceptance/lib/cdp.mjs\u0000pressKey",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000scripts/acceptance/lib/cdp.mjs\u0000typeText",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000MOCK_QUESTION_TEXT",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000MOCK_SECOND_QUESTION_TEXT",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000MOCK_SLOW_CHUNKS",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000pickMockTurn",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000clickOptionAt",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000clickTestId",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000dispatchMouseClick",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000exists",
       "count": 1
     },
     {
@@ -2002,10 +2034,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000scripts/acceptance/lib/mockLlm.mjs\u0000scripts/acceptance/lib/mockLlm.mjs",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000scripts/benchmarks/conversation-navigator-previews.mjs\u0000scripts/benchmarks/conversation-navigator-previews.mjs",
       "count": 1
     },
@@ -2203,6 +2231,10 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/index.ts\u0000NekWorkspaceTarget",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/nekAgentRuntimeLifecycle.ts\u0000NekRuntimeLifecycleSource",
       "count": 1
     },
     {
