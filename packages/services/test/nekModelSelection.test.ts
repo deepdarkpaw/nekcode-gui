@@ -99,6 +99,10 @@ function createFakeApi(options: FakeApiOptions = {}) {
       if (options.readError) throw options.readError;
       return settingsView(options.effective);
     },
+    reloadRunningSessions: async (target) => {
+      calls.push({ method: "reloadRunningSessions", target });
+      return { reloaded: 1, deferred: 0, diagnostics: [], failures: [] };
+    },
     watch: (target, listener) => {
       calls.push({ method: "watch", target });
       watchListener = () => listener({ file: "models.json", revision: "r2", scope: "global" });
@@ -322,10 +326,17 @@ test("watch 通知变更并推进 revision；内容未变时不产生伪变更",
     }),
   );
   const first = await service.getView();
+  assert.equal(
+    fake.calls.filter((call) => call.method === "reloadRunningSessions").length,
+    0,
+    "没有配置变化时不应触发 nek 重载",
+  );
 
   fake.notifyWatch();
   await new Promise((done) => setImmediate(done));
   assert.equal(views.length, 0, "内容未变不应通知");
+  // 配置变了以后，nek 自己的控制进程必须先重读，否则模型目录仍是旧的。
+  assert.equal(fake.calls.filter((call) => call.method === "reloadRunningSessions").length, 1);
 
   fake.api.listAvailableModels = async () => [CUSTOM_MODEL, CUSTOM_MODEL_2];
   fake.api.getModelCatalog = async () => [CUSTOM_MODEL, CUSTOM_MODEL_2];

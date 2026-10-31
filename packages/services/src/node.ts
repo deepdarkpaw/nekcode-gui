@@ -491,7 +491,9 @@ export function createLocalServices(options: {
     hosts: createLocalNekConfigTargetHost(),
     logger: { warn: (...args) => nekModelLog.warn(undefined, ...args) },
   });
-  const nekModelFacts: NekModelFactsSource = createNekModelFactsSource(nekConfigApi);
+  const nekModelFacts: NekModelFactsSource = createNekModelFactsSource(nekConfigApi, {
+    log: nekModelLog,
+  });
   const modelSelectionService: NekModelSelectionService = createNekModelSelectionService({
     facts: nekModelFacts,
     log: nekModelLog,

@@ -460,6 +460,7 @@ export const diagnosticMessages: readonly string[] = [
   "[messageport] client created, waiting for Initialize...",
   "[messageport] creating protocol and client...",
   "[model-selection] nek 模型事实刷新失败",
+  "[model-selection] nek 配置重载失败",
   "[model-selection] 目标 Host View 读取失败",
   "[nek-status] failed to dispatch subagent notification",
   "[nekAgentFeed] dropping the oldest tracked session key",

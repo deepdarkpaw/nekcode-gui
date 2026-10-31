@@ -33,6 +33,8 @@ export interface NekModelFactsApi {
     scope: NekConfigScope,
     cwd?: string,
   ): Promise<NekSettingsReadResult>;
+  /** 配置文件变了以后，让目标机器上的 nek 进程重读（设置页写路径用的是同一入口）。 */
+  reloadRunningSessions(target: NekConfigTarget): Promise<unknown>;
   watch(
     target: NekConfigTarget,
     listener: (change: { file: string; revision: string; scope: NekConfigScope }) => void,
@@ -90,14 +92,29 @@ function availableKey(provider: string, modelId: string): string {
  */
 export function createNekModelFactsSource(
   api: NekModelFactsApi,
-  options: { readonly target?: NekConfigTarget } = {},
+  options: {
+    readonly target?: NekConfigTarget;
+    readonly log?: { warn: (traceId: undefined, ...args: unknown[]) => void };
+  } = {},
 ): NekModelFactsSource {
   const target = options.target ?? NEK_LOCAL_TARGET;
+  const { log } = options;
   const listeners = new Set<() => void>();
   let disposed = false;
   let unsubscribeWatch: (() => void) | undefined;
+  let pendingReload = false;
 
   const read = async (): Promise<NekModelFacts> => {
+    if (pendingReload) {
+      pendingReload = false;
+      // 配置文件改了，nek 自己的控制进程也要重读（与设置页写后 reload 同一机制）；
+      // 否则 get_available_models / get_model_catalog 会一直回答旧的模型目录。
+      try {
+        await api.reloadRunningSessions(target);
+      } catch (error) {
+        log?.warn(undefined, "[model-selection] nek 配置重载失败", { error });
+      }
+    }
     const [available, catalog, authStatus, modelsConfig, settings] = await Promise.all([
       api.listAvailableModels(target),
       api.getModelCatalog(target),
@@ -116,6 +133,7 @@ export function createNekModelFactsSource(
       if (!unsubscribeWatch) {
         unsubscribeWatch = api.watch(target, () => {
           if (disposed) return;
+          pendingReload = true;
           for (const notify of listeners) notify();
         });
       }
