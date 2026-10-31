@@ -19,9 +19,14 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import { stripRemoteTargetSecrets } from "@zcode/shared";
 import { NEK_GUI_PROTOCOL_VERSION } from "@zcode/shared/nek-protocol";
-import { NekLocator, NekLocatorError } from "../../../services/src/nek-agent/nekLocator.js";
+import {
+  NekLocator,
+  NekLocatorError,
+  toLocatorCommand,
+} from "../../../services/src/nek-agent/nekLocator.js";
 import {
   buildNekInstallCommand,
+  buildNekInstallPowerShellCommand,
   createRemoteBackend,
   detectRemoteNek,
   installRemoteNek,
@@ -92,16 +97,36 @@ function appendLines(buffer: { value: string }, chunk: Buffer | string, onLog: L
   }
 }
 
+/** 本机安装 nek 的命令：Windows 走官方 `install.ps1`，其他平台走 `install.sh`。 */
+function localInstallInvocation(options: NekInstallOptions): {
+  file: string;
+  args: string[];
+  manualCommand: string;
+} {
+  if (process.platform === "win32") {
+    const command = buildNekInstallPowerShellCommand(options);
+    return {
+      file: "powershell.exe",
+      args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+      manualCommand: command,
+    };
+  }
+  const command = buildNekInstallCommand(options);
+  return { file: "sh", args: ["-lc", command], manualCommand: command };
+}
+
 async function runLocalCommand(
   command: string,
   args: string[],
   signal: AbortSignal,
   onLog: LogListener,
+  options: { windowsVerbatimArguments?: boolean } = {},
 ): Promise<{ code: number | null; cancelled: boolean; output: string }> {
   const child = spawn(command, args, {
     cwd: homedir(),
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsVerbatimArguments: options.windowsVerbatimArguments ?? false,
   });
   const output = { value: "" };
   const abort = () => child.kill("SIGINT");
@@ -299,15 +324,16 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     const controller = new AbortController();
     this.localInstallControllers.add(controller);
     try {
-      const command = buildNekInstallCommand(options);
-      const shellCommand = process.platform === "win32" ? "bash" : "sh";
+      const invocation = localInstallInvocation(options);
+      const command = invocation.manualCommand;
       const result = await runLocalCommand(
-        shellCommand,
-        ["-lc", command],
+        invocation.file,
+        invocation.args,
         controller.signal,
         onLog,
       );
       if (result.code === 0 && !result.cancelled) {
+        this.locator.invalidate();
         const detected = await this.detectLocalNek();
         if (detected.status === "ready") return { ok: true, version: detected.version };
       }
@@ -351,10 +377,17 @@ export class NekSettingsHostService implements INekSettingsHostApi {
 
   async runNekUpdate(_target: NekConfigTarget, onLog: LogListener): Promise<{ version: string }> {
     const controller = new AbortController();
-    const command = process.platform === "win32" ? "nek.cmd" : "nek";
-    const result = await runLocalCommand(command, ["update"], controller.signal, onLog);
+    // 用定位器找到的启动器：Windows 上 nek.cmd 不能直接 spawn（Node 拒绝无 shell 执行 .cmd），
+    // 也不能假设它在 PATH 里（安装器写的 PATH 对已运行的 GUI 不生效）。
+    const located = await this.locator.locate();
+    const command = toLocatorCommand(located.launcherPath, ["update"], process.platform);
+    const result = await runLocalCommand(command.file, command.args, controller.signal, onLog, {
+      windowsVerbatimArguments: command.windowsVerbatimArguments,
+    });
     if (result.code !== 0)
       throw new Error(result.output || `nek update exited with ${result.code ?? "no code"}`);
+    // 更新通常不改启动器本身，按 mtime 的缓存会继续报旧版本，必须先失效。
+    this.locator.invalidate();
     const detection = await this.detectLocalNek();
     if (detection.status !== "ready")
       throw new Error("nek update completed but nek is unavailable");

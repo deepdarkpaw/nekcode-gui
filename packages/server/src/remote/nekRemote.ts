@@ -148,6 +148,24 @@ export function buildNekInstallCommand(options: InstallNekOptions = {}): string 
   return `curl -fsSL ${quotePosixShellArg(installUrl)} | ${assignments} bash`;
 }
 
+function quotePowerShellString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Windows 本机安装命令：nek 官方的 Windows 安装方式是 PowerShell 的 `install.ps1`
+ * （`install.sh` 需要 bash，普通 Windows 用户没有）。环境变量与 `install.sh` 同名同义。
+ */
+export function buildNekInstallPowerShellCommand(options: InstallNekOptions = {}): string {
+  const environment = installEnvironment(options);
+  const repoUrl = options.repoUrl ?? DEFAULT_INSTALL_REPO_URL;
+  const assignments = Object.entries(environment)
+    .map(([key, value]) => `$env:${key}=${quotePowerShellString(value)}`)
+    .join("; ");
+  const installUrl = `${repoUrl.replace(/\/$/u, "")}/scripts/install.ps1`;
+  return `${assignments}; irm ${quotePowerShellString(installUrl)} | iex`;
+}
+
 function destroyStream(stream: StdioStream): void {
   for (const candidate of [stream.stdin, stream.stdout, stream.stderr]) {
     (candidate as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();

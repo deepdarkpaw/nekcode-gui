@@ -2,7 +2,12 @@ import { PassThrough } from "node:stream";
 import { Emitter } from "@zcode/rpc";
 import { describe, expect, it } from "vitest";
 import type { IRemoteBackend, StdioStream } from "./backend.js";
-import { detectRemoteNek, installRemoteNek } from "./nekRemote.js";
+import {
+  buildNekInstallCommand,
+  buildNekInstallPowerShellCommand,
+  detectRemoteNek,
+  installRemoteNek,
+} from "./nekRemote.js";
 
 function fakeBackend(payload: {
   code: number;
@@ -99,5 +104,19 @@ describe("installRemoteNek", () => {
     expect(result.cancelled).toBe(true);
     expect(signal).toBe("INT");
     expect(streamRef).toBeDefined();
+  });
+});
+
+describe("install commands", () => {
+  it("builds the official Windows PowerShell installer with the same options as install.sh", () => {
+    const options = { channel: "dev" as const, nodeMirror: "https://mirror.example/node's" };
+    const powershell = buildNekInstallPowerShellCommand(options);
+    expect(powershell).toBe(
+      "$env:NEK_CHANNEL='dev'; $env:NEK_REPO_URL='https://github.com/deepdarkpaw/nekcode.git'; " +
+        "$env:NEK_NODE_MIRROR='https://mirror.example/node''s'; " +
+        "irm 'https://raw.githubusercontent.com/deepdarkpaw/nekcode/nek/scripts/install.ps1' | iex",
+    );
+    expect(buildNekInstallCommand(options)).toContain("/scripts/install.sh");
+    expect(buildNekInstallCommand(options)).toContain("NEK_CHANNEL=");
   });
 });

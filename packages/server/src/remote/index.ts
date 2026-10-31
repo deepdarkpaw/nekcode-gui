@@ -63,6 +63,7 @@ export {
   detectRemoteNek,
   installRemoteNek,
   buildNekInstallCommand,
+  buildNekInstallPowerShellCommand,
   type InstallNekOptions,
   type InstallNekResult,
   type RemoteNekCheckResult,
