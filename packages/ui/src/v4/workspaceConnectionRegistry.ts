@@ -186,6 +186,9 @@ export function acquireWorkspaceConnection(
   let entry: RegistryEntry;
   if (existing && (existing.agentService === agentService || isRemote)) {
     existing.refCount += 1;
+    // 同 workspace 的多个 pane 共享一条状态 feed：后接入的 pane 把输出回调换成自己的
+    // 最新实现（语言切换会给出新的 intl 实例），避免通知文案停在旧语言上。
+    existing.statusFeed.setOptions(statusFeedOptions);
     if (existing.keepWarmTimer !== null) {
       clearTimeout(existing.keepWarmTimer);
       existing.keepWarmTimer = null;

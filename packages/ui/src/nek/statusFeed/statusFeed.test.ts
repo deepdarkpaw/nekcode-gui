@@ -121,6 +121,32 @@ describe("nek status feed", () => {
     return feed;
   }
 
+  it("hands status outputs to the latest setOptions callback without resubscribing", () => {
+    const fake = createFakeService();
+    const feed = start(fake.service);
+    const first = vi.fn();
+    const second = vi.fn();
+    feed.setOptions({ onOutput: first });
+    act(() => fake.emit(snapshotFrame()));
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+
+    // 语言切换后 pane 会用新的 intl 重新登记：同一订阅、同一会话状态，只换回调。
+    feed.setOptions({ onOutput: second });
+    act(() =>
+      fake.emit(
+        eventFrame("s1", {
+          type: "extension_event",
+          name: "nek.subagent",
+          payload: subagent("a", "running"),
+        }),
+      ),
+    );
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(fake.listenerCount()).toBe(1);
+  });
+
   it("subscribes once per workspace and forgets the session when the feed is disposed", () => {
     const fake = createFakeService();
     const feed = start(fake.service);

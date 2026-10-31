@@ -39,6 +39,12 @@ export type NekStatusFeedAgentService = Pick<
 
 export interface NekStatusFeedHandle {
   dispose: () => void;
+  /**
+   * 换掉输出回调。同 workspace 的多个 pane 共享一条 feed（registry 引用计数），
+   * 后接入的 pane 用新回调（例如语言切换后的新 intl 实例）覆盖旧的，
+   * 不重建订阅、不丢事件。
+   */
+  setOptions: (options: NekStatusFeedOptions) => void;
 }
 
 export interface NekStatusFeedOptions {
@@ -78,8 +84,12 @@ class NekStatusFeed implements NekStatusFeedHandle {
   constructor(
     private readonly agentService: NekStatusFeedAgentService,
     private readonly target: ZCodeAgentWorkspaceTarget,
-    private readonly options: NekStatusFeedOptions,
+    private options: NekStatusFeedOptions,
   ) {}
+
+  setOptions(options: NekStatusFeedOptions): void {
+    this.options = options;
+  }
 
   start(): void {
     this.subscription = this.agentService.onDynamicNekStatusFrame(this.target)((frame) =>
