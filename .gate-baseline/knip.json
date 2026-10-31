@@ -598,10 +598,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-agent/nekLocator.ts\u0000createNekLocatorDeps",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-agent/nekLocator.ts\u0000isExecutableFile",
       "count": 1
     },
@@ -1706,6 +1702,18 @@
       "count": 1
     },
     {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/app.mjs\u0000writeNekShim",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/cdp.mjs\u0000pressKey",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000exports\u0000scripts/acceptance/lib/cdp.mjs\u0000typeText",
+      "count": 1
+    },
+    {
       "key": "knip\u0000exports\u0000scripts/architecture/index.mjs\u0000loadPolicy",
       "count": 1
     },
@@ -1991,6 +1999,10 @@
     },
     {
       "key": "knip\u0000files\u0000packages/zcode-server-cli/scripts/verify-remote-ssh.mjs\u0000packages/zcode-server-cli/scripts/verify-remote-ssh.mjs",
+      "count": 1
+    },
+    {
+      "key": "knip\u0000files\u0000scripts/acceptance/lib/mockLlm.mjs\u0000scripts/acceptance/lib/mockLlm.mjs",
       "count": 1
     },
     {
