@@ -46,6 +46,7 @@ export class NekAgentInteractionChannel {
     const emitter = new Emitter<NekInteractionFrame>({
       onWillAddFirstListener: () => this.attachService(),
       onDidRemoveLastListener: () => {
+        this.service.cancelWorkspaceInteractions(workspace);
         this.detachIfIdle();
         this.emitters.delete(workspace);
       },

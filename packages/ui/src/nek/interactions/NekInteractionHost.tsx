@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import type {
   NekAskQuestionPayload,
   NekExtensionUiDialogRequest,
@@ -7,8 +7,11 @@ import type {
   NekStructuredUiRequest,
   NekSwitchModePayload,
 } from "@zcode/shared/nek-protocol";
+import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { ActiveElementInfo } from "./interactionCommon.js";
+import { drainNekInteractionEffects, type NekEffectNotifyLevel } from "./interactionEffectSink.js";
 import { NekAskQuestionCard } from "./NekAskQuestionCard.js";
 import { NekExtensionDialogCard } from "./NekExtensionDialogCard.js";
 import { NekPlanReviewCard } from "./NekPlanReviewCard.js";
@@ -18,6 +21,8 @@ import { useNekInteractionStore, type NekInteractionStoreApi } from "./interacti
 export interface NekInteractionHostProps {
   sessionKey: string;
   store?: NekInteractionStoreApi;
+  workspacePath?: string;
+  workspaceIdentity?: string;
   activeElement?: ActiveElementInfo;
   onOpenPlanFile?: (path: string) => Promise<void> | void;
   focusComposer?: () => void;
@@ -35,12 +40,40 @@ function extensionResponse(
 export function NekInteractionHost({
   sessionKey,
   store = useNekInteractionStore,
+  workspacePath,
+  workspaceIdentity,
   activeElement,
   onOpenPlanFile,
   focusComposer,
   onLostText,
 }: NekInteractionHostProps) {
   const { intl } = useZCodeIntl();
+  // fire-and-forget（notify / set_editor_text）与一次性提示（「请求已被撤销」）的出站队列：
+  // 直接订阅 store，不依赖某次渲染，宿主挂在哪个 pane 都能及时消费。
+  const drainEffects = useCallback(() => {
+    drainNekInteractionEffects({
+      store,
+      sessionKey,
+      formatMessage: (id) => intl.formatMessage({ id }),
+      notify: (message: string, level: NekEffectNotifyLevel) => {
+        // 现有 toast 只有 info/warning 两档语义色；错误提示沿用 warning，避免新造样式。
+        toast(message, { variant: level === "error" ? "warning" : level });
+      },
+      ...(workspacePath
+        ? {
+            replaceComposerText: (text: string) => {
+              useZCodeSessionStore
+                .getState()
+                .requestComposerTextInsert(workspacePath, text, workspaceIdentity);
+            },
+          }
+        : {}),
+    });
+  }, [intl, sessionKey, store, workspaceIdentity, workspacePath]);
+  useEffect(() => {
+    drainEffects();
+    return store.subscribe(drainEffects);
+  }, [drainEffects, store]);
   const activeRequest = store((state) => state.sessions[sessionKey]?.queue[0]?.request);
   const queueLength = store((state) =>
     Math.max(0, (state.sessions[sessionKey]?.queue.length ?? 0) - 1),

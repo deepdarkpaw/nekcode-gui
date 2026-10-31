@@ -13,7 +13,11 @@ import type {
 } from "@zcode/services";
 import { logger } from "@/logger.js";
 import { useNekStatusStore } from "@/nek/status/store.js";
-import { NEK_STATUS_MAX_SESSIONS, NEK_STATUS_STATS_THROTTLE_MS } from "@/nek/status/types.js";
+import {
+  NEK_STATUS_MAX_SESSIONS,
+  NEK_STATUS_STATS_THROTTLE_MS,
+  type NekStatusEventOutput,
+} from "@/nek/status/types.js";
 import {
   deleteNekStatusActions,
   setNekStatusActions,
@@ -35,6 +39,16 @@ export type NekStatusFeedAgentService = Pick<
 
 export interface NekStatusFeedHandle {
   dispose: () => void;
+  /**
+   * 换掉输出回调。同 workspace 的多个 pane 共享一条 feed（registry 引用计数），
+   * 后接入的 pane 用新回调（例如语言切换后的新 intl 实例）覆盖旧的，
+   * 不重建订阅、不丢事件。
+   */
+  setOptions: (options: NekStatusFeedOptions) => void;
+}
+
+export interface NekStatusFeedOptions {
+  onOutput?: (sessionKey: string, output: NekStatusEventOutput) => void;
 }
 
 function sessionTarget(
@@ -70,7 +84,12 @@ class NekStatusFeed implements NekStatusFeedHandle {
   constructor(
     private readonly agentService: NekStatusFeedAgentService,
     private readonly target: ZCodeAgentWorkspaceTarget,
+    private options: NekStatusFeedOptions,
   ) {}
+
+  setOptions(options: NekStatusFeedOptions): void {
+    this.options = options;
+  }
 
   start(): void {
     this.subscription = this.agentService.onDynamicNekStatusFrame(this.target)((frame) =>
@@ -102,10 +121,15 @@ class NekStatusFeed implements NekStatusFeedHandle {
     this.trackSession(frame.sessionKey);
     const store = useNekStatusStore.getState();
     if (frame.kind === "snapshot") {
-      store.consumeEvent(frame.sessionKey, { type: "session_snapshot", payload: frame.snapshot });
+      const output = store.consumeEvent(frame.sessionKey, {
+        type: "session_snapshot",
+        payload: frame.snapshot,
+      });
+      this.options.onOutput?.(frame.sessionKey, output);
       return;
     }
     const output = store.consumeEvent(frame.sessionKey, frame.event);
+    this.options.onOutput?.(frame.sessionKey, output);
     if (output.needsStatsRefresh) this.runStatsRefresh(frame.sessionKey);
     else this.syncStatsRefresh(frame.sessionKey);
   }
@@ -193,8 +217,9 @@ class NekStatusFeed implements NekStatusFeedHandle {
 export function createNekStatusFeed(
   agentService: NekStatusFeedAgentService,
   target: ZCodeAgentWorkspaceTarget,
+  options: NekStatusFeedOptions = {},
 ): NekStatusFeedHandle {
-  const feed = new NekStatusFeed(agentService, target);
+  const feed = new NekStatusFeed(agentService, target, options);
   feed.start();
   return feed;
 }

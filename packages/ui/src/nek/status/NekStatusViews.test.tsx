@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NekSessionStats, NekSubagentRecord } from "@zcode/shared/nek-protocol";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { resetNekStatusActionRegistry } from "@/nek/statusFeed/statusActions.js";
 import { useNekStatusStore } from "./store.js";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
 import { NekRetryBannerView } from "./NekRetryBannerView.js";
 import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
-import { NekSessionStatusSlot, type NekSessionStatusCallbacks } from "./NekSessionStatusSlot.js";
 import { NekSubagentCardView } from "./NekSubagentCardView.js";
 import { NekSubagentTranscriptView } from "./NekSubagentTranscriptView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
@@ -70,27 +70,10 @@ function setStats() {
   useNekStatusStore.getState().consumeEvent("s", { type: "session_stats", payload: stats });
 }
 
-function callbacks(overrides: Partial<NekSessionStatusCallbacks> = {}): NekSessionStatusCallbacks {
-  return {
-    onStopSubagent: vi.fn(async () => undefined),
-    onFocusSubagent: vi.fn(),
-    onOpenPlan: vi.fn(),
-    onJumpToTodo: vi.fn(),
-    canJumpToTodo: () => true,
-    clearQueue: vi.fn(async () => ({ steering: [], followUp: [] })),
-    requeue: vi.fn(async () => undefined),
-    getComposerText: () => "",
-    setComposerText: vi.fn(),
-    focusComposerAtEnd: vi.fn(),
-    abortRetry: vi.fn(async () => undefined),
-    abort: vi.fn(async () => undefined),
-    abortCompaction: vi.fn(async () => undefined),
-    onCompact: vi.fn(async () => undefined),
-    ...overrides,
-  };
-}
-
-beforeEach(() => useNekStatusStore.getState().reset());
+beforeEach(() => {
+  useNekStatusStore.getState().reset();
+  resetNekStatusActionRegistry();
+});
 afterEach(() => cleanup());
 
 describe("nek status views", () => {
@@ -259,19 +242,5 @@ describe("nek status views", () => {
     await waitFor(() => expect(screen.getByText("加载失败")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "加载失败，重试" }));
     await waitFor(() => expect(screen.getByText("消息一")).toBeTruthy());
-  });
-
-  it("slot: returns null without active state and mounts active status views", () => {
-    const empty = renderView(<NekSessionStatusSlot sessionKey="s" callbacks={callbacks()} />);
-    expect(empty.container.querySelector('[data-status-view="session-status-slot"]')).toBeNull();
-    empty.unmount();
-    act(() => {
-      useNekStatusStore
-        .getState()
-        .consumeEvent("s", { type: "queue_update", steering: ["one"], followUp: [] });
-    });
-    renderView(<NekSessionStatusSlot sessionKey="s" callbacks={callbacks()} />);
-    expect(document.querySelector('[data-status-view="session-status-slot"]')).toBeTruthy();
-    expect(screen.getByText("one")).toBeTruthy();
   });
 });

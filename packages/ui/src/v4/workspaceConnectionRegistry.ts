@@ -13,7 +13,11 @@ import { ReplaceableConversationTransport } from "@/v4/replaceableConversationTr
 import { SessionDataLayer } from "@/v4/sessionDataLayer.js";
 import type { ConversationTransport } from "@/v4/transport.js";
 import { logger } from "@/logger.js";
-import { createNekStatusFeed, type NekStatusFeedHandle } from "@/nek/statusFeed/statusFeed.js";
+import {
+  createNekStatusFeed,
+  type NekStatusFeedHandle,
+  type NekStatusFeedOptions,
+} from "@/nek/statusFeed/statusFeed.js";
 
 /** 注册表需要的 agentService 窄面（= conversation transport 的依赖面，便于测试注入）。 */
 export type WorkspaceConnectionAgentService = Pick<
@@ -171,6 +175,7 @@ export function acquireWorkspaceConnection(
   scope: WorkspaceConnectionScope,
   agentService: WorkspaceConnectionAgentService,
   createLocalMediaPreviewUrl?: (path: string) => string,
+  statusFeedOptions: NekStatusFeedOptions = {},
 ): WorkspaceConnectionLease {
   const key = buildWorkspaceConnectionKey(scope);
   const existing = registry.get(key);
@@ -181,6 +186,9 @@ export function acquireWorkspaceConnection(
   let entry: RegistryEntry;
   if (existing && (existing.agentService === agentService || isRemote)) {
     existing.refCount += 1;
+    // 同 workspace 的多个 pane 共享一条状态 feed：后接入的 pane 把输出回调换成自己的
+    // 最新实现（语言切换会给出新的 intl 实例），避免通知文案停在旧语言上。
+    existing.statusFeed.setOptions(statusFeedOptions);
     if (existing.keepWarmTimer !== null) {
       clearTimeout(existing.keepWarmTimer);
       existing.keepWarmTimer = null;
@@ -214,11 +222,15 @@ export function acquireWorkspaceConnection(
       ? new ReplaceableConversationTransport(initialTransport)
       : null;
     const transport = replaceableTransport ?? initialTransport;
-    const statusFeed = createNekStatusFeed(agentService, {
-      workspacePath: scope.workspacePath,
-      ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
-      ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
-    });
+    const statusFeed = createNekStatusFeed(
+      agentService,
+      {
+        workspacePath: scope.workspacePath,
+        ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+        ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+      },
+      statusFeedOptions,
+    );
     entry = {
       key,
       agentService,
@@ -266,11 +278,15 @@ export function acquireWorkspaceConnection(
       entry.agentService = agentService;
       entry.agentServiceGeneration = incomingServiceGeneration;
       entry.statusFeed.dispose();
-      entry.statusFeed = createNekStatusFeed(agentService, {
-        workspacePath: scope.workspacePath,
-        ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
-        ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
-      });
+      entry.statusFeed = createNekStatusFeed(
+        agentService,
+        {
+          workspacePath: scope.workspacePath,
+          ...(scope.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+          ...(scope.remoteSessionId ? { remoteSessionId: scope.remoteSessionId } : {}),
+        },
+        statusFeedOptions,
+      );
       entry.replaceableTransport.replace(
         createAgentConversationTransport(agentService, {
           workspacePath: scope.workspacePath,

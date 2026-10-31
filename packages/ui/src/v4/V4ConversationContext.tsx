@@ -23,11 +23,14 @@ import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import type { ConversationAttachmentReadParams, ConversationTransport } from "@/v4/transport.js";
 import type { PaneWorkspaceScope } from "@/v4/paneLayoutStore.js";
+import { paneWorkspaceKey } from "@/v4/paneLayoutTree.js";
 import { SessionDataLayer } from "@/v4/sessionDataLayer.js";
 import { acquireWorkspaceConnection } from "@/v4/workspaceConnectionRegistry.js";
 import type { AttachmentUploadOptions } from "@/v4/attachmentUploadTransaction.js";
 import { NekAgentFeedProvider } from "@/nek/feed/nekAgentFeed.js";
 import { NekWorkspaceInteractionHost } from "@/nek/feed/NekWorkspaceInteractionHost.js";
+import { useWorkspaceInteractionOwnership } from "@/nek/feed/workspaceInteractionOwnership.js";
+import { useNekSubagentFinishedNotifications } from "@/nek/statusFeed/subagentFinishedNotifications.js";
 
 export interface V4ConversationContextValue {
   layer: SessionDataLayer;
@@ -77,9 +80,21 @@ export function useHasV4Conversation(): boolean {
   return useContext(V4ConversationContext) !== null;
 }
 
+/** workspace 级交互卡的去重身份：只有 workspace 布局里的 pane 传。 */
+interface PaneInteractionIdentity {
+  paneId: string;
+  /** 是否是 workspace 布局的 primary pane（同 workspace 多 pane 时由它优先渲染）。 */
+  primary: boolean;
+}
+
 interface V4PaneConversationProviderProps {
   /** pane 绑定的 primary workspace（连接路由键）。 */
   scope: PaneWorkspaceScope;
+  /**
+   * 参与 workspace 级交互卡去重的 pane 身份。侧栏（计划详情 / 子代理 / 选区侧聊）不传，
+   * 它们不渲染 workspace 级交互卡，避免同一张卡在侧栏里再出现一次。
+   */
+  interactionPane?: PaneInteractionIdentity;
   children: ReactNode;
 }
 
@@ -94,7 +109,11 @@ interface V4PaneConversationProviderProps {
  * 另起独立 runtime（远控保护约束）。重连 ready 后 services 换新引用 → 注册表保持
  * 原 layer/transport 身份，并在 commit 阶段单向激活最新 proxy。
  */
-export function V4PaneConversationProvider({ scope, children }: V4PaneConversationProviderProps) {
+export function V4PaneConversationProvider({
+  scope,
+  interactionPane,
+  children,
+}: V4PaneConversationProviderProps) {
   const targetResolution = useWorkspaceServicesResolution(
     scope.workspacePath,
     scope.remoteSessionId ?? null,
@@ -118,7 +137,11 @@ export function V4PaneConversationProvider({ scope, children }: V4PaneConversati
   // remoteSessionId 后若仍把原 scope 传给 registry，会以 __base__ 和远端 endpoint
   // 各建一份数据层，终态可能落到非可见 store。ready 后统一使用解析后的 scope。
   return (
-    <ReadyV4PaneConversationProvider scope={resolvedScope} services={targetResolution.services}>
+    <ReadyV4PaneConversationProvider
+      scope={resolvedScope}
+      services={targetResolution.services}
+      {...(interactionPane ? { interactionPane } : {})}
+    >
       {children}
     </ReadyV4PaneConversationProvider>
   );
@@ -127,12 +150,26 @@ export function V4PaneConversationProvider({ scope, children }: V4PaneConversati
 function ReadyV4PaneConversationProvider({
   scope,
   services,
+  interactionPane,
   children,
-}: Pick<V4PaneConversationProviderProps, "scope" | "children"> & {
+}: Pick<V4PaneConversationProviderProps, "scope" | "children" | "interactionPane"> & {
   services: IServiceAccessor;
 }) {
   const agentService = services.zcodeAgentService;
   const platform = usePlatform();
+  // 状态 feed 的完成事件 → 桌面通知（RB-6）；窗口有焦点时由 main 进程抑制。
+  const onStatusOutput = useNekSubagentFinishedNotifications();
+  const statusFeedOptions = useMemo(() => ({ onOutput: onStatusOutput }), [onStatusOutput]);
+  // 同一个 workspace 开多个 pane 时，workspace 级交互卡只由登记出的那一个 pane 渲染。
+  const ownsWorkspaceInteractions = useWorkspaceInteractionOwnership(
+    interactionPane
+      ? {
+          workspaceKey: paneWorkspaceKey(scope),
+          paneId: interactionPane.paneId,
+          primary: interactionPane.primary,
+        }
+      : undefined,
+  );
   const feedTarget = useMemo(
     () => ({
       workspacePath: scope.workspacePath,
@@ -154,6 +191,7 @@ function ReadyV4PaneConversationProvider({
       },
       agentService,
       scope.remoteSessionId ? undefined : platform.createLocalMediaPreviewUrl,
+      statusFeedOptions,
     );
     return {
       lease,
@@ -181,6 +219,7 @@ function ReadyV4PaneConversationProvider({
     agentService,
     platform.createLocalMediaPreviewUrl,
     scope.workspacePath,
+    statusFeedOptions,
     scope.workspaceIdentity,
     scope.remoteSessionId,
   ]);
@@ -200,7 +239,9 @@ function ReadyV4PaneConversationProvider({
   return (
     <ServiceProvider services={services}>
       <NekAgentFeedProvider service={agentService} target={feedTarget}>
-        <NekWorkspaceInteractionHost workspacePath={scope.workspacePath} />
+        {ownsWorkspaceInteractions ? (
+          <NekWorkspaceInteractionHost workspacePath={scope.workspacePath} />
+        ) : null}
         <ConversationDiagnosticPaneAttachment services={services} scope={scope}>
           <V4ConversationContext.Provider value={bundle.value}>
             {children}

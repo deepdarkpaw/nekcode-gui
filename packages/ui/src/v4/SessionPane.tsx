@@ -22,6 +22,7 @@ import {
   buildCustomSupplierKey,
   TID_CHAT_EMPTY,
   TID_V4_SESSION_PANE,
+  TID_V4_COMPOSER_INPUT,
   testId,
   ZCODE_AGENT_PROVIDER,
 } from "@zcode/shared";
@@ -169,6 +170,7 @@ import type {
 import type { SessionLease } from "@/v4/sessionDataLayer.js";
 import { V4InteractionDialogs } from "@/v4/V4InteractionDialogs.js";
 import {
+  createNekPaneStatusCallbacks,
   NekSessionStatusSlot,
   type NekSessionStatusCallbacks,
 } from "@/nek/status/index.js";
@@ -182,7 +184,10 @@ import {
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { useFoldStore } from "@/lib/foldState.js";
+import { focusAtEnd } from "@/lib/typeToFocus.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
+import { useNekSubagentFeed } from "@/nek/feed/useNekSubagentFeed.js";
+import { useNekStatusStore } from "@/nek/status/store.js";
 import { useConversationProjection } from "@/v4/useConversationProjection.js";
 import { usePendingCommandRecovery } from "@/v4/usePendingCommandRecovery.js";
 import { shouldFocusTimelineAfterComposerSend } from "@/v4/promptScrollFocusPolicy.js";
@@ -475,6 +480,7 @@ export function SessionPane({
   const { conversationShareService, modelSelectionService, zcodeSessionService, zcodeTaskService } =
     useServices();
   const { intl, locale } = useZCodeIntl();
+  const subagentFeed = useNekSubagentFeed(sessionId ?? "");
   const platform = usePlatform();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
   const workspaceHomePath = useWorkspaceHomePath({
@@ -945,6 +951,7 @@ export function SessionPane({
   const autoLoadIncompleteTurnCursorRef = useRef<string | null>(null);
   snapshotRef.current = snapshot;
   const composerDraftStateRef = useRef({ hasContent: false, busy: false });
+  const paneRootRef = useRef<HTMLDivElement>(null);
   const [queueEditOperation, setQueueEditOperation] = useState<{
     queueItemId: string;
     sessionId: string;
@@ -1097,6 +1104,9 @@ export function SessionPane({
     agentStartupAllowed: draftAgentStartupAllowed,
     modelSelectionService,
   });
+  // 稳定的"当前草稿文本"读取器：队列取回/编辑要在 latest 草稿上拼接，不能每键重建回调。
+  const composerDraftRef = useRef(composerDraft);
+  composerDraftRef.current = composerDraft;
   const modelSelectionView =
     modelSelectionRead.state.status === "ready" ? modelSelectionRead.state.view : null;
   const draftModelSelectionRevisionRef = useRef<number | null>(null);
@@ -1483,6 +1493,83 @@ export function SessionPane({
     },
     [onOpenPlanDetail, remoteSessionId, workspaceIdentity, workspacePath],
   );
+  const handleOpenNekPlan = useCallback(
+    (path: string) => {
+      onOpenFileLink?.({
+        path,
+        label: path,
+        pathKind: "file",
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity } : {}),
+        ...(remoteSessionId ? { workspaceRemoteSessionId: remoteSessionId } : {}),
+      });
+    },
+    [onOpenFileLink, remoteSessionId, workspaceIdentity, workspacePath],
+  );
+  const handleJumpToNekTodo = useCallback(() => {
+    timelineScrollToBottomRef.current?.();
+  }, []);
+  const canJumpToNekTodo = useCallback(
+    (_id: string) => Boolean(sessionId && timelineScrollToBottomRef.current),
+    [sessionId],
+  );
+  const getComposerText = useCallback(() => composerDraftRef.current.text, []);
+  const setComposerText = useCallback(
+    (text: string) => {
+      useZCodeSessionStore
+        .getState()
+        .requestComposerTextInsert(workspacePath, text, workspaceIdentity);
+    },
+    [workspaceIdentity, workspacePath],
+  );
+  const focusComposerAtEnd = useCallback(() => {
+    const input = paneRootRef.current?.querySelector<HTMLElement>(
+      `[data-testid="${TID_V4_COMPOSER_INPUT}"]`,
+    );
+    if (input) focusAtEnd(input);
+  }, []);
+  const handleFocusNekSubagent = useCallback(
+    (id: string) => {
+      if (!sessionId) return;
+      const record = useNekStatusStore.getState().sessions[sessionId]?.subagents.byId[id];
+      if (!record) return;
+      handleOpenSubagentSession({
+        parentSessionId: sessionId,
+        childSessionId: id,
+        subagentType: record.type,
+        title: record.description,
+      });
+    },
+    [handleOpenSubagentSession, sessionId],
+  );
+  // 状态卡的 pane 级回调：子代理 RPC 走 feed，其余都落到当前 pane 的真实行为上。
+  // 只依赖 agent 服务的动作（abort / compact / 队列）由 status feed 直接登记，不在这里转发。
+  const nekStatusCallbacksForPane = useMemo<NekSessionStatusCallbacks | undefined>(() => {
+    if (!sessionId) return undefined;
+    if (nekStatusCallbacks) return nekStatusCallbacks;
+    return createNekPaneStatusCallbacks({
+      stopSubagent: subagentFeed.onStop,
+      fetchTranscript: subagentFeed.fetchTranscript,
+      focusSubagent: handleFocusNekSubagent,
+      openPlan: handleOpenNekPlan,
+      jumpToTodo: handleJumpToNekTodo,
+      canJumpToTodo: canJumpToNekTodo,
+      getComposerText,
+      setComposerText,
+      focusComposerAtEnd,
+    });
+  }, [
+    canJumpToNekTodo,
+    focusComposerAtEnd,
+    getComposerText,
+    handleFocusNekSubagent,
+    handleJumpToNekTodo,
+    handleOpenNekPlan,
+    nekStatusCallbacks,
+    sessionId,
+    setComposerText,
+    subagentFeed,
+  ]);
   const handleAddSelectionToCurrentTask = useCallback(
     (reference: ConversationSelectionReference) => {
       if (!sessionId) return;
@@ -3812,7 +3899,7 @@ export function SessionPane({
       centered={isDraft}
       blockingRequestId={blockingInteractionId}
       listenAddToChatEvents={focused}
-      externalTextInsertRequest={focused && sessionId === null ? composerTextInsertRequest : null}
+      externalTextInsertRequest={focused ? composerTextInsertRequest : null}
       onExternalTextInsertApplied={handleExternalTextInsertApplied}
       autoFocusEnabled={focused}
       paneFocused={focused}
@@ -3947,10 +4034,12 @@ export function SessionPane({
           workspaceIdentity={workspaceIdentity}
           remoteSessionId={remoteSessionId ?? undefined}
           snapshot={snapshot}
+          onOpenPlanFile={handleOpenNekPlan}
+          focusComposer={focusComposerAtEnd}
         />
       ) : null}
-      {sessionId && nekStatusCallbacks ? (
-        <NekSessionStatusSlot sessionKey={sessionId} callbacks={nekStatusCallbacks} />
+      {sessionId && nekStatusCallbacksForPane ? (
+        <NekSessionStatusSlot sessionKey={sessionId} callbacks={nekStatusCallbacksForPane} />
       ) : null}
       {composerNode}
     </>
@@ -3965,6 +4054,7 @@ export function SessionPane({
 
   return (
       <div
+        ref={paneRootRef}
         data-testid={testId(TID_V4_SESSION_PANE, paneId)}
       data-session-id={sessionId ?? "draft"}
       data-initial-draft-provider={initialDraftConfigForDiagnostics?.provider ?? ""}

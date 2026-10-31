@@ -6,6 +6,7 @@ import { DEFAULT_GUI_RUNTIME_CONFIG } from "@zcode/shared/guiRuntimeConfig";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekRpcProcessExit, NekRpcProcessHandle } from "../src/nek-agent/nekRpcClient.js";
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
+import { NekAgentInteractionChannel } from "../src/nek-agent/adapter/nekAgentInteractionChannel.js";
 import { NekAgentService } from "../src/nek-agent/service/nekAgentService.js";
 import type { NekExtensionUiHandler } from "../src/nek-agent/nekExtensionUiRouter.js";
 import type { NekAgentServiceOptions } from "../src/nek-agent/service/types.js";
@@ -233,6 +234,65 @@ test("an unanswered interaction is cancelled on timeout instead of hanging nek",
     assert.ok(
       frames.some((frame) => frame.kind === "cancel"),
       "timeout must publish a cancel frame so the GUI closes the card",
+    );
+  } finally {
+    await service.dispose();
+  }
+});
+
+test("renderer unsubscribing its last workspace listener answers the pending request as cancelled", async () => {
+  const control = fakeProcess("control");
+  const sessions: FakeProcess[] = [];
+  const service = new NekAgentService({
+    guiInfo,
+    createControlProcess: () => control.process,
+    createSessionProcess: (request) => {
+      const session = fakeProcess("session", request.extensionUi);
+      sessions.push(session);
+      return session.process;
+    },
+  });
+  const channel = new NekAgentInteractionChannel(service);
+  const frames: NekInteractionFrame[] = [];
+  try {
+    const first = channel.onDynamic({ workspacePath: "/workspace" })((frame) => frames.push(frame));
+    const second = channel.onDynamic({ workspacePath: "/workspace" })(() => undefined);
+    const pending = service.createSession({ cwd: "/workspace" });
+    await waitFor(() => frames.some((frame) => frame.kind === "request"), "the trust request");
+
+    // 还有一个 renderer 订阅者：请求必须继续等回答，不能被提前取消。
+    first.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(
+      frames.some((frame) => frame.kind === "cancel"),
+      false,
+      "one remaining subscriber must keep the request pending",
+    );
+
+    // renderer 全部退订：桥必须立刻以 cancelled 应答 nek，而不是等它超时。
+    second.dispose();
+    await assert.rejects(pending, /project trust denied for \/workspace/u);
+    assert.deepEqual(
+      control.commands.map((command) => command.type),
+      ["get_project_trust"],
+      "a cancelled trust prompt must not record a trust decision",
+    );
+  } finally {
+    channel.dispose();
+    await service.dispose();
+  }
+});
+
+test("cancelling a workspace answers every pending interaction as cancelled", async () => {
+  const { service, frames } = harness();
+  try {
+    const pending = service.createSession({ cwd: "/workspace" });
+    await waitFor(() => frames.some((frame) => frame.kind === "request"), "the trust request");
+    service.cancelWorkspaceInteractions("/workspace");
+    await assert.rejects(pending, /project trust denied for \/workspace/u);
+    assert.ok(
+      frames.some((frame) => frame.kind === "cancel"),
+      "workspace cancellation must publish a cancel frame",
     );
   } finally {
     await service.dispose();

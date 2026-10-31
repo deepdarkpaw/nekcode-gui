@@ -151,6 +151,34 @@ describe("workspace connection registry status feed", () => {
     expect(getNekStatusActions("session-registry-2")).toBeUndefined();
   });
 
+  it("hands later leases' status output handler to the shared feed", () => {
+    const fake = createFakeAgentService();
+    const early = vi.fn();
+    const late = vi.fn();
+    const first = acquireWorkspaceConnection(
+      { workspacePath: "/registry-options" },
+      fake.agentService,
+      undefined,
+      { onOutput: early },
+    );
+    const second = acquireWorkspaceConnection(
+      { workspacePath: "/registry-options" },
+      fake.agentService,
+      undefined,
+      { onOutput: late },
+    );
+    expect(fake.agentService.onDynamicNekStatusFrame).toHaveBeenCalledTimes(1);
+
+    fake.emit(snapshotFrame("session-registry-options"));
+    expect(late).toHaveBeenCalledTimes(1);
+    expect(early).not.toHaveBeenCalled();
+
+    first.release();
+    second.release();
+    vi.advanceTimersByTime(30_000);
+    expect(fake.listenerCount()).toBe(0);
+  });
+
   it("shares one feed per workspace while another lease still holds it", () => {
     const fake = createFakeAgentService();
     const first = acquireWorkspaceConnection(

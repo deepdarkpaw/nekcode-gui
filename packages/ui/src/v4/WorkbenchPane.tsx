@@ -520,7 +520,7 @@ export function WorkbenchLeafPane({
       onDrop={handleDrop}
       restoredUnvalidated={Boolean((isPrimary ? primaryBinding : binding)?.restoredUnvalidated)}
     >
-      <V4PaneConversationProvider scope={scope}>
+      <V4PaneConversationProvider scope={scope} interactionPane={{ paneId, primary: isPrimary }}>
         {(isPrimary ? primaryBinding : binding)?.restoredUnvalidated && sessionId ? (
           <PaneRestoredGuard
             paneId={paneId}

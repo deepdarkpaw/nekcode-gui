@@ -9,8 +9,9 @@ import type { NekStatusSubagent } from "./types.js";
 
 export interface RunningSubagentsBarControllerProps {
   sessionKey: string;
+  /** 单个子代理停止；`stopAll` 按 RB-4 并发逐个调用它（不单独注入批量接口）。 */
   onStop: (id: string) => Promise<void>;
-  onStopAll?: (ids: string[]) => Promise<void>;
+  /** 点击某项（不是停止按钮）时定位到对话里的子代理卡。 */
   onFocusSubagent: (id: string) => void;
 }
 
@@ -52,7 +53,6 @@ function runningItems(
 export function useRunningSubagentsBarController({
   sessionKey,
   onStop,
-  onStopAll: _onStopAll,
   onFocusSubagent,
 }: RunningSubagentsBarControllerProps): RunningSubagentsBarController {
   const { intl } = useZCodeIntl();

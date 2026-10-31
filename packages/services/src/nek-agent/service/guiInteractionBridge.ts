@@ -142,6 +142,13 @@ export class NekGuiInteractionBridge {
     }
   }
 
+  /** 撤销 workspace 下全部待回答请求（renderer 最后一个订阅者离开）。 */
+  cancelWorkspace(workspacePath: string): void {
+    for (const [id, pending] of Array.from(this.pending)) {
+      if (pending.scope.workspacePath === workspacePath) this.cancel(pending.scope, id);
+    }
+  }
+
   dispose(): void {
     for (const [id, pending] of Array.from(this.pending)) {
       this.pending.delete(id);
