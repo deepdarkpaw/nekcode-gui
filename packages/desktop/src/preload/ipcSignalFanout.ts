@@ -19,7 +19,7 @@ export interface IpcSignalSource {
   removeListener(channel: string, listener: () => void): void;
 }
 
-export interface IpcSignalFanout {
+interface IpcSignalFanout {
   subscribe(callback: () => void): () => void;
   subscriberCount: () => number;
 }

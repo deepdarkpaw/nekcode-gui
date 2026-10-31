@@ -81,7 +81,7 @@ export function useHasV4Conversation(): boolean {
 }
 
 /** workspace 级交互卡的去重身份：只有 workspace 布局里的 pane 传。 */
-export interface PaneInteractionIdentity {
+interface PaneInteractionIdentity {
   paneId: string;
   /** 是否是 workspace 布局的 primary pane（同 workspace 多 pane 时由它优先渲染）。 */
   primary: boolean;

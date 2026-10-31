@@ -22,7 +22,7 @@ type FormatMessage = (
   values?: Record<string, string | number>,
 ) => string;
 
-export interface SubagentFinishedNotificationSinks {
+interface SubagentFinishedNotificationSinks {
   formatMessage: FormatMessage;
   showTaskNotification: (payload: TaskNotificationPayload) => void;
   logger?: { warn: (message: string, context?: unknown) => void };

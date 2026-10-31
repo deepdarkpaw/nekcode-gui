@@ -23,11 +23,11 @@ import type { NekInteractionStoreApi } from "./interactionStore.js";
 export type NekEffectNotifyLevel = "info" | "warning" | "error";
 
 /** 诊断出口的最小面（测试注入用）；默认实现是项目 logger。 */
-export interface NekEffectSinkLogger {
+interface NekEffectSinkLogger {
   warn: (message: string, context?: unknown) => void;
 }
 
-export interface NekInteractionEffectSinkOptions {
+interface NekInteractionEffectSinkOptions {
   store: NekInteractionStoreApi;
   sessionKey: string;
   /** 提示文案 id → 本地化文本（一次性提示只给 id）。 */
