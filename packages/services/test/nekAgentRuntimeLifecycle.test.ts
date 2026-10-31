@@ -1,9 +1,13 @@
 /**
- * nek runtime 生命周期投影回归。
+ * nek workspace runtime 生命周期回归。
  *
- * 渲染层与 host 观察者都靠 `onAgentRuntimeLifecycle` 判断换代：unavailable 必须由
- * 会话进程退出触发，available 必须只在真正恢复后发一次——重复 available 会让
- * sessions-index 观察者反复重订阅，永不 available 则会让 dormant 观察者永久休眠。
+ * 现场（2026-10-31）：工厂把代际游标做成跨订阅者共享，却给每个订阅者单独挂一条
+ * `service.onEvent`。第一个订阅者收到 available 时顺手清掉共享的 `unavailable`，
+ * 其余订阅者再也收不到恢复帧——dormant 的 sessions-index 观察者永久休眠。
+ *
+ * 这里锁定新的语义：一个 workspace runtime 由“还有挂接进程的会话”定义，单个会话
+ * 关闭/崩溃不等于 workspace 不可用；一次事实只计算一次并广播给全部监听者；正常关闭
+ * 不制造 unavailable；代际查询与事件共用同一份记忆。
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -14,127 +18,324 @@ import {
 } from "../src/nek-agent/adapter/nekAgentRuntimeLifecycle.js";
 import type { NekAgentServiceEvent, NekSession } from "../src/nek-agent/service/types.js";
 
-function session(cwd: string, phase: NekSession["phase"] = "running"): NekSession {
-  return {
-    sessionKey: `${cwd}/s1.jsonl`,
-    sessionId: "s1",
-    sessionPath: `${cwd}/s1.jsonl`,
-    cwd,
-    phase,
-    readonly: false,
-  };
-}
-
-function createSource() {
+/** 会话记录表的替身：只保留 owner 需要回答的两个事实（进程是否挂接、属于哪个 workspace）。 */
+function createRuntimeHarness() {
+  const sessions = new Map<string, NekSession>();
+  const live = new Set<string>();
   const listeners = new Set<(event: NekAgentServiceEvent) => void>();
-  return {
-    emit(event: NekAgentServiceEvent) {
-      for (const listener of listeners) listener(event);
-    },
-    listenerCount: () => listeners.size,
-    onEvent(listener: (event: NekAgentServiceEvent) => void) {
+
+  const emit = (event: NekAgentServiceEvent): void => {
+    for (const listener of Array.from(listeners)) listener(event);
+  };
+  const sessionOf = (sessionKey: string): NekSession => {
+    const session = sessions.get(sessionKey);
+    assert.ok(session, `unknown test session ${sessionKey}`);
+    return session;
+  };
+  const read = (sessionKey: string, cwd: string): NekSession => ({
+    sessionKey,
+    sessionId: sessionKey,
+    sessionPath: `${cwd}/${sessionKey}.jsonl`,
+    cwd,
+    phase: "idle",
+    readonly: false,
+  });
+
+  const source = {
+    onEvent(listener: (event: NekAgentServiceEvent) => void): () => void {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
+    hasLiveSessionProcess(workspacePath: string): boolean {
+      for (const sessionKey of live) {
+        if (sessions.get(sessionKey)?.cwd === workspacePath) return true;
+      }
+      return false;
+    },
+  };
+
+  return {
+    source,
+    listenerCount: () => listeners.size,
+    /** 会话拿到（或重新拿到）一个可用进程。 */
+    attach(sessionKey: string, cwd: string): void {
+      const session = read(sessionKey, cwd);
+      sessions.set(sessionKey, session);
+      live.add(sessionKey);
+      emit({ type: "process_attached", session });
+    },
+    /** 进程非正常退出：记录仍在，phase 变成 error 且不再持有进程。 */
+    crash(sessionKey: string): void {
+      const session = sessionOf(sessionKey);
+      live.delete(sessionKey);
+      emit({
+        type: "process_exit",
+        session: { ...session, phase: "error" },
+        exit: { code: 1, signal: null },
+      });
+    },
+    /** 主动关闭：服务层只移除记录，不发任何事件。 */
+    close(sessionKey: string): void {
+      live.delete(sessionKey);
+      sessions.delete(sessionKey);
+    },
+    /** 存活期间的 phase 变化（含 error/locked），都不是生命周期事实。 */
+    phase(sessionKey: string, previous: NekSession["phase"], state: NekSession["phase"]): void {
+      const session = sessionOf(sessionKey);
+      sessions.set(sessionKey, { ...session, phase: state });
+      emit({ type: "state", session: { ...session, phase: state }, previous, state });
+    },
   };
 }
 
-const exit = (cwd: string): NekAgentServiceEvent =>
-  ({
-    type: "process_exit",
-    session: session(cwd, "error"),
-    exit: { code: 1, signal: null },
-  }) as NekAgentServiceEvent;
-
-const state = (
-  cwd: string,
-  previous: NekSession["phase"],
-  next: NekSession["phase"],
-): NekAgentServiceEvent =>
-  ({ type: "state", session: session(cwd, next), previous, state: next }) as NekAgentServiceEvent;
-
-test("进程退出发 unavailable，恢复后只补一次 available 并递增代际", () => {
-  const source = createSource();
+function collect(lifecycle: {
+  onDidChange: (listener: (event: ZCodeAgentRuntimeLifecycleEvent) => void) => { dispose(): void };
+}) {
   const frames: ZCodeAgentRuntimeLifecycleEvent[] = [];
-  const subscription = createNekAgentRuntimeLifecycle(source)((event) => frames.push(event));
-  const cwd = "/workspace/project";
+  const subscription = lifecycle.onDidChange((event) => frames.push(event));
+  return { frames, subscription };
+}
 
-  source.emit(exit(cwd));
-  assert.equal(frames.length, 1);
-  assert.deepEqual(
-    { ...frames[0], runtimeIdentity: { ...frames[0]?.runtimeIdentity } },
+const shape = (frames: ZCodeAgentRuntimeLifecycleEvent[]) =>
+  frames.map((frame) => [frame.state, frame.runtimeIdentity.generation]);
+
+test("首个会话进程挂上发一次 available，代际与 identity 查询一致", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  assert.deepEqual(lifecycle.getIdentity("/workspace/p1"), {
+    generation: 1,
+    identity: "nek:/workspace/p1",
+    workspaceKey: "/workspace/p1",
+  });
+
+  // 发给 dormant 观察者的第一条事实：runtime 从这一代开始可用。
+  harness.attach("s1", "/workspace/p1");
+  assert.deepEqual(frames, [
     {
-      workspacePath: cwd,
-      workspaceKey: cwd,
+      workspacePath: "/workspace/p1",
+      workspaceKey: "/workspace/p1",
       runtimeIdentity: {
         generation: 1,
-        identity: `nek:${cwd}`,
-        workspaceKey: cwd,
+        identity: "nek:/workspace/p1",
+        workspaceKey: "/workspace/p1",
       },
-      state: "unavailable",
+      state: "available",
     },
-  );
-
-  source.emit(state(cwd, "error", "idle"));
-  assert.equal(frames.length, 2);
-  assert.equal(frames[1]?.state, "available");
-  assert.equal(frames[1]?.runtimeIdentity.generation, 2);
-
-  // 存活期间的 phase 抖动不是换代。
-  source.emit(state(cwd, "idle", "running"));
-  assert.equal(frames.length, 2);
-
-  // 下一次退出仍然只是一次换代。
-  source.emit(exit(cwd));
-  source.emit(state(cwd, "error", "running"));
-  assert.deepEqual(
-    frames.slice(2).map((frame) => [frame.state, frame.runtimeIdentity.generation]),
-    [
-      ["unavailable", 2],
-      ["available", 3],
-    ],
-  );
-
-  subscription.dispose();
-  assert.equal(source.listenerCount(), 0);
-});
-
-test("没有退出的存活事件不产生 available，error 与 locked 也不算恢复", () => {
-  const source = createSource();
-  const frames: ZCodeAgentRuntimeLifecycleEvent[] = [];
-  createNekAgentRuntimeLifecycle(source)((event) => frames.push(event));
-  const cwd = "/workspace/project";
-
-  source.emit(state(cwd, "idle", "running"));
-  source.emit(exit(cwd));
-  source.emit(state(cwd, "running", "error"));
-  source.emit(state(cwd, "error", "locked"));
-  assert.deepEqual(
-    frames.map((frame) => frame.state),
-    ["unavailable"],
-  );
-});
-
-test("不同 workspace 的代际互相独立，且代际表有界", () => {
-  const source = createSource();
-  const frames: ZCodeAgentRuntimeLifecycleEvent[] = [];
-  createNekAgentRuntimeLifecycle(source)((event) => frames.push(event));
-
-  const workspaces = Array.from(
-    { length: NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES + 8 },
-    (_, index) => `/workspace/p${index}`,
-  );
-  for (const cwd of workspaces) source.emit(exit(cwd));
-  assert.equal(frames.length, workspaces.length);
-  assert.ok(frames.every((frame) => frame.runtimeIdentity.generation === 1));
-
-  // 最近用过的 workspace 仍然只有自己的代际：表被淘汰也只会退回初始代际，不会串台。
-  const recent = workspaces.at(-1)!;
-  frames.length = 0;
-  source.emit(state(recent, "error", "running"));
+  ]);
+  // 查询与事件必须给出同一个代际，否则观察者会把新代判成旧代。
+  assert.equal(lifecycle.getIdentity("/workspace/p1").generation, 1);
+  // 查询本身不是事实来源，不能制造事件。
   assert.equal(frames.length, 1);
-  assert.equal(frames[0]?.workspacePath, recent);
+  lifecycle.dispose();
+});
+
+test("多监听者共享一次计算：崩溃与恢复都广播给全部订阅者", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const first = collect(lifecycle);
+  const second = collect(lifecycle);
+  const third = collect(lifecycle);
+
+  harness.attach("s1", "/workspace/p");
+  assert.deepEqual(shape(first.frames), [["available", 1]]);
+  assert.deepEqual(shape(second.frames), [["available", 1]]);
+  assert.deepEqual(shape(third.frames), [["available", 1]]);
+
+  harness.crash("s1");
+  harness.attach("s1", "/workspace/p");
+  for (const { frames } of [first, second, third]) {
+    assert.deepEqual(shape(frames), [
+      ["available", 1],
+      ["unavailable", 1],
+      ["available", 2],
+    ]);
+  }
+
+  // 单个监听者退订不影响其余监听者，也不影响记账。
+  second.subscription.dispose();
+  harness.crash("s1");
+  assert.deepEqual(shape(first.frames), [
+    ["available", 1],
+    ["unavailable", 1],
+    ["available", 2],
+    ["unavailable", 2],
+  ]);
+  assert.deepEqual(shape(second.frames), [
+    ["available", 1],
+    ["unavailable", 1],
+    ["available", 2],
+  ]);
+  assert.deepEqual(shape(third.frames).at(-1), ["unavailable", 2]);
+  lifecycle.dispose();
+});
+
+test("同 workspace 多会话：最后一个存活进程消失才算 workspace 不可用", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("a", "/workspace/p");
+  harness.attach("b", "/workspace/p");
+  // 第二个会话挂进程只是 workspace 内部的又一次可用事实，不换代。
+  assert.deepEqual(shape(frames), [["available", 1]]);
+
+  harness.crash("a");
+  assert.deepEqual(shape(frames), [["available", 1]]);
+
+  harness.crash("b");
+  assert.deepEqual(shape(frames), [
+    ["available", 1],
+    ["unavailable", 1],
+  ]);
+
+  // 任一会话重新挂进程即恢复，且只换代一次。
+  harness.attach("b", "/workspace/p");
+  assert.deepEqual(shape(frames), [
+    ["available", 1],
+    ["unavailable", 1],
+    ["available", 2],
+  ]);
+  lifecycle.dispose();
+});
+
+test("正常关闭不伪造 unavailable，重开也不换代", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("s1", "/workspace/p");
+  harness.close("s1");
+  assert.deepEqual(shape(frames), [["available", 1]]);
+  assert.equal(harness.source.hasLiveSessionProcess("/workspace/p"), false);
+
+  // 关闭后重新打开：仍是同一代，观察者不必重订阅。
+  harness.attach("s2", "/workspace/p");
+  assert.deepEqual(shape(frames), [["available", 1]]);
+  assert.equal(lifecycle.getIdentity("/workspace/p").generation, 1);
+  lifecycle.dispose();
+});
+
+test("phase 抖动、error 与 locked 都不是恢复信号", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("s1", "/workspace/p");
+  harness.phase("s1", "idle", "running");
+  harness.phase("s1", "running", "waiting_input");
+  harness.phase("s1", "waiting_input", "error");
+  harness.phase("s1", "error", "locked");
+  assert.deepEqual(shape(frames), [["available", 1]]);
+
+  // 崩溃后 phase 事件不能把 workspace 拉回 available——只有重新挂进程才行。
+  harness.crash("s1");
+  harness.phase("s1", "error", "idle");
+  assert.deepEqual(shape(frames), [
+    ["available", 1],
+    ["unavailable", 1],
+  ]);
+  lifecycle.dispose();
+});
+
+test("不同 workspace 领取互不重复、单调递增的代际票据", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("a", "/workspace/a");
+  harness.attach("b", "/workspace/b");
+  harness.attach("c", "/workspace/c");
+  const generations = frames.map((frame) => frame.runtimeIdentity.generation);
+  assert.equal(new Set(generations).size, 3);
+  assert.deepEqual(
+    generations,
+    [...generations].sort((left, right) => left - right),
+  );
+  lifecycle.dispose();
+});
+
+test("活跃 workspace 不被回收；冷 workspace 的 identity 查询挤不掉它的代际", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("hot", "/workspace/hot");
+  const hotGeneration = frames[0]?.runtimeIdentity.generation;
+  assert.equal(lifecycle.getIdentity("/workspace/hot").generation, hotGeneration);
+
+  // 大量冷 workspace（只查询、不起进程）也会占表；不能把活跃 workspace 的记忆淘汰掉。
+  for (let index = 0; index < NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES * 2; index += 1) {
+    assert.ok(lifecycle.getIdentity(`/cold/${index}`).generation > 0);
+  }
+  assert.equal(lifecycle.getIdentity("/workspace/hot").generation, hotGeneration);
+
+  // 记忆还在：崩溃时报告的仍是同一个代际，而不是重建后的新号。
+  frames.length = 0;
+  harness.crash("hot");
+  assert.deepEqual(shape(frames), [["unavailable", hotGeneration]]);
+  lifecycle.dispose();
+});
+
+test("慢 workspace 在新 workspace 高频使用后回来，代际不回退也不重复", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+
+  harness.attach("slow", "/workspace/slow");
+  harness.crash("slow");
+  const firstGeneration = frames[0]?.runtimeIdentity.generation;
+  assert.deepEqual(shape(frames), [
+    ["available", firstGeneration],
+    ["unavailable", firstGeneration],
+  ]);
+
+  // 用一个远超表容量的 workspace 轮换把它挤出记忆（每个都建立并崩溃）。
+  for (let index = 0; index < NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES * 2; index += 1) {
+    harness.attach(`churn-${index}`, `/workspace/churn-${index}`);
+    harness.crash(`churn-${index}`);
+  }
+
+  frames.length = 0;
+  harness.attach("slow", "/workspace/slow");
+  const recovered = frames[0]?.runtimeIdentity.generation;
+  assert.equal(frames.length, 1);
   assert.equal(frames[0]?.state, "available");
+  // 关键：淘汰过记忆也不能回到旧号，观察者不会把新代当成旧代。
+  assert.ok(recovered !== undefined);
+  assert.ok(recovered > firstGeneration, `${recovered} should be greater than ${firstGeneration}`);
+  assert.equal(lifecycle.getIdentity("/workspace/slow").generation, recovered);
+  lifecycle.dispose();
+});
+
+test("一个监听者抛错不影响其它监听者，错误仍冒泡给服务层记录", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const healthy: ZCodeAgentRuntimeLifecycleEvent[] = [];
+  lifecycle.onDidChange(() => {
+    throw new Error("listener boom");
+  });
+  lifecycle.onDidChange((event) => healthy.push(event));
+
+  assert.throws(() => harness.attach("s1", "/workspace/p"), /listener boom/u);
+  assert.deepEqual(shape(healthy), [["available", 1]]);
+  lifecycle.dispose();
+});
+
+test("dispose 之后脱离服务订阅，不再广播也不再记账", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+  assert.equal(harness.listenerCount(), 1);
+
+  lifecycle.dispose();
+  assert.equal(harness.listenerCount(), 0);
+  harness.attach("s1", "/workspace/p");
+  assert.deepEqual(frames, []);
+  // 终结之后的订阅是空实现（与 Emitter.dispose 的口径一致），不能把监听者留在表里。
+  assert.doesNotThrow(() => lifecycle.onDidChange(() => undefined).dispose());
+  assert.doesNotThrow(() => lifecycle.dispose());
 });

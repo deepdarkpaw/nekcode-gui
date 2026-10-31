@@ -3279,6 +3279,7 @@ const zhCN: Record<string, string> = {
   "ui.relativeTime.minutesAgo": "{count} 分钟前",
   "ui.relativeTime.hoursAgo": "{count} 小时前",
   "ui.asyncAction.failed": "操作失败，请重试",
+  "ui.rpcSubscription.failed": "实时更新已中断，重试可重新订阅这条数据流",
   "ui.asyncAction.succeeded": "已完成",
   "ui.field.error.notNumber": "请输入数字",
   "ui.field.error.notInteger": "请输入整数",

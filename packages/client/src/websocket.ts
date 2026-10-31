@@ -8,6 +8,10 @@ import {
 } from "@zcode/rpc";
 import type { IServiceAccessor } from "@zcode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
+import {
+  attachSubscriptionFailureHandling,
+  type ServiceConnectionOptions,
+} from "./serviceConnectionLog.js";
 
 export interface WebSocketConnectionCloseEvent {
   code: number;
@@ -15,7 +19,7 @@ export interface WebSocketConnectionCloseEvent {
   wasClean: boolean;
 }
 
-interface WebSocketConnectionOptions {
+interface WebSocketConnectionOptions extends ServiceConnectionOptions {
   onClose?: (event: WebSocketConnectionCloseEvent) => void;
   onOpenSocket?: (socket: WebSocket) => void;
 }
@@ -61,7 +65,7 @@ function wrapBrowserWebSocket(ws: WebSocket): ISocket {
 
 export function connectViaWebSocket(
   wsUrl: string,
-  options?: WebSocketConnectionOptions,
+  options: WebSocketConnectionOptions,
 ): Promise<IServiceAccessor> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -73,7 +77,7 @@ export function connectViaWebSocket(
       }
     });
     ws.addEventListener("close", (event) => {
-      options?.onClose?.({
+      options.onClose?.({
         code: event.code,
         reason: event.reason,
         wasClean: event.wasClean,
@@ -92,14 +96,19 @@ export function connectViaWebSocket(
 
     ws.addEventListener("open", () => {
       settled = true;
-      options?.onOpenSocket?.(ws);
+      options.onOpenSocket?.(ws);
       const socket = wrapBrowserWebSocket(ws);
-      resolve(connectViaProtocol(new SocketProtocol(socket)));
+      resolve(connectViaProtocol(new SocketProtocol(socket), options));
     });
   });
 }
 
-export function connectViaProtocol(protocol: IMessagePassingProtocol): IServiceAccessor {
+export function connectViaProtocol(
+  protocol: IMessagePassingProtocol,
+  options: ServiceConnectionOptions,
+): IServiceAccessor {
   const client = new ChannelClient(protocol);
+  // 与 MessagePort 连接同一条收口：可见状态 + 日志，连接本身继续可用。
+  attachSubscriptionFailureHandling(client, options);
   return new RemoteServiceAccess(client);
 }

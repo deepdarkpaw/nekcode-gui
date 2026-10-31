@@ -3,6 +3,10 @@ import { MessagePortProtocol, ChannelClient } from "@zcode/rpc";
 import type { IServiceAccessor } from "@zcode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
 import { isRendererProductionBuild } from "./rendererLoggingEnv.js";
+import {
+  attachSubscriptionFailureHandling,
+  type ServiceConnectionOptions,
+} from "./serviceConnectionLog.js";
 
 function logMessagePortDebug(message: string): void {
   // 生产构建下 renderer 连接日志不输出，避免窗口启动和重连路径产生同步 console 成本。
@@ -25,6 +29,7 @@ export interface MessagePortServiceConnection {
  */
 export function createMessagePortServiceConnection(
   port: MessagePort,
+  options: ServiceConnectionOptions,
 ): MessagePortServiceConnection {
   logMessagePortDebug("[messageport] creating protocol and client...");
   const protocol = new MessagePortProtocol(port);
@@ -32,6 +37,9 @@ export function createMessagePortServiceConnection(
   client.onDidInitialize(() => {
     logMessagePortDebug("[messageport] ChannelClient received Initialize from server");
   });
+  // 这是 renderer 侧唯一一处订阅失败收口：一条事件 → 宿主可见状态 + 诊断日志。
+  // 连接不因此终结（其它 channel 仍然可用），重试走 `failure.retry()`（同一批订阅者）。
+  attachSubscriptionFailureHandling(client, options);
   logMessagePortDebug("[messageport] client created, waiting for Initialize...");
 
   const services = new RemoteServiceAccess(client);
@@ -55,6 +63,9 @@ export function createMessagePortServiceConnection(
  * Desktop 模式下，utilityProcess（或 main 进程的远程代理）通过 MessagePort
  * 暴露 ChannelServer，renderer 用此函数建立 ChannelClient 连接。
  */
-export function connectViaMessagePort(port: MessagePort): IServiceAccessor {
-  return createMessagePortServiceConnection(port).services;
+export function connectViaMessagePort(
+  port: MessagePort,
+  options: ServiceConnectionOptions,
+): IServiceAccessor {
+  return createMessagePortServiceConnection(port, options).services;
 }

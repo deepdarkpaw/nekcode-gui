@@ -243,6 +243,22 @@ export abstract class NekAgentServiceRuntimeBase {
     record.readonly = false;
     record.detachEvents = process.client.onAnyEvent((event) => this.handleEvent(record, event));
     record.detachExit = process.client.onExit((exit) => this.handleProcessExit(record, exit));
+    // 进程可用性升级为公开事实：workspace runtime 生命周期与 sessions-index 都只认这一条
+    // 信号，不再从 phase 抖动反推。
+    this.emit({ type: "process_attached", session: this.publicSession(record) });
+  }
+
+  /**
+   * 该 workspace 是否还有挂接进程的会话——workspace runtime 是否存活的唯一权威事实。
+   *
+   * 崩溃后记录仍留在表里（phase 变成 error），正常关闭则整条移除，空闲/容量回收只摘进程；
+   * 只有 `record.process` 能同时覆盖这三种情况。任何在订阅方另存的"存活集合"都会在
+   * 正常关闭或回收之后漂移，于是把 workspace 永久判成不可用。
+   */
+  hasLiveSessionProcess(cwd: string): boolean {
+    return Array.from(this.sessions.values()).some(
+      (record) => record.cwd === cwd && record.process !== undefined,
+    );
   }
 
   protected detachProcess(record: NekSessionRecord): void {

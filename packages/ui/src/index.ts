@@ -42,6 +42,8 @@ export {
   REMOTE_WORKSPACE_DISCONNECTED_ERROR_CODE,
   createRemoteWorkspaceDisconnectedError,
 } from "./lib/remoteWorkspaceServiceError.js";
+// RPC 订阅失败的可见状态（headless）：连接 owner 写入，UI 用既有提示组件呈现。
+export { registerRpcSubscriptionFault } from "./store/rpcSubscriptionFaultStore.js";
 
 // Hooks —— 统一的服务和平台操作访问层
 export {

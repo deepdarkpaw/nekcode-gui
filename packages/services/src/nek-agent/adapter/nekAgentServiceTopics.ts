@@ -203,7 +203,14 @@ export class NekAgentServiceTopics {
   }
 
   private handleServiceEvent(event: NekAgentServiceEvent): void {
-    if (event.type !== "state" && event.type !== "rpc_event" && event.type !== "resume_notice")
+    // `process_attached` 是新会话/恢复会话的第一条事实：新建会话的 phase 从 idle 开始，
+    // 随后 setPhase 遇到相同值不再发 state，只认 state 会让新会话迟迟不进索引。
+    if (
+      event.type !== "state" &&
+      event.type !== "rpc_event" &&
+      event.type !== "resume_notice" &&
+      event.type !== "process_attached"
+    )
       return;
     const target = { workspacePath: event.session.cwd };
     const workspaceId = workspaceKey(target);

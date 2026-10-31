@@ -3355,6 +3355,7 @@ const enUS: Record<string, string> = {
   "nek.interaction.dialog.seconds": "{seconds}s",
   "nek.interaction.dialog.deadline": "Cancels automatically in {seconds} seconds",
   "ui.action.busy": "The previous operation is still being processed",
+  "ui.rpcSubscription.failed": "Live updates were interrupted. Retry to reconnect this stream.",
   "ui.fold.expand": "Expand",
   "ui.fold.collapse": "Collapse",
   "ui.action.unavailable.externalEditor": "The external editor is not connected in this GUI yet",

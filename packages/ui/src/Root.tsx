@@ -51,6 +51,7 @@ import { OccupationOnboarding } from "@/onboarding/OccupationOnboarding.js";
 import { OnboardingDialog } from "@/onboarding/OnboardingDialog.js";
 import { NekOnboardingModal } from "@/onboarding/NekOnboardingModal.js";
 import { NekRemotePromptHost } from "@/remote/nek/NekRemotePromptHost.js";
+import { RpcSubscriptionFaultNotifier } from "@/RpcSubscriptionFaultNotifier.js";
 import { NekSettingsProvider } from "@/settings/nek/api/NekSettingsContext.js";
 import { resolveNekSettingsApis } from "@/settings/nek/api/registry.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
@@ -788,6 +789,8 @@ function RootInner({
     // HTML 启动壳已删除，门禁阻塞期由这一处静态 nekcode 标记承接主题背景与品牌画面。
     return (
       <RootShell>
+        {/* RPC 订阅失败的既有提示入口（headless）：只管状态与重试，不新增视觉。 */}
+        <RpcSubscriptionFaultNotifier />
         {rootModelSelectionErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}

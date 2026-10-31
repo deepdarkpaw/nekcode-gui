@@ -49,6 +49,7 @@ function createErrorFromPayload(payload: IRawErrorPayload): Error {
 export class ChannelClient implements IChannelClient, IDisposable {
   private state = State.Uninitialized;
   private isDisposed = false;
+  /** 进行中的 Promise 取消令牌与事件订阅；连接终结时统一收口。 */
   private activeRequests = new Set<IDisposable>();
   private handlers = new Map<number, IHandler>();
   // Promise 请求和事件监听共用 handlers，但只有前者需要在连接终结时 reject。
@@ -62,8 +63,13 @@ export class ChannelClient implements IChannelClient, IDisposable {
 
   private readonly _onDidSubscriptionError = new Emitter<IChannelSubscriptionFailure>();
   /**
-   * 服务端拒绝建立事件订阅时触发。订阅方必须把它当"连接还在但这条流已死"处理：
-   * 静默等帧会让状态卡与任务列表永久停在加载态。
+   * 服务端拒绝建立事件订阅时触发。这是订阅失败的**唯一**上报通道：
+   *
+   * `IChannel.listen` 只返回 `Event<T>`，订阅方没有 terminal 回调，帧流死掉与"暂时没有帧"
+   * 在类型上不可区分。因此连接 owner 必须消费这条事件，把它收进既有的诊断/错误通道，
+   * 而不是让状态卡与任务列表永久停在加载态。
+   *
+   * 重试边界：重新 `listen()` 会分配新的请求 id 与新的 emitter，旧流已死不阻塞新订阅。
    */
   readonly onDidSubscriptionError = this._onDidSubscriptionError.event;
 
@@ -161,53 +167,107 @@ export class ChannelClient implements IChannelClient, IDisposable {
     });
   }
 
+  /**
+   * 一条事件订阅的客户端状态机：`idle → pending →（收帧）| failed`。`pending` 表示请求已
+   * 发出、服务端没有报错；服务端不为 EventListen 回 ACK，收帧即是成功。
+   *
+   * 失败时**保留监听者**（不再 dispose emitter），这样 `retry()` 能向服务端重新建立同一条
+   * 逻辑订阅并把后续帧继续投给原订阅者。旧实现 dispose emitter 之后，订阅方只剩一条永远
+   * 不会有帧的 Event，任何"重试"都只能由调用方另外造一个没人监听的 emitter。
+   */
   private requestEvent(channelName: string, name: string, arg?: any): Event<any> {
-    const id = this.lastRequestId++;
-    const emitter = new Emitter<any>({
-      onWillAddFirstListener: () => {
-        const doRequest = () => {
-          this.activeRequests.add(emitter);
-          this.sendRequest(RequestType.EventListen, id, channelName, name, arg);
-        };
+    const listeners = new Set<(data: any) => void>();
+    let activeId: number | null = null;
+    let status: "idle" | "pending" | "failed" = "idle";
 
-        if (this.state === State.Idle) {
-          doRequest();
-        } else {
-          this.whenInitialized().then(doRequest);
+    /** 真正发出 EventListen：先登记 handler 与活跃请求，再发送（同步回包也能找到 handler）。 */
+    const send = (): void => {
+      const id = this.lastRequestId++;
+      activeId = id;
+      status = "pending";
+      this.handlers.set(id, (response) => {
+        if (
+          response.type === ResponseType.PromiseError ||
+          response.type === ResponseType.PromiseErrorObj
+        ) {
+          // 服务端拒绝订阅：这条流不会再有帧。按 "handler → 活跃请求" 的顺序收口，
+          // 同一 id 的第二份错误回包（协议层重复投递）在 handler 删除后自然变成空操作。
+          this.handlers.delete(id);
+          this.activeRequests.delete(subscription);
+          activeId = null;
+          status = "failed";
+          this._onDidSubscriptionError.fire({
+            channelName,
+            event: name,
+            error:
+              response.type === ResponseType.PromiseError
+                ? createErrorFromPayload(response.data)
+                : new Error(String(response.data)),
+            isLive: () => listeners.size > 0,
+            retry,
+          });
+          return;
         }
-      },
-      onDidRemoveLastListener: () => {
-        this.activeRequests.delete(emitter);
-        this.sendCancelOrDispose(RequestType.EventDispose, id);
-        this.handlers.delete(id);
-      },
-    });
+        for (const listener of Array.from(listeners)) listener((response as { data: any }).data);
+      });
+      this.activeRequests.add(subscription);
+      this.sendRequest(RequestType.EventListen, id, channelName, name, arg);
+    };
 
-    this.handlers.set(id, (response) => {
-      if (
-        response.type === ResponseType.PromiseError ||
-        response.type === ResponseType.PromiseErrorObj
-      ) {
-        // 服务端拒绝订阅：这条流不会再有帧。必须显式收口（dispose emitter 会让订阅方
-        // 停止等待），并把失败事实交给 onDidSubscriptionError，而不是把错误对象当成
-        // 业务帧 fire 给订阅者。
-        this.handlers.delete(id);
-        this.activeRequests.delete(emitter);
-        emitter.dispose();
-        this._onDidSubscriptionError.fire({
-          channelName,
-          event: name,
-          error:
-            response.type === ResponseType.PromiseError
-              ? createErrorFromPayload(response.data)
-              : new Error(String(response.data)),
-        });
+    /** 首个监听者（或重建后的首个监听者）到来时发出请求；Initialize 之前排队。 */
+    const start = (): void => {
+      if (this.isDisposed || listeners.size === 0) return;
+      if (this.state === State.Idle) {
+        send();
         return;
       }
-      emitter.fire((response as { data: any }).data);
-    });
+      void this.whenInitialized().then(() => {
+        // 排队期间可能被 dispose 或全部退订：不能再向已终结的连接发请求。
+        if (this.isDisposed || listeners.size === 0) return;
+        send();
+      });
+    };
 
-    return emitter.event;
+    const stop = (): void => {
+      if (activeId !== null) {
+        // 只有真的向服务端登记过的订阅才需要 EventDispose；失败态服务端本来就没有记录。
+        if (!this.isDisposed && status !== "failed") {
+          this.sendCancelOrDispose(RequestType.EventDispose, activeId);
+        }
+        this.handlers.delete(activeId);
+        this.activeRequests.delete(subscription);
+      }
+      activeId = null;
+      status = "idle";
+    };
+
+    /** 手动重试：只在失败且仍有人监听时重建订阅，不会自动循环。 */
+    const retry = (): void => {
+      if (this.isDisposed || status !== "failed" || listeners.size === 0) return;
+      start();
+    };
+
+    const subscription: IDisposable = {
+      dispose: () => {
+        stop();
+        listeners.clear();
+      },
+    };
+
+    return (listener) => {
+      if (this.isDisposed) {
+        return { dispose: () => undefined };
+      }
+      const wasEmpty = listeners.size === 0;
+      listeners.add(listener);
+      if (wasEmpty) start();
+      return {
+        dispose: () => {
+          if (!listeners.delete(listener)) return;
+          if (listeners.size === 0) stop();
+        },
+      };
+    };
   }
 
   private sendRequest(
@@ -305,6 +365,8 @@ export class ChannelClient implements IChannelClient, IDisposable {
     }
     this.activeRequests.clear();
     this.pendingRejections.clear();
+    // 事件订阅的 handler 不在 pendingRejections 里，单独清掉，避免终结后的连接继续留表。
+    this.handlers.clear();
     this._onDidInitialize.dispose();
     this._onDidSubscriptionError.dispose();
   }
