@@ -56,7 +56,7 @@ function createConnection(
 
 const tick = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test("同一事件的多个订阅者各自收帧，订阅失败只上报一次", async () => {
+test("同一事件的多个订阅者各自收帧，互不串号也不产生失败上报", async () => {
   const pair = createLinkedProtocols();
   const client = new ChannelClient(pair.clientProtocol);
   const frameEmitters: Emitter<number>[] = [];
@@ -247,11 +247,11 @@ test("客户端 dispose 之后不再上报订阅失败", async () => {
 });
 
 test("Initialize 与 dispose 同 tick：排队中的订阅不再发 EventListen，也不上报失败", async () => {
-  const sent: number[] = [];
+  let sentCount = 0;
   const inbound = new Emitter<VSBuffer>();
   const client = new ChannelClient({
     send: () => {
-      sent.push(Date.now());
+      sentCount += 1;
     },
     onMessage: inbound.event,
   });
@@ -260,7 +260,7 @@ test("Initialize 与 dispose 同 tick：排队中的订阅不再发 EventListen�
   client.onDidSubscriptionError((failure) => failures.push(failure));
   // Initialize 还没到：订阅进入 whenInitialized() 的排队队列。
   client.getChannel<IChannel>("svc").listen("onTick")(() => undefined);
-  assert.deepEqual(sent, []);
+  assert.equal(sentCount, 0);
 
   // Initialize 到达，它的 `.then(doRequest)` 仍排在微任务队列里；同一 tick 里 dispose。
   inbound.fire(encodeInitialize());
@@ -268,7 +268,7 @@ test("Initialize 与 dispose 同 tick：排队中的订阅不再发 EventListen�
   await tick();
 
   // 旧实现会在微任务里继续向已终结的传输发 EventListen，并把 emitter 留在 activeRequests。
-  assert.deepEqual(sent, []);
+  assert.equal(sentCount, 0);
   assert.deepEqual(failures, []);
 });
 
