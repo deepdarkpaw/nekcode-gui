@@ -32,6 +32,7 @@ import {
   unsupported,
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
+import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
   if (typeof value !== "object" || value === null) return false;
@@ -354,6 +355,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       });
       return { dispose: detach };
     },
+    onAgentRuntimeLifecycle: createNekAgentRuntimeLifecycle(target.service),
     async disposeWorkspace(input) {
       const sessions = await target.listNekSessions(input);
       for (const summary of sessions) {

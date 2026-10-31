@@ -4,11 +4,42 @@ import { BufferReader, BufferWriter, deserialize, serialize } from "./serializat
 import type { IMessagePassingProtocol } from "./protocol.js";
 import {
   type IChannelServer,
+  type IRawErrorPayload,
   type IRawResponse,
   type IServerChannel,
   RequestType,
   ResponseType,
 } from "./channels.shared.js";
+
+/** 跨进程错误只透传这些结构化字段；其余业务对象不进入线上载荷。 */
+const ERROR_PASSTHROUGH_KEYS = [
+  "code",
+  "kind",
+  "status",
+  "retryAfterMs",
+  "data",
+  "detail",
+  "details",
+  "taskId",
+  "traceId",
+] as const;
+
+/** 把异常折叠成线上错误载荷：message/name/stack 之外只保留白名单字段。 */
+export function toRpcErrorPayload(error: Error): IRawErrorPayload {
+  const payload: IRawErrorPayload = {
+    message: error.message,
+    name: error.name,
+    stack: error.stack ? error.stack.split("\n") : undefined,
+  };
+  const record = error as Error & Record<string, unknown>;
+  for (const key of ERROR_PASSTHROUGH_KEYS) {
+    const value = record[key];
+    if (value !== undefined) {
+      payload[key] = value;
+    }
+  }
+  return payload;
+}
 
 export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
   private channels = new Map<string, IServerChannel<TContext>>();
@@ -132,62 +163,36 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
           });
         },
         (error) => {
-          if (error instanceof Error) {
-            const rpcErrorPayload: {
-              message: string;
-              name: string;
-              stack: string[] | undefined;
-              code?: unknown;
-              kind?: unknown;
-              status?: unknown;
-              retryAfterMs?: unknown;
-              data?: unknown;
-              detail?: unknown;
-              details?: unknown;
-              taskId?: unknown;
-              traceId?: unknown;
-            } = {
-              message: error.message,
-              name: error.name,
-              stack: error.stack ? error.stack.split("\n") : undefined,
-            };
-            const errorRecord = error as Error & Record<string, unknown>;
-            const passthroughKeys = [
-              "code",
-              "kind",
-              "status",
-              "retryAfterMs",
-              "data",
-              "detail",
-              "details",
-              "taskId",
-              "traceId",
-            ] as const;
-            for (const key of passthroughKeys) {
-              const value = errorRecord[key];
-              if (value !== undefined) {
-                rpcErrorPayload[key] = value;
-              }
-            }
-            this.sendResponse({
-              id: request.id,
-              data: rpcErrorPayload,
-              type: ResponseType.PromiseError,
-            });
-            return;
-          }
-
-          this.sendResponse({
-            id: request.id,
-            data: error,
-            type: ResponseType.PromiseErrorObj,
-          });
+          this.sendRequestFailure(request.id, error);
         },
       )
       .finally(() => {
         disposable.dispose();
         this.activeRequests.delete(request.id);
       });
+  }
+
+  /**
+   * Promise 拒绝与事件订阅失败的统一回包。
+   *
+   * 订阅失败必须回给客户端而不是抛给协议层：ChannelServer 运行在各进程的消息分发栈里，
+   * 一次抛出会变成 uncaughtException 直接杀掉整个 host，连带所有会话与窗口。
+   */
+  private sendRequestFailure(id: number, error: unknown): void {
+    if (error instanceof Error) {
+      this.sendResponse({
+        id,
+        data: toRpcErrorPayload(error),
+        type: ResponseType.PromiseError,
+      });
+      return;
+    }
+
+    this.sendResponse({
+      id,
+      data: error,
+      type: ResponseType.PromiseErrorObj,
+    });
   }
 
   private onEventListen(request: {
@@ -203,17 +208,25 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       return;
     }
 
-    const disposable = channel.listen(
-      this.ctx,
-      request.name,
-      request.arg,
-    )((data) => {
-      this.sendResponse({
-        id: request.id,
-        data,
-        type: ResponseType.EventFire,
+    let disposable: IDisposable;
+    try {
+      // listen() 自身（未知事件 → ProxyChannel 抛错）与首订阅回调（服务 attach 失败）
+      // 都可能抛出，两者都要变成客户端可见的订阅失败。
+      disposable = channel.listen(
+        this.ctx,
+        request.name,
+        request.arg,
+      )((data) => {
+        this.sendResponse({
+          id: request.id,
+          data,
+          type: ResponseType.EventFire,
+        });
       });
-    });
+    } catch (error) {
+      this.sendRequestFailure(request.id, error);
+      return;
+    }
     this.activeRequests.set(request.id, disposable);
   }
 
