@@ -6,7 +6,7 @@ import { applyComposerPermissionGrant } from "@/v4/composer/composerPermissionGr
 // Workspace presentation 水合只提供 mode 与 slash commands；模型候选、能力和首选值
 // 统一来自目标 Host ModelSelectionView。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ZCODE_AGENT_PROVIDER, resolveExecutionState } from "@zcode/shared";
+import { ZCODE_AGENT_PROVIDER, modelSelectionSchema, resolveExecutionState } from "@zcode/shared";
 import { applyComposerPlanTransition } from "@/v4/composer/composerPlanTransition.js";
 import type {
   ZCodeConfigOption,
@@ -146,6 +146,7 @@ export function useDraftConfigControl(params: {
     "remote-waiting",
     {
       selection: draft.modelSelection ?? null,
+      workspacePath,
     },
   );
   const modelSelectionView =
@@ -410,8 +411,13 @@ export function useDraftConfigControl(params: {
   const handleDraftSelectModel = useCallback(
     (modelProvider: string, model: string) => {
       const modelId = modelProvider ? `${modelProvider}/${model}` : model;
-      const parsedSelection = parseModelPickerValue(modelId);
-      // 用户点击模型只确定模型身份；Reasoning 没有默认值，保持为空并等待用户选择。
+      // 菜单已经给出 provider/model 两个字段：能拿到 provider 时不再拼成 "provider/model"
+      // 再解析——事实来源的模型 id 允许包含 "/"，重新解析会把 id 截断成另一条模型。
+      const parsedSelection = modelProvider
+        ? modelSelectionSchema.parse({ providerId: modelProvider, modelId: model })
+        : parseModelPickerValue(model);
+      // 用户点击模型只确定模型身份与它自己的默认档位（事实来源给出的 defaultReasoningLevel），
+      // 之后仍可从该模型的 reasoningLevels 改档位。
       const modelSelection = modelSelectionView
         ? (completeNewModelSelection(modelSelectionView, parsedSelection) ?? parsedSelection)
         : parsedSelection;

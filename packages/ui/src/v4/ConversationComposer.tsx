@@ -443,6 +443,8 @@ interface ConversationComposerProps {
   /** v4 会话级错误（snapshot.control.lastError），展示在输入框上方。 */
   error?: ZCodeUiError | null;
   onDismissError?: () => void;
+  /** 可重试错误（例如读取 nek 模型配置失败）的重试动作；不提供时不渲染重试按钮。 */
+  onRetryError?: () => void;
   /** 无可用模型横幅的恢复动作；由 SessionPane 注入壳层导航，组件不直接操作 tab。 */
   onOpenModelSettings?: () => void;
   /**
@@ -518,6 +520,7 @@ function ConversationComposerImpl({
   onSendCompressionCommand,
   error,
   onDismissError,
+  onRetryError,
   onOpenModelSettings,
   listenAddToChatEvents = true,
   externalTextInsertRequest = null,
@@ -2073,6 +2076,7 @@ function ConversationComposerImpl({
           <ChatErrorBanner
             error={visibleError}
             onDismiss={onDismissError}
+            onRetry={onRetryError}
             onOpenModelSettings={onOpenModelSettings}
           />
         </div>

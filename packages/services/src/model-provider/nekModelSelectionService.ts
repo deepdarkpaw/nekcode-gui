@@ -1,0 +1,172 @@
+/**
+ * `IModelSelectionService` 的唯一实现：把 nek 的模型事实投影成 renderer 用的 View。
+ *
+ * 状态模型刻意只有一个：
+ * - 事实不缓存：每次 `getView()` 都读一次（读失败就是失败，交回调用方展示/重试）；
+ * - `onDidChange` 只是**失效信号**，不携带快照；所有调用方重新 `getView()`；
+ * - `revision` 只随事实内容变化前进，且只有“比已提交读取更新”的那次读取才能提交，
+ *   并发/乱序完成不会把旧目录当成当前版本。
+ */
+import {
+  resolveEffectiveModelSelection,
+  resolveInitialModelSelection,
+  type ModelSelectionView,
+  type ModelSelectionViewInput,
+} from "@zcode/provider";
+import type { IModelSelectionService } from "./providerFacadeServices.js";
+import type { NekModelFacts, NekModelFactsSource } from "./nekModelFacts.js";
+
+interface NekModelSelectionServiceOptions {
+  readonly facts: NekModelFactsSource;
+}
+
+interface CommitResult {
+  readonly revision: number;
+  /** false = 这次读取被更新的读取超车，内容不是当前版本。 */
+  readonly accepted: boolean;
+}
+
+export interface NekModelSelectionService extends IModelSelectionService {
+  dispose(): void;
+}
+
+/** 一次 `getView()` 最多读几次：被更新的读取超车时重读，避免把旧目录当当前事实返回。 */
+const MAX_READ_ATTEMPTS = 3;
+
+export function createNekModelSelectionService(
+  options: NekModelSelectionServiceOptions,
+): NekModelSelectionService {
+  const source = options.facts;
+  const listeners = new Set<() => void>();
+  let revision = 0;
+  let lastKey: string | null = null;
+  /** 已提交内容版本对应的读取序号；更早发起的读取即使后完成也不能改版本。 */
+  let committedSequence = 0;
+  let startedSequence = 0;
+  let disposed = false;
+
+  /**
+   * 读事实并（在它是当前最新读取时）提交版本。
+   *
+   * 不缓存：调用方拿到的就是这次读取的结果。若期间有更新的读取先提交（配置刚变过），
+   * 本次结果已不是当前版本 → 重读，最多 `MAX_READ_ATTEMPTS` 次，不把旧目录当当前事实。
+   */
+  const readFacts = async (
+    input: ModelSelectionViewInput | undefined,
+  ): Promise<ModelSelectionView> => {
+    let view: ModelSelectionView | undefined;
+    for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
+      const sequence = (startedSequence += 1);
+      const facts = await source.read(
+        input?.workspacePath ? { cwd: input.workspacePath } : undefined,
+      );
+      if (disposed) throw new Error("ModelSelectionService 已 dispose");
+      const committed = commit(sequence, facts);
+      view = project(facts, committed.revision, input);
+      if (committed.accepted) return view;
+    }
+    // 连续被超车（配置在持续变化）：返回最后读到的内容，它的下一次失效信号还会让调用方重读。
+    return view!;
+  };
+
+  const commit = (sequence: number, facts: NekModelFacts): CommitResult => {
+    if (sequence <= committedSequence) return { revision, accepted: false };
+    committedSequence = sequence;
+    const key = catalogKey(facts);
+    if (key !== lastKey) {
+      lastKey = key;
+      revision += 1;
+    }
+    return { revision, accepted: true };
+  };
+
+  const unsubscribe = source.onDidChange(() => {
+    if (disposed) return;
+    // 失效信号：不读、不改写任何状态。谁需要事实谁重读，读取失败由那次调用自己承担。
+    for (const listener of listeners) listener();
+  });
+
+  return {
+    async getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView> {
+      if (disposed) throw new Error("ModelSelectionService 已 dispose");
+      return await readFacts(input);
+    },
+    onDidChange: (listener) => {
+      if (disposed) return { dispose: () => undefined };
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      unsubscribe();
+      listeners.clear();
+      source.dispose();
+    },
+  };
+}
+
+/**
+ * `revision` 只跟“有哪些可用模型、各自支持什么”这一事实走。
+ *
+ * 按 workspace 变化的默认档位（`defaultReasoningLevel`）与默认模型不进版本：不同 workspace
+ * 交替读取不能让版本号来回跳，也不能因此重建草稿运行时。
+ */
+function catalogKey(facts: NekModelFacts): string {
+  return JSON.stringify([
+    facts.providers,
+    facts.models.map((model) => [
+      model.providerId,
+      model.modelId,
+      model.displayName,
+      model.reasoningLevels,
+      model.supportsImage,
+    ]),
+  ]);
+}
+
+/** 纯投影：nek 事实 → Selection View（含首选选择与当前选择的解析）。 */
+function project(
+  facts: NekModelFacts,
+  revision: number,
+  input?: ModelSelectionViewInput,
+): ModelSelectionView {
+  const providers = facts.providers.map((provider) => ({
+    providerId: provider.providerId,
+    displayName: provider.displayName,
+    models: facts.models
+      .filter((model) => model.providerId === provider.providerId)
+      .map((model) => ({
+        modelId: model.modelId,
+        displayName: model.displayName,
+        reasoningLevels: model.reasoningLevels,
+        ...(model.defaultReasoningLevel
+          ? { defaultReasoningLevel: model.defaultReasoningLevel }
+          : {}),
+        supportsImage: model.supportsImage,
+      })),
+  }));
+  const catalog = { providers };
+  const initial = resolveInitialModelSelection({
+    catalog,
+    ...(facts.defaults.providerId && facts.defaults.modelId
+      ? {
+          configuredDefault: {
+            providerId: facts.defaults.providerId,
+            modelId: facts.defaults.modelId,
+          },
+        }
+      : {}),
+  });
+  return Object.freeze({
+    revision,
+    providers: Object.freeze(
+      providers.map((provider) =>
+        Object.freeze({ ...provider, models: Object.freeze(provider.models) }),
+      ),
+    ),
+    ...(initial.selection ? { preferredSelection: initial.selection } : {}),
+    ...(initial.issue ? { preferredSelectionIssue: initial.issue } : {}),
+    ...(input ? resolveEffectiveModelSelection({ selection: input.selection, catalog }) : {}),
+  });
+}

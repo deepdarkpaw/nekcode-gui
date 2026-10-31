@@ -32,7 +32,6 @@ import {
   unsupported,
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
-import type { ZCodeModelProviderAvailability } from "../../zcode-agent/zcodeAgent.js";
 import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
@@ -70,12 +69,8 @@ function planRow(
   };
 }
 
-export function createNekLegacyMethods(
-  target: NekAgentServiceAdapterLegacyTarget,
-  readModelAvailability: () => Promise<ZCodeModelProviderAvailability>,
-): LegacyMethods {
-  // 代际记忆只有一个 owner：被动事件与此处的 identity 查询共用同一份，事件自增而查询
-  // 恒为 1 会让观察者把新代当成旧代。
+export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarget): LegacyMethods {
+  // 被动事件与 identity 查询共用同一份代际记忆。
   const runtimeLifecycle = createNekAgentRuntimeLifecycle(target.service);
   const methods: LegacyMethods = {
     async prepareStorage() {
@@ -358,8 +353,12 @@ export function createNekLegacyMethods(
       });
       return { dispose: detach };
     },
+<<<<<<< HEAD
     onAgentRuntimeLifecycle: (listener) => runtimeLifecycle.onDidChange(listener),
     getModelProviderAvailability: () => readModelAvailability(),
+=======
+    onAgentRuntimeLifecycle: createNekAgentRuntimeLifecycle(target.service),
+>>>>>>> wt/nek-model-source
     async disposeWorkspace(input) {
       const sessions = await target.listNekSessions(input);
       for (const summary of sessions) {

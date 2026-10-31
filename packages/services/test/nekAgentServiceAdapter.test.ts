@@ -663,3 +663,43 @@ test("bounds the conversation plan list with the GUI runtime config", async () =
     await adapter.dispose();
   }
 });
+
+test("v4 createSession carries the protocol modelSelection to nek as provider/modelId", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    // 首发命令的载荷形状来自 v4 协议：modelSelection.providerId，不是 provider。
+    await adapter.sendNekConversationCommandV4({
+      target: { workspacePath: "/workspace" },
+      envelope: {
+        commandId: "cmd-1",
+        clientId: "client-1",
+        sessionId: null,
+        type: "createSession",
+        issuedAt: Date.now(),
+        payload: {
+          config: {
+            mode: "agent",
+            thought: "off",
+            modelSelection: { providerId: "mock", modelId: "mock-model" },
+          },
+          firstInput: { text: "hello" },
+        },
+      },
+    });
+    const setModel = session.commands.find((command) => command.type === "set_model");
+    assert.ok(setModel, "nek 必须收到 set_model");
+    assert.equal(setModel.provider, "mock");
+    assert.equal(setModel.modelId, "mock-model");
+    const thinking = session.commands.find((command) => command.type === "set_thinking_level");
+    assert.equal(thinking?.level, "off");
+  } finally {
+    await adapter.dispose();
+  }
+});

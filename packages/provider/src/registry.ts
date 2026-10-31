@@ -88,7 +88,10 @@ export class ProviderRegistry {
         modelId: selection.modelId,
       };
     }
-    return validateModelSelectionOptions(model, selection);
+    return validateModelSelectionOptions(
+      { reasoningLevels: model.config.optionSpecs.reasoningLevel.values },
+      selection,
+    );
   }
 
   replace(providers: readonly Provider[], reason: string): void {
@@ -125,18 +128,13 @@ export class ProviderRegistry {
   }
 }
 
-/** Registry 与默认选择初始化共用同一套通用 Model Option 校验。 */
+/** 默认选择、选择解析与提交门禁共用同一套 Model Option 校验。 */
 export function validateModelSelectionOptions(
-  // 只依赖发布给 Renderer 的 Option 事实，避免 UI 另写一份档位校验或构造领域类。
-  model: {
-    readonly config: {
-      readonly optionSpecs: { readonly reasoningLevel: { readonly values: readonly string[] } };
-    };
-  },
+  // 只依赖“模型支持哪些档位”这一条事实，避免 UI 另写一份档位校验或构造领域类。
+  model: { readonly reasoningLevels: readonly string[] },
   selection: ModelSelection,
 ): ModelSelectionValidation {
   const reasoningLevel = selection.options?.reasoningLevel;
-  const reasoningSpec = model.config.optionSpecs.reasoningLevel;
   if (reasoningLevel === undefined) {
     return {
       ok: false,
@@ -145,14 +143,14 @@ export function validateModelSelectionOptions(
       modelId: selection.modelId,
     };
   }
-  if (!reasoningSpec.values.includes(reasoningLevel)) {
+  if (!model.reasoningLevels.includes(reasoningLevel)) {
     return {
       ok: false,
       code: "reasoning-level-not-supported",
       providerId: selection.providerId,
       modelId: selection.modelId,
       reasoningLevel,
-      supportedLevels: Object.freeze([...reasoningSpec.values]),
+      supportedLevels: Object.freeze([...model.reasoningLevels]),
     };
   }
   return { ok: true };

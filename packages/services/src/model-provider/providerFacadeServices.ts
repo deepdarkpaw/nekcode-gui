@@ -3,8 +3,6 @@ import { ServiceChannels } from "@zcode/shared";
 import {
   type ModelConfigObject,
   type ModelId,
-  type ModelSelection,
-  type ModelSelectionFacade,
   type ModelSelectionView,
   type ModelSelectionViewInput,
   type ProviderConfigObject,
@@ -113,13 +111,12 @@ export type ProviderSettingsConnectivityTester = (
 ) => Promise<ModelConnectivityResult>;
 
 export interface IModelSelectionService {
-  readonly onDidChange: Event<ModelSelectionView>;
+  /**
+   * 模型事实的失效信号：**不携带快照**。收到后调用方重新 `getView()`，读取失败由那次调用
+   * 自己承担（error 状态可见、可重试）。事件即事实会让 UI 多一份陈旧状态。
+   */
+  readonly onDidChange: Event<void>;
   getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView>;
-}
-
-export interface ModelSelectionConfiguredDefaultSource {
-  read(): Promise<ModelSelection | undefined>;
-  onDidChange?(listener: () => void): () => void;
 }
 
 export const IModelSelectionService = createServiceDescriptor<IModelSelectionService>(
@@ -286,60 +283,6 @@ export function createProviderSettingsService(
           error: { code: "request-failed", message: "request failed" },
         } satisfies ProviderModelCatalogFailure;
       }
-    },
-  };
-}
-
-export function createModelSelectionService(
-  facade: ModelSelectionFacade,
-  ensureReady: () => Promise<void> = async () => {},
-  configuredDefaultSource?: ModelSelectionConfiguredDefaultSource,
-): IModelSelectionService & { dispose(): void } {
-  const log = createServiceLogger("model-selection");
-  let revision = 0;
-  let disposed = false;
-  const listeners = new Set<(view: ModelSelectionView) => void>();
-  const getView = async (input?: ModelSelectionViewInput): Promise<ModelSelectionView> => {
-    await ensureReady();
-    if (disposed) throw new Error("ModelSelectionService 已 dispose");
-    const configuredDefault = await configuredDefaultSource?.read();
-    if (disposed) throw new Error("ModelSelectionService 已 dispose");
-    const base = facade.getView(configuredDefault);
-    if (revision < base.revision) revision = base.revision;
-    return facade.getView(configuredDefault, revision, input);
-  };
-  const emit = (): void => {
-    if (disposed) return;
-    revision += 1;
-    void getView().then(
-      (view) => {
-        if (disposed) return;
-        for (const listener of listeners) listener(view);
-      },
-      (error: unknown) => {
-        // Registry 事件触发的异步 View 重建没有 owner；Host dispose 后它仍会继续
-        // 读取已释放的配置仓库，并形成未处理 rejection。dispose 是明确的取消边界；仅在服务
-        // 仍存活时记录真实读取失败。
-        if (disposed) return;
-        log.warn(undefined, `ModelSelection View 刷新失败: ${String(error)}`);
-      },
-    );
-  };
-  const disposeFacade = facade.onDidChange(emit);
-  const disposeConfiguredDefault = configuredDefaultSource?.onDidChange?.(emit);
-
-  return {
-    onDidChange: (listener) => {
-      listeners.add(listener);
-      return { dispose: () => listeners.delete(listener) };
-    },
-    getView,
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      disposeFacade();
-      disposeConfiguredDefault?.();
-      listeners.clear();
     },
   };
 }

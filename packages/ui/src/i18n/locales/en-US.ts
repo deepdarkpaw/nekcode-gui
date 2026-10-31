@@ -3233,6 +3233,8 @@ const enUS: Record<string, string> = {
   "chat.error.expandDetails": "Show details",
   "chat.error.collapseDetails": "Hide details",
   "chat.error.noAvailableModel": "Configure a model to start a conversation.",
+  "chat.error.modelConfigUnreadable":
+    "Cannot read the model configuration from nek. Check the nek config and try again.",
   "chat.error.sendFailed": "Failed to send. Try again later.",
   "chat.error.modelSettings": "Model settings",
   "chat.error.setModels": "Configure model",

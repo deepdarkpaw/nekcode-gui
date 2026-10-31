@@ -47,11 +47,10 @@ async function setup(t) {
 test("Host startup and repeated settings refresh read local facts without an account lifecycle", async (t) => {
   const { runtime } = await setup(t);
   await Promise.all([runtime.start(), runtime.start()]);
+  // 模型选择已改由 nek 的配置与模型目录回答（见 packages/services/test/nekModelSelection.test.ts），
+  // 这里只保留 Provider 设置事实：重复刷新仍然只读本地配置，且旧账号条目不可执行。
   for (const reason of ["open-settings", "user-retry", "local-config-changed"]) {
     await runtime.providerSettings.refresh(reason);
-    const selection = await runtime.modelSelection.getView();
-    for (const provider of selection.providers)
-      assert.notEqual(provider.config.access.type, "zhipu-account");
   }
   const snapshot = runtime.registryService.getSnapshot();
   const accounts = snapshot.resolution.resolvedProviders.filter(
