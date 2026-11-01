@@ -125,13 +125,15 @@ export const ConversationHookDetailsAction = memo(function ConversationHookDetai
 }) {
   const { intl } = useZCodeIntl();
   const [open, setOpen] = useState(false);
+  // Tooltip 始终受控：Popover 打开时压住提示，避免受控/非受控来回切换。
+  const [tooltipOpen, setTooltipOpen] = useState(false);
   const items = useMemo(() => buildHookDetailItems(rows), [rows]);
   if (items.length === 0) return null;
 
   const label = intl.formatMessage({ id: "chat.hooks.label" });
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip open={open ? false : undefined}>
+      <Tooltip open={!open && tooltipOpen} onOpenChange={setTooltipOpen}>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
             <Button
