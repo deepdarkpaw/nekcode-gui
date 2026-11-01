@@ -17,7 +17,7 @@ const user = (content) => ({ role: "user", content });
 const tool = (tool_call_id, content) => ({ role: "tool", tool_call_id, content });
 const body = (messages) => JSON.stringify({ messages });
 
-await test("mock routes only the latest user turn, not a previous completed tool chain", () => {
+test("mock routes only the latest user turn, not a previous completed tool chain", () => {
   const history = [user(MOCK_FIRST_PROMPT), tool("call_switch", "You are now in Plan mode.")];
   assert.equal(pickMockTurn(body(history)), "plan");
   assert.equal(pickMockTurn(body([...history, user(MOCK_LONG_PROMPT)])), "slow");
@@ -28,7 +28,7 @@ await test("mock routes only the latest user turn, not a previous completed tool
   );
 });
 
-await test("nek reminder-only user messages do not hide the approved implementation or a later user turn", () => {
+test("nek reminder-only user messages do not hide the approved implementation or a later user turn", () => {
   const reminder = user([
     { type: "text", text: "<system_reminder>Mode changed.</system_reminder>" },
   ]);
@@ -43,7 +43,7 @@ await test("nek reminder-only user messages do not hide the approved implementat
   assert.throws(() => pickMockTurn(body([...history, user("unexpected user input"), reminder])));
 });
 
-await test("mock verifies both question answers and actual mode approval before continuing", () => {
+test("mock verifies both question answers and actual mode approval before continuing", () => {
   const prefix = [user(MOCK_FIRST_PROMPT)];
   assert.equal(pickMockTurn(body([...prefix, tool("call_ls", "README.md")])), "ask");
   assert.equal(
@@ -62,7 +62,7 @@ await test("mock verifies both question answers and actual mode approval before 
   assert.throws(() => pickMockTurn(body([user("unrecognized")])));
 });
 
-await test("mock records stream abort before cleanup, not ordinary successful completion", async () => {
+test("mock records stream abort before cleanup, not ordinary successful completion", async () => {
   const mock = await startMockLlm({ slowChunks: 100, slowDelayMs: 20 });
   try {
     const normal = await fetch(`${mock.baseUrl}/chat/completions`, {
@@ -93,7 +93,7 @@ await test("mock records stream abort before cleanup, not ordinary successful co
   }
 });
 
-await test("mock rejects malformed or oversized requests instead of replying with a success fallback", async () => {
+test("mock rejects malformed or oversized requests instead of replying with a success fallback", async () => {
   const mock = await startMockLlm();
   try {
     const invalid = await fetch(`${mock.baseUrl}/chat/completions`, { method: "POST", body: "{" });
@@ -113,7 +113,7 @@ await test("mock rejects malformed or oversized requests instead of replying wit
   }
 });
 
-await test("packaged entry detection returns Linux path and refuses ambiguous Windows flavors", async () => {
+test("packaged entry detection returns Linux path and refuses ambiguous Windows flavors", async () => {
   const root = await mkdtemp(join(tmpdir(), "nekcode-entry-test-"));
   try {
     for (const folder of ["linux-unpacked", "win-unpacked"]) await mkdir(join(root, folder));
