@@ -1,28 +1,20 @@
 /* oxlint-disable eslint(max-lines) -- 状态面板同时维护收起态摘要、展开态分区、菜单策略和宽度自适应，同文件能保证两种形态共享同一内容优先级。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import {
-  forwardRef,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ComponentPropsWithoutRef,
   type CSSProperties,
   type MouseEvent,
   type ReactNode,
 } from "react";
 import {
-  ActivityIcon,
-  ArrowRightIcon,
-  BotIcon,
-  CheckCircle2Icon,
   ChevronDownIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
   CircleCheckBigIcon,
-  CircleIcon,
   EllipsisIcon,
   FileDiffIcon,
   GoalIcon,
@@ -43,13 +35,11 @@ import {
 import type {
   GitChangeSourceId,
   GitRepositorySummary,
-  ZCodeSessionRunningSubagent,
   ZCodeTaskChangeSummary,
 } from "@zcode/shared";
 import type {
   BackgroundWorkSummary,
   GoalState,
-  PlanState,
   ToolCallRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
@@ -67,22 +57,16 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { formatBackgroundTaskElapsedLabel } from "@/BackgroundTaskElapsedLabel.js";
 import { GitActionMenu } from "@/GitActionMenu.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import type {
-  OpenPlanDetailSideTabRequest,
-  OpenSubagentDirectorySideTabRequest,
-  OpenSubagentSideTabRequest,
-} from "@/lib/workspaceSidePane.js";
+import type { OpenPlanDetailSideTabRequest } from "@/lib/workspaceSidePane.js";
 import type { ChatViewSummaryPanelVariant } from "@/v4/legacyChatViewTypes.js";
 import { resolveConversationStatusPanelVariant } from "@/v4/conversationLayout.js";
 import {
   buildConversationStatusPanelModel,
-  type ConversationStatusPanelRunningSubagent,
   type ConversationStatusPanelModel,
   type ConversationStatusPanelSessionPlanItem,
 } from "@/v4/conversationStatusPanelModel.js";
@@ -101,11 +85,7 @@ interface ConversationStatusPanelProps {
   activeTaskChangeSummary?: ZCodeTaskChangeSummary | null;
   goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
-  plan?: PlanState | null;
   backgroundWorks?: readonly BackgroundWorkSummary[];
-  runningSubagents?: readonly ZCodeSessionRunningSubagent[];
-  endedSubagentCount?: number;
-  rootSessionId?: string;
   parentSessionId?: string;
   /** 当前 pane 是否由手机 Web 远控壳承载。 */
   /** 当前是否为粗指针手机视口。 */
@@ -115,8 +95,6 @@ interface ConversationStatusPanelProps {
   onVariantChange?: (variant: ChatViewSummaryPanelVariant | null) => void;
   terminalSectionOpen?: boolean;
   onTerminalSectionOpenChange?: (open: boolean) => void;
-  agentSectionOpen?: boolean;
-  onAgentSectionOpenChange?: (open: boolean) => void;
   onRefreshGit?: () => void;
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onPauseGoal?: () => void;
@@ -124,14 +102,11 @@ interface ConversationStatusPanelProps {
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
   onOpenBackgroundBash?: (work: BackgroundWorkSummary) => void;
   onCancelBackgroundWork?: (workId: string) => void;
-  onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
-  onOpenSubagentDirectory?: (request: OpenSubagentDirectorySideTabRequest) => void;
   className?: string;
 }
 
 // memo 组件默认 props 不内联创建数组，避免每次渲染生成新引用触发稳定引用边界测试。
 const EMPTY_BACKGROUND_WORKS: readonly BackgroundWorkSummary[] = [];
-const EMPTY_RUNNING_SUBAGENTS: readonly ZCodeSessionRunningSubagent[] = [];
 
 function formatDurationUnits(
   totalSeconds: number,
@@ -184,34 +159,14 @@ function formatRunningCount(
   );
 }
 
-function formatRunningSubagentCount(
-  formatMessage: ReturnType<typeof useZCodeIntl>["intl"]["formatMessage"],
-  count: number,
-) {
-  return formatMessage(
-    {
-      // 这里的计数至少包含 running 投影中的 subagent（可能是 mixed 胶囊总数）；
-      // subagent 又包含 foreground、background、blocked 和 waiting，复用后台任务文案
-      // 会把计数语义错误地缩窄成“后台”。
-      id:
-        count === 1
-          ? "chat.statusPanel.runningAgentsValue"
-          : "chat.statusPanel.runningAgentsValuePlural",
-    },
-    { count: String(count) },
-  );
-}
-
-type StatusSectionKind = "environment" | "goal" | "sessionPlans" | "plan" | "terminal" | "agent";
+// 待办与子代理由输入框上方的 nek 状态槽展示，这里不再重复。
+type StatusSectionKind = "environment" | "goal" | "sessionPlans" | "terminal";
 
 const STATUS_SECTION_SCROLL_POLICY = {
   environment: null,
   goal: "max-h-48",
   sessionPlans: "max-h-48",
-  // 六个双行 Todo（6 × 52px）需要约 20rem；超过后只滚动进程区块。
-  plan: "max-h-80",
   terminal: "max-h-48",
-  agent: "max-h-48",
 } as const satisfies Record<StatusSectionKind, string | null>;
 
 function StatusSectionHeader({
@@ -549,229 +504,6 @@ function GoalStatusSection({
   );
 }
 
-function PlanStatusIcon({ status }: { status: PlanState["items"][number]["status"] }) {
-  if (status === "completed") {
-    return (
-      <CheckCircle2Icon
-        aria-hidden
-        className="mt-0.5 size-3.5 shrink-0 text-[var(--color-success)]"
-      />
-    );
-  }
-  if (status === "inProgress") {
-    return (
-      <ArrowRightIcon
-        aria-hidden
-        className="mt-0.5 size-3.5 shrink-0 text-[var(--color-foreground)]"
-      />
-    );
-  }
-  return (
-    <CircleIcon
-      aria-hidden
-      className="mt-0.5 size-3.5 shrink-0 text-[var(--color-foreground-subtlest)]"
-    />
-  );
-}
-
-const COMPACT_TODO_THRESHOLD = 6;
-const TODO_FOCUS_WINDOW_SIZE = 3;
-
-interface StatusPanelTodoFocusWindow {
-  compact: boolean;
-  precedingItems: PlanState["items"];
-  focusItems: PlanState["items"];
-  followingItems: PlanState["items"];
-}
-
-function getStatusPanelTodoFocusWindow(items: PlanState["items"]): StatusPanelTodoFocusWindow {
-  if (items.length <= COMPACT_TODO_THRESHOLD) {
-    return {
-      compact: false,
-      precedingItems: [],
-      focusItems: items,
-      followingItems: [],
-    };
-  }
-
-  const runningIndex = items.findIndex((item) => item.status === "inProgress");
-  const firstUnfinishedIndex = items.findIndex((item) => item.status !== "completed");
-  const focusIndex =
-    runningIndex >= 0
-      ? runningIndex
-      : firstUnfinishedIndex >= 0
-        ? firstUnfinishedIndex
-        : Math.max(0, items.length - TODO_FOCUS_WINDOW_SIZE);
-  // 只取“当前 + 后两条”会让靠近列表末尾的当前项只剩一两条上下文。
-  // 从前面回补可以让精简窗口在项目数足够时始终保持三条，同时不改变 snapshot 原序。
-  const focusStartIndex = Math.max(0, Math.min(focusIndex, items.length - TODO_FOCUS_WINDOW_SIZE));
-  const focusEndIndex = Math.min(items.length, focusStartIndex + TODO_FOCUS_WINDOW_SIZE);
-
-  return {
-    compact: true,
-    precedingItems: items.slice(0, focusStartIndex),
-    focusItems: items.slice(focusStartIndex, focusEndIndex),
-    followingItems: items.slice(focusEndIndex),
-  };
-}
-
-function PlanStatusItemRows({ items }: { items: PlanState["items"] }) {
-  return items.map((item) => (
-    <li
-      key={item.id}
-      data-plan-status={item.status}
-      className="flex min-h-8 items-start gap-2 rounded-lg px-2 py-1.5 text-ui-base hover:bg-[var(--color-hover)]"
-    >
-      <PlanStatusIcon status={item.status} />
-      <span
-        title={item.content}
-        className={cn(
-          "line-clamp-2 min-w-0 flex-1 break-words leading-5",
-          item.status === "completed"
-            ? "text-[var(--color-foreground-subtlest)] line-through"
-            : "text-[var(--color-foreground)]",
-        )}
-      >
-        {item.content}
-      </span>
-    </li>
-  ));
-}
-
-const TodoPreviewTrigger = forwardRef<
-  HTMLButtonElement,
-  ComponentPropsWithoutRef<"button"> & {
-    group: "preceding" | "following";
-    label: string;
-    open: boolean;
-    onTouchOpen: () => void;
-  }
->(function TodoPreviewTrigger({ group, label, onClick, onTouchOpen, open, ...buttonProps }, ref) {
-  return (
-    <button
-      {...buttonProps}
-      ref={ref}
-      type="button"
-      aria-expanded={open}
-      data-status-todo-preview-trigger={group}
-      className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-ui-base text-[var(--color-foreground-subtle)] hover:bg-[var(--color-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-input-border-focused)]"
-      onClick={(event) => {
-        onClick?.(event);
-        // HoverCard 在桌面由 hover/focus 驱动；仅无 hover 输入补充点击打开，
-        // 避免桌面点击把已经由 hover 打开的预览反向关闭。
-        if (
-          !event.defaultPrevented &&
-          typeof window !== "undefined" &&
-          window.matchMedia?.("(hover: none)").matches
-        ) {
-          onTouchOpen();
-        }
-      }}
-    >
-      <ChevronLeftIcon className="size-3.5 shrink-0" />
-      <span className="min-w-0 truncate">{label}</span>
-    </button>
-  );
-});
-
-type TodoPreviewGroup = "preceding" | "following";
-
-function TodoHiddenGroupPreview({
-  group,
-  items,
-  onOpenChange,
-  open,
-  popoverSide,
-}: {
-  group: TodoPreviewGroup;
-  items: PlanState["items"];
-  onOpenChange: (open: boolean) => void;
-  open: boolean;
-  popoverSide: "bottom" | "left";
-}) {
-  const { intl } = useZCodeIntl();
-  const messageId =
-    group === "preceding"
-      ? items.every((item) => item.status === "completed")
-        ? "chat.statusPanel.todoCompletedFold"
-        : "chat.statusPanel.todoEarlierFold"
-      : items.every((item) => item.status === "pending")
-        ? "chat.statusPanel.todoWaitingFold"
-        : "chat.statusPanel.todoLaterFold";
-  const label = intl.formatMessage({ id: messageId }, { count: String(items.length) });
-
-  return (
-    <HoverCard closeDelay={80} open={open} openDelay={120} onOpenChange={onOpenChange}>
-      <HoverCardTrigger asChild>
-        <TodoPreviewTrigger
-          group={group}
-          label={label}
-          open={open}
-          onTouchOpen={() => onOpenChange(true)}
-        />
-      </HoverCardTrigger>
-      <HoverCardContent
-        align="start"
-        side={popoverSide}
-        sideOffset={4}
-        data-status-todo-preview-content={group}
-        className="w-80 max-w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[var(--color-popover-border)] bg-[var(--color-menu)] p-3 shadow-md ring-0"
-      >
-        <div className="flex max-h-[min(24rem,calc(100dvh-2rem))] min-w-0 flex-col">
-          <p className="flex h-8 shrink-0 items-center px-2 text-ui-base text-[var(--color-foreground-subtle)]">
-            {label}
-          </p>
-          <ul className="min-h-0 space-y-0 overflow-y-auto pr-1">
-            <PlanStatusItemRows items={items} />
-          </ul>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
-  );
-}
-
-function PlanStatusItems({
-  plan,
-  popoverSide,
-}: {
-  plan: NonNullable<ConversationStatusPanelModel["plan"]>;
-  popoverSide: "bottom" | "left";
-}) {
-  const [openPreviewGroup, setOpenPreviewGroup] = useState<TodoPreviewGroup | null>(null);
-  const window = getStatusPanelTodoFocusWindow(plan.displayItems);
-  const handlePreviewOpenChange = (group: TodoPreviewGroup, open: boolean) => {
-    setOpenPreviewGroup((current) => (open ? group : current === group ? null : current));
-  };
-
-  return (
-    <ul className="space-y-0 pb-1">
-      {window.compact && window.precedingItems.length > 0 ? (
-        <li>
-          <TodoHiddenGroupPreview
-            group="preceding"
-            items={window.precedingItems}
-            open={openPreviewGroup === "preceding"}
-            onOpenChange={(open) => handlePreviewOpenChange("preceding", open)}
-            popoverSide={popoverSide}
-          />
-        </li>
-      ) : null}
-      <PlanStatusItemRows items={window.focusItems} />
-      {window.compact && window.followingItems.length > 0 ? (
-        <li>
-          <TodoHiddenGroupPreview
-            group="following"
-            items={window.followingItems}
-            open={openPreviewGroup === "following"}
-            onOpenChange={(open) => handlePreviewOpenChange("following", open)}
-            popoverSide={popoverSide}
-          />
-        </li>
-      ) : null}
-    </ul>
-  );
-}
-
 function SessionPlansStatusSection({
   model,
   onOpenPlanDetail,
@@ -836,47 +568,6 @@ function buildSessionPlanOpenRequest(
   };
 }
 
-function PlanStatusSection({
-  model,
-  popoverSide,
-  separated,
-}: {
-  model: ConversationStatusPanelModel;
-  popoverSide: "bottom" | "left";
-  separated: boolean;
-}) {
-  const { intl } = useZCodeIntl();
-  const plan = model.plan;
-  if (!plan) return null;
-  const isCompleted = plan.totalCount > 0 && plan.completedCount >= plan.totalCount;
-
-  return (
-    <StatusSection
-      section="plan"
-      separated={separated}
-      title={intl.formatMessage({ id: "chat.statusPanel.todo" })}
-      trailing={() => (
-        <span
-          className={cn(
-            "tabular-nums",
-            isCompleted ? "text-[var(--color-success)]" : "text-[var(--color-foreground-subtle)]",
-          )}
-        >
-          {plan.completedCount}/{plan.totalCount}
-        </span>
-      )}
-    >
-      <PlanStatusItems
-        key={plan.displayItems
-          .map((item) => `${item.id}\u0000${item.content}\u0000${item.status}`)
-          .join("\u0001")}
-        plan={plan}
-        popoverSide={popoverSide}
-      />
-    </StatusSection>
-  );
-}
-
 function RunningWorkCancelButton({
   workId,
   onCancel,
@@ -911,25 +602,6 @@ function RunningWorkCancelButton({
       {intl.formatMessage({ id: "chat.statusPanel.runningStop" })}
     </Button>
   );
-}
-
-function buildRunningSubagentOpenRequest({
-  parentSessionId,
-  rootSessionId,
-  subagent,
-}: {
-  parentSessionId?: string;
-  rootSessionId?: string;
-  subagent: ZCodeSessionRunningSubagent;
-}): OpenSubagentSideTabRequest | null {
-  if (!parentSessionId) return null;
-  return {
-    rootSessionId: rootSessionId ?? parentSessionId,
-    parentSessionId,
-    childSessionId: subagent.childSessionId,
-    subagentType: subagent.subagentType,
-    title: subagent.title,
-  };
 }
 
 function RunningStatusItem({
@@ -998,7 +670,7 @@ function BackgroundWorkStatusSection({
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
   separated: boolean;
-  section: "terminal" | "agent";
+  section: "terminal";
   title: string;
   works: readonly BackgroundWorkSummary[];
 }) {
@@ -1071,220 +743,6 @@ function BackgroundWorkStatusSection({
   );
 }
 
-function SubagentStatusSection({
-  endedSubagentCount,
-  onCancelBackgroundWork,
-  onOpenChange,
-  onOpenSubagentDirectory,
-  onOpenSubagentSession,
-  open,
-  parentSessionId,
-  rootSessionId,
-  separated,
-  title,
-  subagents,
-}: {
-  endedSubagentCount: number;
-  onCancelBackgroundWork?: (workId: string) => void;
-  onOpenChange?: (open: boolean) => void;
-  onOpenSubagentDirectory?: (request: OpenSubagentDirectorySideTabRequest) => void;
-  onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
-  open?: boolean;
-  parentSessionId?: string;
-  rootSessionId?: string;
-  separated: boolean;
-  title: string;
-  subagents: readonly ConversationStatusPanelRunningSubagent[];
-}) {
-  const { intl } = useZCodeIntl();
-  const [now, setNow] = useState(() => Date.now());
-  const ordered = useMemo(
-    () => [...subagents].sort((left, right) => (left.startedAt ?? 0) - (right.startedAt ?? 0)),
-    [subagents],
-  );
-  useEffect(() => {
-    if (subagents.length === 0) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [subagents.length]);
-  if (subagents.length === 0 && endedSubagentCount <= 0) return null;
-  const longestElapsedMs = subagents.reduce(
-    (longest, item) => Math.max(longest, Math.max(0, now - (item.startedAt ?? now))),
-    0,
-  );
-
-  return (
-    <StatusSection
-      section="agent"
-      defaultOpen={false}
-      open={open}
-      onOpenChange={onOpenChange}
-      separated={separated}
-      title={title}
-      trailing={(isOpen) =>
-        subagents.length === 0 ? null : isOpen ? (
-          <span>{formatRunningSubagentCount(intl.formatMessage, subagents.length)}</span>
-        ) : (
-          <>
-            <span className="min-w-0 truncate">
-              {formatDurationUnits(
-                Math.max(1, Math.floor(longestElapsedMs / 1000)),
-                intl.formatMessage,
-              )}
-            </span>
-            <span className="shrink-0">·</span>
-            <span className="shrink-0">
-              {formatRunningSubagentCount(intl.formatMessage, subagents.length)}
-            </span>
-          </>
-        )
-      }
-    >
-      <ul className="space-y-0">
-        {ordered.map((subagent) => {
-          const request = buildRunningSubagentOpenRequest({
-            parentSessionId,
-            rootSessionId,
-            subagent,
-          });
-          const canOpenSubagentSession = Boolean(request && onOpenSubagentSession);
-          return (
-            <li
-              key={subagent.childSessionId}
-              data-testid={
-                subagent.controlWorkId
-                  ? testId(TID_V4_BACKGROUND_WORK_ITEM, subagent.controlWorkId)
-                  : undefined
-              }
-              data-background-task-kind="agent"
-              data-child-session-id={subagent.childSessionId}
-              data-work-id={subagent.controlWorkId}
-              data-work-status="running"
-              className={cn(
-                "group relative flex min-w-0 items-start gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-hover)]",
-                canOpenSubagentSession && "cursor-pointer",
-              )}
-            >
-              {canOpenSubagentSession ? (
-                // Agent 行同时包含“打开详情”和 Stop，不能用整行 button 包住
-                // Stop 形成嵌套按钮。透明同级按钮承接详情，Stop 保持独立交互层且阻止冒泡。
-                <button
-                  type="button"
-                  data-running-subagent-session-trigger="true"
-                  data-child-session-id={subagent.childSessionId}
-                  aria-label={intl.formatMessage({
-                    id: "chat.summaryPanel.openRunningSubagentSession",
-                  })}
-                  onClick={() => request && onOpenSubagentSession?.(request)}
-                  className="absolute inset-0 z-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-input-border-focused)]"
-                />
-              ) : null}
-              <BotIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
-              <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1.5">
-                <span className="line-clamp-2 text-ui-base leading-5 text-[var(--color-foreground)]">
-                  {subagent.title}
-                </span>
-                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-ui-base">
-                  <span className="text-ui-base tabular-nums text-[var(--color-foreground-subtle)]">
-                    {formatBackgroundTaskElapsedLabel(
-                      Math.max(0, now - (subagent.startedAt ?? now)),
-                      intl.formatMessage,
-                    )}
-                  </span>
-                  {subagent.controlWorkId && subagent.cancellable !== false ? (
-                    <RunningWorkCancelButton
-                      workId={subagent.controlWorkId}
-                      onCancel={onCancelBackgroundWork}
-                    />
-                  ) : null}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <EndedSubagentDirectoryRow
-        count={endedSubagentCount}
-        parentSessionId={parentSessionId}
-        rootSessionId={rootSessionId}
-        onOpen={onOpenSubagentDirectory}
-        separated={subagents.length > 0}
-      />
-    </StatusSection>
-  );
-}
-
-/**
- * 「已结束的 X · N ›」页脚行：分区里那条通往目录页的入口。
- *
- * `count <= 0` 或缺回调即整行缺席：一个点了没反应的入口比没有入口更糟。
- */
-function EndedDirectoryRow({
-  count,
-  icon,
-  label,
-  onOpen,
-  separated,
-  testId,
-}: {
-  count: number;
-  icon: ReactNode;
-  label: string;
-  onOpen?: () => void;
-  separated: boolean;
-  testId?: string;
-}) {
-  if (count <= 0 || !onOpen) return null;
-  return (
-    <div className={cn(separated && "border-t border-[var(--color-border)] pt-2")}>
-      <button
-        type="button"
-        data-testid={testId}
-        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-ui-base text-[var(--color-foreground)] hover:bg-[var(--color-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-input-border-focused)]"
-        onClick={onOpen}
-      >
-        {icon}
-        <span>{label}</span>
-        <span className="ml-auto text-[var(--color-foreground-subtle)]">{count}</span>
-        <ChevronRightIcon className="size-4 text-[var(--color-foreground-subtle)]" />
-      </button>
-    </div>
-  );
-}
-
-function EndedSubagentDirectoryRow({
-  count,
-  onOpen,
-  parentSessionId,
-  rootSessionId,
-  separated,
-}: {
-  count: number;
-  onOpen?: (request: OpenSubagentDirectorySideTabRequest) => void;
-  parentSessionId?: string;
-  rootSessionId?: string;
-  separated: boolean;
-}) {
-  const { intl } = useZCodeIntl();
-  return (
-    <EndedDirectoryRow
-      count={count}
-      icon={<CheckCircle2Icon className="size-4 shrink-0 text-[var(--color-foreground-subtle)]" />}
-      label={intl.formatMessage({ id: "chat.statusPanel.endedAgents" })}
-      separated={separated}
-      onOpen={
-        parentSessionId && onOpen
-          ? () =>
-              onOpen({
-                rootSessionId: rootSessionId ?? parentSessionId,
-                parentSessionId,
-              })
-          : undefined
-      }
-    />
-  );
-}
-
 function StatusSummaryMetric({ children, icon }: { children: ReactNode; icon: ReactNode }) {
   return (
     <div className="flex h-8 w-max max-w-80 min-w-0 items-center gap-1.5 pl-2 pr-3 text-ui-base text-[var(--color-foreground)]">
@@ -1299,18 +757,6 @@ function StatusSummaryMetric({ children, icon }: { children: ReactNode; icon: Re
   );
 }
 
-function getCurrentPlanItem(plan: ConversationStatusPanelModel["plan"]) {
-  return (
-    plan?.items.find((item) => item.status === "inProgress") ??
-    plan?.items.find((item) => item.status === "pending") ??
-    null
-  );
-}
-
-function getCompletedPlanItem(plan: ConversationStatusPanelModel["plan"]) {
-  return [...(plan?.items ?? [])].reverse().find((item) => item.status === "completed") ?? null;
-}
-
 function StatusSummaryRow({
   gitWorktreeChangeSummary,
   model,
@@ -1322,8 +768,6 @@ function StatusSummaryRow({
 }) {
   const { intl } = useZCodeIntl();
   const expandLabel = intl.formatMessage({ id: "chat.summaryPanel.showPanel" });
-  const currentPlanItem = getCurrentPlanItem(model.plan);
-  const completedPlanItem = getCompletedPlanItem(model.plan);
   const latestSessionPlan = model.sessionPlans?.items[0] ?? null;
   const goal = model.goal;
   const goalTitle = goal ? goal.summaryTitle?.trim() || goal.objective.trim() || null : null;
@@ -1340,72 +784,44 @@ function StatusSummaryRow({
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
   const hasGitMiniSummary = Boolean(model.git && added + removed > 0);
 
-  // 胶囊摘要过去把所有后台任务都写死成 Activity，纯 Subagent 因而没有复用
-  // Running 明细的 Bot 语义。规则现在是两类的：**恰好一类**沿用该类图标，混合才是 Activity。
-  const hasRunningBash = model.runningBashWorks.length > 0;
-  const hasRunningSubagent = model.runningSubagentWorks.length > 0;
-  const runningCount = model.runningBashWorks.length + model.runningSubagentWorks.length;
-  const runningKindCount = [hasRunningBash, hasRunningSubagent].filter(Boolean).length;
-  const RunningSummaryIcon =
-    runningKindCount > 1 ? ActivityIcon : hasRunningBash ? SquareTerminalIcon : BotIcon;
-  const summaryMetric = currentPlanItem ? (
-    <StatusSummaryMetric
-      icon={<ArrowRightIcon className="size-4 text-[var(--color-foreground)]" />}
-    >
-      <span className="min-w-0 truncate">{currentPlanItem.content}</span>
-    </StatusSummaryMetric>
-  ) : goalTitle && isActiveGoal ? (
-    <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
-      <span className="min-w-0 truncate">{goalTitle}</span>
-    </StatusSummaryMetric>
-  ) : hasGitMiniSummary ? (
-    <StatusSummaryMetric icon={<FileDiffIcon className="size-4 text-[var(--color-foreground)]" />}>
-      <span className="min-w-0 truncate">
-        {intl.formatMessage({ id: "chat.statusPanel.changes" })}
-      </span>
-      <span className="shrink-0 text-[var(--color-diff-added)]">+{added}</span>
-      <span className="shrink-0 text-[var(--color-diff-removed)]">-{removed}</span>
-    </StatusSummaryMetric>
-  ) : goalTitle && isDoneGoal ? (
-    <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
-      <span className="min-w-0 truncate">{goalTitle}</span>
-    </StatusSummaryMetric>
-  ) : completedPlanItem ? (
-    <StatusSummaryMetric icon={<CheckCircle2Icon className="size-4 text-[var(--color-success)]" />}>
-      <span className="min-w-0 truncate">{completedPlanItem.content}</span>
-    </StatusSummaryMetric>
-  ) : model.plan ? (
-    <StatusSummaryMetric
-      icon={<ListChecksIcon className="size-4 text-[var(--color-foreground-subtle)]" />}
-    >
-      <span className="min-w-0 truncate">
-        {intl.formatMessage({ id: "chat.statusPanel.todo" })}
-      </span>
-      <span className="shrink-0 text-[var(--color-foreground-subtle)]">
-        {model.plan.completedCount}/{model.plan.totalCount}
-      </span>
-    </StatusSummaryMetric>
-  ) : latestSessionPlan ? (
-    <StatusSummaryMetric
-      icon={<ListChecksIcon className="size-4 text-[var(--color-foreground)]" />}
-    >
-      <span className="min-w-0 truncate">
-        {latestSessionPlan.title ?? intl.formatMessage({ id: "chat.statusPanel.planFallback" })}
-      </span>
-    </StatusSummaryMetric>
-  ) : runningCount > 0 ? (
-    <StatusSummaryMetric
-      icon={<RunningSummaryIcon className="size-4 text-[var(--color-foreground)]" />}
-    >
-      {/* 产品规则：实时活动只能在没有 Goal/Todo/Git 等主状态时兜底，
+  const runningCount = model.runningBashWorks.length;
+  // 待办由 nek 状态槽展示：胶囊只摘要本面板独有的目标、改动、计划文档与后台终端。
+  const summaryMetric =
+    goalTitle && isActiveGoal ? (
+      <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
+        <span className="min-w-0 truncate">{goalTitle}</span>
+      </StatusSummaryMetric>
+    ) : hasGitMiniSummary ? (
+      <StatusSummaryMetric
+        icon={<FileDiffIcon className="size-4 text-[var(--color-foreground)]" />}
+      >
+        <span className="min-w-0 truncate">
+          {intl.formatMessage({ id: "chat.statusPanel.changes" })}
+        </span>
+        <span className="shrink-0 text-[var(--color-diff-added)]">+{added}</span>
+        <span className="shrink-0 text-[var(--color-diff-removed)]">-{removed}</span>
+      </StatusSummaryMetric>
+    ) : goalTitle && isDoneGoal ? (
+      <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
+        <span className="min-w-0 truncate">{goalTitle}</span>
+      </StatusSummaryMetric>
+    ) : latestSessionPlan ? (
+      <StatusSummaryMetric
+        icon={<ListChecksIcon className="size-4 text-[var(--color-foreground)]" />}
+      >
+        <span className="min-w-0 truncate">
+          {latestSessionPlan.title ?? intl.formatMessage({ id: "chat.statusPanel.planFallback" })}
+        </span>
+      </StatusSummaryMetric>
+    ) : runningCount > 0 ? (
+      <StatusSummaryMetric
+        icon={<SquareTerminalIcon className="size-4 text-[var(--color-foreground)]" />}
+      >
+        {/* 产品规则：实时活动只能在没有 Goal/Git 等主状态时兜底，
           避免胶囊把主状态和输入框已展示的实时计数重复拼接。 */}
-      <span className="shrink-0">
-        {hasRunningSubagent
-          ? formatRunningSubagentCount(intl.formatMessage, runningCount)
-          : formatRunningCount(intl.formatMessage, runningCount)}
-      </span>
-    </StatusSummaryMetric>
-  ) : null;
+        <span className="shrink-0">{formatRunningCount(intl.formatMessage, runningCount)}</span>
+      </StatusSummaryMetric>
+    ) : null;
 
   if (!summaryMetric) {
     return null;
@@ -1435,19 +851,13 @@ function ConversationStatusPanelImpl({
   activeTaskChangeSummary,
   goal,
   sessionPlans,
-  plan,
   backgroundWorks = EMPTY_BACKGROUND_WORKS,
-  runningSubagents = EMPTY_RUNNING_SUBAGENTS,
-  endedSubagentCount = 0,
-  rootSessionId,
   parentSessionId,
   layoutMode = "none",
   summaryPanelVariantOverride,
   onVariantChange,
   terminalSectionOpen,
   onTerminalSectionOpenChange,
-  agentSectionOpen,
-  onAgentSectionOpenChange,
   onRefreshGit,
   onOpenGitReview,
   onPauseGoal,
@@ -1455,8 +865,6 @@ function ConversationStatusPanelImpl({
   onOpenPlanDetail,
   onOpenBackgroundBash,
   onCancelBackgroundWork,
-  onOpenSubagentSession,
-  onOpenSubagentDirectory,
   className,
 }: ConversationStatusPanelProps) {
   const isOfficeMode = useIsOfficeMode();
@@ -1472,9 +880,7 @@ function ConversationStatusPanelImpl({
         goal,
         sessionPlans,
         workspacePath,
-        plan,
         backgroundWorks,
-        runningSubagents,
       }),
     [
       isOfficeMode,
@@ -1484,8 +890,6 @@ function ConversationStatusPanelImpl({
       gitWorktreeChangeSummary,
       goal,
       sessionPlans,
-      plan,
-      runningSubagents,
       workspacePath,
     ],
   );
@@ -1509,14 +913,7 @@ function ConversationStatusPanelImpl({
   const canRenderGit = Boolean(model.git && gitSummary && onRefreshGit);
   const canRenderGoal = Boolean(model.goal);
   const canRenderSessionPlans = Boolean(model.sessionPlans);
-  const canRenderPlan = Boolean(model.plan);
   const canRenderTerminals = model.runningBashWorks.length > 0;
-  const canRenderEndedAgents = Boolean(
-    endedSubagentCount > 0 && parentSessionId && onOpenSubagentDirectory,
-  );
-  // 已结束目录入口过去渲染在 Agent StatusSection 之后，视觉和 DOM 都被提升成
-  // 并列顶层 section。Agent 的运行态和已结束目录属于同一领域，统一由 Agent 折叠分组承载。
-  const canRenderAgents = model.runningSubagentWorks.length > 0 || canRenderEndedAgents;
   const handlePanelModeChange = useCallback(
     (value: string) => {
       if (value === "auto") {
@@ -1588,11 +985,8 @@ function ConversationStatusPanelImpl({
         data-display-mode={variant}
         data-goal-status={model.goal?.status}
         data-goal-objective={model.goal?.objective}
-        data-running-background-count={
-          model.runningBashWorks.length + model.runningSubagentWorks.length
-        }
+        data-running-background-count={model.runningBashWorks.length}
         data-running-terminal-count={model.runningBashWorks.length}
-        data-running-agent-count={model.runningSubagentWorks.length}
         style={shellStyle}
         className={cn(
           "pointer-events-auto relative overflow-hidden rounded-2xl border border-[var(--color-popover-border)] bg-[var(--color-popover)] text-[var(--color-foreground)] shadow-md transition-[border-radius,padding,background-color,box-shadow] duration-300 ease-in-out",
@@ -1695,13 +1089,6 @@ function ConversationStatusPanelImpl({
                 separated={canRenderGit || canRenderGoal}
               />
             ) : null}
-            {canRenderPlan ? (
-              <PlanStatusSection
-                model={model}
-                popoverSide={useVerticalFloatingPanels ? "bottom" : "left"}
-                separated={canRenderGit || canRenderGoal || canRenderSessionPlans}
-              />
-            ) : null}
             {canRenderTerminals ? (
               <BackgroundWorkStatusSection
                 onOpenBackgroundBash={onOpenBackgroundBash}
@@ -1710,29 +1097,8 @@ function ConversationStatusPanelImpl({
                 works={model.runningBashWorks}
                 open={terminalSectionOpen}
                 onOpenChange={onTerminalSectionOpenChange}
-                separated={canRenderGit || canRenderGoal || canRenderSessionPlans || canRenderPlan}
+                separated={canRenderGit || canRenderGoal || canRenderSessionPlans}
                 onCancelBackgroundWork={onCancelBackgroundWork}
-              />
-            ) : null}
-            {canRenderAgents ? (
-              <SubagentStatusSection
-                title={intl.formatMessage({ id: "chat.statusPanel.agents" })}
-                subagents={model.runningSubagentWorks}
-                endedSubagentCount={canRenderEndedAgents ? endedSubagentCount : 0}
-                onCancelBackgroundWork={onCancelBackgroundWork}
-                open={agentSectionOpen}
-                onOpenChange={onAgentSectionOpenChange}
-                separated={
-                  canRenderGit ||
-                  canRenderGoal ||
-                  canRenderSessionPlans ||
-                  canRenderPlan ||
-                  canRenderTerminals
-                }
-                parentSessionId={parentSessionId}
-                rootSessionId={rootSessionId}
-                onOpenSubagentSession={onOpenSubagentSession}
-                onOpenSubagentDirectory={onOpenSubagentDirectory}
               />
             ) : null}
           </div>

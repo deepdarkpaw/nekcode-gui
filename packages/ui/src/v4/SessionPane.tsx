@@ -914,7 +914,6 @@ export function SessionPane({
   const [paneLocalSummaryPanelVariantOverride, setPaneLocalSummaryPanelVariantOverride] =
     useState<ChatViewSummaryPanelVariant | null>(null);
   const [terminalSectionOpen, setTerminalSectionOpen] = useState(false);
-  const [agentSectionOpen, setAgentSectionOpen] = useState(false);
   const [dropTargetController, setDropTargetController] =
     useState<ConversationDropTargetController | null>(null);
   const handleDropTargetControllerChange = useCallback(
@@ -3454,9 +3453,7 @@ export function SessionPane({
         gitWorktreeChangeSummary,
         goal: selectionSideChat ? null : (snapshot?.goal ?? null),
         sessionPlans: state.sessionPlans,
-        plan: snapshot?.plan ?? null,
         backgroundWorks: snapshot?.backgroundWorks ?? [],
-        runningSubagents: subagents.running,
       }),
     [
       isOfficeMode,
@@ -3465,44 +3462,26 @@ export function SessionPane({
       gitWorktreeChangeSummary,
       snapshot?.backgroundWorks,
       snapshot?.goal,
-      snapshot?.plan,
       state.sessionPlans,
       selectionSideChat,
-      subagents.running,
       workspacePath,
     ],
   );
-  const runningBackgroundWorkCount =
-    statusPanelModel.runningBashWorks.length + statusPanelModel.runningSubagentWorks.length;
+  // 子代理由 nek 状态槽展示；面板的实时活动只剩后台终端。
   const runningTerminalCount = statusPanelModel.runningBashWorks.length;
-  const runningAgentCount = statusPanelModel.runningSubagentWorks.length;
   useEffect(() => {
     setTerminalSectionOpen(false);
-    setAgentSectionOpen(false);
   }, [sessionId]);
   useEffect(() => {
     if (runningTerminalCount === 0) {
       setTerminalSectionOpen(false);
     }
   }, [runningTerminalCount]);
-  useEffect(() => {
-    if (runningAgentCount === 0) {
-      setAgentSectionOpen(false);
-    }
-  }, [runningAgentCount]);
   const handleOpenRunningBackgroundWorks = useCallback(() => {
-    if (runningBackgroundWorkCount === 0) return;
-    // 产品规则：Composer 是全部实时活动的入口；分区拆开后一次点击仍要展开所有非空类型，
-    // 但两个区块后续保持独立折叠状态，不能再共享一个 open 布尔值。
-    setTerminalSectionOpen(runningTerminalCount > 0);
-    setAgentSectionOpen(runningAgentCount > 0);
+    if (runningTerminalCount === 0) return;
+    setTerminalSectionOpen(true);
     handleSummaryPanelVariantChange("panel");
-  }, [
-    handleSummaryPanelVariantChange,
-    runningAgentCount,
-    runningBackgroundWorkCount,
-    runningTerminalCount,
-  ]);
+  }, [handleSummaryPanelVariantChange, runningTerminalCount]);
   const statusPanelVariant = resolveConversationStatusPanelVariant({
     variantOverride: effectiveSummaryPanelVariantOverride,
   });
@@ -3916,12 +3895,11 @@ export function SessionPane({
       onSelectThought={handleSelectThought}
       onSwitchMode={handleSwitchMode}
       onOpenRunningBackgroundWorks={
-        sessionId && runningBackgroundWorkCount > 0 ? handleOpenRunningBackgroundWorks : undefined
+        sessionId && runningTerminalCount > 0 ? handleOpenRunningBackgroundWorks : undefined
       }
       // 父轮结束后 subagents.running 的目录投影可能短暂落后于仍为 running 的
       // backgroundWorks；Composer 若直接读目录会提前隐藏 Agent 入口。这里复用状态面板按
       // childSessionId 精确回退后的计数，让两个入口共享同一份运行态真值。
-      runningSubagentCount={runningAgentCount}
       onRecoverCustomModelSelection={handleRecoverCustomModelSelection}
       error={composerError}
       onDismissError={handleDismissComposerError}
@@ -4116,19 +4094,13 @@ export function SessionPane({
             activeTaskChangeSummary={activeTaskChangeSummary}
             goal={selectionSideChat ? null : (snapshot?.goal ?? null)}
             sessionPlans={state.sessionPlans}
-            plan={snapshot?.plan ?? null}
             backgroundWorks={snapshot?.backgroundWorks ?? []}
-            runningSubagents={subagents.running}
-            endedSubagentCount={subagents.endedTotal}
-            rootSessionId={rootSessionId ?? sessionId ?? undefined}
             parentSessionId={sessionId ?? undefined}
             layoutMode={statusPanelLayout}
             summaryPanelVariantOverride={effectiveSummaryPanelVariantOverride}
             onVariantChange={handleSummaryPanelVariantChange}
             terminalSectionOpen={terminalSectionOpen}
             onTerminalSectionOpenChange={setTerminalSectionOpen}
-            agentSectionOpen={agentSectionOpen}
-            onAgentSectionOpenChange={setAgentSectionOpen}
             onRefreshGit={onRefreshGit}
             onOpenGitReview={onOpenGitReview}
             onPauseGoal={
@@ -4157,10 +4129,6 @@ export function SessionPane({
                 : undefined
             }
             onCancelBackgroundWork={readOnly ? undefined : handleCancelBackgroundWork}
-            onOpenSubagentSession={onOpenSubagentSession ? handleOpenSubagentSession : undefined}
-            onOpenSubagentDirectory={
-              onOpenSubagentDirectory ? handleOpenSubagentDirectory : undefined
-            }
           />
         ) : null}
 
