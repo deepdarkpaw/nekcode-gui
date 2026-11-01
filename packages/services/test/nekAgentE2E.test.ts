@@ -110,7 +110,17 @@ test(
       assert.equal(stats.sessionId, created.sessionId);
       const summaries = await adapter.listNekSessions(target);
       assert.ok(summaries.some((summary) => summary.id === created.sessionId));
-      const beforeResume = adapter.readNekSession({ ...target, sessionId: created.sessionId });
+      await waitFor(
+        () =>
+          statusEvents(statusFrames, created.sessionId).some(
+            (event) => event.type === "agent_settled",
+          ),
+        60_000,
+      );
+      const beforeResume = await adapter.readNekSession({
+        ...target,
+        sessionId: created.sessionId,
+      });
       await adapter.closeNekSession({ ...target, sessionId: created.sessionId });
       await waitFor(() => statusFrames.some((frame) => frame.kind === "closed"), 10_000);
       const resumed = await adapter.resumeNekSession({
@@ -120,9 +130,62 @@ test(
           summaries.find((summary) => summary.id === created.sessionId)?.path ??
           "",
       });
-      assert.deepEqual((await beforeResume).rows, resumed.conversation.rows);
+      assert.deepEqual(beforeResume.rows, resumed.conversation.rows);
       frameSubscription.dispose();
       statusSubscription.dispose();
+
+      // A full application restart loses every in-memory binding. Open only by the disk id,
+      // exactly like SessionDataLayer.subscribe does, without an explicit legacy resume call.
+      await adapter.dispose();
+      adapter = createNekAgentServiceAdapter({
+        guiInfo,
+        cwd: projectDir,
+        askProjectTrust: () => true,
+      });
+      const reopenedFrames: unknown[] = [];
+      const reopenedStatus: NekStatusFrame[] = [];
+      adapter.onDynamicConversationFrame(target)((frame) => reopenedFrames.push(frame));
+      adapter.onDynamicNekStatusFrame(target)((frame) => reopenedStatus.push(frame));
+      assert.equal(adapter.resolveSessionKey(target, created.sessionId), undefined);
+      await adapter.subscribeConversationV4({ ...target, sessionId: created.sessionId });
+      const restored = await adapter.readNekSession({ ...target, sessionId: created.sessionId });
+      const tool = restored.rows.window.find(
+        (row) => row.kind === "toolCall" && row.toolName === "ls",
+      );
+      assert.ok(tool?.kind === "toolCall");
+      assert.deepEqual(tool.input, { path: "." });
+      assert.equal(tool.inputText, JSON.stringify({ path: "." }, null, 2));
+      assert.equal(tool.status, "success");
+      assert.ok(
+        restored.rows.window.some(
+          (row) => row.kind === "assistantText" && row.text.includes("listing is complete"),
+        ),
+      );
+      assert.ok(reopenedFrames.length > 0);
+      await adapter.sendNekConversationCommandV4({
+        target,
+        envelope: {
+          commandId: "e2e-after-restart",
+          clientId: "e2e",
+          sessionId: created.sessionId,
+          type: "sendText",
+          payload: { text: "Continue this saved session." },
+          issuedAt: Date.now(),
+        },
+      });
+      await waitFor(
+        () =>
+          statusEvents(reopenedStatus, created.sessionId).some(
+            (event) => event.type === "agent_settled",
+          ),
+        60_000,
+      );
+      const continued = await adapter.readNekSession({ ...target, sessionId: created.sessionId });
+      assert.ok(
+        continued.rows.window.some(
+          (row) => row.kind === "userInput" && row.text === "Continue this saved session.",
+        ),
+      );
     } finally {
       if (adapter) await adapter.dispose();
       if (server) await close(server);

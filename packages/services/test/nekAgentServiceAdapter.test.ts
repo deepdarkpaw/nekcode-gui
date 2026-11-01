@@ -599,7 +599,7 @@ test("surfaces subagent RPC failures and closed-session errors", async () => {
     );
     await assert.rejects(
       adapter.getSubagentTranscript({ ...target, sessionId: "missing", id: "child-1" }),
-      /nek session missing is not open/u,
+      /nek session missing was not found/u,
     );
     session.invalidExtensions.add("nek.list_agent_types");
     await assert.rejects(

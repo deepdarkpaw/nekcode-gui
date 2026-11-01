@@ -19,9 +19,8 @@ import {
   isPlanPreviewDetails,
   isRedactedThinking,
   toEpochMs,
-  toolResultDisplay,
-  toolResultText,
 } from "./nekRows.js";
+import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentDetails } from "./nekLiveTools.js";
@@ -243,25 +242,16 @@ function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessag
   const entityId = `tool:${result.toolCallId}`;
   const rowId = ctx.store.allocate(entityId);
   ctx.toolRows.set(result.toolCallId, rowId);
-  const text = toolResultText(result);
   if (result.details !== undefined) ctx.toolDetails.set(result.toolCallId, result.details);
-  const existing = ctx.store.getRow(rowId);
   ctx.store.add(
-    buildToolCallRow(
+    mergeToolResultRow(
       rowIdentity(entityId, rowId, currentTurnId(ctx), toEpochMs(result.timestamp)),
+      ctx.store.getRow(rowId),
       {
         toolCallId: result.toolCallId,
         toolName: result.toolName,
-        status: result.isError ? "error" : "success",
-        inputText: existing?.kind === "toolCall" ? existing.inputText : "",
-        ...(existing?.kind === "toolCall" && existing.input !== undefined
-          ? { input: existing.input }
-          : {}),
-        output: { text, display: toolResultDisplay(result.toolName, result, text) },
-        ...(result.isError ? { error: { code: "tool_error", message: text.slice(0, 2000) } } : {}),
-        ...(existing?.kind === "toolCall" && existing.startedAt !== undefined
-          ? { startedAt: existing.startedAt }
-          : {}),
+        result,
+        isError: result.isError,
         endedAt: toEpochMs(result.timestamp),
       },
     ),

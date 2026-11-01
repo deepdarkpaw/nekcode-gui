@@ -21,10 +21,13 @@ import {
 } from "./nekAgentStatusChannel.js";
 import type { NekSessionBinding, NekWorkspaceTarget } from "./types.js";
 
-/** 薄壳依赖的适配器内部面：服务实例与绑定解析。 */
+/** 薄壳依赖的适配器内部面：服务实例与按需恢复。 */
 interface NekAgentStatusSurface {
   service: NekAgentService;
-  requireBinding(target: NekWorkspaceTarget, sessionId: string): NekSessionBinding;
+  ensureNekSessionBinding(
+    target: NekWorkspaceTarget,
+    sessionId: string,
+  ): Promise<NekSessionBinding>;
 }
 
 /** `Object.assign` 挂到适配器上的状态方法（适配器用 `declare readonly` 补接口类型）。 */
@@ -48,7 +51,7 @@ export function createNekAgentStatusFeed(
   surface: NekAgentStatusSurface,
   logger?: NekStatusChannelLogger,
 ): { channel: NekAgentStatusChannel; methods: NekAgentStatusMethods } {
-  const { service, requireBinding } = surface;
+  const { service } = surface;
   /** 权威快照：只读会话没有活进程，`commands.getStatusSnapshot` 会直接报错。 */
   const readSnapshot = async (sessionKey: string): Promise<NekStatusSnapshot> =>
     await service.runSessionCommand(
@@ -65,45 +68,53 @@ export function createNekAgentStatusFeed(
   );
   return {
     channel,
-    methods: createNekAgentStatusMethods(service, requireBinding, channel, readSnapshot),
+    methods: createNekAgentStatusMethods(
+      service,
+      (target, sessionId) => surface.ensureNekSessionBinding(target, sessionId),
+      channel,
+      readSnapshot,
+    ),
   };
 }
 
 function createNekAgentStatusMethods(
   service: NekAgentService,
-  requireBinding: NekAgentStatusSurface["requireBinding"],
+  ensureNekSessionBinding: NekAgentStatusSurface["ensureNekSessionBinding"],
   channel: NekAgentStatusChannel,
   readSnapshot: (sessionKey: string) => Promise<NekStatusSnapshot>,
 ): NekAgentStatusMethods {
-  /** renderer 的 sessionId → 服务内部会话键；未打开的会话直接报错，不做兜底。 */
-  const sessionKeyOf = (params: NekWorkspaceTarget & { sessionId: string }): string =>
-    requireBinding(params, params.sessionId).sessionKey;
+  /** renderer 的 sessionId → 服务内部会话键；历史会话按需恢复后再执行动作。 */
+  const sessionKeyOf = async (
+    params: NekWorkspaceTarget & { sessionId: string },
+  ): Promise<string> => (await ensureNekSessionBinding(params, params.sessionId)).sessionKey;
   return {
     onDynamicNekStatusFrame: (target) => channel.onDynamic(target),
     getNekStatusSnapshot: async (params): Promise<NekStatusSnapshot> =>
-      boundNekStatusSnapshot(await readSnapshot(sessionKeyOf(params))),
+      boundNekStatusSnapshot(await readSnapshot(await sessionKeyOf(params))),
     getNekSessionStats: async (params): Promise<NekSessionStats> =>
-      await service.getStats(sessionKeyOf(params)),
+      await service.getStats(await sessionKeyOf(params)),
     clearNekQueue: async (params): Promise<NekStatusQueue> =>
-      boundNekStatusQueue(await service.clearQueue(sessionKeyOf(params))),
+      boundNekStatusQueue(await service.clearQueue(await sessionKeyOf(params))),
     requeueNekQueue: async (params): Promise<void> => {
-      const sessionKey = sessionKeyOf(params);
+      const sessionKey = await sessionKeyOf(params);
       await service.runSessionCommand(
         sessionKey,
         async (context) => await commands.requeueQueue(context, sessionKey, params.queue),
       );
     },
     abortNekRetry: async (params): Promise<void> => {
-      const sessionKey = sessionKeyOf(params);
+      const sessionKey = await sessionKeyOf(params);
       await service.runSessionCommand(
         sessionKey,
         async (context) => await commands.abortRetry(context, sessionKey),
       );
     },
-    abortNekCompaction: async (params): Promise<void> => await service.abort(sessionKeyOf(params)),
-    abortNekSession: async (params): Promise<void> => await service.abort(sessionKeyOf(params)),
+    abortNekCompaction: async (params): Promise<void> =>
+      await service.abort(await sessionKeyOf(params)),
+    abortNekSession: async (params): Promise<void> =>
+      await service.abort(await sessionKeyOf(params)),
     compactNekSession: async (params): Promise<void> => {
-      await service.compact({ sessionKey: sessionKeyOf(params) });
+      await service.compact({ sessionKey: await sessionKeyOf(params) });
     },
   };
 }

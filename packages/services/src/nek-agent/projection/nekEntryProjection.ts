@@ -21,9 +21,8 @@ import {
   isPlanPreviewDetails,
   isRedactedThinking,
   toEpochMs,
-  toolResultDisplay,
-  toolResultText,
 } from "./nekRows.js";
+import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProjectionSnapshot.js";
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
@@ -228,21 +227,19 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
           const rowId =
             toolRows.get(result.toolCallId) ?? allocator.resolve(`tool:${result.toolCallId}`);
           toolRows.set(result.toolCallId, rowId);
-          const text = toolResultText(result);
-          const row = buildToolCallRow(
-            identity(`tool:${result.toolCallId}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-            {
-              toolCallId: result.toolCallId,
-              toolName: result.toolName,
-              status: result.isError ? "error" : "success",
-              output: { text, display: toolResultDisplay(result.toolName, result, text) },
-              ...(result.isError
-                ? { error: { code: "tool_error", message: text.slice(0, 2000) } }
-                : {}),
-              endedAt: toEpochMs(entry.timestamp),
-            },
+          push(
+            mergeToolResultRow(
+              identity(`tool:${result.toolCallId}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
+              rows.find((row) => row.rowId === rowId),
+              {
+                toolCallId: result.toolCallId,
+                toolName: result.toolName,
+                result,
+                isError: result.isError,
+                endedAt: toEpochMs(entry.timestamp),
+              },
+            ),
           );
-          push(row);
           break;
         }
         if (message.role === "bashExecution") {
