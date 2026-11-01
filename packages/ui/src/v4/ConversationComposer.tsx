@@ -123,6 +123,7 @@ import {
   type ComposerAutoFocusOptions,
 } from "@/v4/composer/composerAutoFocus.js";
 import { V4_DRAFT_SCOPE_ROOT, type V4ComposerDraft } from "@/v4/composer/composerDraftStore.js";
+import { restorePersistedComposerDraftIntoInput } from "@/v4/composer/restoreComposerDraft.js";
 import {
   resolveOppositeFollowupDelivery,
   resolveFollowupModifierTooltip,
@@ -203,36 +204,6 @@ interface ExternalTextInsertRequest {
   text: string;
   mention?: ComposerMentionPrefill;
   mode?: "replace" | "prepend-if-missing";
-}
-
-function restorePersistedComposerDraftIntoInput({
-  draft,
-  inputApi,
-  onEditorStateError,
-}: {
-  draft: Pick<V4ComposerDraft, "editorStateJson" | "mention" | "text">;
-  inputApi: Pick<
-    LexicalChatInputHandle,
-    "getMarkdown" | "setEditorStateJson" | "setMention" | "setText"
-  >;
-  onEditorStateError?: (error: unknown) => void;
-}): string {
-  if (draft.editorStateJson) {
-    try {
-      inputApi.setEditorStateJson(draft.editorStateJson);
-      return inputApi.getMarkdown();
-    } catch (error) {
-      onEditorStateError?.(error);
-    }
-  }
-  if (draft.mention && draft.text.startsWith(draft.mention.markdown)) {
-    // Workspace 插件详情会卸载聊天 Composer。结构化 mention 必须从共享草稿事实源恢复，
-    // 不能只依赖一次性插入事件，否则重挂载时会退化成 canonical 普通文本。
-    inputApi.setMention(draft.mention, draft.text.slice(draft.mention.markdown.length));
-    return draft.text;
-  }
-  inputApi.setText(draft.text);
-  return draft.text;
 }
 
 function applyExternalTextInsertRequestToComposer({
@@ -1157,6 +1128,7 @@ function ConversationComposerImpl({
           !hasPendingConversationSelections &&
           !submittedShareContext) ||
         pendingRef.current ||
+        snapshotRef.current?.control.readOnly ||
         !submissionReady ||
         (createSubmissionFromComposer !== undefined && submission === null) ||
         attachmentsApi.hasUnreadyAttachments
@@ -2097,7 +2069,11 @@ function ConversationComposerImpl({
           workspaceIdentity={workspaceIdentity}
           taskId={sessionId}
           skillCatalogSessionId={skillCatalogSessionId}
-          placeholder={placeholder}
+          placeholder={
+            snapshot?.control.readOnly
+              ? intl.formatMessage({ id: "nek.conversation.readOnlyComposer" })
+              : placeholder
+          }
           disabled={disabled || mode === "reject"}
           submitting={pending}
           submitDisabled={pending || !routingAllowsSend || !attachmentsReady || !submissionReady}

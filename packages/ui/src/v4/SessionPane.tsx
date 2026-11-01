@@ -113,6 +113,8 @@ import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHe
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
 import { PendingCommandRecoveryBanner } from "@/v4/PendingCommandRecoveryBanner.js";
+import { useConversationFork } from "@/v4/useConversationFork.js";
+import { ConversationLockedBanner } from "@/v4/ConversationLockedBanner.js";
 import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
@@ -491,6 +493,7 @@ export function SessionPane({
   const [lease, setLease] = useState<SessionLease | null>(null);
   const state = useConversationProjection(lease);
   const snapshot = state.snapshot;
+  const sessionLocked = snapshot?.sessionId === sessionId && !!snapshot.control.readOnly;
 
   const shareDraft = useConversationShareSelectionStore((storeState) =>
     sessionId ? storeState.drafts[sessionId] : undefined,
@@ -2580,30 +2583,15 @@ export function SessionPane({
     [clearQueueEditOperation],
   );
 
-  const handleFork = useCallback(
-    (target: ConversationRowTarget) => {
-      const current = snapshotRef.current;
-      if (!sessionId || current === null) return;
-      // forkAssistant 是 CAS 命令：baseRevision 取当前投影 revision。
-      void dispatchCommand(
-        "forkAssistant",
-        { target },
-        sessionId,
-        current.revision,
-        current.logEpoch,
-      ).then((ack) => {
-        if (ack.status !== "accepted" && ack.status !== "duplicate") {
-          logger.warn(`[v4-pane] fork 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-          return;
-        }
-        if (ack.result?.type === "forkAssistant") {
-          // 原地切到 child session（与新建会话同一选择路径）。
-          onSessionCreated?.(ack.result.sessionId);
-        }
-      });
-    },
-    [dispatchCommand, onSessionCreated, sessionId],
-  );
+  const handleFork = useConversationFork({
+    sessionId,
+    workspacePath,
+    workspaceIdentity,
+    snapshotRef,
+    dispatch: dispatchCommand,
+    onSessionCreated,
+    onError: setSendSubmissionError,
+  });
 
   const handleEdit = useCallback(
     async (
@@ -3292,8 +3280,8 @@ export function SessionPane({
   // retry 的产品裁决属于行级权威投影。这里仅提供命令能力，入口是否展示
   // 完全读取 row.actions.canRetry，禁止再用 pane phase 形成第二套 guard。
   const retryActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
-  // fork 可用性完全由 row.actions.canFork（CLI stable resolver 投影）裁决；pane 只提供命令回调。
-  const forkActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
+  // Fork eligibility belongs to the persisted user row; lock admission disables writes.
+  const forkActionsEnabled = !readOnly && !sessionLocked && !selectionSideChat && Boolean(sessionId);
   // editUserQuery 已由 command 层防御 latest real user query，并在 running
   // 提交时先 stop barrier 再 rewind/rerun；UI 不应再用 completed gate 把入口整轮隐藏。
   const editActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
@@ -3859,7 +3847,7 @@ export function SessionPane({
       onExternalTextInsertApplied={handleExternalTextInsertApplied}
       autoFocusEnabled={focused}
       paneFocused={focused}
-      disabled={connecting || draftRuntimeRebuilding || queueEditActiveForCurrentComposer}
+      disabled={sessionLocked || connecting || draftRuntimeRebuilding || queueEditActiveForCurrentComposer}
       workspacePath={workspacePath}
       workspaceIdentity={workspaceIdentity}
       remoteSessionId={remoteSessionId ?? undefined}
@@ -3995,6 +3983,9 @@ export function SessionPane({
       ) : null}
       {sessionId && nekStatusCallbacksForPane ? (
         <NekSessionStatusSlot sessionKey={sessionId} callbacks={nekStatusCallbacksForPane} />
+      ) : null}
+      {sessionLocked && snapshot?.control.readOnly ? (
+        <ConversationLockedBanner readOnly={snapshot.control.readOnly} onRetry={handleRetrySubscribe} retrying={connecting} />
       ) : null}
       {composerNode}
     </>

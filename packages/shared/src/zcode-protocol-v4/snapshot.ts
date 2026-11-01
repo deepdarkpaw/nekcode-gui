@@ -134,6 +134,19 @@ export const sessionControlSchema = z.object({
   activeWorks: z.array(activeWorkSummarySchema),
   lastError: sessionErrorInfoSchema.nullable(),
   apiRetry: apiRetryStateSchema.nullable(),
+  readOnly: z
+    .object({
+      reason: z.literal("locked"),
+      holder: z
+        .object({
+          pid: z.number(),
+          hostname: z.string(),
+          kind: z.enum(["tui", "rpc", "print", "json"]),
+          startedAt: z.string(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 export type SessionControl = z.infer<typeof sessionControlSchema>;
 

@@ -203,6 +203,34 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     }
   }
 
+  /** Fork replaces nek's runtime. Reopen its actual path so pool keys and UI scopes stay session-bound. */
+  async forkSession(input: {
+    sessionKey: string;
+    entryId: string;
+  }): Promise<{ cancelled: true } | { cancelled: false; text: string; session: NekSessionResult }> {
+    const record = this.requireWritable(input.sessionKey);
+    const forked = await this.withSession(input.sessionKey, async () => {
+      const result = await commands.fork(this.commandContext(), input);
+      if (result.cancelled) return null;
+      try {
+        const state = await this.requireProcess(record).client.call({ type: "get_state" });
+        if (
+          !state.sessionFile ||
+          state.sessionId === record.sessionId ||
+          typeof result.text !== "string"
+        )
+          throw new Error("nek fork did not return a new session and editor text");
+        return { path: state.sessionFile, text: result.text };
+      } finally {
+        // The process now owns the fork, not the source. Never leave a source-keyed writer behind.
+        await this.closeSession(input.sessionKey);
+      }
+    });
+    if (!forked) return { cancelled: true };
+    const session = await this.resumeSession({ sessionPath: forked.path, cwd: record.cwd });
+    return { cancelled: false, text: forked.text, session };
+  }
+
   async closeSession(sessionKey: string | { sessionKey: string }): Promise<boolean> {
     const record = this.requireRecord(
       typeof sessionKey === "string" ? sessionKey : sessionKey.sessionKey,

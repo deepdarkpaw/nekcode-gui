@@ -2,6 +2,7 @@ import type { NekMode, NekThinkingLevel } from "@zcode/shared/nek-protocol";
 import type { CommandAck, CommandsQueryResult } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionResult } from "../service/types.js";
 import { toNekImages } from "./attachmentImages.js";
+import { forkUserMessage } from "./nekForkUserMessage.js";
 import {
   acceptedCommand,
   asRecord,
@@ -30,6 +31,7 @@ export interface NekCommandContext {
     thinking?: NekThinkingLevel;
     mode?: NekMode;
   }): Promise<NekSessionResult>;
+  bindSession(target: NekWorkspaceTarget, result: NekSessionResult): void;
   ensureBinding(target: NekWorkspaceTarget, sessionId: string): Promise<NekSessionBinding>;
   removeBinding(target: NekWorkspaceTarget, sessionId: string): void;
 }
@@ -70,6 +72,8 @@ export async function sendConversationCommand(
   const binding = await context.ensureBinding(input.target, envelope.sessionId);
   const revision = context.service.conversationSnapshot(binding.sessionKey).revision;
   switch (envelope.type) {
+    case "forkUserMessage":
+      return await forkUserMessage(context, input.target, binding, envelope);
     case "sendText": {
       await applySelection(context.service, binding.sessionKey, payload);
       const images = await toNekImages(payload.attachments);

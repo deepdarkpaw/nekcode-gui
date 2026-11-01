@@ -119,8 +119,8 @@ export const commandPayloadSchemas = {
   // compact 是输入型维护命令：idle 时立即执行，busy/held 时进入 FIFO。
   // 因为 admission 与当前 revision 无关，不走 CAS；sourceCommandId 提供幂等边界。
   compact: z.object({}),
-  // running 时对稳定 assistant row 可用。
-  forkAssistant: z.object({ target: conversationRowTargetSchema }),
+  // nek forks before a persisted user message and returns its text to the editor.
+  forkUserMessage: z.object({ target: conversationRowTargetSchema }),
   applyFileRewind: z.object({ target: conversationRowTargetSchema }),
   editUserQuery: z.object({
     target: conversationRowTargetSchema,
@@ -214,7 +214,7 @@ export const BACKGROUND_WORK_CANCEL_REJECTED_FAULT_PREFIX =
 // CAS ✓ 的命令：信封必带 baseRevision。
 export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Set([
   "applyFileRewind",
-  "forkAssistant",
+  "forkUserMessage",
   "editUserQuery",
   "retryTurn",
   "setAssistantFeedback",
@@ -232,7 +232,7 @@ export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Se
 
 export const ROW_TARGETING_COMMANDS: ReadonlySet<CommandType> = new Set([
   "applyFileRewind",
-  "forkAssistant",
+  "forkUserMessage",
   "editUserQuery",
   "retryTurn",
   "setAssistantFeedback",
@@ -301,7 +301,12 @@ export function parseCommandEnvelope(
 // ── ACK ──
 export const commandResultSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.enum(["createSession", "createSelectionSideSession", "forkAssistant"]),
+    type: z.literal("forkUserMessage"),
+    sessionId: z.string(),
+    text: z.string(),
+  }),
+  z.object({
+    type: z.enum(["createSession", "createSelectionSideSession"]),
     sessionId: z.string(),
     input: z
       .object({

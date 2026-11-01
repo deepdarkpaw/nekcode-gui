@@ -342,6 +342,7 @@ export abstract class NekAgentServiceRuntimeBase {
       leafId: snapshot.leafId,
       title: snapshot.session.name,
     });
+    record.projector.applyReadOnly({ reason: "locked", ...(holder ? { holder } : {}) });
     return this.result(record);
   }
 
@@ -370,9 +371,6 @@ export abstract class NekAgentServiceRuntimeBase {
       case "extension_ui_cancel":
         if (record.phase === "waiting_input")
           this.setPhase(record, record.state?.isStreaming ? "running" : "idle");
-        break;
-      case "extension_error":
-        this.setPhase(record, "error");
         break;
       default:
         break;

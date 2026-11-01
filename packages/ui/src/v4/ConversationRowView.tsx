@@ -108,6 +108,7 @@ import { ConversationSelectionReferenceChip } from "@/v4/composer/ConversationSe
 import { ConversationFileRewindDialog } from "@/v4/ConversationFileRewindDialog.js";
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
+import { ConversationExtensionErrors } from "@/v4/ConversationExtensionErrors.js";
 import {
   ConversationUserInputEpilogue,
   splitUserInputEpilogue,
@@ -226,7 +227,7 @@ interface ConversationRowViewProps {
   row: ConversationRow;
   /** 渲染上下文（theme/codePreviewSettings/workspacePath）；宿主保证引用稳定。 */
   context: ConversationRowRenderContext;
-  /** 完成态 assistant 行的 fork 入口（forkAssistant command）。 */
+  /** Fork before a persisted user message (nek fork semantics). */
   onFork?: (target: ConversationRowTarget) => void;
   /** assistant entity 反馈 CAS；UI 先乐观更新，命令失败时回滚。 */
   onFeedbackChange?: AssistantFeedbackHandler;
@@ -831,12 +832,14 @@ const UserInputAttachmentList = memo(function UserInputAttachmentList({
 const UserInputRowView = memo(function UserInputRowView({
   row,
   context,
+  onFork,
   onEdit,
   editWorkspaceRewindAvailability,
   status,
 }: {
   row: UserInputRow;
   context: ConversationRowRenderContext;
+  onFork?: (target: ConversationRowTarget) => void;
   onEdit?: UserInputEditHandler;
   editWorkspaceRewindAvailability?: EditWorkspaceRewindAvailability;
   status?: string;
@@ -1223,6 +1226,17 @@ const UserInputRowView = memo(function UserInputRowView({
           rowId={row.rowId}
           label={intl.formatMessage({ id: "chat.message.copy" })}
         />
+        {onFork && row.entityId && row.actions?.canFork === true ? (
+          <MessageAction
+            aria-label={intl.formatMessage({ id: "nek.conversation.forkUser" })}
+            label={intl.formatMessage({ id: "nek.conversation.forkUser" })}
+            tooltip={intl.formatMessage({ id: "nek.conversation.forkUser" })}
+            data-testid={testId(TID_V4_FORK, String(row.rowId))}
+            onClick={() => onFork({ rowId: row.rowId, entityId: row.entityId! })}
+          >
+            <TrendingUpDownIcon className="size-3.5" />
+          </MessageAction>
+        ) : null}
         {onEdit && row.entityId ? (
           <MessageAction
             label={intl.formatMessage({ id: "chat.message.edit" })}
@@ -1247,7 +1261,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   hookInvocations,
   sessionId,
   turnId,
-  onFork,
   onFeedbackChange,
   className,
 }: {
@@ -1259,7 +1272,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   hookInvocations?: readonly HookInvocationRow[];
   sessionId?: string | null;
   turnId?: string;
-  onFork?: (target: ConversationRowTarget) => void;
   onRetry?: (target: ConversationRowTarget) => void;
   onFeedbackChange?: AssistantFeedbackHandler;
   className?: string;
@@ -1274,7 +1286,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   const dislikeLabel = intl.formatMessage({
     id: localFeedback === "dislike" ? "chat.message.disliked" : "chat.message.dislike",
   });
-  const forkLabel = intl.formatMessage({ id: "chat.message.fork" });
   const timeLabel = formatMessageTimeLabel(createdAt, locale, intl);
   const resolveTooltip = (label: string): string | undefined => label;
 
@@ -1310,11 +1321,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
     },
     [entityId, localFeedback, onFeedbackChange, platform, rowId, sessionId],
   );
-  const handleFork = useCallback(() => {
-    if (entityId) {
-      onFork?.({ rowId, entityId });
-    }
-  }, [entityId, onFork, rowId]);
   return (
     <MessageActions className={cn(className)}>
       <CopyRowAction
@@ -1363,17 +1369,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
           </MessageAction>
         </>
       ) : null}
-      {onFork && entityId ? (
-        <MessageAction
-          aria-label={forkLabel}
-          label={forkLabel}
-          tooltip={resolveTooltip(forkLabel)}
-          data-testid={testId(TID_V4_FORK, String(rowId))}
-          onClick={handleFork}
-        >
-          <TrendingUpDownIcon className="size-3.5" />
-        </MessageAction>
-      ) : null}
       {turnId && hookInvocations ? (
         <ConversationHookDetailsAction rows={hookInvocations} turnId={turnId} />
       ) : null}
@@ -1389,7 +1384,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
 const AssistantTextRowView = memo(function AssistantTextRowView({
   row,
   context,
-  onFork,
   onRetry,
   onFeedbackChange,
   hideActions,
@@ -1401,7 +1395,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
 }: {
   row: AssistantTextRow;
   context: ConversationRowRenderContext;
-  onFork?: (target: ConversationRowTarget) => void;
   onRetry?: (target: ConversationRowTarget) => void;
   onFeedbackChange?: AssistantFeedbackHandler;
   hideActions?: boolean;
@@ -1484,7 +1477,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
           createdAt={row.createdAt}
           feedback={readAssistantFeedback(row)}
           sessionId={context.sessionId}
-          onFork={onFork}
           onRetry={onRetry}
           onFeedbackChange={onFeedbackChange}
           className={cn(
@@ -1898,6 +1890,7 @@ function ConversationRowViewImpl({
           context={context}
           onEdit={onEdit}
           editWorkspaceRewindAvailability={editWorkspaceRewindAvailability}
+          onFork={onFork}
           status={userInputStatus}
         />
       );
@@ -1906,7 +1899,6 @@ function ConversationRowViewImpl({
         <AssistantTextRowView
           row={row}
           context={context}
-          onFork={onFork}
           onRetry={onRetry}
           onFeedbackChange={onFeedbackChange}
           hideActions={hideAssistantActions}
@@ -1926,7 +1918,13 @@ function ConversationRowViewImpl({
     case "turnHeader":
       return <TurnHeaderRowView row={row} />;
     case "timelineMarker":
-      return <TimelineMarkerRowView row={row} context={context} />;
+      return row.marker.type === "extensionError" ? (
+        <RowShell rowId={row.rowId}>
+          <ConversationExtensionErrors marker={row.marker} />
+        </RowShell>
+      ) : (
+        <TimelineMarkerRowView row={row} context={context} />
+      );
     case "toolCall":
       // 只在 ToolCallBlock 内返回 null 会留下空 RowShell 和多余间距；
       // 在行分发处按同一工具身份规则裁剪，设置关闭时不产生任何 Todo DOM。
