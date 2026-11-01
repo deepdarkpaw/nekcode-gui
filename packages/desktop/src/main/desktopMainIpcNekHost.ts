@@ -33,12 +33,17 @@ import {
   type IRemoteBackend,
 } from "@zcode/server/remote";
 import type { NekConfigHostExecutor } from "../../../services/src/nek-config-api/hostExecutor.js";
+import type { NekLoginPortForward } from "../../../services/src/nek-config-api/runtime.js";
 import { NekRemoteConfigConnectionRegistry } from "./desktopMainIpcNekConfig.js";
+import type { RemoteCredentialSafeStorage } from "./remoteCredentialSafeStorage.js";
+import { desktopRemoteCredentialStore } from "./desktopCredentialBridge.js";
+import { SavedRemoteHostCredentials, savedHostAuthMethod } from "./savedRemoteHostCredentials.js";
 
 interface StoredHost {
   connectionId: string;
   alias: string;
   target: NekRemoteHost["target"];
+  authMethod?: NekRemoteHost["authMethod"];
   fingerprints: NekRemoteHost["fingerprints"];
 }
 
@@ -49,7 +54,6 @@ const GUI_DIR = join(homedir(), ".nek", "gui");
 const HOSTS_PATH = join(GUI_DIR, "hosts.json");
 const ONBOARDING_PATH = join(GUI_DIR, "onboarding.json");
 const MAX_LOG_BYTES = 64 * 1024;
-
 function asErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -142,6 +146,16 @@ async function runLocalCommand(
   return { code, cancelled: signal.aborted, output: output.value };
 }
 
+interface NekSettingsHostServiceOptions {
+  locator?: NekLocator;
+  credentialStore?: Pick<
+    RemoteCredentialSafeStorage,
+    "setCredential" | "getCredential" | "deleteCredential"
+  >;
+  remoteConfigs?: NekRemoteConfigConnectionRegistry;
+  hostsPath?: string;
+}
+
 export class NekSettingsHostService implements INekSettingsHostApi {
   private readonly hostListeners = new Set<HostListener>();
   private readonly localInstallControllers = new Set<AbortController>();
@@ -149,10 +163,19 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     string,
     { controller: AbortController; backend: IRemoteBackend }
   >();
-  private readonly remoteConfigs = new NekRemoteConfigConnectionRegistry();
+  private readonly remoteConfigs: NekRemoteConfigConnectionRegistry;
+  private readonly credentials: SavedRemoteHostCredentials;
+  private readonly hostsPath: string;
   private hosts: StoredHost[] | undefined;
 
-  constructor(private readonly locator = new NekLocator()) {}
+  constructor(options: NekSettingsHostServiceOptions = {}) {
+    this.locator = options.locator ?? new NekLocator();
+    this.credentials = new SavedRemoteHostCredentials(options.credentialStore ?? desktopRemoteCredentialStore);
+    this.remoteConfigs = options.remoteConfigs ?? new NekRemoteConfigConnectionRegistry();
+    this.hostsPath = options.hostsPath ?? HOSTS_PATH;
+  }
+
+  private readonly locator: NekLocator;
 
   async listHosts(): Promise<NekRemoteHost[]> {
     const hosts = await this.readHosts();
@@ -171,8 +194,11 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       connectionId,
       alias: input.alias.trim(),
       target: stripRemoteTargetSecrets(input.target),
+      authMethod: savedHostAuthMethod(input.target),
       fingerprints: current?.fingerprints ?? [],
     };
+    if (current && input.target.kind === "ssh" && !input.target.privateKeyPath && input.target.password === undefined) next.authMethod = current.authMethod;
+    await this.credentials.save(connectionId, input.target, current?.target);
     const index = hosts.findIndex((host) => host.connectionId === connectionId);
     if (index === -1) hosts.push(next);
     else hosts[index] = next;
@@ -186,6 +212,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     const next = hosts.filter((host) => host.connectionId !== connectionId);
     if (next.length === hosts.length) return;
     await this.disconnectRemote(connectionId);
+    await this.credentials.delete(connectionId);
     await this.persistHosts(next);
     this.emitHostsChanged();
   }
@@ -193,7 +220,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
   /** 建立配置读写用的远端连接；主机密钥由 SSH backend 的 known-hosts 存储负责，不伪造指纹。 */
   async connectHost(connectionId: string): Promise<void> {
     const host = await this.requireHost(connectionId);
-    await this.remoteConfigs.connect(connectionId, host.target);
+    await this.remoteConfigs.connect(connectionId, await this.credentials.restore(host.connectionId, host.target));
     this.emitHostsChanged();
   }
 
@@ -205,6 +232,10 @@ export class NekSettingsHostService implements INekSettingsHostApi {
 
   configExecutor(connectionId: string): NekConfigHostExecutor | undefined {
     return this.remoteConfigs.executor(connectionId);
+  }
+
+  forwardLoginPorts(target: NekConfigTarget, ports: number[]): Promise<NekLoginPortForward> {
+    return this.remoteConfigs.forwardLoginPorts(target, ports);
   }
 
   dispose(): void {
@@ -219,7 +250,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     const startedAt = Date.now();
     let backend: IRemoteBackend | undefined;
     try {
-      backend = await createRemoteBackend(host.target);
+      backend = await createRemoteBackend(await this.credentials.restore(host.connectionId, host.target));
       const detected = await detectRemoteNek(backend);
       if (detected.status !== "ready")
         return { ok: false, message: detected.error ?? detected.status };
@@ -237,7 +268,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     onLog: LogListener,
   ): Promise<NekInstallResult> {
     const host = await this.requireHost(connectionId);
-    const backend = await createRemoteBackend(host.target);
+    const backend = await createRemoteBackend(await this.credentials.restore(host.connectionId, host.target));
     try {
       return mapInstallResult(await installRemoteNek(backend, { ...options, onLog }));
     } finally {
@@ -409,13 +440,13 @@ export class NekSettingsHostService implements INekSettingsHostApi {
   }
 
   private async readHosts(): Promise<StoredHost[]> {
-    this.hosts ??= await readJson(HOSTS_PATH, []);
+    this.hosts ??= await readJson(this.hostsPath, []);
     return this.hosts;
   }
 
   private async persistHosts(hosts: StoredHost[]): Promise<void> {
     this.hosts = hosts;
-    await writeJsonAtomic(HOSTS_PATH, hosts);
+    await writeJsonAtomic(this.hostsPath, hosts);
   }
 
   private async requireHost(connectionId: string): Promise<StoredHost> {
@@ -429,7 +460,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       connectionId: host.connectionId,
       alias: host.alias,
       target: host.target,
-      authMethod: "agent",
+      authMethod: host.authMethod ?? savedHostAuthMethod(host.target),
       fingerprints: host.fingerprints,
       state: this.remoteConfigs.has(host.connectionId) ? "connected" : "disconnected",
       nek: this.remoteConfigs.has(host.connectionId)

@@ -7,7 +7,7 @@ import {
 } from "@zcode/shared";
 import { createNekConfigHostBridge } from "./desktopMainIpcNekBridge.js";
 import { createNekIpcHostRouter } from "./desktopMainIpcNekRouter.js";
-import { NekRemoteInteractionHostService } from "./desktopMainIpcNekRemote.js";
+import { desktopRemoteInteraction } from "./desktopRemoteReconnect.js";
 
 interface IpcSuccess {
   ok: true;
@@ -59,7 +59,7 @@ function eventChannel(scope: "config" | "settings-host" | "remote-interaction"):
 
 /** Main-side registration for all settings, onboarding and remote interaction IPC. */
 export function registerNekIpcHandlers(options: IpcLogger): void {
-  const remote = new NekRemoteInteractionHostService();
+  const remote = desktopRemoteInteraction;
   const bridgePromise = createNekConfigHostBridge(options);
   const routerPromise = bridgePromise.then((bridge) => createNekIpcHostRouter(bridge, remote));
   const requestChannels: Array<{

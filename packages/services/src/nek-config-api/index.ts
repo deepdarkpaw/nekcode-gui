@@ -38,6 +38,7 @@ export type {
   NekConfigApiConfig,
   NekConfigApiLogger,
   NekConfigApiOptions,
+  NekLoginPortForward,
   NekConfigSessionHandle,
   NekConfigSessionRegistry,
   NekConfigTargetHost,

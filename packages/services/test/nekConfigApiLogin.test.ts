@@ -1,14 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NEK_STRUCTURED_KINDS } from "@zcode/shared/nek-protocol";
-import type { NekLoginEvent } from "@zcode/shared/nek-protocol";
-import { FakeControlClient, LOCAL, createHarness } from "./nekConfigApiHarness.js";
+import type { NekConfigTarget, NekLoginEvent } from "@zcode/shared/nek-protocol";
+import { FakeControlClient, LOCAL, REMOTE, createHarness } from "./nekConfigApiHarness.js";
 
 /**
  * 登录事件流的两条硬约束：
  * - `startLogin` 返回后界面才订阅，所以订阅时必须**回放**已经发生过的事件；
  * - structured 请求 → `prompt`，撤销 → `prompt_cancelled`，`auth_event` → `auth_event`。
  */
+
+test("remote OAuth login forwards its callback port and releases it after completion", async () => {
+  const control = new FakeControlClient();
+  const calls: Array<{ target: NekConfigTarget; ports: number[] }> = [];
+  let closed = 0;
+  const harness = createHarness({
+    control,
+    forwardLoginPorts: async (target, ports) => {
+      calls.push({ target, ports });
+      return {
+        ports,
+        close: async () => {
+          closed += 1;
+        },
+      };
+    },
+  });
+  const session = await harness.api.startLogin(REMOTE, "anthropic");
+  assert.deepEqual(session.forwardedPorts, [53692]);
+  assert.deepEqual(calls, [{ target: REMOTE, ports: [53692] }]);
+  assert.equal(closed, 0);
+
+  control.completeLogin();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(closed, 1);
+});
 
 test("login events are replayed to a late subscriber", async () => {
   const control = new FakeControlClient();

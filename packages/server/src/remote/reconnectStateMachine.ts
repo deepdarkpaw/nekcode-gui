@@ -77,7 +77,6 @@ export class RemoteReconnectStateMachine {
 
   /** 用户点击立即重试；跳过当前退避但仍从 attempt=1 计数。 */
   retryNow(): void {
-    if (this.currentState.kind === "cancelled") return;
     this.cancelTimer();
     this.generation += 1;
     this.attempt = 0;

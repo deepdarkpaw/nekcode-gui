@@ -48,6 +48,7 @@ export async function createNekConfigHostBridge(logger: {
   });
   const configApi = new NekConfigApi({
     hosts,
+    forwardLoginPorts: (target, ports) => hostApi.forwardLoginPorts(target, ports),
     config: nekConfigApiConfigFromRuntime(loaded.config),
     logger,
   });

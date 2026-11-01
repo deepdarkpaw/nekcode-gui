@@ -78,6 +78,11 @@ export interface NekConfigApiLogger {
   debug?: (...args: unknown[]) => void;
 }
 
+export interface NekLoginPortForward {
+  ports: number[];
+  close(): Promise<void>;
+}
+
 export interface NekConfigApiOptions {
   hosts: NekConfigTargetHost;
   sessions?: NekConfigSessionRegistry;
@@ -87,8 +92,8 @@ export interface NekConfigApiOptions {
     executor: NekConfigHostExecutor;
     logger?: NekConfigApiLogger;
   }) => Promise<NekControlClient>;
-  /** 远程登录的端口转发（host 侧 SSH 实现）；返回实际建立的本机端口。 */
-  forwardLoginPorts?: (target: NekConfigTarget, ports: number[]) => Promise<number[]>;
+  /** 远程登录的端口转发（host 侧 SSH 实现）；调用方必须在登录结束后关闭 lease。 */
+  forwardLoginPorts?: (target: NekConfigTarget, ports: number[]) => Promise<NekLoginPortForward>;
   config?: NekConfigApiConfig;
   logger?: NekConfigApiLogger;
 }
