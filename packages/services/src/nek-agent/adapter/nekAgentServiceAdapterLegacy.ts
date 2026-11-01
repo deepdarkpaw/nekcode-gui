@@ -33,6 +33,7 @@ import {
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
 import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
+import { isListedNekSession } from "./nekSessionListing.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
   if (typeof value !== "object" || value === null) return false;
@@ -102,7 +103,9 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
     },
     async listSessions(input) {
       const summaries = await target.listNekSessions(input);
-      return summaries.map((summary) => legacySessionInfo(input, summary));
+      return summaries
+        .filter(isListedNekSession)
+        .map((summary) => legacySessionInfo(input, summary));
     },
     async listSessionSubagents() {
       return { revision: 0, childSessionIds: [], running: [], ended: { total: 0, items: [] } };

@@ -355,17 +355,14 @@ export class NekAgentService
     await control.client.call({ type: "rename_session", sessionPath: path, name: input.name });
   }
 
+  /** 先关闭持锁的会话进程再删文件：nek 拒绝删除被活进程锁住的会话。 */
   async deleteSession(input: { sessionKey?: string; sessionPath?: string }): Promise<void> {
     const record = input.sessionKey ? this.resolveRecord(input.sessionKey) : undefined;
     const path = input.sessionPath ?? record?.path;
     if (!path) throw new Error("deleteSession requires sessionPath");
+    if (record) await this.closeSession(record.key);
     const control = await this.pool.ensureControl();
     await control.client.call({ type: "delete_session", sessionPath: path });
-    if (!record) return;
-    record.closing = true;
-    this.detachProcess(record);
-    await this.pool.reclaimSession(record.key, "dispose");
-    this.removeRecord(record);
   }
 
   /** 会话目录走控制进程：不需要为列目录启动任何会话进程。 */

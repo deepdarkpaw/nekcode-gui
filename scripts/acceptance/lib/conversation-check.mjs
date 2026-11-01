@@ -129,6 +129,14 @@ export async function checkRestoredSession(session) {
   await clickTaskItem(session, MOCK_FIRST_PROMPT);
   await waitForText(session, MOCK_FINAL_TEXT, "restored conversation history", 120_000);
   await waitForSelector(session, '[data-testid^="v4-row"]', "restored timeline rows");
+  // 草稿页预热会话会被 nek 落盘；没有消息的会话不能出现在侧栏。
+  const taskTitles = await evaluate(
+    session,
+    `[...document.querySelectorAll('[data-testid^="task-item"]')].map((item) => item.innerText.trim())`,
+  );
+  if (taskTitles.length !== 1) {
+    throw new Error(`sidebar should list only the used session: ${JSON.stringify(taskTitles)}`);
+  }
 }
 
 export async function checkStop(session, mock) {

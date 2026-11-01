@@ -4,7 +4,12 @@
  */
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
-import type { NekGuiInfo, NekRpcCommand, NekSessionSnapshot } from "@zcode/shared/nek-protocol";
+import type {
+  NekGuiInfo,
+  NekRpcCommand,
+  NekSessionSnapshot,
+  NekSessionSummary,
+} from "@zcode/shared/nek-protocol";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 import { NekRpcClient, type NekRpcProcessExit } from "../src/nek-agent/nekRpcClient.js";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
@@ -87,23 +92,30 @@ function createProcess(reply: (command: NekRpcCommand) => unknown | Promise<unkn
     },
   };
   const client = new NekRpcClient(handle, { defaultTimeoutMs: 1_000 });
+  let disposed = false;
   const process: NekRpcProcess = {
     client,
     guiInfo,
     exitInfo: () => undefined,
     onExit: (listener) => handle.onExit(listener),
     dispose: async () => {
+      disposed = true;
       handle.kill();
       await client.close();
     },
   };
   /** 模拟 nek 主动推送的 RPC 事件（JSONL 一行）。 */
   const emit = (record: Record<string, unknown>) => stdout.write(`${JSON.stringify(record)}\n`);
-  return { process, commands, emit };
+  return { process, commands, emit, isDisposed: () => disposed };
 }
 
 export function harness(
-  options: { lockedBy?: NekSessionSnapshot["lockedBy"]; failEntries?: boolean } = {},
+  options: {
+    lockedBy?: NekSessionSnapshot["lockedBy"];
+    failEntries?: boolean;
+    /** 目录里额外的会话摘要（例如没有消息的草稿会话）。 */
+    extraSessions?: NekSessionSummary[];
+  } = {},
 ) {
   let failEntries = options.failEntries ?? false;
   let snapshotFailure: Error | undefined;
@@ -117,7 +129,11 @@ export function harness(
     leafId: entry.id,
   };
   const control = createProcess(async (command) => {
-    if (command.type === "list_sessions") return { sessions: [snapshot.session] };
+    if (command.type === "list_sessions")
+      return { sessions: [snapshot.session, ...(options.extraSessions ?? [])] };
+    // 与 nek 一致：会话进程还活着（持锁）时拒绝删除。
+    if (command.type === "delete_session" && sessions.some((session) => !session.isDisposed()))
+      throw new Error(`Session is locked by a live process: ${command.sessionPath}`);
     if (command.type === "read_session_snapshot") {
       await barrier;
       if (snapshotFailure) throw snapshotFailure;

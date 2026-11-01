@@ -6,8 +6,8 @@
 // createSession。v4 协议本就保留 phase=draft 会话实体（「pane 绑 draft
 // session 则服务端已有会话实体」）——本模块在 pane 未绑定会话时后台建一个
 // draft session 作预热载体：配置写走 v4 CAS 命令直达会话、首发 sendText 复用、
-// 未使用则清理。纯内存不落盘，CLI 重启即消失；gateway isDraftSession 过滤保证
-// 它不会以「新任务」漏进 sessions-index 侧栏。
+// 未使用则清理（deleteSession）。nek 会把会话落盘；没有消息的会话不进 sessions-index，
+// 所以未清理的预热会话也不会以「新任务」漏进侧栏。
 //
 // 结构：生命周期收敛在纯控制器 startDraftSessionPrewarm（可单测，无 React 依赖），
 // useDraftSessionPrewarm 只做 effect 接线与 owner-scoped binding 暴露。
@@ -61,9 +61,9 @@ function startDraftSessionPrewarm(params: {
           });
         }
       })
-      .catch(() => {
-        // 清理失败无碍：内存会话随 CLI 退出消失。
-      });
+      .catch((error: unknown) =>
+        logger.warn("[v4-draft-prewarm] 清理预热会话失败", { sessionId, error: String(error) }),
+      );
   };
 
   const createPayload = () => {
