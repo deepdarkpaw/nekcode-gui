@@ -222,9 +222,8 @@ async function connectRemoteUnchecked(
   const socket = wrapStdioStream(stream);
   const protocol = new SocketProtocol(socket);
   const client = new ChannelClient(protocol);
-  // Connection diagnostics also cover host-owned observers. Renderer-facing subscriptions carry
-  // their terminal Event callback through ProxyChannel/ChannelServer's existing error packet;
-  // renderer retry reattaches that stream. A stream failure is never an SSH disconnect.
+  // 这里只覆盖 host 自有观察者的诊断；面向 renderer 的订阅失败经既有错误回包回传、由 renderer 重试。
+  // 单条流失败不等于 SSH 断开，不终结 ChannelClient。
   client.onDidSubscriptionError((failure) => log("[rpc:subscription] failed", failure.error));
   const services = new RemoteServiceAccess(client);
   let hasReportedRemoteClose = false;
