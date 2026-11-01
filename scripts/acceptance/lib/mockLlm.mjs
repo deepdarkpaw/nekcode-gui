@@ -144,6 +144,44 @@ export function pickMockTurn(body) {
 }
 
 /**
+ * WHATWG fetch 的 bad ports 中可能由 `listen(0)` 分配到的部分（≥1024）。nek 用 fetch 访问模型，
+ * 落到这些端口时请求在客户端就被拒绝（`bad port`），表现为 nek 的 Connection error、mock 零请求。
+ */
+const FETCH_BAD_PORTS = new Set([
+  1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669,
+  6679, 6697, 10080,
+]);
+const MAX_PORT_ATTEMPTS = 8;
+
+function listen(server, port) {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve(server.address().port);
+    });
+  });
+}
+
+/** 被分到 fetch 禁用端口时用占位服务占住它再重新申请，保证下一次拿到不同端口。 */
+export async function listenOnFetchablePort(server, createPlaceholder = createServer) {
+  const placeholders = [];
+  try {
+    for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt += 1) {
+      const port = await listen(server, 0);
+      if (!FETCH_BAD_PORTS.has(port)) return port;
+      await new Promise((resolve) => server.close(() => resolve()));
+      const placeholder = createPlaceholder();
+      await listen(placeholder, port);
+      placeholders.push(placeholder);
+    }
+    throw new Error(`no fetch-allowed port after ${MAX_PORT_ATTEMPTS} attempts`);
+  } finally {
+    for (const placeholder of placeholders) placeholder.close();
+  }
+}
+
+/**
  * 启动服务，返回 `{ baseUrl, requests, close }`。
  * `requests` 只保留有界摘要：分类、是否被客户端中止；不保存 prompt 原文。
  */
@@ -232,11 +270,7 @@ export async function startMockLlm(options = {}) {
       finish();
     });
   });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const { port } = server.address();
+  const port = await listenOnFetchablePort(server);
   return {
     baseUrl: `http://127.0.0.1:${port}/v1`,
     requests,

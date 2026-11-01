@@ -9,6 +9,7 @@ import {
   MOCK_LONG_PROMPT,
   MOCK_OTHER_ANSWER,
   MOCK_PLAN_TITLE,
+  listenOnFetchablePort,
   pickMockTurn,
   startMockLlm,
 } from "../acceptance/lib/mockLlm.mjs";
@@ -111,6 +112,37 @@ test("mock rejects malformed or oversized requests instead of replying with a su
   } finally {
     await mock.close();
   }
+});
+
+test("mock never listens on a port that fetch refuses (nek would report Connection error)", async () => {
+  /** 模拟系统分配：被占住的端口不会再分配出去。 */
+  const held = new Set();
+  const offers = [6000, 10080, 41234];
+  const stubServer = (bound = []) => ({
+    port: 0,
+    once() {},
+    off() {},
+    listen(port, _host, callback) {
+      this.port = port === 0 ? offers.find((offer) => !held.has(offer)) : port;
+      if (port !== 0) held.add(port);
+      bound.push(this.port);
+      callback();
+    },
+    address() {
+      return { port: this.port };
+    },
+    close(callback) {
+      held.delete(this.port);
+      callback?.();
+    },
+  });
+  const placeholders = [];
+  const port = await listenOnFetchablePort(stubServer(), () => stubServer(placeholders));
+  assert.equal(port, 41234);
+  assert.deepEqual(placeholders, [6000, 10080]);
+  assert.equal(held.size, 0, "placeholders must be released once a usable port is bound");
+  const refused = await fetch("http://127.0.0.1:6000/").catch((error) => error.cause?.message);
+  assert.equal(refused, "bad port");
 });
 
 test("packaged entry detection returns Linux path and refuses ambiguous Windows flavors", async () => {
