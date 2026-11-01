@@ -955,9 +955,6 @@ function ConversationStatusPanelImpl({
     return () => observer.disconnect();
   }, [model]);
 
-  // `model.hasContent` 只认**活的**内容（模型手上的投影都是活状态），所以「只剩历史」的
-  // 会话会连整个胶囊一起消失——而那正是重启后打开一条旧对话的样子。
-  // （Agents 的已结束行有同一个洞：`endedSubagentCount` 也没进 `hasContent`。）
   if (!model.hasContent) {
     return null;
   }

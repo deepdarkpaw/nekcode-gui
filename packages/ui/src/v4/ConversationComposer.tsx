@@ -432,7 +432,6 @@ interface ConversationComposerProps {
   onSwitchMode: (mode: string) => void;
   /** 打开当前 session 的 Status panel，并直达 Running 明细。 */
   onOpenRunningBackgroundWorks?: () => void;
-  runningSubagentCount?: number;
   /** prepare/configOptions 失败时，custom provider 选择走 workspace recovery 链。 */
   onRecoverCustomModelSelection?: (
     value: string,
@@ -513,7 +512,6 @@ function ConversationComposerImpl({
   onSelectThought,
   onSwitchMode,
   onOpenRunningBackgroundWorks,
-  runningSubagentCount = 0,
   onRecoverCustomModelSelection,
   error,
   onDismissError,
@@ -2012,7 +2010,6 @@ function ConversationComposerImpl({
         />
         <ConversationBackgroundWorkTrigger
           backgroundWorks={snapshot?.backgroundWorks ?? []}
-          runningSubagentCount={runningSubagentCount}
           onOpen={onOpenRunningBackgroundWorks}
         />
       </>
@@ -2026,7 +2023,6 @@ function ConversationComposerImpl({
       onOpenRunningBackgroundWorks,
       onSwitchMode,
       provider,
-      runningSubagentCount,
       snapshot?.backgroundWorks,
       workspaceIdentity,
       workspacePath,
