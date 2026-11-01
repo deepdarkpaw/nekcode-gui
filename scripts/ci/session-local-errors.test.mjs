@@ -73,17 +73,20 @@ test("composer retains connection/rebuild/queue edit gates without account quota
   );
   assert.ok(disabled && ts.isJsxExpression(disabled.initializer));
   for (const flags of [
-    [false, false, false],
-    [true, false, false],
-    [false, true, false],
-    [false, false, true],
+    [false, false, false, false],
+    [true, false, false, false],
+    [false, true, false, false],
+    [false, false, true, false],
+    [false, false, false, true],
   ]) {
-    const [connecting, draftRuntimeRebuilding, queueEditActiveForCurrentComposer] = flags;
+    const [connecting, draftRuntimeRebuilding, queueEditActiveForCurrentComposer, sessionLocked] =
+      flags;
     assert.equal(
       evaluate(disabled.initializer.expression, {
         connecting,
         draftRuntimeRebuilding,
         queueEditActiveForCurrentComposer,
+        sessionLocked,
         quotaBanner: forbiddenQuota,
       }),
       flags.some(Boolean),
