@@ -4,6 +4,7 @@
  * 覆盖语义与现有命令表一致（bindings.ts resolveEffectiveShortcutBindings）：
  * 按动作整组替换；显式空数组 = 用户清除为「未设置」；条目全部非法时回退默认。
  */
+import { SHORTCUT_COMMANDS } from "@zcode/shared";
 import type { EffectiveShortcutBindings, ShortcutBindingEvent } from "./bindings.js";
 import type { KeyboardShortcutPlatformInfo } from "@/lib/keyboardShortcuts.js";
 import {
@@ -50,12 +51,24 @@ export function resolveEffectiveActionBindings(
 }
 
 /** 编辑类原生行为与刷新/开发工具：动作不得占用。 */
+/**
+ * 应用菜单快捷键先被 Electron 菜单消费，renderer 收不到；没有对应 nek 动作的菜单命令
+ * （打开工作区、关闭、缩放）占用的键因此不能再绑给动作。与 nek 动作同义的菜单命令
+ * （例如新建任务 ↔ `app.session.new`）不算占用。
+ */
+const MENU_ACCELERATOR_BINDINGS: readonly string[] = SHORTCUT_COMMANDS.filter(
+  (command) =>
+    command.channel === "menu" &&
+    !NEK_ACTIONS.some((action) => action.legacyCommandId === command.id),
+).flatMap((command) => command.defaultBindings);
+
 const RESERVED_ACTION_BINDINGS: readonly string[] = [
   ...["c", "v", "x", "z", "a", "y"].map((key) => `CmdOrCtrl+${key}`),
   "CmdOrCtrl+Shift+z",
   "CmdOrCtrl+r",
   "CmdOrCtrl+Shift+r",
   "CmdOrCtrl+Shift+i",
+  ...MENU_ACCELERATOR_BINDINGS,
 ];
 
 /** 两个作用域是否会同时生效：同作用域或任一方为全局。 */

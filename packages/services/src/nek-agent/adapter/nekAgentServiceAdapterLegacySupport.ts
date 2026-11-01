@@ -10,6 +10,7 @@ import { workspaceKey } from "./frameHelpers.js";
 
 export interface NekAgentServiceAdapterLegacyTarget extends NekAgentServiceAdapterApi {
   readonly service: NekAgentService;
+  readonly logger?: { warn: (...args: unknown[]) => void };
   resolveSessionKey(target: NekWorkspaceTarget, sessionId?: string): string | undefined;
 }
 
@@ -35,6 +36,8 @@ export type LegacyMethods = Partial<IZCodeAgentService> & {
   closeSession: IZCodeAgentService["closeSession"];
   sendConversationCommandV4: IZCodeAgentService["sendConversationCommandV4"];
   queryConversationCommandsV4: IZCodeAgentService["queryConversationCommandsV4"];
+  /** 应用退出时等待 nek 进程关闭（`disposeServiceResourcesAndWait` 按需调用）。 */
+  disposeAllAndWait: () => Promise<void>;
 };
 
 export const unsupported = <T>(operation: string): Promise<T> => {

@@ -5,10 +5,11 @@ import type {
   NekSessionSummary,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
-import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMethods.js";
+import type { NekAgentServiceCommandMethods as Methods } from "./nekAgentServiceCommandMethods.js";
 import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
 import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
+import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
 
 import {
   type NekAgentServiceOptions,
@@ -27,10 +28,7 @@ import {
  * （无状态的 RPC 调用），进程与投影器接线落在 `NekAgentServiceRuntimeBase`。
  * 每个命令都通过 `withSession` 持有一次进程引用，命令结束即归还，空闲进程因此可以被进程池回收。
  */
-export class NekAgentService
-  extends NekAgentSessionResumeBase
-  implements NekAgentServiceCommandMethods
-{
+export class NekAgentService extends NekAgentSessionResumeBase implements Methods {
   constructor(options: NekAgentServiceOptions) {
     super(options);
   }
@@ -55,103 +53,44 @@ export class NekAgentService
     this.interactions.cancelWorkspace(workspacePath);
   }
 
+  /** 一次命令 = 一次会话租约：按 `input.sessionKey` 持进程引用，结束即归还给进程池。 */
+  private forInput<I extends { sessionKey: string }, R>(
+    run: (context: NekAgentCommandContext, input: I) => Promise<R>,
+  ): (input: I) => Promise<R> {
+    return async (input) =>
+      await this.withSession(input.sessionKey, async () => await run(this.commandContext(), input));
+  }
+
+  /** 同 {@link forInput}，命令参数就是 sessionKey。 */
+  private forKey<R>(
+    run: (context: NekAgentCommandContext, sessionKey: string) => Promise<R>,
+  ): (sessionKey: string) => Promise<R> {
+    return async (sessionKey) =>
+      await this.withSession(sessionKey, async () => await run(this.commandContext(), sessionKey));
+  }
+
   // ---- 输入 ----
-
-  readonly sendPrompt: NekAgentServiceCommandMethods["sendPrompt"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.sendPrompt(this.commandContext(), input),
-    );
-
-  readonly abort: NekAgentServiceCommandMethods["abort"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.abort(this.commandContext(), sessionKey),
-    );
-
-  readonly bash: NekAgentServiceCommandMethods["bash"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.bash(this.commandContext(), input),
-    );
-
-  readonly abortBash: NekAgentServiceCommandMethods["abortBash"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.abortBash(this.commandContext(), sessionKey),
-    );
-
-  readonly clearQueue: NekAgentServiceCommandMethods["clearQueue"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.clearQueue(this.commandContext(), sessionKey),
-    );
-
-  readonly retrieveQueue: NekAgentServiceCommandMethods["retrieveQueue"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.retrieveQueue(this.commandContext(), sessionKey),
-    );
+  readonly sendPrompt: Methods["sendPrompt"] = this.forInput(commands.sendPrompt);
+  readonly abort: Methods["abort"] = this.forKey(commands.abort);
+  readonly bash: Methods["bash"] = this.forInput(commands.bash);
+  readonly abortBash: Methods["abortBash"] = this.forKey(commands.abortBash);
+  readonly clearQueue: Methods["clearQueue"] = this.forKey(commands.clearQueue);
+  readonly retrieveQueue: Methods["retrieveQueue"] = this.forKey(commands.retrieveQueue);
 
   // ---- 会话操作 ----
-
-  readonly compact: NekAgentServiceCommandMethods["compact"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.compact(this.commandContext(), input),
-    );
-
-  readonly setModel: NekAgentServiceCommandMethods["setModel"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.setModel(this.commandContext(), input),
-    );
-
-  readonly cycleModel: NekAgentServiceCommandMethods["cycleModel"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.cycleModel(this.commandContext(), sessionKey),
-    );
-
-  readonly setThinkingLevel: NekAgentServiceCommandMethods["setThinkingLevel"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.setThinkingLevel(this.commandContext(), input),
-    );
-
-  readonly setThoughtLevel: NekAgentServiceCommandMethods["setThoughtLevel"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.setThinkingLevel(this.commandContext(), input),
-    );
-
-  readonly cycleThinkingLevel: NekAgentServiceCommandMethods["cycleThinkingLevel"] = async (
-    sessionKey,
-  ) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.cycleThinkingLevel(this.commandContext(), sessionKey),
-    );
-
-  readonly cycleThoughtLevel: NekAgentServiceCommandMethods["cycleThoughtLevel"] = async (
-    sessionKey,
-  ) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.cycleThinkingLevel(this.commandContext(), sessionKey),
-    );
-
-  readonly setMode: NekAgentServiceCommandMethods["setMode"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.setMode(this.commandContext(), input),
-    );
-
-  readonly getStats: NekAgentServiceCommandMethods["getStats"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.getStats(this.commandContext(), sessionKey),
-    );
+  readonly compact: Methods["compact"] = this.forInput(commands.compact);
+  readonly setModel: Methods["setModel"] = this.forInput(commands.setModel);
+  readonly cycleModel: Methods["cycleModel"] = this.forKey(commands.cycleModel);
+  readonly setThinkingLevel: Methods["setThinkingLevel"] = this.forInput(commands.setThinkingLevel);
+  readonly setThoughtLevel: Methods["setThoughtLevel"] = this.forInput(commands.setThinkingLevel);
+  readonly cycleThinkingLevel: Methods["cycleThinkingLevel"] = this.forKey(
+    commands.cycleThinkingLevel,
+  );
+  readonly cycleThoughtLevel: Methods["cycleThoughtLevel"] = this.forKey(
+    commands.cycleThinkingLevel,
+  );
+  readonly setMode: Methods["setMode"] = this.forInput(commands.setMode);
+  readonly getStats: Methods["getStats"] = this.forKey(commands.getStats);
 
   /**
    * 外部命令实现（状态 feed 等）复用的会话租约入口：取记录、持进程引用、交还命令层。
@@ -163,34 +102,13 @@ export class NekAgentService
     return this.withSession(sessionKey, async () => await run(this.commandContext()));
   }
 
-  readonly getCommands: NekAgentServiceCommandMethods["getCommands"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.getCommands(this.commandContext(), sessionKey),
-    );
-
-  readonly getEntries: NekAgentServiceCommandMethods["getEntries"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.getEntries(this.commandContext(), input),
-    );
-
-  readonly getTree: NekAgentServiceCommandMethods["getTree"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.getTree(this.commandContext(), sessionKey),
-    );
-
-  readonly getForkMessages: NekAgentServiceCommandMethods["getForkMessages"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.getForkMessages(this.commandContext(), sessionKey),
-    );
+  readonly getCommands: Methods["getCommands"] = this.forKey(commands.getCommands);
+  readonly getEntries: Methods["getEntries"] = this.forInput(commands.getEntries);
+  readonly getTree: Methods["getTree"] = this.forKey(commands.getTree);
+  readonly getForkMessages: Methods["getForkMessages"] = this.forKey(commands.getForkMessages);
 
   /** 有会话时问会话进程，只有 cwd 时问控制进程（不占会话进程）。 */
-  readonly getMentionTargets: NekAgentServiceCommandMethods["getMentionTargets"] = async (
-    input,
-  ) => {
+  readonly getMentionTargets: Methods["getMentionTargets"] = async (input) => {
     const sessionKey = typeof input === "string" ? input : input.sessionKey;
     if (!sessionKey) return await commands.getMentionTargets(this.commandContext(), input);
     return await this.withSession(
@@ -199,74 +117,25 @@ export class NekAgentService
     );
   };
 
-  readonly reload: NekAgentServiceCommandMethods["reload"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.reload(this.commandContext(), sessionKey),
-    );
-
-  readonly stopSubagent: NekAgentServiceCommandMethods["stopSubagent"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.stopSubagent(this.commandContext(), input),
-    );
-
-  readonly getSubagentTranscript: NekAgentServiceCommandMethods["getSubagentTranscript"] = async (
-    input,
-  ) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.getSubagentTranscript(this.commandContext(), input),
-    );
-
-  readonly listAgentTypes: NekAgentServiceCommandMethods["listAgentTypes"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.listAgentTypes(this.commandContext(), sessionKey),
-    );
+  readonly reload: Methods["reload"] = this.forKey(commands.reload);
+  readonly stopSubagent: Methods["stopSubagent"] = this.forInput(commands.stopSubagent);
+  readonly getSubagentTranscript: Methods["getSubagentTranscript"] = this.forInput(
+    commands.getSubagentTranscript,
+  );
+  readonly listAgentTypes: Methods["listAgentTypes"] = this.forKey(commands.listAgentTypes);
 
   // ---- 会话树与历史 ----
-
-  readonly navigateTree: NekAgentServiceCommandMethods["navigateTree"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.navigateTree(this.commandContext(), input),
-    );
-
-  readonly setEntryLabel: NekAgentServiceCommandMethods["setEntryLabel"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.setEntryLabel(this.commandContext(), input),
-    );
-
-  readonly fork: NekAgentServiceCommandMethods["fork"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.fork(this.commandContext(), input),
-    );
-
-  readonly clone: NekAgentServiceCommandMethods["clone"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.clone(this.commandContext(), sessionKey),
-    );
+  readonly navigateTree: Methods["navigateTree"] = this.forInput(commands.navigateTree);
+  readonly setEntryLabel: Methods["setEntryLabel"] = this.forInput(commands.setEntryLabel);
+  readonly fork: Methods["fork"] = this.forInput(commands.fork);
+  readonly clone: Methods["clone"] = this.forKey(commands.clone);
 
   // ---- 导出与导入 ----
-
-  readonly exportSession: NekAgentServiceCommandMethods["exportSession"] = async (input) =>
-    await this.withSession(
-      input.sessionKey,
-      async () => await commands.exportSession(this.commandContext(), input),
-    );
-
-  readonly shareSession: NekAgentServiceCommandMethods["shareSession"] = async (sessionKey) =>
-    await this.withSession(
-      sessionKey,
-      async () => await commands.shareSession(this.commandContext(), sessionKey),
-    );
+  readonly exportSession: Methods["exportSession"] = this.forInput(commands.exportSession);
+  readonly shareSession: Methods["shareSession"] = this.forKey(commands.shareSession);
 
   /** 导入只看会话文件与目标 cwd，不依赖已打开的会话进程。 */
-  readonly importSession: NekAgentServiceCommandMethods["importSession"] = async (input) =>
+  readonly importSession: Methods["importSession"] = async (input) =>
     await commands.importSession(this.commandContext(), input);
 
   // ---- 会话生命周期 ----
@@ -307,6 +176,7 @@ export class NekAgentService
       phase: "idle",
       readonly: false,
       closing: false,
+      createdThisRun: true,
     };
     this.sessions.set(key, record);
     try {
@@ -390,6 +260,10 @@ export class NekAgentService
 
   async dispose(): Promise<void> {
     if (this.disposed) return;
+    await deleteUnusedCreatedSessions([...this.sessions.values()], {
+      deleteSession: async (input) => await this.deleteSession(input),
+      ...(this.logger ? { logger: this.logger } : {}),
+    });
     this.disposed = true;
     this.detachPoolEvents?.();
     this.detachPoolEvents = undefined;

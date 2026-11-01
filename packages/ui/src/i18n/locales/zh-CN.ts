@@ -972,7 +972,7 @@ const zhCN: Record<string, string> = {
   "workspaceSidebar.newConversation": "新建任务",
   "workspaceSidebar.reorderSection": "移动{section}分区",
   "workspaceSidebar.addProject": "添加项目",
-  "workspaceSidebar.noConversations": "还没有任务",
+  "workspaceSidebar.noConversations": "不属于任何项目的任务会显示在这里",
   "workspaceSidebar.noProjects": "尚未打开项目",
   "workspaceSidebar.viewByWorkspace": "按项目",
   "workspaceSidebar.organizeChronologicalList": "时间线",
@@ -3283,6 +3283,8 @@ const zhCN: Record<string, string> = {
   "shortcuts.action.note.dequeue": "nek 在 Windows 终端默认 Alt+Q；桌面端统一为 Alt+↑",
   "shortcuts.action.note.sessionNew": "nek 终端未绑定默认键；桌面端沿用 Ctrl+N 惯例",
   "shortcuts.action.note.editorExternal": "nek 中打开外部编辑器；桌面端的大编辑器尚未实现",
+  "shortcuts.action.note.toolsExpand":
+    "nek 终端默认 Ctrl+O；桌面端 Ctrl+O 用于打开工作区，改为 Ctrl+Shift+O",
   "shortcuts.action.conflict.invalid": "不支持的按键组合",
   "shortcuts.action.conflict.reserved": "该组合由系统或编辑操作保留",
   "shortcuts.action.conflict.occupied": "已被「{action}」占用",
@@ -3994,9 +3996,10 @@ const zhCN: Record<string, string> = {
   "settings.nek.appearance.conversation": "对话",
   "settings.nek.appearance.thinkingCollapsed": "thinking 默认折叠",
   "settings.nek.appearance.thinkingCollapsedHint":
-    "流式输出时显示一行预览，结束后折叠；Ctrl+T 切换全部。",
+    "流式输出时显示一行预览，结束后折叠；用「展开 / 折叠全部 thinking」快捷键切换全部。",
   "settings.nek.appearance.toolOutputExpanded": "工具输出默认展开",
-  "settings.nek.appearance.toolOutputExpandedHint": "出错的工具卡总是展开；Ctrl+O 切换全部。",
+  "settings.nek.appearance.toolOutputExpandedHint":
+    "出错的工具卡总是展开；用「展开 / 折叠全部工具输出」快捷键切换全部。",
   "settings.nek.appearance.mermaid": "渲染 Mermaid 图表",
   "settings.nek.appearance.notifications": "系统通知",
   "settings.nek.appearance.notificationsHint": "窗口不在前台时发送通知，点击通知回到对应内容。",

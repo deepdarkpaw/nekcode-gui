@@ -1051,7 +1051,7 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.newConversation": "New task",
   "workspaceSidebar.reorderSection": "Move {section} section",
   "workspaceSidebar.addProject": "Add project",
-  "workspaceSidebar.noConversations": "No tasks yet",
+  "workspaceSidebar.noConversations": "Tasks outside a project appear here",
   "workspaceSidebar.noProjects": "No open projects",
   "workspaceSidebar.viewByWorkspace": "By project",
   "workspaceSidebar.organizeChronologicalList": "Timeline",
@@ -3475,6 +3475,8 @@ const enUS: Record<string, string> = {
     "Unbound in the nek terminal; the desktop app follows the Ctrl+N convention",
   "shortcuts.action.note.editorExternal":
     "Opens an external editor in nek; the desktop large editor is not implemented yet",
+  "shortcuts.action.note.toolsExpand":
+    "nek defaults to Ctrl+O in the terminal; the desktop app keeps Ctrl+O for Open Workspace and uses Ctrl+Shift+O",
   "shortcuts.action.conflict.invalid": "Unsupported key combination",
   "shortcuts.action.conflict.reserved": "Reserved for system or editing actions",
   "shortcuts.action.conflict.occupied": 'Already used by "{action}"',
@@ -4231,10 +4233,10 @@ const enUS: Record<string, string> = {
   "settings.nek.appearance.conversation": "Conversation",
   "settings.nek.appearance.thinkingCollapsed": "Collapse thinking by default",
   "settings.nek.appearance.thinkingCollapsedHint":
-    "Shows a one-line preview while streaming and collapses afterwards; Ctrl+T toggles all.",
+    "Shows a one-line preview while streaming and collapses afterwards; the “Expand / collapse all thinking” shortcut toggles all.",
   "settings.nek.appearance.toolOutputExpanded": "Expand tool output by default",
   "settings.nek.appearance.toolOutputExpandedHint":
-    "Failed tool cards always expand; Ctrl+O toggles all.",
+    "Failed tool cards always expand; the “Expand / collapse all tool output” shortcut toggles all.",
   "settings.nek.appearance.mermaid": "Render Mermaid diagrams",
   "settings.nek.appearance.notifications": "System notifications",
   "settings.nek.appearance.notificationsHint":

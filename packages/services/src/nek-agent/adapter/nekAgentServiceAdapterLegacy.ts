@@ -345,8 +345,13 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       }
     },
     disposeAll() {
+      void methods.disposeAllAndWait().catch((error: unknown) => {
+        target.logger?.warn("failed to dispose the nek agent service", error);
+      });
+    },
+    async disposeAllAndWait() {
       runtimeLifecycle.dispose();
-      void target.dispose();
+      await target.dispose();
     },
   };
   return methods;

@@ -115,6 +115,8 @@ export function harness(
     failEntries?: boolean;
     /** 目录里额外的会话摘要（例如没有消息的草稿会话）。 */
     extraSessions?: NekSessionSummary[];
+    /** 会话进程 `get_state` 报告的消息数（新建且未发送的会话为 0）。 */
+    messageCount?: number;
   } = {},
 ) {
   let failEntries = options.failEntries ?? false;
@@ -153,7 +155,8 @@ export function harness(
     guiInfo,
     createControlProcess: () => control.process,
     createSessionProcess: (request) => {
-      assert.equal(request.sessionPath, sessionPath);
+      // 新建会话没有 sessionPath；恢复只能恢复这一个磁盘会话。
+      if (request.sessionPath !== undefined) assert.equal(request.sessionPath, sessionPath);
       const session = createProcess((command) => {
         if (command.type === "get_state")
           return {
@@ -165,7 +168,7 @@ export function harness(
             steeringMode: "all",
             followUpMode: "one-at-a-time",
             autoCompactionEnabled: true,
-            messageCount: 1,
+            messageCount: options.messageCount ?? 1,
             pendingMessageCount: 0,
           };
         if (command.type === "get_entries") {

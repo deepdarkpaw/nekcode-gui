@@ -40,6 +40,8 @@ export interface NekSessionRecord {
   /** nek 报出的锁持有者详情；早于 P2c 的 nek 只报 `locked: true`，此处缺省。 */
   lockHolder?: NekSessionLockHolder;
   closing: boolean;
+  /** 本次运行经 `createSession` 新建；退出时若仍没有消息就删除（见 `nekUnusedSessionCleanup.ts`）。 */
+  createdThisRun?: boolean;
 }
 
 export interface NekSession {
