@@ -140,7 +140,9 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     id: "app.tools.expand",
     category: "displayNavigation",
     scope: "global",
-    defaultBindings: ["CmdOrCtrl+o"],
+    // Ctrl+O 是菜单「打开工作区」的快捷键，会被菜单先消费。
+    defaultBindings: ["CmdOrCtrl+Shift+o"],
+    desktopNoteId: "shortcuts.action.note.toolsExpand",
     // 输入框聚焦时也生效（nek fullscreen 语义：显示类动作照样打得开）。
     allowInEditable: true,
   },

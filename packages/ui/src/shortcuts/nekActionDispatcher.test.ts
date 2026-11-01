@@ -22,10 +22,10 @@ const event = (patch: Partial<ShortcutBindingEvent>): ShortcutBindingEvent => ({
 describe("nek action dispatch", () => {
   afterEach(() => resetNekActionHandlersForTest());
 
-  it("K1: resolves the registered Ctrl+O action and allows it outside editing", () => {
+  it("K1: resolves the registered Ctrl+Shift+O action and allows it outside editing", () => {
     expect(
       resolveNekActionKeyboardEvent(
-        event({ key: "o", ctrlKey: true }),
+        event({ key: "O", code: "KeyO", ctrlKey: true, shiftKey: true }),
         resolveEffectiveActionBindings(),
         false,
         win,
@@ -53,7 +53,12 @@ describe("nek action dispatch", () => {
     const bindings = resolveEffectiveActionBindings();
     // 显示类动作（折叠 / 搜索 / 转写区跳转）在输入框里照样生效。
     expect(
-      resolveNekActionKeyboardEvent(event({ key: "o", ctrlKey: true }), bindings, true, win),
+      resolveNekActionKeyboardEvent(
+        event({ key: "O", code: "KeyO", ctrlKey: true, shiftKey: true }),
+        bindings,
+        true,
+        win,
+      ),
     ).toBe("app.tools.expand");
     expect(
       resolveNekActionKeyboardEvent(event({ key: "f", ctrlKey: true }), bindings, true, win),

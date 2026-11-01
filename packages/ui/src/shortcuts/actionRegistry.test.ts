@@ -93,7 +93,7 @@ describe("nek action registry", () => {
       "nek.plan.toggle": "Alt+M",
       "app.thinking.cycle": "Shift+Tab",
       "app.model.select": "Ctrl+L",
-      "app.tools.expand": "Ctrl+O",
+      "app.tools.expand": "Ctrl+Shift+O",
       "app.thinking.toggle": "Ctrl+T",
       "tui.altScreen.search": "Ctrl+F",
       "tui.altScreen.previousPrompt": "Ctrl+↑",
@@ -117,6 +117,26 @@ describe("nek action registry", () => {
     expect(findActionConflicts(effective, mac)).toEqual([]);
   });
 
+  // 菜单快捷键会先被 Electron 菜单消费：Ctrl+O（打开工作区）曾让「展开全部工具输出」永远收不到按键。
+  it("never binds an action to a key the application menu consumes", () => {
+    const effective = resolveEffectiveActionBindings();
+    for (const action of NEK_ACTIONS) {
+      for (const binding of action.defaultBindings) {
+        expect(checkActionBindingConflict(action.id, binding, effective, win)?.kind).not.toBe(
+          "reserved",
+        );
+      }
+    }
+    for (const menuKey of ["CmdOrCtrl+o", "CmdOrCtrl+w", "CmdOrCtrl+0"]) {
+      expect(checkActionBindingConflict("app.tools.expand", menuKey, effective, win)).toEqual({
+        kind: "reserved",
+        binding: menuKey,
+      });
+    }
+    // 与 nek 动作同义的菜单命令（新建任务）不算占用。
+    expect(checkActionBindingConflict("app.session.new", "CmdOrCtrl+n", effective, win)).toBeNull();
+  });
+
   it("provides zh-CN and en-US names for every action", () => {
     for (const action of NEK_ACTIONS) {
       expect(zhCN[nekActionLabelId(action.id)]).toBeTruthy();
@@ -130,12 +150,12 @@ describe("nek action registry", () => {
 
   it("applies user overrides with the kernel semantics", () => {
     const effective = resolveEffectiveActionBindings({
-      "app.tools.expand": ["CmdOrCtrl+Shift+o"],
+      "app.tools.expand": ["CmdOrCtrl+Alt+o"],
       "app.thinking.toggle": [],
       "app.model.select": ["Bogus+x"],
       "unknown.action": ["CmdOrCtrl+q"],
     });
-    expect(effective["app.tools.expand"]).toEqual(["CmdOrCtrl+Shift+o"]);
+    expect(effective["app.tools.expand"]).toEqual(["CmdOrCtrl+Alt+o"]);
     expect(effective["app.thinking.toggle"]).toEqual([]);
     expect(formatActionShortcut("app.thinking.toggle", effective, win)).toBe("");
     expect(effective["app.model.select"]).toEqual(["CmdOrCtrl+l"]);
@@ -185,11 +205,24 @@ describe("nek action registry", () => {
     expect(
       matchActionEvent(event({ key: "Enter", altKey: true }), effective, "composer", win),
     ).toBe("app.message.followUp");
+    expect(
+      matchActionEvent(
+        event({ key: "O", ctrlKey: true, shiftKey: true }),
+        effective,
+        "global",
+        win,
+      ),
+    ).toBe("app.tools.expand");
+    expect(
+      matchActionEvent(
+        event({ key: "O", metaKey: true, shiftKey: true }),
+        effective,
+        "global",
+        mac,
+      ),
+    ).toBe("app.tools.expand");
     expect(matchActionEvent(event({ key: "o", ctrlKey: true }), effective, "global", win)).toBe(
-      "app.tools.expand",
-    );
-    expect(matchActionEvent(event({ key: "o", metaKey: true }), effective, "global", mac)).toBe(
-      "app.tools.expand",
+      null,
     );
     expect(matchActionEvent(event({ key: "Enter" }), effective, "global", win)).toBe(null);
   });
@@ -200,11 +233,8 @@ describe("nek action registry", () => {
       resolveEffectiveShortcutBindings(undefined),
       win,
     );
-    expect(conflicts).toContainEqual({
-      actionId: "app.tools.expand",
-      commandId: "openWorkspace",
-      binding: "CmdOrCtrl+o",
-    });
+    // Ctrl+O 留给菜单「打开工作区」，展开工具输出不再与它重叠。
+    expect(conflicts.some((conflict) => conflict.commandId === "openWorkspace")).toBe(false);
     expect(conflicts).toContainEqual({
       actionId: "app.thinking.toggle",
       commandId: "cycleThoughtLevel",
