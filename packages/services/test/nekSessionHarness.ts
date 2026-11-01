@@ -17,7 +17,7 @@ import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 export const target = { workspacePath: "/project" };
 export const sessionId = "disk-session";
 export const sessionPath = "/sessions/disk.jsonl";
-const guiInfo: NekGuiInfo = {
+export const guiInfo: NekGuiInfo = {
   protocolVersion: 1,
   nekVersion: "test",
   piVersion: "test",
@@ -47,7 +47,7 @@ const summary = {
 };
 
 /** In-memory JSONL transport; the real adapter, service, pool and projector remain in the test. */
-function createProcess(reply: (command: NekRpcCommand) => unknown | Promise<unknown>) {
+export function createProcess(reply: (command: NekRpcCommand) => unknown | Promise<unknown>) {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
