@@ -165,6 +165,8 @@ interface PendingOwnership {
 
 interface RoutedFrameEvent {
   emitter: Emitter<RoutedTopicFrame>;
+  errors: Emitter<Error>;
+  failure: Error | null;
   upstream: IDisposable;
 }
 
@@ -475,14 +477,49 @@ export function createZCodeAgentConnectionScope(
     const key = routedEventKey(kind, target);
     let route = routedFrameEvents.get(key);
     if (!route) {
-      const emitter = new Emitter<RoutedTopicFrame>();
-      route = {
-        emitter,
-        upstream: source((frame) => routeIncomingFrame(kind, target, frame, emitter)),
+      const created: RoutedFrameEvent = {
+        emitter: new Emitter<RoutedTopicFrame>(),
+        errors: new Emitter<Error>(),
+        failure: null,
+        upstream: { dispose() {} },
       };
-      routedFrameEvents.set(key, route);
+      route = created;
+      routedFrameEvents.set(key, created);
+      const fail = (error: Error): void => {
+        if (created.failure) return;
+        created.failure = error;
+        if (routedFrameEvents.get(key) === created) routedFrameEvents.delete(key);
+        created.upstream.dispose();
+        created.errors.fire(error);
+        created.errors.dispose();
+        created.emitter.dispose();
+      };
+      try {
+        const upstream = source(
+          (frame) => routeIncomingFrame(kind, target, frame, created.emitter),
+          fail,
+        );
+        if (created.failure) upstream.dispose();
+        else created.upstream = upstream;
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+      }
     }
-    return route.emitter.event as Event<T>;
+    const current = route;
+    return (listener, onError) => {
+      if (current.failure) {
+        onError?.(current.failure);
+        return { dispose() {} };
+      }
+      const errors = current.errors.event((error) => onError?.(error));
+      const frames = current.emitter.event((frame) => listener(frame as T));
+      return {
+        dispose() {
+          errors.dispose();
+          frames.dispose();
+        },
+      };
+    };
   };
   const forget = (entry: OwnedSubscription): void => {
     const key = routeKey(
@@ -1075,6 +1112,7 @@ export function createZCodeAgentConnectionScope(
       pendingByOwnership.clear();
       for (const route of routedFrameEvents.values()) {
         route.upstream.dispose();
+        route.errors.dispose();
         route.emitter.dispose();
       }
       routedFrameEvents.clear();

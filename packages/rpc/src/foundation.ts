@@ -67,7 +67,8 @@ export class DisposableStore implements IDisposable {
  * Event<T> 就是一个函数签名：传入 listener，返回一个 IDisposable 用于取消订阅。
  * 这是整个 IPC 框架中事件流转的核心类型。
  */
-export type Event<T> = (listener: (e: T) => void) => IDisposable;
+/** Optional terminal errors preserve one subscription's failure across RPC relays. */
+export type Event<T> = (listener: (e: T) => void, onError?: (error: Error) => void) => IDisposable;
 
 export namespace Event {
   /** 永远不触发的事件 */

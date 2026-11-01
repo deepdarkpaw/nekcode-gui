@@ -63,9 +63,12 @@ class LoggingServerChannel<TContext> implements IServerChannel<TContext> {
     this.logger("[rpc:listen] subscribed");
     // 首订阅回调同样可能抛错（服务 attach 失败 / 未知事件在订阅时才解析）。这发生在
     // ChannelServer 拿到返回值之后，包在 listen 外层的 try 抓不到，必须在这里补上。
-    return (listener) => {
+    return (listener, onError) => {
       try {
-        return subscribed(listener);
+        return subscribed(listener, (error) => {
+          this.logger("[rpc:listen] failed", error);
+          onError?.(error);
+        });
       } catch (err) {
         this.logger("[rpc:listen] failed", err);
         throw err;

@@ -1,5 +1,10 @@
 import { VSBuffer } from "./buffer.js";
-import { type IDisposable, CancellationTokenSource, toDisposable } from "./foundation.js";
+import {
+  type IDisposable,
+  CancellationTokenSource,
+  DisposableStore,
+  toDisposable,
+} from "./foundation.js";
 import { BufferReader, BufferWriter, deserialize, serialize } from "./serialization.js";
 import type { IMessagePassingProtocol } from "./protocol.js";
 import {
@@ -208,35 +213,51 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       return;
     }
 
-    let disposable: IDisposable;
+    const scope = new DisposableStore();
+    this.activeRequests.set(request.id, scope);
+    const fail = (error: unknown): void => {
+      if (this.activeRequests.get(request.id) !== scope) return;
+      this.activeRequests.delete(request.id);
+      scope.dispose();
+      this.sendRequestFailure(request.id, error);
+    };
     try {
-      // listen() 自身（未知事件 → ProxyChannel 抛错）与首订阅回调（服务 attach 失败）
-      // 都可能抛出，两者都要变成客户端可见的订阅失败。
-      disposable = channel.listen(
+      const disposable = channel.listen(
         this.ctx,
         request.name,
         request.arg,
       )((data) => {
-        this.sendResponse({
-          id: request.id,
-          data,
-          type: ResponseType.EventFire,
-        });
-      });
+        if (this.activeRequests.get(request.id) !== scope) return;
+        this.sendResponse({ id: request.id, data, type: ResponseType.EventFire });
+      }, fail);
+      // A proxy may fail synchronously before its registration lease returns.
+      if (this.activeRequests.get(request.id) === scope) scope.add(disposable);
+      else disposable.dispose();
     } catch (error) {
-      this.sendRequestFailure(request.id, error);
-      return;
+      fail(error);
     }
-    this.activeRequests.set(request.id, disposable);
+  }
+
+  private removePendingRequest(id: number): void {
+    for (const [channelName, entries] of this.pendingRequests) {
+      const remaining = entries.filter((entry) => {
+        if (entry.request.id !== id) return true;
+        clearTimeout(entry.timer);
+        return false;
+      });
+      if (remaining.length === 0) this.pendingRequests.delete(channelName);
+      else this.pendingRequests.set(channelName, remaining);
+    }
   }
 
   private disposeActiveRequest(id: number): void {
+    this.removePendingRequest(id);
     const disposable = this.activeRequests.get(id);
     if (!disposable) {
       return;
     }
-    disposable.dispose();
     this.activeRequests.delete(id);
+    disposable.dispose();
   }
 
   private collectPendingRequest(request: any): void {
@@ -246,6 +267,9 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
     }
 
     const timer = setTimeout(() => {
+      const entries = this.pendingRequests.get(request.channelName);
+      if (!entries?.some((entry) => entry.timer === timer)) return;
+      this.removePendingRequest(request.id);
       console.error(`Unknown channel: ${request.channelName}`);
       // Promise 与事件订阅共用同一份错误回包：EventListen 若只打日志不回包，客户端会
       // 拿到一条永远没有帧、也没有失败事实的死流（订阅方没有任何 terminal 回调）。
@@ -269,8 +293,11 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       return;
     }
 
-    for (const { request, timer } of requests) {
-      clearTimeout(timer);
+    for (const entry of requests) {
+      // A synchronous reply from an earlier entry can cancel a later one during this flush.
+      if (!this.pendingRequests.get(channelName)?.includes(entry)) continue;
+      const { request } = entry;
+      this.removePendingRequest(request.id);
       switch (request.type) {
         case RequestType.Promise:
           this.onPromise(request);
@@ -280,15 +307,17 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
           break;
       }
     }
-    this.pendingRequests.delete(channelName);
   }
 
   dispose(): void {
     this.protocolListener?.dispose();
     this.protocolListener = null;
-    for (const disposable of this.activeRequests.values()) {
-      disposable.dispose();
+    for (const entries of this.pendingRequests.values()) {
+      for (const entry of entries) clearTimeout(entry.timer);
     }
+    this.pendingRequests.clear();
+    const active = Array.from(this.activeRequests.values());
     this.activeRequests.clear();
+    for (const disposable of active) disposable.dispose();
   }
 }
