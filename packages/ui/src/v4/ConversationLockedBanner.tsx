@@ -1,6 +1,7 @@
 import type { SessionControl } from "@zcode/shared/zcode-protocol-v4";
 import { ChatErrorBanner } from "@/ChatErrorBanner.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { formatDateTime } from "@/lib/displayFormat.js";
 
 /** Explain only the lock facts nek reports; rpc does not identify a particular GUI or terminal. */
 export function ConversationLockedBanner({
@@ -14,23 +15,18 @@ export function ConversationLockedBanner({
 }) {
   const { intl } = useZCodeIntl();
   const holder = readOnly.holder;
-  const detail = holder
+  const holderText = holder
     ? intl.formatMessage(
         { id: "nek.conversation.lockHolder" },
-        {
-          ...holder,
-          startedAt: holder.startedAt.replace("T", " ").replace(/\.\d+Z$/u, "Z"),
-        },
+        { ...holder, startedAt: formatDateTime(Date.parse(holder.startedAt)) },
       )
-    : undefined;
+    : null;
+  const message = intl.formatMessage({ id: "nek.conversation.readOnlyLocked" });
   return (
     <ChatErrorBanner
       error={{
         code: "NEK_SESSION_LOCKED",
-        message:
-          intl.formatMessage({ id: "nek.conversation.readOnlyLocked" }) +
-          (detail ? ` ${detail}` : ""),
-        ...(detail ? { detail } : {}),
+        message: holderText ? `${message} ${holderText}` : message,
       }}
       onRetry={onRetry}
       retryDisabled={retrying}

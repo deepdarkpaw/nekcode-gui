@@ -22,6 +22,7 @@ import { ConversationRowView } from "./ConversationRowView.js";
 import { ConversationTurnGroup } from "./ConversationTurnGroup.js";
 import { buildConversationTurnRenderUnits } from "./conversationTurnRenderUnits.js";
 import { ConversationLockedBanner } from "./ConversationLockedBanner.js";
+import { formatDateTime } from "@/lib/displayFormat.js";
 import { useConversationFork } from "./useConversationFork.js";
 import { persistV4ComposerDraft, readV4ComposerDraft } from "./composer/composerDraftStore.js";
 
@@ -251,8 +252,12 @@ describe("conversation gap UI", () => {
       { wrapper },
     );
     expect(screen.getByText(/Read-only: another nek process/)).toBeTruthy();
+    // 用户可见时间是本地时区 `YYYY-MM-DD HH:mm`。
+    const startedAt = formatDateTime(Date.parse(readOnly.holder.startedAt));
     expect(
-      screen.getByText(/dev-box, PID 4242, mode rpc, started 2026-01-01 02:03:04Z/),
+      screen.getByText((text) =>
+        text.includes(`dev-box, PID 4242, mode rpc, started ${startedAt}`),
+      ),
     ).toBeTruthy();
     expect(screen.queryByText(/another GUI|terminal/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry writable access" }));
