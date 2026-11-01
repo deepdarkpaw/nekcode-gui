@@ -260,8 +260,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     const id = makeSubscriptionId(`conversation/${input.sessionId}`);
     const topic = `conversation/${input.sessionId}`;
     let firstFrame: ConversationTopicFrame | undefined;
-    let ordinal = 0;
     let first = true;
+    // 实时帧与恢复帧共用 subscription.ordinal：客户端丢弃不大于已处理最大序号的帧，
+    // 恢复帧若沿用过期序号会被静默丢弃，恢复只能超时。
     const subscription: ConversationSubscription = {
       id,
       workspaceKey: workspaceKey(input),
@@ -272,16 +273,16 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     };
     subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
       firstFrame ??= frame;
+      subscription.ordinal += 1;
       const mapped = makeWireFrame(
         { ...frame, topic },
         id,
-        ++ordinal,
+        subscription.ordinal,
         first ? "initial" : "online",
       );
       first = false;
       this.conversationEmitter(subscription.workspaceKey).fire(mapped);
     });
-    subscription.ordinal = ordinal;
     this.conversationSubscriptions.set(id, subscription);
     return {
       ack: {

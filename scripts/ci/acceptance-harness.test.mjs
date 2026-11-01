@@ -22,10 +22,10 @@ test("mock routes only the latest user turn, not a previous completed tool chain
   assert.equal(pickMockTurn(body(history)), "plan");
   assert.equal(pickMockTurn(body([...history, user(MOCK_LONG_PROMPT)])), "slow");
   assert.equal(pickMockTurn(body([...history, user(MOCK_FIRST_PROMPT)])), "first");
-  assert.equal(
-    pickMockTurn(body([...history, user(`Implement the plan.\n${MOCK_PLAN_TITLE}`)])),
-    "final",
-  );
+  const implementing = [...history, user(`Implement the plan.\n${MOCK_PLAN_TITLE}`)];
+  assert.equal(pickMockTurn(body(implementing)), "todos");
+  // 待办全部标为完成之后才给最终回复，nek 不会再追加“仍有未完成待办”的提醒。
+  assert.equal(pickMockTurn(body([...implementing, tool("call_todos", "2 of 2 done")])), "final");
 });
 
 test("nek reminder-only user messages do not hide the approved implementation or a later user turn", () => {
@@ -38,7 +38,7 @@ test("nek reminder-only user messages do not hide the approved implementation or
     user(`Implement the plan.\n${MOCK_PLAN_TITLE}`),
     reminder,
   ];
-  assert.equal(pickMockTurn(body(history)), "final");
+  assert.equal(pickMockTurn(body(history)), "todos");
   assert.equal(pickMockTurn(body([...history, user(MOCK_LONG_PROMPT), reminder])), "slow");
   assert.throws(() => pickMockTurn(body([...history, user("unexpected user input"), reminder])));
 });

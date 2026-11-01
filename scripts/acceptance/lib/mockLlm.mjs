@@ -82,6 +82,12 @@ const askQuestionArguments = {
 
 const switchModeArguments = { explanation: "Plan the migration first.", target_mode_id: "plan" };
 
+/** 计划的两项待办；执行计划时 mock 像真实模型一样先把它们标为完成，避免 nek 追加未完成待办提醒。 */
+const PLAN_TODOS = [
+  { id: "summarize", content: "Summarize the inspected workspace" },
+  { id: "record-choice", content: "Record the Redis choice" },
+];
+
 /** nek 的扩展提示会映射成 user 消息，但纯 reminder 不是用户新开的一轮。 */
 function isReminderOnly(content) {
   const text =
@@ -126,9 +132,10 @@ export function pickMockTurn(body) {
     }
     return "plan";
   }
+  if (toolCallId === "call_todos") return "final";
   const content = messages[userIndex]?.content;
   const text = typeof content === "string" ? content : JSON.stringify(content ?? "");
-  if (text.includes("Implement the plan.") && text.includes(MOCK_PLAN_TITLE)) return "final";
+  if (text.includes("Implement the plan.") && text.includes(MOCK_PLAN_TITLE)) return "todos";
   if (text.includes(MOCK_LONG_PROMPT)) return "slow";
   if (text.includes(MOCK_FIRST_PROMPT)) return "first";
   throw new Error(
@@ -213,9 +220,14 @@ export async function startMockLlm(options = {}) {
                     name: MOCK_PLAN_TITLE,
                     overview: "Confirm the workspace listing and the selected database.",
                     plan: `# ${MOCK_PLAN_TITLE}\n\nSummarize the workspace listing and the approved Redis choice.`,
-                    todos: [{ id: "summarize", content: "Summarize the inspected workspace" }],
+                    todos: PLAN_TODOS,
                   })
-                : textTurn(MOCK_FINAL_TEXT);
+                : turn === "todos"
+                  ? toolTurn("call_todos", "todo_write", {
+                      merge: true,
+                      todos: PLAN_TODOS.map((todo) => ({ ...todo, status: "completed" })),
+                    })
+                  : textTurn(MOCK_FINAL_TEXT);
       for (const event of events) write(event);
       finish();
     });

@@ -2,7 +2,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { evaluate, screenshot, waitForPage } from "./cdp.mjs";
-import { clickAt, clickOptionAt, fillInput, waitForSelector, waitForText } from "./ui.mjs";
+import {
+  clickAt,
+  clickOptionAt,
+  clickTaskItem,
+  fillInput,
+  waitForSelector,
+  waitForText,
+} from "./ui.mjs";
 import {
   MOCK_FINAL_TEXT,
   MOCK_FIRST_PROMPT,
@@ -105,6 +112,7 @@ export async function checkInteractions(session, sandbox, mock) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   await waitForText(session, MOCK_FINAL_TEXT, "final assistant reply", 60_000);
+  await waitForText(session, "2/2", "plan todos completed", 30_000);
   if (!mock.requests.some((request) => request.turn === "final")) {
     throw new Error("mock did not receive the mode approval result");
   }
@@ -113,11 +121,12 @@ export async function checkInteractions(session, sandbox, mock) {
 export async function checkRestoredSession(session) {
   await waitForPage(
     session,
-    `document.querySelectorAll('[data-testid^="task-item"]').length > 0`,
+    `[...document.querySelectorAll('[data-testid^="task-item"]')].some((item) =>
+      item.innerText.includes(${JSON.stringify(MOCK_FIRST_PROMPT)}))`,
     "restored task item",
     90_000,
   );
-  await clickAt(session, '[data-testid^="task-item"]');
+  await clickTaskItem(session, MOCK_FIRST_PROMPT);
   await waitForText(session, MOCK_FINAL_TEXT, "restored conversation history", 120_000);
   await waitForSelector(session, '[data-testid^="v4-row"]', "restored timeline rows");
 }

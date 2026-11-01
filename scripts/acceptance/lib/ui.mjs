@@ -51,6 +51,15 @@ export async function clickButton(session, text) {
   );
 }
 
+/** 按标题点开侧栏会话；同一工作区可能同时存在草稿会话，不能按顺序点。 */
+export async function clickTaskItem(session, text) {
+  await clickTarget(
+    session,
+    `[...document.querySelectorAll('[data-testid^="task-item"]')].find((item) =>
+    item.getClientRects().length > 0 && item.innerText.includes(${JSON.stringify(text)}))`,
+  );
+}
+
 export async function clickOptionAt(session, text) {
   await clickTarget(
     session,
