@@ -77,8 +77,6 @@ export function registerPlatformIpcHandlers(options: {
   }>;
   setAutoDownloadAndInstallUpdates: (enabled: boolean) => Promise<void>;
   syncAppSettings: (patch: unknown) => void;
-  /** 快捷键设置页录制态开关：true 时 main 重建菜单摘除可配置 accelerator */
-  setShortcutRecordingActive?: (active: boolean, ownerWebContentsId?: number | null) => void;
   /** 桌面端设备标识符（基于 userData 路径的 SHA-256） */
 }) {
   ipcMain.handle(PlatformChannels.SelectDirectory, async () => {
@@ -257,17 +255,6 @@ export function registerPlatformIpcHandlers(options: {
     }
 
     options.syncAppSettings(result.data);
-  });
-
-  // 快捷键录制态：renderer 设置页进入/退出录制时通知。macOS 系统菜单会先于 renderer
-  // 吃掉按键，录制 menu 通道命令必须先摘掉可配置 accelerator，否则按键直接触发原命令。
-  // 附带发起方 webContents id：录制中窗口销毁时 main 侧据此复位（见 index.ts）。
-  ipcMain.on(PlatformChannels.SetShortcutRecordingActive, (event, payload: unknown) => {
-    if (typeof payload !== "boolean") {
-      options.logger.warn("[shortcuts] invalid recording-active payload:", payload);
-      return;
-    }
-    options.setShortcutRecordingActive?.(payload, event.sender.id);
   });
 
   ipcMain.on(PlatformChannels.Log, (_event, payload: unknown) => {

@@ -156,8 +156,6 @@ export const PlatformChannels = {
   SyncActiveTaskSession: "zcode:sync-active-task-session",
   /** Renderer → Main：同步 main 进程需即时感知的应用设置 */
   SyncAppSettings: "zcode:sync-app-settings",
-  /** Renderer → Main：快捷键设置页录制态开关；true = main 暂时摘除可配置菜单 accelerator */
-  SetShortcutRecordingActive: "zcode:set-shortcut-recording-active",
   /** Main → Renderer：聚焦到指定 workspace 路径的 tab */
   FocusTab: "zcode:focus-tab",
   /** Main → Renderer：菜单触发新建 tab */
