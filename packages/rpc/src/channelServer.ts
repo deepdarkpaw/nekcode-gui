@@ -1,5 +1,5 @@
 import { VSBuffer } from "./buffer.js";
-import { type IDisposable, CancellationTokenSource, toDisposable } from "./foundation.js";
+import { type IDisposable, CancellationTokenSource, DisposableStore, toDisposable } from "./foundation.js";
 import { BufferReader, BufferWriter, deserialize, serialize } from "./serialization.js";
 import type { IMessagePassingProtocol } from "./protocol.js";
 import {
@@ -208,35 +208,46 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       return;
     }
 
-    let disposable: IDisposable;
-    try {
-      // listen() 自身（未知事件 → ProxyChannel 抛错）与首订阅回调（服务 attach 失败）
-      // 都可能抛出，两者都要变成客户端可见的订阅失败。
-      disposable = channel.listen(
-        this.ctx,
-        request.name,
-        request.arg,
-      )((data) => {
-        this.sendResponse({
-          id: request.id,
-          data,
-          type: ResponseType.EventFire,
-        });
-      });
-    } catch (error) {
+    const scope = new DisposableStore();
+    this.activeRequests.set(request.id, scope);
+    const fail = (error: unknown): void => {
+      if (this.activeRequests.get(request.id) !== scope) return;
+      this.activeRequests.delete(request.id);
+      scope.dispose();
       this.sendRequestFailure(request.id, error);
-      return;
+    };
+    try {
+      const disposable = channel.listen(this.ctx, request.name, request.arg)(
+        (data) => {
+          if (this.activeRequests.get(request.id) !== scope) return;
+          this.sendResponse({ id: request.id, data, type: ResponseType.EventFire });
+        },
+        fail,
+      );
+      // A proxy may fail synchronously before its registration lease returns.
+      if (this.activeRequests.get(request.id) === scope) scope.add(disposable);
+      else disposable.dispose();
+    } catch (error) {
+      fail(error);
     }
-    this.activeRequests.set(request.id, disposable);
   }
 
   private disposeActiveRequest(id: number): void {
+    for (const [channelName, entries] of this.pendingRequests) {
+      const remaining = entries.filter((entry) => {
+        if (entry.request.id !== id) return true;
+        clearTimeout(entry.timer);
+        return false;
+      });
+      if (remaining.length === 0) this.pendingRequests.delete(channelName);
+      else this.pendingRequests.set(channelName, remaining);
+    }
     const disposable = this.activeRequests.get(id);
     if (!disposable) {
       return;
     }
-    disposable.dispose();
     this.activeRequests.delete(id);
+    disposable.dispose();
   }
 
   private collectPendingRequest(request: any): void {
@@ -246,6 +257,11 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
     }
 
     const timer = setTimeout(() => {
+      const entries = this.pendingRequests.get(request.channelName);
+      if (!entries) return;
+      const remaining = entries.filter((entry) => entry.timer !== timer);
+      if (remaining.length === 0) this.pendingRequests.delete(request.channelName);
+      else this.pendingRequests.set(request.channelName, remaining);
       console.error(`Unknown channel: ${request.channelName}`);
       // Promise 与事件订阅共用同一份错误回包：EventListen 若只打日志不回包，客户端会
       // 拿到一条永远没有帧、也没有失败事实的死流（订阅方没有任何 terminal 回调）。
@@ -286,6 +302,10 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
   dispose(): void {
     this.protocolListener?.dispose();
     this.protocolListener = null;
+    for (const entries of this.pendingRequests.values()) {
+      for (const entry of entries) clearTimeout(entry.timer);
+    }
+    this.pendingRequests.clear();
     for (const disposable of this.activeRequests.values()) {
       disposable.dispose();
     }

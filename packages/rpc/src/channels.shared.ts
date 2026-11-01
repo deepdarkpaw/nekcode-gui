@@ -66,6 +66,12 @@ export type IRawResponse =
  * 调用方不需要（也不应该）自己再造一个没人监听的 emitter。
  */
 export interface IChannelSubscriptionFailure {
+  /** Unique connection + logical subscription identity; never derived from names or args. */
+  readonly id: string;
+  /** Monotonic attempt owned by the logical subscription, including synchronous failures. */
+  readonly attempt: number;
+  /** Fires once when retry, last unsubscribe or connection disposal revokes this capability. */
+  readonly onDidInvalidate: Event<void>;
   channelName: string;
   event: string;
   error: Error;

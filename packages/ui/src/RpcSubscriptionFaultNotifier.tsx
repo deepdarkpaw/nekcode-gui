@@ -16,6 +16,7 @@ import { subscriptionFaultToastPlan } from "@/lib/rpcSubscriptionFaultToast.js";
 import { useZCodeIntl } from "@/i18n/index.js";
 import {
   dismissRpcSubscriptionFault,
+  retryRpcSubscriptionFault,
   useRpcSubscriptionFaultStore,
 } from "@/store/rpcSubscriptionFaultStore.js";
 
@@ -36,8 +37,9 @@ export function RpcSubscriptionFaultNotifier() {
     for (const fault of faults) {
       const key = `${fault.id}#${fault.attempt}`;
       if (shownRef.current.has(key)) continue;
+      const { id, attempt } = fault;
       const plan = subscriptionFaultToastPlan(
-        fault,
+        { id, attempt },
         {
           title: intl.formatMessage({ id: "ui.rpcSubscription.failed" }),
           retry: intl.formatMessage({ id: "common.retry" }),

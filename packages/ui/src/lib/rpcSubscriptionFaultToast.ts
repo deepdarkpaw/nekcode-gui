@@ -7,9 +7,10 @@ import type { ToastOptions } from "@/components/ui/toast.js";
  * 替换旧提示，`attempt` 让"重试后仍然失败"再提醒一次。
  */
 export function subscriptionFaultToastPlan(
-  fault: { id: string; attempt: number; retry(): void },
+  fault: { id: string; attempt: number },
   labels: { title: string; retry: string; dismiss: string },
   onRetry: () => void,
+  onDismiss: () => void,
 ): { message: string; options: ToastOptions } {
   return {
     message: labels.title,
@@ -19,6 +20,7 @@ export function subscriptionFaultToastPlan(
       variant: "warning",
       actionLabel: labels.retry,
       onAction: onRetry,
+      onDismiss,
       dismissible: true,
       dismissLabel: labels.dismiss,
       dedupeKey: `rpc-subscription:${fault.id}`,

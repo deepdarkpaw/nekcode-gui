@@ -176,35 +176,51 @@ function bufferEvent<T>(event: Event<T>): Event<T> {
   let buffer: T[] = [];
   let flushing = false;
   let listener: IDisposable | undefined;
+  const failures = new Set<(error: Error) => void>();
 
   const emitter = new Emitter<T>({
     onWillAddFirstListener: () => {
-      listener = event((e) => {
-        if (flushing) {
-          emitter.fire(e);
-        } else {
-          buffer.push(e);
-        }
-      });
+      listener = event(
+        (e) => {
+          if (flushing) emitter.fire(e);
+          else buffer.push(e);
+        },
+        (error) => {
+          for (const fail of Array.from(failures)) fail(error);
+        },
+      );
     },
     onDidRemoveLastListener: () => {
       listener?.dispose();
       listener = undefined;
       buffer = [];
+      flushing = false;
     },
   });
 
   // 一旦有订阅者，先 flush 缓冲区
   const originalEvent = emitter.event;
-  return (listener_fn) => {
-    const disposable = originalEvent(listener_fn);
+  return (listener_fn, onError) => {
+    const fail = (error: Error) => onError?.(error);
+    failures.add(fail);
+    let disposable: IDisposable;
+    try {
+      // A wrapper gives repeated registrations of the same callback independent leases.
+      disposable = originalEvent((value) => listener_fn(value));
+    } catch (error) {
+      failures.delete(fail);
+      throw error;
+    }
     if (!flushing) {
       flushing = true;
-      for (const item of buffer) {
-        emitter.fire(item);
-      }
+      for (const item of buffer) emitter.fire(item);
       buffer = [];
     }
-    return disposable;
+    return {
+      dispose: () => {
+        failures.delete(fail);
+        disposable.dispose();
+      },
+    };
   };
 }

@@ -164,13 +164,7 @@ const reportServiceSubscriptionFailure: ServiceConnectionOptions["onSubscription
     status: "error",
     metrics: { count: 1 },
   });
-  registerRpcSubscriptionFault({
-    id: `${failure.channelName}::${failure.event}`,
-    channelName: failure.channelName,
-    event: failure.event,
-    // 重新建立同一条订阅（ChannelClient 保留订阅者）；不是新建空 emitter。
-    retry: () => failure.retry(),
-  });
+  registerRpcSubscriptionFault(failure);
 };
 
 const serviceConnectionOptions: ServiceConnectionOptions = {
