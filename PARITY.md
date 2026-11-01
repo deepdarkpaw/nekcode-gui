@@ -9,6 +9,8 @@
 
 ## 0. 当前实现快照（2026-10-29 核查）
 
+- **2026-11-01 打包验收**：Windows 打包应用 + nek 开发版 + 本地 OpenAI 兼容 mock 跑通 `scripts/acceptance/packaged-e2e.mjs` 01–10：引导三步、设置 13 页（含一次写盘）、首发与项目信任、`ls` 工具行、用量指示、ask_question（单选与自填）、switch_mode 审批、plan_review 执行计划并完成待办、重启后恢复历史会话、停止生成。下列 2026-10-29 的缺口中，项目信任询问与交互/状态/引导挂载已被这次验收覆盖；其余各行状态待逐行复核后再改。
+
 - **服务层已切换到 nek**：`packages/services/src/node.ts` 用 `createNekZCodeAgentService` 装配 `IZCodeAgentService`，旧 zcode agent 运行时已删除；`packages/services/test/nekAgentE2E.test.ts` 用真实 nek 产物 + 本地 OpenAI 兼容 mock 跑通"建会话 → prompt → 工具 → 恢复快照"（需 `NEK_RPC_WORKTREE` 与 `NEK_E2E=1`，默认跳过）。
 - **设置中心已挂载**：13 个页面由 `NekSettingsSection` 渲染进 `SettingsPage`，后端是真实 `INekConfigApi`（本机执行器 + `~/.nek/agent` 锁），IPC 由 `desktopMainIpcNek*` + preload `nekIpc` 暴露。
 - **交互 / 状态 / 远程 / 引导的 headless 层就绪但未挂载**：`packages/ui/src/nek/**`、`packages/ui/src/remote/nek/**`、`packages/ui/src/onboarding/useNek*` 目前只有实现与单测，产品代码里没有引用点，故这些行标 `[~]`。
