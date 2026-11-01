@@ -116,6 +116,9 @@ export interface IModelSelectionService {
    * 自己承担（error 状态可见、可重试）。事件即事实会让 UI 多一份陈旧状态。
    */
   readonly onDidChange: Event<void>;
+  /** Global + this workspace's invalidations. Disposing releases its directory lease. */
+  onDynamicDidChange(scope: { readonly workspacePath?: string }): Event<void>;
+  /** Temporary read lease only; no historical workspace watch/cache is retained. */
   getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView>;
 }
 

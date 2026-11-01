@@ -42,6 +42,10 @@ function createHostService(initial: ModelSelectionView) {
   const getView = vi.fn(async () => next);
   const service: IModelSelectionService = {
     getView,
+    onDynamicDidChange: () => (listener) => {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
     onDidChange: (listener) => {
       listeners.add(listener);
       return { dispose: () => listeners.delete(listener) };
@@ -97,6 +101,10 @@ describe("useDraftModelReadinessGate", () => {
     });
     const service: IModelSelectionService = {
       getView,
+      onDynamicDidChange: () => (listener) => {
+        listeners.add(listener);
+        return { dispose: () => listeners.delete(listener) };
+      },
       onDidChange: (listener) => {
         listeners.add(listener);
         return { dispose: () => listeners.delete(listener) };
@@ -167,6 +175,75 @@ describe("useDraftModelReadinessGate", () => {
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
     // 重选由 Composer 的空选择 + 菜单承担，门禁不把“默认不可用”误报成没有模型。
     expect(result.current.error).toBeNull();
+  });
+
+  it("MW-G1: defaults-only/thinking-only recovery clears Host refusal without a catalog revision change", async () => {
+    const host = createHostService(MISSING_DEFAULT_VIEW);
+    const { result } = renderGate(host.service);
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    act(() => result.current.markProviderNotReady());
+    expect(result.current.agentStartupAllowed).toBe(false);
+    host.setView({ ...READY_VIEW, preferredSelection: { providerId: "mock", modelId: "mock-model", options: { reasoningLevel: "off" } } });
+    act(() => host.invalidate());
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    expect(result.current.error).toBeNull();
+  });
+
+  it("MW-G2: successful same-revision observation clears a failed send recheck", async () => {
+    const host = createHostService(READY_VIEW);
+    const { result } = renderGate(host.service);
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    host.getView.mockRejectedValueOnce(new Error("control reload failed"));
+    await act(async () => { expect(await result.current.ensureReadyForSend()).toBe(false); });
+    expect(result.current.error?.code).toBe("model_config_unreadable");
+    act(() => host.invalidate());
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    expect(result.current.error).toBeNull();
+  });
+
+  it("MW-G3: watch reload failure replaces old ready with visible retryable error", async () => {
+    const host = createHostService(READY_VIEW);
+    const { result } = renderGate(host.service);
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    host.getView.mockRejectedValueOnce(new Error("watch EACCES"));
+    act(() => host.invalidate());
+    await waitFor(() => expect(result.current.error?.detail).toContain("watch EACCES"));
+    expect(result.current.agentStartupAllowed).toBe(false);
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+  });
+
+  it("MW-G4: a send recheck from a previous workspace cannot poison its replacement", async () => {
+    const host = createHostService(READY_VIEW);
+    const { result, rerender } = renderHook(({ workspacePath }) => useDraftModelReadinessGate({ workspacePath, sessionId: null, modelSelectionService: host.service }), { initialProps: { workspacePath: "/a" } });
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    let reject!: (error: Error) => void;
+    host.getView.mockImplementationOnce(() => new Promise<ModelSelectionView>((_resolve, fail) => { reject = fail; }));
+    const old = result.current.ensureReadyForSend();
+    rerender({ workspacePath: "/b" });
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    await act(async () => { reject(new Error("old A failed")); expect(await old).toBe(false); });
+    expect(result.current.agentStartupAllowed).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("MW-G5: concurrent send rechecks cannot let the older failure overwrite the newer success", async () => {
+    const host = createHostService(READY_VIEW);
+    const { result } = renderGate(host.service);
+    await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
+    let reject!: (error: Error) => void;
+    host.getView.mockImplementationOnce(() => new Promise<ModelSelectionView>((_resolve, fail) => { reject = fail; }));
+    const older = result.current.ensureReadyForSend();
+    await act(async () => { expect(await result.current.ensureReadyForSend()).toBe(true); });
+    await act(async () => { reject(new Error("outdated")); expect(await older).toBe(false); });
+    expect(result.current.agentStartupAllowed).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("MW-G6: no target service cannot admit an unchecked send", async () => {
+    const { result } = renderGate(null);
+    expect(result.current.agentStartupAllowed).toBe(false);
+    await expect(result.current.ensureReadyForSend()).resolves.toBe(false);
   });
 
   it("已存在的会话不参与门禁", async () => {

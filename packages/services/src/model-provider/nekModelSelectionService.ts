@@ -20,12 +20,6 @@ interface NekModelSelectionServiceOptions {
   readonly facts: NekModelFactsSource;
 }
 
-interface CommitResult {
-  readonly revision: number;
-  /** false = 这次读取被更新的读取超车，内容不是当前版本。 */
-  readonly accepted: boolean;
-}
-
 export interface NekModelSelectionService extends IModelSelectionService {
   dispose(): void;
 }
@@ -40,44 +34,44 @@ export function createNekModelSelectionService(
   const listeners = new Set<() => void>();
   let revision = 0;
   let lastKey: string | null = null;
-  /** 已提交内容版本对应的读取序号；更早发起的读取即使后完成也不能改版本。 */
-  let committedSequence = 0;
+  /** Settled reads, including failures, fence older results. */
+  let settledSequence = 0;
   let startedSequence = 0;
   let disposed = false;
 
-  /**
-   * 读事实并（在它是当前最新读取时）提交版本。
-   *
-   * 不缓存：调用方拿到的就是这次读取的结果。若期间有更新的读取先提交（配置刚变过），
-   * 本次结果已不是当前版本 → 重读，最多 `MAX_READ_ATTEMPTS` 次，不把旧目录当当前事实。
-   */
-  const readFacts = async (
-    input: ModelSelectionViewInput | undefined,
-  ): Promise<ModelSelectionView> => {
-    let view: ModelSelectionView | undefined;
-    for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
-      const sequence = (startedSequence += 1);
-      const facts = await source.read(
-        input?.workspacePath ? { cwd: input.workspacePath } : undefined,
-      );
-      if (disposed) throw new Error("ModelSelectionService 已 dispose");
-      const committed = commit(sequence, facts);
-      view = project(facts, committed.revision, input);
-      if (committed.accepted) return view;
+  /** A temporary scope lease fences this read even when no other caller re-reads. */
+  const readFacts = async (input: ModelSelectionViewInput | undefined): Promise<ModelSelectionView> => {
+    const scope = input?.workspacePath ? { cwd: input.workspacePath } : undefined;
+    let epoch = 0;
+    const release = source.onDidChange(() => { epoch += 1; }, scope);
+    try {
+      for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
+        const generation = epoch;
+        const sequence = ++startedSequence;
+        let facts: NekModelFacts;
+        try {
+          facts = await source.read(scope);
+        } catch (error) {
+          settledSequence = Math.max(settledSequence, sequence);
+          if (disposed) throw new Error("ModelSelectionService 已 dispose");
+          if (generation !== epoch) continue;
+          throw error;
+        }
+        if (disposed) throw new Error("ModelSelectionService 已 dispose");
+        const superseded = sequence < settledSequence;
+        settledSequence = Math.max(settledSequence, sequence);
+        if (generation !== epoch || superseded) continue;
+        const key = catalogKey(facts);
+        if (key !== lastKey) {
+          lastKey = key;
+          revision += 1;
+        }
+        return project(facts, revision, input);
+      }
+      throw new Error("Model configuration changed during every read; retry the read");
+    } finally {
+      release();
     }
-    // 连续被超车（配置在持续变化）：返回最后读到的内容，它的下一次失效信号还会让调用方重读。
-    return view!;
-  };
-
-  const commit = (sequence: number, facts: NekModelFacts): CommitResult => {
-    if (sequence <= committedSequence) return { revision, accepted: false };
-    committedSequence = sequence;
-    const key = catalogKey(facts);
-    if (key !== lastKey) {
-      lastKey = key;
-      revision += 1;
-    }
-    return { revision, accepted: true };
   };
 
   const unsubscribe = source.onDidChange(() => {
@@ -90,6 +84,11 @@ export function createNekModelSelectionService(
     async getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView> {
       if (disposed) throw new Error("ModelSelectionService 已 dispose");
       return await readFacts(input);
+    },
+    onDynamicDidChange: (scope) => (listener) => {
+      if (disposed) throw new Error("ModelSelectionService 已 dispose");
+      const release = source.onDidChange(listener, { cwd: scope.workspacePath });
+      return { dispose: release };
     },
     onDidChange: (listener) => {
       if (disposed) return { dispose: () => undefined };
@@ -149,11 +148,11 @@ function project(
   const catalog = { providers };
   const initial = resolveInitialModelSelection({
     catalog,
-    ...(facts.defaults.providerId && facts.defaults.modelId
+    ...(facts.defaults.providerId !== undefined || facts.defaults.modelId !== undefined
       ? {
           configuredDefault: {
-            providerId: facts.defaults.providerId,
-            modelId: facts.defaults.modelId,
+            providerId: facts.defaults.providerId ?? "",
+            modelId: facts.defaults.modelId ?? "",
           },
         }
       : {}),

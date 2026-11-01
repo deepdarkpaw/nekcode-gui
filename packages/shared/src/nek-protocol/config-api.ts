@@ -254,7 +254,8 @@ export interface INekConfigApi {
   // ---- 校验与重载 ----
   validate(target: NekConfigTarget, cwd?: string): Promise<NekConfigDiagnostic[]>;
   /** 写入后由实现自动调用；也供"重新载入"按钮使用。返回仍需等待本轮结束的会话数。 */
-  reloadRunningSessions(target: NekConfigTarget): Promise<NekSessionReloadOutcome>;
+  /** With cwd, reload only that workspace's sessions plus the shared control process. */
+  reloadRunningSessions(target: NekConfigTarget, cwd?: string): Promise<NekSessionReloadOutcome>;
   /** 写入后的自动 reload 结果（含进程级失败）；返回取消订阅函数。 */
   onReloadResult(
     target: NekConfigTarget,
@@ -262,10 +263,10 @@ export interface INekConfigApi {
   ): () => void;
 
   // ---- 外部修改 ----
-  /** 监视目标机器的配置文件（本机 fs.watch，远程每 5 s stat），变化时回调。 */
+  /** Reference-counted global + optional workspace coverage. Errors remain visible until recovery. */
   watch(
     target: NekConfigTarget,
-    listener: (change: { file: string; revision: string; scope: NekConfigScope }) => void,
+    listener: (change: { file: string; revision: string; scope: NekConfigScope; error?: { message: string } }) => void,
     cwd?: string,
   ): () => void;
 

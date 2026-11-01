@@ -205,6 +205,7 @@ export interface ModelSelectionViewInput {
 }
 
 export interface ModelSelectionView extends Partial<EffectiveModelSelectionResult> {
+  /** Catalog identity only: excludes workspace defaults. Not a readiness/recovery token. */
   readonly revision: number;
   readonly providers: readonly ModelSelectionProviderView[];
   readonly preferredSelection?: ModelSelection;

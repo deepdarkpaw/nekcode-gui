@@ -37,10 +37,10 @@ export interface NekModelFactsApi {
     cwd?: string,
   ): Promise<NekSettingsReadResult>;
   /** 配置变了以后，让目标机器上的 nek 进程重读（设置页写路径用的是同一入口）。 */
-  reloadRunningSessions(target: NekConfigTarget): Promise<NekSessionReloadOutcome>;
+  reloadRunningSessions(target: NekConfigTarget, cwd?: string): Promise<NekSessionReloadOutcome>;
   watch(
     target: NekConfigTarget,
-    listener: (change: { file: string; revision: string; scope: NekConfigScope }) => void,
+    listener: (change: { file: string; revision: string; scope: NekConfigScope; error?: { message: string } }) => void,
     cwd?: string,
   ): () => void;
 }
@@ -84,7 +84,7 @@ export interface NekModelFactsSource {
   /** 总是读最新事实；失败直接抛出 nek 的结构化错误。 */
   read(options?: NekModelFactsReadOptions): Promise<NekModelFacts>;
   /** 事实可能过期的信号（配置变化）；不携带快照，调用方重新 `read()`。 */
-  onDidChange(listener: () => void): () => void;
+  onDidChange(listener: () => void, options?: NekModelFactsReadOptions): () => void;
   dispose(): void;
 }
 
@@ -108,20 +108,7 @@ export class NekModelFactsReloadError extends Error {
   }
 }
 
-/**
- * 事实来源：可用性（`get_available_models`）与详情（`get_model_catalog`）取交集。
- *
- * 两者分工固定：可用性回答“能不能跑”，目录回答“叫什么、支持哪些档位”。
- * 因此 models.json 有条目但没有可用凭据时不会出现在候选里——那是 nek 自己的判定。
- *
- * 重载时机：初次读取直接用控制进程启动时的配置；只有收到配置变化信号后，下一次读取前先
- * `reloadRunningSessions`。重载失败时 `reloadPending` 保持为真，读取直接抛错——重试会再次
- * 重载，不会用旧目录冒充当前事实。
- *
- * 监视范围：只订阅机器级 agent 目录。项目级 `<workspace>/.nek/settings.json` 的变化没有事件
- * （`NekWatchHub` 每个机器键只保留一份目录集，无法按 workspace 追加），读取仍按 workspace
- * 合并项目配置，下一次读取（选模型/发送复查/全局配置变化）即可生效。
- */
+/** Scope leases own watch errors; one shared epoch/flight owns control reload admission. */
 export function createNekModelFactsSource(
   api: NekModelFactsApi,
   options: {
@@ -130,84 +117,105 @@ export function createNekModelFactsSource(
   } = {},
 ): NekModelFactsSource {
   const target = options.target ?? NEK_LOCAL_TARGET;
-  const { log } = options;
-  const listeners = new Set<() => void>();
+  const scopes = new Map<string, {
+    listeners: Set<() => void>;
+    errors: Map<string, string>;
+    stop(): void;
+  }>();
   let disposed = false;
-  let unsubscribeWatch: (() => void) | undefined;
-  let reloadPending = false;
-  /** 配置变化计数：重载期间又来新变化时，不能让这次重载把 pending 清掉。 */
-  let invalidationCount = 0;
+  let epoch = 0;
+  let loadedEpoch = 0;
+  let reloading: Promise<void> | undefined;
 
   const reload = async (): Promise<void> => {
-    const generation = invalidationCount;
+    const generation = epoch;
     let outcome: NekSessionReloadOutcome;
     try {
       outcome = await api.reloadRunningSessions(target);
     } catch (error) {
-      // 重载本身失败（nek 不可用/控制进程崩溃）：同样不能继续读旧目录。
       throw new NekModelFactsReloadError(error instanceof Error ? error.message : String(error));
     }
-    const controlFailures = outcome.failures.filter((failure) => failure.sessionKey === "control");
-    if (controlFailures.length > 0) {
-      throw new NekModelFactsReloadError(
-        controlFailures.map((failure) => failure.message).join("; "),
-        outcome,
-      );
+    const failures = outcome.failures.filter((failure) => failure.sessionKey === "control" || failure.sessionKey === "runtime");
+    if (failures.length > 0) {
+      throw new NekModelFactsReloadError(failures.map((failure) => failure.message).join("; "), outcome);
     }
-    if (invalidationCount === generation) reloadPending = false;
-    // 会话重载失败不影响模型目录这一事实；它属于会话侧，记录但不阻断。
-    const sessionFailures = outcome.failures.filter((failure) => failure.sessionKey !== "control");
-    if (sessionFailures.length > 0) {
-      log?.warn(undefined, "[model-selection] nek 会话重载未全部成功", {
-        failures: sessionFailures,
-      });
-    }
+    loadedEpoch = generation;
+    if (outcome.failures.length > 0) options.log?.warn(undefined, "[model-selection] nek 会话重载未全部成功", { failures: outcome.failures });
   };
 
-  const read = async (readOptions?: NekModelFactsReadOptions): Promise<NekModelFacts> => {
-    if (reloadPending) {
-      // 失败时不吞：抛错让调用方看到“配置重载失败”，reloadPending 保持为真，重试会再次重载。
-      await reload();
-    }
-    const cwd = readOptions?.cwd?.trim();
-    const [available, catalog, authStatus, modelsConfig, settings] = await Promise.all([
-      api.listAvailableModels(target),
-      api.getModelCatalog(target),
-      api.getAuthStatus(target),
-      api.readModelsConfig(target),
-      cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
-    ]);
+  const assertHealthy = (cwd: string): void => {
     if (disposed) throw new Error("NekModelFactsSource 已 dispose");
-    return composeFacts({ available, catalog, authStatus, modelsConfig, settings });
+    for (const key of new Set(["", cwd])) {
+      const errors = scopes.get(key)?.errors;
+      if (errors?.size) throw new Error(`nek config watch: ${[...errors.values()].join("; ")}`);
+    }
   };
 
   return {
-    read,
-    onDidChange: (listener) => {
-      if (disposed) return () => undefined;
-      if (!unsubscribeWatch) {
-        unsubscribeWatch = api.watch(target, () => {
-          if (disposed) return;
-          invalidationCount += 1;
-          reloadPending = true;
-          for (const notify of listeners) notify();
-        });
+    read: async (readOptions) => {
+      const cwd = readOptions?.cwd?.trim() ?? "";
+      assertHealthy(cwd);
+      for (let attempt = 0; loadedEpoch !== epoch; attempt += 1) {
+        if (attempt === 3) throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
+        if (!reloading) reloading = reload().finally(() => { reloading = undefined; });
+        await reloading;
+        assertHealthy(cwd);
       }
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-        if (listeners.size === 0) {
-          unsubscribeWatch?.();
-          unsubscribeWatch = undefined;
+      const [available, catalog, authStatus, modelsConfig, settings] = await Promise.all([
+        api.listAvailableModels(target),
+        api.getModelCatalog(target),
+        api.getAuthStatus(target),
+        api.readModelsConfig(target),
+        cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
+      ]);
+      assertHealthy(cwd);
+      if (settings.diagnostics.length > 0) throw new Error(settings.diagnostics.map((item) => item.message).join("; "));
+      return composeFacts({ available, catalog, authStatus, modelsConfig, settings });
+    },
+    onDidChange: (listener, readOptions) => {
+      if (disposed) throw new Error("NekModelFactsSource 已 dispose");
+      const cwd = readOptions?.cwd?.trim() ?? "";
+      if (!scopes.has(cwd) && scopes.size >= 128) throw new Error("Model observation capacity exceeded");
+      let state = scopes.get(cwd);
+      if (!state) {
+        state = { listeners: new Set(), errors: new Map(), stop: () => undefined };
+        const owned = state;
+        scopes.set(cwd, state);
+        let stop: () => void;
+        try {
+          stop = api.watch(target, (change) => {
+          if (disposed || scopes.get(cwd) !== owned) return;
+          // Global delivery is owned by the global lease, not duplicated by every project lease.
+          if (cwd && change.scope === "global") return;
+          if (change.error) owned.errors.set(change.file, change.error.message);
+          else owned.errors.delete(change.file);
+          if (!cwd) epoch += 1;
+          for (const [key, scope] of scopes) {
+            if (cwd && key !== cwd) continue;
+            for (const notify of [...scope.listeners]) notify();
+          }
+          }, cwd || undefined);
+        } catch (error) {
+          scopes.delete(cwd);
+          throw error;
         }
+        state.stop = stop;
+      }
+      const owned = state;
+      const notify = () => listener();
+      owned.listeners.add(notify);
+      return () => {
+        owned.listeners.delete(notify);
+        if (owned.listeners.size > 0 || scopes.get(cwd) !== owned) return;
+        owned.stop();
+        scopes.delete(cwd);
       };
     },
     dispose: () => {
       if (disposed) return;
       disposed = true;
-      unsubscribeWatch?.();
-      unsubscribeWatch = undefined;
-      listeners.clear();
+      for (const state of scopes.values()) state.stop();
+      scopes.clear();
     },
   };
 }
@@ -273,8 +281,8 @@ function composeFacts(input: {
     providers,
     models,
     defaults: {
-      ...(effective.defaultProvider ? { providerId: effective.defaultProvider } : {}),
-      ...(effective.defaultModel ? { modelId: effective.defaultModel } : {}),
+      ...(effective.defaultProvider !== undefined ? { providerId: effective.defaultProvider } : {}),
+      ...(effective.defaultModel !== undefined ? { modelId: effective.defaultModel } : {}),
     },
   };
 }

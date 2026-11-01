@@ -4,6 +4,7 @@
  * 每个功能模块（models / settings / mcp / …）都只拿这一个运行时，避免它们各自
  * 去猜目标、进程与通知的细节。
  */
+import { basename, dirname, relative, normalize } from "node:path";
 import type {
   NekConfigDiagnostic,
   NekConfigTarget,
@@ -184,13 +185,7 @@ export class NekConfigRuntime {
     listener: (change: NekWatchChange) => void,
     cwd?: string,
   ): () => void {
-    let context: NekTargetContext;
-    try {
-      context = this.target(target);
-    } catch (error) {
-      this.options.logger?.warn("cannot watch a disconnected target", error);
-      return () => undefined;
-    }
+    const context = this.target(target);
     return this.watchHub.subscribe(
       {
         key: context.key,
@@ -213,7 +208,10 @@ export class NekConfigRuntime {
       files.map((file) => ({ file: file.path, revision: file.revision })),
     );
     if (!this.autoReload) return;
-    void this.reload(target)
+    const agentDir = this.target(target).layout.agentDir;
+    const workspaces = new Set(files.map((file) => workspaceOfWrite(agentDir, file.path)));
+    const cwd = workspaces.size === 1 ? [...workspaces][0] : undefined;
+    void this.reload(target, cwd)
       .then((result) => this.emitReloadResult(target, result))
       .catch((error: unknown) => {
         this.options.logger?.warn("automatic reload after a config write failed", error);
@@ -246,7 +244,7 @@ export class NekConfigRuntime {
   }
 
   /** 对目标机器上所有 nek 进程发 reload。回合正在跑的计入 deferred。 */
-  async reload(target: NekConfigTarget): Promise<NekReloadOutcome> {
+  async reload(target: NekConfigTarget, cwd?: string): Promise<NekReloadOutcome> {
     this.target(target);
     const diagnostics: NekConfigDiagnostic[] = [];
     const failures: NekReloadOutcome["failures"] = [];
@@ -254,6 +252,7 @@ export class NekConfigRuntime {
     let deferred = 0;
     const sessions = this.options.sessions?.sessions(target) ?? [];
     for (const session of sessions) {
+      if (cwd && (!session.cwd || normalize(session.cwd) !== normalize(cwd))) continue;
       const outcome = await this.reloadOne(session.sessionKey, session.busy, () =>
         session.call({ type: "reload" }),
       );
@@ -347,6 +346,18 @@ export class NekConfigRuntime {
       }
     }
   }
+}
+
+/** Global writes affect all sessions; project files affect only their owning workspace. */
+function workspaceOfWrite(agentDir: string, file: string): string | undefined {
+  const path = relative(agentDir, file);
+  if (path && !path.startsWith("..")) return undefined;
+  let directory = dirname(file);
+  while (dirname(directory) !== directory) {
+    if (basename(directory) === ".nek") return dirname(directory);
+    directory = dirname(directory);
+  }
+  return dirname(file);
 }
 
 /** 默认控制进程工厂（真机）；测试通过 `options.control` 注入假实现。 */

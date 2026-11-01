@@ -1,291 +1,198 @@
-/**
- * 配置文件监视：本机 `fs.watch`（防抖），远程定时 `stat`。
- *
- * 为什么要两条路径：本机可以直接拿 inotify/ReadDirectoryChangesW（事件即时），
- * 而远程目标没有文件系统事件通道，只能按 `remote.configPollSeconds` 轮询。
- * 两者对外行为一致：只在**内容 revision 真的变了**时推 `{file, revision}`，
- * 本端刚写完的那次变化由 `publish` 直接送达，不等文件系统事件。
- */
-import { watch as fsWatch } from "node:fs";
-import type { FSWatcher } from "node:fs";
-import { join } from "node:path";
+/** Shared, reference-counted directory observations for settings and model selection. */
+import { join, dirname, normalize } from "node:path";
 import type { NekConfigScope } from "@zcode/shared/nek-protocol";
 import { baselineConfigFiles } from "./watchFiles.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { ABSENT_REVISION } from "./revision.js";
 import { readTextDocument } from "./documents.js";
+import { createDirectoryWatch } from "./watchDirectory.js";
 
 export interface NekWatchChange {
   file: string;
   revision: string;
   scope: NekConfigScope;
+  error?: { message: string };
 }
 
 export interface NekWatchTarget {
-  /** 目标键（`local` / `remote:<id>`）。 */
   key: string;
   executor: NekConfigHostExecutor;
-  /** 是否本机（决定 fs.watch 还是轮询）。 */
   local: boolean;
-  /** 需要监视的目录及其配置作用域。 */
   dirs: Array<{ path: string; scope: NekConfigScope }>;
 }
 
 export interface NekWatchHubOptions {
-  /** 本机 fs.watch 的防抖，默认 200 ms。 */
   debounceMs?: number;
-  /** 远程轮询间隔（秒），来自 `remote.configPollSeconds`，默认 5。 */
   pollSeconds?: number;
   logger?: { warn: (...args: unknown[]) => void; debug?: (...args: unknown[]) => void };
 }
 
-interface WatchState {
-  target: NekWatchTarget;
-  listeners: Set<(change: NekWatchChange) => void>;
-  episodes: Map<string, { mtimeMs: number; size: number; revision: string }>;
-  stop: () => void;
+interface Observation {
+  readonly key: string;
+  readonly target: NekWatchTarget;
+  readonly path: string;
+  readonly scope: NekConfigScope;
+  readonly listeners: Set<(change: NekWatchChange) => void>;
+  episodes: Map<string, string>;
+  epoch: number;
+  failure?: string;
+  stop(): void;
 }
 
-const DEFAULT_DEBOUNCE_MS = 200;
-const DEFAULT_POLL_SECONDS = 5;
+const MAX_DIRECTORIES = 512;
+const MAX_SUBSCRIPTIONS = 4096;
 
 export class NekWatchHub {
-  private readonly states = new Map<string, WatchState>();
-  private readonly debounceMs: number;
-  private readonly pollSeconds: number;
-  private readonly logger: NekWatchHubOptions["logger"];
+  private readonly observations = new Map<string, Observation>();
+  private subscriptions = 0;
 
-  constructor(options: NekWatchHubOptions = {}) {
-    this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-    this.pollSeconds = Math.max(1, options.pollSeconds ?? DEFAULT_POLL_SECONDS);
-    this.logger = options.logger;
-  }
+  constructor(private readonly options: NekWatchHubOptions = {}) {}
 
-  /** 订阅某个目标的变化；返回退订函数。同一目标共享一个监视器。 */
+  /** Each call is a distinct lease, including repeated subscriptions of the same callback. */
   subscribe(target: NekWatchTarget, listener: (change: NekWatchChange) => void): () => void {
-    const existing = this.states.get(target.key);
-    if (existing) {
-      existing.listeners.add(listener);
-      return () => this.unsubscribe(target.key, listener);
+    const dirs = new Map(target.dirs.map((dir) => [this.directoryKey(target.key, dir.path, dir.scope), dir]));
+    const additions = [...dirs.keys()].filter((key) => !this.observations.has(key));
+    if (this.subscriptions >= MAX_SUBSCRIPTIONS || this.observations.size + additions.length > MAX_DIRECTORIES) {
+      throw new Error("nek config watch capacity exceeded");
     }
-    const state: WatchState = {
-      target,
-      listeners: new Set([listener]),
-      episodes: new Map(),
-      stop: () => undefined,
+    const notify = (change: NekWatchChange) => listener(change);
+    const leased: Observation[] = [];
+    for (const [key, dir] of dirs) {
+      let state = this.observations.get(key);
+      if (!state) {
+        state = { key, target, ...dir, listeners: new Set(), episodes: new Map(), epoch: 0, stop: () => undefined };
+        this.observations.set(key, state);
+        state.listeners.add(notify);
+        state.stop = this.start(state);
+      } else {
+        state.listeners.add(notify);
+      }
+      leased.push(state);
+    }
+    this.subscriptions += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.subscriptions -= 1;
+      for (const state of leased) {
+        state.listeners.delete(notify);
+        if (state.listeners.size !== 0) continue;
+        state.stop();
+        this.observations.delete(state.key);
+      }
     };
-    this.states.set(target.key, state);
-    void this.prime(state).then(() => {
-      if (this.states.get(target.key) === state) state.stop = this.start(state);
-    });
-    return () => this.unsubscribe(target.key, listener);
   }
 
-  /** 本端写入后的即时通知（不等文件系统事件）。 */
-  publish(
-    targetKey: string,
-    changes: ReadonlyArray<Omit<NekWatchChange, "scope"> & { scope?: NekConfigScope }>,
-  ): void {
-    const state = this.states.get(targetKey);
-    for (const change of changes) {
-      const scoped = {
-        ...change,
-        scope: change.scope ?? (state ? this.scopeOfFile(state.target, change.file) : "global"),
-      };
-      if (state)
-        state.episodes.set(change.file, { mtimeMs: 0, size: 0, revision: change.revision });
-      this.emit(targetKey, scoped);
+  /** Publication fences scans already in flight; only leases covering this file receive it. */
+  publish(targetKey: string, changes: ReadonlyArray<Omit<NekWatchChange, "scope"> & { scope?: NekConfigScope }>): void {
+    for (const state of this.observations.values()) {
+      if (state.target.key !== targetKey) continue;
+      for (const change of changes) {
+        if (normalize(dirname(change.file)) !== normalize(state.path)) continue;
+        state.epoch += 1;
+        state.episodes.set(change.file, change.revision);
+        this.emit(state, { ...change, scope: state.scope });
+      }
     }
-  }
-
-  /** 目录集合变了（切换了项目目录）：重建监视器，保留订阅者。 */
-  refresh(target: NekWatchTarget): void {
-    const state = this.states.get(target.key);
-    if (!state) return;
-    state.stop();
-    state.target = target;
-    state.episodes.clear();
-    void this.prime(state).then(() => {
-      if (this.states.get(target.key) === state) state.stop = this.start(state);
-    });
   }
 
   dispose(): void {
-    for (const state of this.states.values()) state.stop();
-    this.states.clear();
+    for (const state of this.observations.values()) state.stop();
+    this.observations.clear();
   }
 
-  // --------------------------------------------------------------------------
-  // 内部
-  // --------------------------------------------------------------------------
-
-  private unsubscribe(key: string, listener: (change: NekWatchChange) => void): void {
-    const state = this.states.get(key);
-    if (!state) return;
-    state.listeners.delete(listener);
-    if (state.listeners.size > 0) return;
-    state.stop();
-    this.states.delete(key);
+  private directoryKey(target: string, path: string, scope: NekConfigScope): string {
+    return JSON.stringify([target, normalize(path), scope]);
   }
 
-  private emit(key: string, change: NekWatchChange): void {
-    const state = this.states.get(key);
-    if (!state) return;
-    for (const listener of Array.from(state.listeners)) {
-      try {
-        listener(change);
-      } catch (error) {
-        this.logger?.warn("nek config watch listener threw", error);
-      }
+  private active(state: Observation): boolean {
+    return this.observations.get(state.key) === state;
+  }
+
+  private emit(state: Observation, change: NekWatchChange): void {
+    if (!this.active(state)) return;
+    for (const listener of [...state.listeners]) {
+      try { listener(change); }
+      catch (error) { this.options.logger?.warn("nek config watch listener threw", error); }
     }
   }
 
-  /** 记录当前状态，避免订阅瞬间把已有文件当成"刚变化"。 */
-  private async prime(state: WatchState): Promise<void> {
-    state.episodes = await this.scan(state.target).catch((error: unknown) => {
-      this.logger?.warn("failed to scan config files for watching", error);
-      return new Map();
-    });
-  }
-
-  private start(state: WatchState): () => void {
-    return state.target.local ? this.startFsWatch(state) : this.startPolling(state);
-  }
-
-  private startFsWatch(state: WatchState): () => void {
-    const watchers: FSWatcher[] = [];
+  private start(state: Observation): () => void {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const schedule = () => {
+    let pending: Promise<void> | undefined;
+    let requested = 0;
+    let completed = 0;
+    const scan = (): void => {
+      requested += 1;
+      if (pending) return;
+      pending = (async () => {
+        while (this.active(state) && completed < requested) {
+          const request = requested;
+          await this.rescan(state);
+          completed = request;
+        }
+      })().finally(() => { pending = undefined; });
+    };
+    const schedule = (): void => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = undefined;
-        void this.rescan(state);
-      }, this.debounceMs);
+      timer = setTimeout(() => { timer = undefined; scan(); }, this.options.debounceMs ?? 200);
       timer.unref?.();
     };
-    for (const dir of state.target.dirs) {
-      try {
-        const watcher = fsWatch(dir.path, { persistent: false }, () => schedule());
-        watcher.on("error", (error) => this.logger?.warn(`fs.watch failed for ${dir.path}`, error));
-        watchers.push(watcher);
-      } catch (error) {
-        // 目录还不存在（首次运行、项目没有 .nek）：轮询兜底会让它"永远不开始"，所以这里只记日志。
-        this.logger?.debug?.(`cannot watch ${dir.path}`, error);
-      }
-    }
-    if (watchers.length === 0) {
-      this.logger?.debug?.(
-        "no directory could be watched; falling back to polling",
-        state.target.key,
-      );
-      return this.startPolling(state);
-    }
+    const native = state.target.local ? createDirectoryWatch(state.path, schedule, (error) => this.fail(state, error)) : undefined;
+    // Reconciliation is also what discovers/re-arms missing or atomically replaced directories.
+    const poll = setInterval(() => { native?.refresh(); scan(); }, Math.max(1, this.options.pollSeconds ?? 5) * 1000);
+    poll.unref?.();
+    scan();
     return () => {
+      state.epoch += 1;
       if (timer) clearTimeout(timer);
-      for (const watcher of watchers) watcher.close();
+      clearInterval(poll);
+      native?.dispose();
     };
   }
 
-  private startPolling(state: WatchState): () => void {
-    const timer = setInterval(() => void this.rescan(state), this.pollSeconds * 1000);
-    timer.unref?.();
-    return () => clearInterval(timer);
+  private fail(state: Observation, error: unknown): void {
+    if (!this.active(state)) return;
+    const message = error instanceof Error ? error.message : String(error);
+    state.failure = message;
+    this.options.logger?.warn("nek config watch failed", state.path, error);
+    this.emit(state, { file: state.path, revision: "watch-error", scope: state.scope, error: { message } });
   }
 
-  private async rescan(state: WatchState): Promise<void> {
-    let scanned: Map<string, { mtimeMs: number; size: number; revision: string }>;
+  private async rescan(state: Observation): Promise<void> {
+    const epoch = state.epoch;
     try {
-      scanned = await this.scan(state.target);
-    } catch (error) {
-      this.logger?.warn("failed to rescan config files", error);
-      return;
-    }
-    const changes: NekWatchChange[] = [];
-    for (const [file, entry] of scanned) {
-      const previous = state.episodes.get(file);
-      if (previous && previous.revision === entry.revision) continue;
-      changes.push({
-        file,
-        revision: entry.revision,
-        scope: this.scopeOfFile(state.target, file),
-      });
-    }
-    for (const file of state.episodes.keys()) {
-      if (!scanned.has(file)) {
-        changes.push({
-          file,
-          revision: ABSENT_REVISION,
-          scope: this.scopeOfFile(state.target, file),
-        });
+      const scanned = await this.scan(state);
+      if (!this.active(state) || epoch !== state.epoch) return;
+      const previous = state.episodes;
+      const recovering = state.failure !== undefined;
+      state.failure = undefined;
+      state.episodes = scanned;
+      // An initial scan must notify: a change between subscribe and baseline is not safe to discard.
+      for (const [file, revision] of scanned) {
+        if (previous.get(file) !== revision) this.emit(state, { file, revision, scope: state.scope });
       }
+      for (const file of previous.keys()) {
+        if (!scanned.has(file)) this.emit(state, { file, revision: ABSENT_REVISION, scope: state.scope });
+      }
+      if (recovering) this.emit(state, { file: state.path, revision: "watch-recovered", scope: state.scope });
+    } catch (error) {
+      if (epoch === state.epoch) this.fail(state, error);
     }
-    state.episodes = scanned;
-    for (const change of changes) this.emit(state.target.key, change);
   }
 
-  /**
-   * 扫一遍受监视的目录。
-   *
-   * 轮询模式下只对 mtime/size 变过的文件重新读+哈希：远程每 5 s 一次全量读会把
-   * 慢链路拖死；但是否"变过"必须用上次扫描到的元信息判断。
-   */
-  private async scan(
-    target: NekWatchTarget,
-  ): Promise<Map<string, { mtimeMs: number; size: number; revision: string }>> {
-    const result = new Map<string, { mtimeMs: number; size: number; revision: string }>();
-    for (const dir of target.dirs) {
-      for (const file of await this.listCandidates(target.executor, dir.path)) {
-        const info = await target.executor.stat(file);
-        if (!info || info.isDirectory) continue;
-        const cached = this.states.get(target.key)?.episodes.get(file);
-        if (cached && cached.mtimeMs === info.mtimeMs && cached.size === info.size) {
-          result.set(file, cached);
-          continue;
-        }
-        const document = await readTextDocument(target.executor, file);
-        result.set(file, { mtimeMs: info.mtimeMs, size: info.size, revision: document.revision });
-      }
+  private async scan(state: Observation): Promise<Map<string, string>> {
+    const executor = state.target.executor;
+    const candidates = new Set(baselineConfigFiles(state.path));
+    for (const entry of await executor.listDir(state.path)) {
+      if (!entry.isDirectory && entry.name.endsWith(".md")) candidates.add(join(state.path, entry.name));
+    }
+    const result = new Map<string, string>();
+    for (const file of candidates) {
+      const document = await readTextDocument(executor, file);
+      if (document.revision !== ABSENT_REVISION) result.set(file, document.revision);
     }
     return result;
   }
-
-  /** 文件属于哪个作用域：项目目录优先，其次全局目录；都不匹配时按项目处理（项目目录已被移除）。 */
-  private scopeOfFile(target: NekWatchTarget, file: string): NekConfigScope {
-    const normalized = file.replaceAll("\\", "/");
-    const under = (dir: { path: string }) => {
-      const path = dir.path.replaceAll("\\", "/");
-      return normalized === path || normalized.startsWith(`${path}/`);
-    };
-    const project = target.dirs.some((dir) => dir.scope === "project" && under(dir));
-    if (project) return "project";
-    const global = target.dirs.some((dir) => dir.scope === "global" && under(dir));
-    return global ? "global" : "project";
-  }
-
-  /** 目录下的候选文件：已知配置文件名 + `agents/*.md`。 */
-  private async listCandidates(executor: NekConfigHostExecutor, dir: string): Promise<string[]> {
-    const files = baselineConfigFiles(dir);
-    const entries = await executor.listDir(dir);
-    for (const entry of entries) {
-      if (entry.isDirectory) {
-        if (entry.name === "agents") {
-          // 预设目录单独展开（只认 *.md）。
-          for (const preset of await executor.listDir(join(dir, "agents"))) {
-            if (!preset.isDirectory && preset.name.endsWith(".md")) {
-              files.push(join(dir, "agents", preset.name));
-            }
-          }
-        }
-        continue;
-      }
-      if (entry.name.endsWith(".md") && dirBelongsToInstructions(dir))
-        files.push(join(dir, entry.name));
-    }
-    return files;
-  }
-}
-
-/** `AGENTS.md` 只存在于 agent 目录与项目根目录（不是 `.nek` 下）。 */
-function dirBelongsToInstructions(dir: string): boolean {
-  return !dir.replaceAll("\\", "/").endsWith("/.nek");
 }

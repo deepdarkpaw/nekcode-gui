@@ -89,7 +89,8 @@ export type FakeFactsApi = NekModelFactsApi & {
     cwd?: string;
   }>;
   /** 推一次“配置变化”事件（会先置 reloadPending 再通知订阅者）。 */
-  notifyWatch(): void;
+  notifyWatch(cwd?: string, error?: string): void;
+  gateNextReload(): Deferred<void>;
   readonly watchDisposed: number;
   /** 让下一次 `listAvailableModels` 等这个 deferred 完成（控制读完成时机）。 */
   gateNextRead(): Deferred<void>;
@@ -102,7 +103,8 @@ export type FakeFactsApi = NekModelFactsApi & {
 
 export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFactsApi {
   const calls: FakeFactsApi["calls"] = [];
-  let watchListener: (() => void) | undefined;
+  const watchListeners = new Set<{ cwd?: string; notify: (cwd?: string, error?: string) => void }>();
+  const reloadGates: Deferred<void>[] = [];
   let watchDisposed = 0;
   // 可变的编排状态：测试可以在中途“修好配置/解除错误”，模拟真实的重试路径。
   let available = options.available ?? [];
@@ -153,24 +155,40 @@ export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFacts
       const view = cwd ? (options.effectiveByCwd?.[cwd] ?? effective) : effective;
       return settingsView(view);
     },
-    reloadRunningSessions: async (target) => {
-      calls.push({ method: "reloadRunningSessions", target });
+    reloadRunningSessions: async (target, cwd) => {
+      calls.push({ method: "reloadRunningSessions", target, cwd });
+      const gate = reloadGates.shift();
+      if (gate) await gate.promise;
       if (reloadError) throw reloadError;
       return reloadOutcome(reloadFailures);
     },
-    watch: (target, listener) => {
-      calls.push({ method: "watch", target });
-      watchListener = () => listener({ file: "models.json", revision: "r2", scope: "global" });
+    watch: (target, listener, cwd) => {
+      calls.push({ method: "watch", target, cwd });
+      const entry = { cwd, notify: (changedCwd?: string, error?: string) => listener({
+        file: changedCwd ? `${changedCwd}/.nek/settings.json` : "models.json",
+        revision: "r2", scope: changedCwd ? "project" : "global",
+        ...(error ? { error: { message: error } } : {}),
+      }) };
+      watchListeners.add(entry);
       return () => {
         watchDisposed += 1;
-        watchListener = undefined;
+        watchListeners.delete(entry);
       };
     },
   };
   return {
     ...api,
     calls,
-    notifyWatch: () => watchListener?.(),
+    notifyWatch: (cwd, error) => {
+      for (const entry of watchListeners) {
+        if (!cwd || entry.cwd === cwd) entry.notify(cwd, error);
+      }
+    },
+    gateNextReload: () => {
+      const gate = deferred<void>();
+      reloadGates.push(gate);
+      return gate;
+    },
     get watchDisposed() {
       return watchDisposed;
     },
