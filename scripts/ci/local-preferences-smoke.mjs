@@ -155,12 +155,7 @@ try {
         () => document.activeElement?.dataset.testid === "sidebar-preferences-trigger",
       );
       assert.equal(await trigger.getAttribute("data-state"), "closed");
-      assert.equal(
-        await page.evaluate(
-          () => window.preferencesFixture.usage + window.preferencesFixture.settings,
-        ),
-        0,
-      );
+      assert.equal(await page.evaluate(() => window.preferencesFixture.settings), 0);
 
       await open();
       await sub(zh ? "界面主题" : "App theme");
@@ -217,12 +212,6 @@ try {
       await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
 
-      await open();
-      await page
-        .getByRole("menuitem", { name: zh ? "使用统计" : "Usage stats", exact: true })
-        .click();
-      assert.equal(await page.evaluate(() => window.preferencesFixture.usageIntent), "usage");
-      assert.equal(await page.evaluate(() => window.preferencesFixture.usage), 1);
       await page.getByRole("button", { name: zh ? "设置" : "Settings", exact: true }).click();
       assert.equal(await page.evaluate(() => window.preferencesFixture.settings), 1);
 
@@ -263,20 +252,12 @@ try {
     await page.getByRole("menuitem", { name: "Interface zoom", exact: true }).count(),
     0,
   );
-  await page.getByRole("menuitem", { name: "Usage stats", exact: true }).click();
-  assert.equal(await page.evaluate(() => window.preferencesFixture.usage), 1);
+  await page.keyboard.press("Escape");
   await visit("locale=en-US&mode=back");
   await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
   assert.equal(await page.evaluate(() => window.preferencesFixture.settings), 1);
   await visit("locale=en-US&mode=no-navigation");
   assert.ok(await page.getByRole("button", { name: "Settings", exact: true }).isDisabled());
-  await open();
-  assert.equal(
-    await page
-      .getByRole("menuitem", { name: "Usage stats", exact: true })
-      .getAttribute("aria-disabled"),
-    "true",
-  );
   assert.deepEqual(requests, []);
   assert.deepEqual(errors, []);
   console.log(

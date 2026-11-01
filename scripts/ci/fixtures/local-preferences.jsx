@@ -8,7 +8,6 @@ import { PlatformProvider } from "../../../packages/ui/src/hooks/usePlatform.js"
 import { StoreProvider, useZCodeStore } from "../../../packages/ui/src/store/StoreProvider.js";
 import { ZCodeIntlProvider, useZCodeIntl } from "../../../packages/ui/src/i18n/IntlProvider.js";
 import { TooltipProvider } from "../../../packages/ui/src/components/ui/tooltip.js";
-import { consumeInitialSettingsSection } from "../../../packages/ui/src/lib/settingsNavigation.js";
 
 const params = new URLSearchParams(location.search);
 window.preferencesFixture = {
@@ -16,7 +15,6 @@ window.preferencesFixture = {
   commands: [],
   changes: [],
   forbidden: [],
-  usage: 0,
   settings: 0,
   zoomListeners: 0,
 };
@@ -141,14 +139,6 @@ function Fixture() {
                 ? undefined
                 : () => {
                     fixture.settings++;
-                  }
-            }
-            onUsageClick={
-              params.get("mode") === "no-navigation"
-                ? undefined
-                : () => {
-                    fixture.usage++;
-                    fixture.usageIntent = consumeInitialSettingsSection();
                   }
             }
             settingsButtonMode={params.get("mode") === "back" ? "back" : "settings"}

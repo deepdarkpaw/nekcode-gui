@@ -43,7 +43,8 @@ const serviceValues = {
     },
   },
   modelSelectionService: {
-    onDidChange: () => ({ dispose() {} }),
+    // 与 useModelSelectionServiceView 一致：动态失效信号按目标订阅，不携带快照。
+    onDynamicDidChange: () => () => ({ dispose() {} }),
     async getView() {
       fixture.modelReads++;
       if (modelMode === "pending")
@@ -53,12 +54,6 @@ const serviceValues = {
       if (modelMode === "failure" && fixture.modelReads === 1)
         throw new Error("Fixture model settings failure");
       return modelView;
-    },
-  },
-  codingPlanSubscriptionService: {
-    async getDynamicWorkflowClientConfig() {
-      fixture.calls.push("workflow.localConfig");
-      return { enabled: true };
     },
   },
   zcodeAgentService: {
