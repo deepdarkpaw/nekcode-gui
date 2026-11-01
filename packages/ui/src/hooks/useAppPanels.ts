@@ -22,7 +22,6 @@ import {
   openModelTrajectorySidePane,
   openTerminalSidePane,
   openSubagentSessionSidePane,
-  openSubagentDirectorySidePane,
   openSelectionSideChatPane,
   openPlanDetailSidePane,
   activateDeveloperToolsSidePane,
@@ -40,7 +39,6 @@ import {
   type OpenScopedSubagentSideTabRequest,
   type OpenBackgroundBashSideTabRequest,
   openBackgroundBashSidePane,
-  type OpenScopedSubagentDirectorySideTabRequest,
   type OpenSelectionSideChatRequest,
   type OpenScopedPlanDetailSideTabRequest,
   type WorkspaceSidePaneState,
@@ -424,27 +422,6 @@ export function useAppPanels(options: {
     [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
   );
 
-  const handleOpenSubagentDirectory = useCallback(
-    (request: OpenScopedSubagentDirectorySideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      const rootSessionId = request.rootSessionId ?? request.parentSessionId;
-      revealSidePaneForCurrentOwner();
-      commitOpenedSidePaneState((current) => {
-        const next = openSubagentDirectorySidePane(current, {
-          workspaceKey,
-          workspacePath: request.workspacePath,
-          ...(request.workspaceIdentity ? { workspaceIdentity: request.workspaceIdentity } : {}),
-          ...(request.remoteSessionId ? { remoteSessionId: request.remoteSessionId } : {}),
-          rootSessionId,
-          parentSessionId: request.parentSessionId,
-        });
-        lastActiveSubagentTabByRootRef.current.set(rootSessionId, next.activeTabId);
-        return next;
-      });
-    },
-    [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
-  );
-
   const handleSyncSubagentSessionTabs = useCallback(
     (request: import("@/lib/workspaceSidePane.js").SyncSubagentSessionTabsRequest) => {
       // 分支 edit/retry 的失效 tab 属于投影清理，不进入“最近关闭”。
@@ -625,7 +602,7 @@ export function useAppPanels(options: {
     (tabId: string) => {
       commitSidePaneState((current) => {
         const target = current?.tabs.find((candidate) => candidate.id === tabId);
-        if (target?.type === "subagent-session" || target?.type === "subagent-directory") {
+        if (target?.type === "subagent-session") {
           lastActiveSubagentTabByRootRef.current.set(target.rootSessionId, target.id);
         }
         return setActiveSidePaneTab(current, tabId);
@@ -774,7 +751,7 @@ export function useAppPanels(options: {
       commitSidePaneState((sidePaneCurrent) => {
         const restoredTab = item.tab;
         const next = restoreSidePaneTab(sidePaneCurrent, restoredTab);
-        if (restoredTab.type === "subagent-session" || restoredTab.type === "subagent-directory") {
+        if (restoredTab.type === "subagent-session") {
           lastActiveSubagentTabByRootRef.current.set(restoredTab.rootSessionId, restoredTab.id);
         }
         return next;
@@ -822,7 +799,6 @@ export function useAppPanels(options: {
     handleOpenModelTrajectory,
     handleOpenSubagentSession,
     handleOpenBackgroundBash,
-    handleOpenSubagentDirectory,
     handleSyncSubagentSessionTabs,
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,

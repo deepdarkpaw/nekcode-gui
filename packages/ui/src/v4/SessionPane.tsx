@@ -204,7 +204,6 @@ import type {
   OpenScopedPlanDetailSideTabRequest,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
-  OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   SyncSubagentSessionTabsRequest,
   OpenSubagentSideTabRequest,
@@ -287,7 +286,6 @@ export interface SessionPaneProps {
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
-  onOpenSubagentDirectory?: (request: OpenScopedSubagentDirectorySideTabRequest) => void;
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
@@ -454,7 +452,6 @@ export function SessionPane({
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
-  onOpenSubagentDirectory,
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
   onOpenPlanDetail,
@@ -1469,18 +1466,6 @@ export function SessionPane({
       });
     },
     [onOpenSubagentSession, remoteSessionId, rootSessionId, workspaceIdentity, workspacePath],
-  );
-  const handleOpenSubagentDirectory = useCallback(
-    (request: import("@/lib/workspaceSidePane.js").OpenSubagentDirectorySideTabRequest) => {
-      onOpenSubagentDirectory?.({
-        ...request,
-        rootSessionId: request.rootSessionId ?? rootSessionId ?? request.parentSessionId,
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        ...(remoteSessionId ? { remoteSessionId } : {}),
-      });
-    },
-    [onOpenSubagentDirectory, remoteSessionId, rootSessionId, workspaceIdentity, workspacePath],
   );
   const handleOpenPlanDetail = useCallback(
     (request: OpenPlanDetailSideTabRequest) => {

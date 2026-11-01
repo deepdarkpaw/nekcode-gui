@@ -209,9 +209,6 @@ export interface WorkspaceShellLayoutProps extends AppProps {
   handleOpenCodeViewer: (source: CodeViewerSource) => void;
   handleOpenBackgroundBash: (request: OpenBackgroundBashSideTabRequest) => void;
   handleOpenSubagentSession: (request: OpenScopedSubagentSideTabRequest) => void;
-  handleOpenSubagentDirectory: (
-    request: import("@/lib/workspaceSidePane.js").OpenScopedSubagentDirectorySideTabRequest,
-  ) => void;
   handleSyncSubagentSessionTabs: (
     request: import("@/lib/workspaceSidePane.js").SyncSubagentSessionTabsRequest,
   ) => void;

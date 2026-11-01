@@ -205,7 +205,6 @@ export function App({
     handleOpenTerminalTab,
     handleOpenSubagentSession,
     handleOpenBackgroundBash,
-    handleOpenSubagentDirectory,
     handleSyncSubagentSessionTabs,
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,
@@ -1056,7 +1055,6 @@ export function App({
         handleOpenCodeViewer={handleOpenCodeViewerIfWritable}
         handleOpenSubagentSession={handleOpenSubagentSession}
         handleOpenBackgroundBash={handleOpenBackgroundBash}
-        handleOpenSubagentDirectory={handleOpenSubagentDirectory}
         handleSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
         handleOpenSelectionSideChat={handleOpenSelectionSideChat}
         handleOpenPlanDetail={handleOpenPlanDetail}
