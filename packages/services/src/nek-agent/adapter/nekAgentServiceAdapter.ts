@@ -1,4 +1,4 @@
-import { Emitter, type Event } from "@zcode/rpc";
+import type { Event } from "@zcode/rpc";
 import type {
   NekAgentMessage,
   NekInteractionFrame,
@@ -10,7 +10,6 @@ import type {
   CommandAck,
   CommandsQueryResult,
   ConversationSnapshot,
-  ConversationTopicFrame,
   ConversationTopicWireCandidate,
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
@@ -21,7 +20,8 @@ import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js
 import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
-import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
+import { workspaceKey } from "./frameHelpers.js";
+import { NekConversationSubscriptions } from "./nekConversationSubscriptions.js";
 import {
   queryConversationCommands,
   sendConversationCommand,
@@ -42,17 +42,6 @@ import type {
   NekWorkspaceConfigSubscribeParams,
   NekWorkspaceTarget,
 } from "./types.js";
-
-type ConversationEmitter = Emitter<ConversationTopicWireCandidate>;
-
-interface ConversationSubscription {
-  id: string;
-  workspaceKey: string;
-  sessionKey: string;
-  topic: string;
-  ordinal: number;
-  detach: () => void;
-}
 
 /**
  * 把 NekAgentService 接到现有 ZCode v4 host 面。
@@ -124,6 +113,8 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly onAgentRuntimeRestarted: IZCodeAgentService["onAgentRuntimeRestarted"];
   declare readonly disposeWorkspace: IZCodeAgentService["disposeWorkspace"];
   declare readonly disposeAll: IZCodeAgentService["disposeAll"];
+  /** 应用退出：`disposeServiceResourcesAndWait` 等待 nek 进程关闭与未用会话清理完成。 */
+  declare readonly disposeAllAndWait: () => Promise<void>;
   // nek status feed（薄壳实现见 nekAgentStatusMethods.ts，经 Object.assign 挂上）
   declare readonly onDynamicNekStatusFrame: NekAgentStatusMethods["onDynamicNekStatusFrame"];
   declare readonly getNekStatusSnapshot: NekAgentStatusMethods["getNekStatusSnapshot"];
@@ -135,16 +126,17 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly abortNekSession: NekAgentStatusMethods["abortNekSession"];
   declare readonly compactNekSession: NekAgentStatusMethods["compactNekSession"];
   readonly service: NekAgentService;
+  readonly logger: NekAgentServiceAdapterOptions["logger"];
   private readonly topics: NekAgentServiceTopics;
   private readonly interactions: NekAgentInteractionChannel;
   private readonly status: NekAgentStatusChannel;
   private readonly bindings: NekSessionBindings;
+  private readonly conversations: NekConversationSubscriptions;
   private disposed = false;
-  private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
-  private readonly conversationEmitters = new Map<string, ConversationEmitter>();
 
   constructor(options: NekAgentServiceAdapterOptions) {
     this.service = new NekAgentService(options);
+    this.logger = options.logger;
     this.bindings = new NekSessionBindings({
       getSession: (key) => this.service.getSession(key),
       listSessions: (target) => this.listNekSessions(target),
@@ -156,6 +148,9 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
         storage: new MemoryNekSessionIndexStorage(),
         listSessions: async (input) => await this.service.listSessions(input),
       });
+    this.conversations = new NekConversationSubscriptions(this.service, (target, sessionId) =>
+      this.ensureNekSessionBinding(target, sessionId),
+    );
     this.topics = new NekAgentServiceTopics(
       this.service,
       (target) => this.resolveSessionKey(target),
@@ -255,73 +250,17 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   async subscribeConversationV4(
     input: NekConversationSubscribeParams,
   ): Promise<V4ConversationSubscribeResult> {
-    this.assertSubscriptionCapacity();
-    const binding = await this.ensureNekSessionBinding(input, input.sessionId);
-    const id = makeSubscriptionId(`conversation/${input.sessionId}`);
-    const topic = `conversation/${input.sessionId}`;
-    let firstFrame: ConversationTopicFrame | undefined;
-    let first = true;
-    // 实时帧与恢复帧共用 subscription.ordinal：客户端丢弃不大于已处理最大序号的帧，
-    // 恢复帧若沿用过期序号会被静默丢弃，恢复只能超时。
-    const subscription: ConversationSubscription = {
-      id,
-      workspaceKey: workspaceKey(input),
-      sessionKey: binding.sessionKey,
-      topic,
-      ordinal: 0,
-      detach: () => {},
-    };
-    subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
-      firstFrame ??= frame;
-      subscription.ordinal += 1;
-      const mapped = makeWireFrame(
-        { ...frame, topic },
-        id,
-        subscription.ordinal,
-        first ? "initial" : "online",
-      );
-      first = false;
-      this.conversationEmitter(subscription.workspaceKey).fire(mapped);
-    });
-    this.conversationSubscriptions.set(id, subscription);
-    return {
-      ack: {
-        subscriptionId: id,
-        mode: "snapshot",
-        logEpoch:
-          firstFrame?.payload.kind === "snapshot" ? firstFrame.payload.snapshot.logEpoch : "nek-1",
-      },
-    };
+    return await this.conversations.subscribe(input);
   }
 
   async resyncConversationV4(
     input: NekConversationResyncParams,
   ): Promise<V4ConversationResyncResult> {
-    const subscription = this.conversationSubscriptions.get(input.subscriptionId);
-    if (!subscription) throw new Error(`unknown conversation subscription ${input.subscriptionId}`);
-    const snapshot = this.service.conversationSnapshot(subscription.sessionKey);
-    const frame: ConversationTopicFrame = {
-      topic: subscription.topic,
-      subscriptionId: subscription.id,
-      fromSeq: 0,
-      toSeq: snapshot.seq,
-      sentAt: Date.now(),
-      payload: { kind: "snapshot", snapshot },
-    };
-    subscription.ordinal += 1;
-    this.conversationEmitter(subscription.workspaceKey).fire(
-      makeWireFrame(frame, subscription.id, subscription.ordinal, "recovery"),
-    );
-    return {
-      ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch },
-    };
+    return await this.conversations.resync(input);
   }
 
   async unsubscribeConversationV4(input: NekConversationUnsubscribeParams): Promise<void> {
-    const subscription = this.conversationSubscriptions.get(input.subscriptionId);
-    if (!subscription) return;
-    subscription.detach();
-    this.conversationSubscriptions.delete(input.subscriptionId);
+    this.conversations.unsubscribe(input);
   }
 
   onDynamicNekInteractionFrame = (target: NekWorkspaceTarget): Event<NekInteractionFrame> =>
@@ -332,7 +271,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   ): Promise<void> => await this.interactions.respond(input.response);
 
   onDynamicConversationFrame(target: NekWorkspaceTarget): Event<ConversationTopicWireCandidate> {
-    return this.conversationEmitter(workspaceKey(target)).event;
+    return this.conversations.onDynamicFrame(target);
   }
 
   async subscribeSessionsIndexV4(
@@ -410,10 +349,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     if (this.disposed) return;
     this.disposed = true;
     this.bindings.dispose();
-    for (const subscription of this.conversationSubscriptions.values()) subscription.detach();
-    this.conversationSubscriptions.clear();
-    for (const emitter of this.conversationEmitters.values()) emitter.dispose();
-    this.conversationEmitters.clear();
+    this.conversations.dispose();
     this.interactions.dispose();
     this.status.dispose();
     await this.topics.dispose();
@@ -422,19 +358,5 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
 
   resolveSessionKey(target: NekWorkspaceTarget, sessionId?: string): string | undefined {
     return this.bindings.resolve(target, sessionId);
-  }
-
-  private assertSubscriptionCapacity(): void {
-    if (this.conversationSubscriptions.size >= 128)
-      throw new Error("nek conversation subscription limit exceeded (128)");
-  }
-
-  private conversationEmitter(workspace: string): ConversationEmitter {
-    let emitter = this.conversationEmitters.get(workspace);
-    if (!emitter) {
-      emitter = new Emitter<ConversationTopicWireCandidate>();
-      this.conversationEmitters.set(workspace, emitter);
-    }
-    return emitter;
   }
 }
