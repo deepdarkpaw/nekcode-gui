@@ -4,16 +4,23 @@ import {
   credentialValueSchema,
   type RemoteDesktopMessage,
 } from "@zcode/shared";
-import { createRemoteCredentialSafeStorage } from "./remoteCredentialSafeStorage.js";
+import {
+  createRemoteCredentialSafeStorage,
+  type RemoteCredentialSafeStorage,
+} from "./remoteCredentialSafeStorage.js";
 
 /** One store/write queue for settings hosts and every window's workspace credential RPC. */
 export const desktopRemoteCredentialStore = createRemoteCredentialSafeStorage();
 
 type CredentialRequest = Extract<RemoteDesktopMessage, { type: "remote-credential-request" }>;
+type CredentialStore = Pick<
+  RemoteCredentialSafeStorage,
+  "getCredential" | "setCredential" | "deleteCredential"
+>;
 
 export async function dispatchDesktopCredentialRequest(
   request: CredentialRequest,
-  store = desktopRemoteCredentialStore,
+  store: CredentialStore = desktopRemoteCredentialStore,
 ): Promise<RemoteDesktopMessage> {
   try {
     const key = credentialKeySchema.parse(request.key);
@@ -22,11 +29,18 @@ export async function dispatchDesktopCredentialRequest(
       if (value !== undefined && typeof value !== "string") {
         throw new Error("workspace credential must be a string");
       }
-      return { type: "remote-credential-result", requestId: request.requestId, value: value ?? null };
+      return {
+        type: "remote-credential-result",
+        requestId: request.requestId,
+        value: value ?? null,
+      };
     }
     if (request.operation === "save") {
       const result = await store.setCredential(key, credentialValueSchema.parse(request.value));
-      if (!result.persisted) throw new Error("OS credential encryption is unavailable; credential was not saved");
+      if (!result.persisted)
+        throw new Error(
+          "OS credential encryption is unavailable; the credential is kept in memory for this run only",
+        );
     } else {
       await store.deleteCredential(key);
     }

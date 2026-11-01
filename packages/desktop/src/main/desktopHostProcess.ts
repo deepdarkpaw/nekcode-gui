@@ -186,6 +186,8 @@ export function spawnHostProcess(
     },
   });
 
+  const { logger } = dependencies;
+  logger.info(`[spawnHostProcess] forked (${label}) pid=${child.pid} ${hostModulePath}`);
   attachDesktopCredentialBridge(child);
   dependencies.logger.info(
     `[spawnHostProcess] BIGMODEL_OAUTH_APP_SECRET source: ${process.env.BIGMODEL_OAUTH_APP_SECRET ? "process" : dependencies.hostProcessLocalEnv.BIGMODEL_OAUTH_APP_SECRET ? "dotenv" : "fallback"}`,

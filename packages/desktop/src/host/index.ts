@@ -936,7 +936,10 @@ const windowRemoteConnectionRegistry = createWindowRemoteConnectionRegistry<
   ServiceCollection,
   HostRemoteConnectionCapabilities
 >({
-  connect: (request) => reconnectRemote(request, (signal) => createWindowRemoteConnectionHandle({ ...request, signal })),
+  connect: (request) =>
+    reconnectRemote(request, (signal) =>
+      createWindowRemoteConnectionHandle({ ...request, signal }),
+    ),
   createId: randomUUID,
   releaseWorkspace: async (services, context) => {
     await services.get(IZCodeTaskService).releaseWorkspacePreparation({
@@ -1947,4 +1950,3 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     await databaseStartup.coordinator.start();
   }
 });
-

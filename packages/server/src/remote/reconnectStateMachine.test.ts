@@ -84,4 +84,27 @@ describe("RemoteReconnectStateMachine", () => {
     expect(machine.state).toEqual({ kind: "cancelled" });
     expect(calls).toBe(2);
   });
+
+  it("stays cancelled on later disconnects but resumes on an explicit retry", async () => {
+    const clock = new FakeClock();
+    let calls = 0;
+    const machine = new RemoteReconnectStateMachine({
+      backoffSeconds: [1],
+      clock,
+      connect: async () => {
+        calls += 1;
+      },
+    });
+    machine.markDisconnected();
+    machine.cancel();
+    machine.markDisconnected(new Error("closed again"));
+    await clock.advance(1000);
+    expect(machine.state).toEqual({ kind: "cancelled" });
+    expect(calls).toBe(0);
+    machine.retryNow();
+    expect(machine.state).toMatchObject({ kind: "reconnecting", attempt: 1, nextDelayMs: 0 });
+    await clock.advance(0);
+    expect(calls).toBe(1);
+    expect(machine.state).toEqual({ kind: "connected" });
+  });
 });

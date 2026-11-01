@@ -10,37 +10,58 @@ export function savedHostAuthMethod(target: RemoteTarget): NekRemoteHost["authMe
 
 /** Saved-host form has no remember checkbox: Save stores its supplied secret; blank edit keeps it. */
 export class SavedRemoteHostCredentials {
-  constructor(private readonly store: Pick<RemoteCredentialSafeStorage,
-    "getCredential" | "setCredential" | "deleteCredential">) {}
+  constructor(
+    private readonly store: Pick<
+      RemoteCredentialSafeStorage,
+      "getCredential" | "setCredential" | "deleteCredential"
+    >,
+  ) {}
 
-  private key(connectionId: string): string { return `remote-host:${connectionId}`; }
+  private key(connectionId: string): string {
+    return `remote-host:${connectionId}`;
+  }
 
   async save(connectionId: string, target: RemoteTarget, previous?: RemoteTarget): Promise<void> {
     if (target.kind !== "ssh") return this.delete(connectionId);
-    const sameIdentity = previous?.kind === "ssh" &&
-      buildSshRemoteHostKey(target) === buildSshRemoteHostKey(previous);
+    const sameIdentity =
+      previous?.kind === "ssh" && buildSshRemoteHostKey(target) === buildSshRemoteHostKey(previous);
     const old = sameIdentity ? await this.store.getCredential(this.key(connectionId)) : undefined;
+    // 留空编辑沿用已保存的密钥口令 / 密码；换认证方式时不带入另一种秘密。
+    const kept =
+      typeof old !== "object"
+        ? {}
+        : target.privateKeyPath
+          ? old.privateKeyPassphrase
+            ? { privateKeyPassphrase: old.privateKeyPassphrase }
+            : {}
+          : old.password
+            ? { password: old.password }
+            : {};
     const credentials = {
-      ...(target.privateKeyPath
-        ? { ...(typeof old === "object" && old.privateKeyPassphrase ? { privateKeyPassphrase: old.privateKeyPassphrase } : {}) }
-        : { ...(typeof old === "object" && old.password ? { password: old.password } : {}) }),
+      ...kept,
       ...(target.password !== undefined ? { password: target.password } : {}),
-      ...(target.privateKeyPassphrase !== undefined ? { privateKeyPassphrase: target.privateKeyPassphrase } : {}),
+      ...(target.privateKeyPassphrase !== undefined
+        ? { privateKeyPassphrase: target.privateKeyPassphrase }
+        : {}),
     };
     if (Object.keys(credentials).length === 0) return this.delete(connectionId);
     const result = await this.store.setCredential(this.key(connectionId), credentials);
-    if (!result.persisted) throw new Error("OS credential encryption is unavailable; remote host was not saved");
+    if (!result.persisted)
+      throw new Error("OS credential encryption is unavailable; remote host was not saved");
   }
 
   async restore(connectionId: string, target: RemoteTarget): Promise<RemoteTarget> {
     if (target.kind !== "ssh") return target;
     const stored = await this.store.getCredential(this.key(connectionId));
     if (stored === undefined) return target;
-    if (typeof stored !== "object") throw new Error(`invalid saved-host credentials: ${connectionId}`);
+    if (typeof stored !== "object")
+      throw new Error(`invalid saved-host credentials: ${connectionId}`);
     return {
       ...target,
       ...(stored.password !== undefined ? { password: stored.password } : {}),
-      ...(stored.privateKeyPassphrase !== undefined ? { privateKeyPassphrase: stored.privateKeyPassphrase } : {}),
+      ...(stored.privateKeyPassphrase !== undefined
+        ? { privateKeyPassphrase: stored.privateKeyPassphrase }
+        : {}),
     };
   }
 

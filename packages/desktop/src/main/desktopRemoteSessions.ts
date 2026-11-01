@@ -161,16 +161,20 @@ export function createRemoteWorkspaceSessionManager(options: {
   const reconnect = createDesktopRemoteReconnect({
     reattach: async (sessionId) => {
       const route = routesBySessionId.get(sessionId);
-      const win = route && BrowserWindow.getAllWindows().find((item) => item.webContents.id === route.webContentsId);
+      const win =
+        route &&
+        BrowserWindow.getAllWindows().find((item) => item.webContents.id === route.webContentsId);
       if (!route || !win) throw new Error("remote workspace window is unavailable");
       await attachRendererPort(win, route, "ssh-reconnected");
       route.attachmentState = "attachable";
     },
     disconnect: (sessionId) => {
       const route = routesBySessionId.get(sessionId);
-      if (route) detachRouteAttachments(route, "ssh-disconnected", new Error("remote SSH connection lost"));
+      if (route)
+        detachRouteAttachments(route, "ssh-disconnected", new Error("remote SSH connection lost"));
     },
-    onError: (sessionId, error) => options.logger.error("remote SSH reattachment failed", { sessionId, error }),
+    onError: (sessionId, error) =>
+      options.logger.error("remote SSH reattachment failed", { sessionId, error }),
   });
 
   function detachServicePort(

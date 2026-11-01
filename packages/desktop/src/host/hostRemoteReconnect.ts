@@ -2,14 +2,20 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { remoteDesktopMessageSchema, type RemoteTarget } from "@zcode/shared";
 import { loadGuiRuntimeConfig } from "../../../services/src/nek-agent/guiRuntimeConfigLoader.js";
-import { createReconnectingRemoteConnection, type RemoteReconnectControls } from "./reconnectingRemoteConnection.js";
+import {
+  createReconnectingRemoteConnection,
+  type RemoteReconnectControls,
+} from "./reconnectingRemoteConnection.js";
 import type { WindowRemoteConnectionHandle } from "./windowRemoteConnectionRegistry.js";
 
 /** Window Host command routing owns no retry state; it delegates to the entry's adapter. */
-export function createHostRemoteReconnect(port: {
-  on(event: "message", listener: (event: { data: unknown }) => void): unknown;
-  postMessage(message: unknown): void;
-}, warn: (...args: unknown[]) => void) {
+export function createHostRemoteReconnect(
+  port: {
+    on(event: "message", listener: (event: { data: unknown }) => void): unknown;
+    postMessage(message: unknown): void;
+  },
+  warn: (...args: unknown[]) => void,
+) {
   const adapters = new Map<string, RemoteReconnectControls>();
   port.on("message", ({ data }) => {
     const parsed = remoteDesktopMessageSchema.safeParse(data);
@@ -26,8 +32,12 @@ export function createHostRemoteReconnect(port: {
     for (const diagnostic of result.diagnostics) warn("invalid GUI runtime config", diagnostic);
     return result.config;
   });
-  return async <TServices, TCapabilities>(request: { target: RemoteTarget; signal: AbortSignal },
-    connect: (signal: AbortSignal) => Promise<WindowRemoteConnectionHandle<TServices, TCapabilities>>) => {
+  return async <TServices, TCapabilities>(
+    request: { target: RemoteTarget; signal: AbortSignal },
+    connect: (
+      signal: AbortSignal,
+    ) => Promise<WindowRemoteConnectionHandle<TServices, TCapabilities>>,
+  ) => {
     const config = await loaded;
     return createReconnectingRemoteConnection({
       ...request,
@@ -36,7 +46,9 @@ export function createHostRemoteReconnect(port: {
       emit: (event) => port.postMessage({ type: "remote-connection-status", event }),
       attachReconnectAdapter: (connectionId, adapter) => {
         adapters.set(connectionId, adapter);
-        return () => { if (adapters.get(connectionId) === adapter) adapters.delete(connectionId); };
+        return () => {
+          if (adapters.get(connectionId) === adapter) adapters.delete(connectionId);
+        };
       },
     });
   };

@@ -1,5 +1,11 @@
 import { ZCODE_VERSION, type RemoteTarget } from "@zcode/shared";
-import type { ConnectOptions, DeployLockMode, IRemoteBackend, RemoteConnection, RemoteRuntimeNetworkOptions } from "@zcode/server/remote";
+import type {
+  ConnectOptions,
+  DeployLockMode,
+  IRemoteBackend,
+  RemoteConnection,
+  RemoteRuntimeNetworkOptions,
+} from "@zcode/server/remote";
 
 /** Create one physical transport; the enclosing window entry owns retry and replacement. */
 export async function setupRemoteConnection(
@@ -10,7 +16,8 @@ export async function setupRemoteConnection(
   deployLockMode: DeployLockMode = "remote",
   signal?: AbortSignal,
 ): Promise<RemoteConnection & { backend: IRemoteBackend }> {
-  const { createRemoteBackend, connectRemote, pickRemoteRuntimeEnv } = await import("@zcode/server/remote");
+  const { createRemoteBackend, connectRemote, pickRemoteRuntimeEnv } =
+    await import("@zcode/server/remote");
   const backend = await createRemoteBackend(target);
   const connection = await connectRemote(backend, {
     ...remoteAssets,

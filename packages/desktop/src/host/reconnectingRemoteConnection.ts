@@ -1,6 +1,9 @@
 import { buildSshRemoteHostKey, type RemoteTarget } from "@zcode/shared";
 import type { RemoteConnectionStatusEvent } from "@zcode/shared/nek-protocol";
-import { RemoteReconnectStateMachine, type ReconnectClock } from "@zcode/server/remote/reconnectStateMachine.js";
+import {
+  RemoteReconnectStateMachine,
+  type ReconnectClock,
+} from "@zcode/server/remote/reconnectStateMachine.js";
 import { RemoteReconnectStatusAdapter } from "@zcode/server/remote/remoteReconnectAdapter.js";
 import type { WindowRemoteConnectionHandle } from "./windowRemoteConnectionRegistry.js";
 
@@ -63,7 +66,9 @@ export async function createReconnectingRemoteConnection<TServices, TCapabilitie
     closeSubscription = current.onDidClose?.((event) => {
       if (disposed || !available) return;
       void retire();
-      machine.markDisconnected(event.error ?? new Error(`SSH connection closed (${event.exitCode})`));
+      machine.markDisconnected(
+        event.error ?? new Error(`SSH connection closed (${event.exitCode})`),
+      );
     });
   };
   const adapter = new RemoteReconnectStatusAdapter({ connectionId, machine, emit: options.emit });

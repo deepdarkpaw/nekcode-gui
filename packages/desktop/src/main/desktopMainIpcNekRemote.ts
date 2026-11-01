@@ -82,7 +82,8 @@ export class NekRemoteInteractionHostService implements IRemoteInteractionHostAp
   }
 
   emitStatus(event: RemoteConnectionStatusEvent): void {
-    if (this.reconnectAdapters.has(event.connectionId)) this.statuses.set(event.connectionId, event);
+    if (this.reconnectAdapters.has(event.connectionId))
+      this.statuses.set(event.connectionId, event);
     this.emit(this.statusListeners, event);
   }
 

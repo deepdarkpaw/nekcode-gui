@@ -7,11 +7,14 @@ export function createHostCredentialBridge(port: {
   postMessage(message: unknown): void;
   on(event: "message", listener: (event: { data: unknown }) => void): unknown;
 }): ICredentialService {
-  const pending = new Map<string, {
-    resolve(value: string | null): void;
-    reject(error: Error): void;
-    timer: ReturnType<typeof setTimeout>;
-  }>();
+  const pending = new Map<
+    string,
+    {
+      resolve(value: string | null): void;
+      reject(error: Error): void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   port.on("message", ({ data }) => {
     const parsed = remoteDesktopMessageSchema.safeParse(data);
     if (!parsed.success || parsed.data.type !== "remote-credential-result") return;
@@ -23,7 +26,8 @@ export function createHostCredentialBridge(port: {
     else request.resolve(parsed.data.value ?? null);
   });
   const call = (operation: "load" | "save" | "delete", key: string, value?: string) => {
-    if (pending.size >= 64) return Promise.reject(new Error("too many pending credential requests"));
+    if (pending.size >= 64)
+      return Promise.reject(new Error("too many pending credential requests"));
     const requestId = randomUUID();
     return new Promise<string | null>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -32,10 +36,15 @@ export function createHostCredentialBridge(port: {
       }, 30_000);
       pending.set(requestId, { resolve, reject, timer });
       const message: RemoteDesktopMessage = {
-        type: "remote-credential-request", requestId, operation, key, ...(value === undefined ? {} : { value }),
+        type: "remote-credential-request",
+        requestId,
+        operation,
+        key,
+        ...(value === undefined ? {} : { value }),
       };
-      try { port.postMessage(message); }
-      catch (error) {
+      try {
+        port.postMessage(message);
+      } catch (error) {
         clearTimeout(timer);
         pending.delete(requestId);
         reject(error);
@@ -44,7 +53,11 @@ export function createHostCredentialBridge(port: {
   };
   return {
     load: (key) => call("load", key),
-    save: async (key, value) => { await call("save", key, value); },
-    delete: async (key) => { await call("delete", key); },
+    save: async (key, value) => {
+      await call("save", key, value);
+    },
+    delete: async (key) => {
+      await call("delete", key);
+    },
   };
 }

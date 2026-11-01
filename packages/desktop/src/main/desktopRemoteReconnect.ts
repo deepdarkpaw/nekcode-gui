@@ -14,19 +14,32 @@ export function createDesktopRemoteReconnect(options: {
   disconnect(sessionId: string): void;
   onError(sessionId: string, error: unknown): void;
 }) {
-  const bindings = new Map<string, {
-    physicalId: string;
-    child: { postMessage(message: unknown): void };
-    detach(): void;
-    kind: RemoteConnectionStatusEvent["kind"];
-  }>();
+  const bindings = new Map<
+    string,
+    {
+      physicalId: string;
+      child: { postMessage(message: unknown): void };
+      detach(): void;
+      kind: RemoteConnectionStatusEvent["kind"];
+    }
+  >();
   return {
     bind(sessionId: string, target: RemoteTarget, child: { postMessage(message: unknown): void }) {
       if (target.kind !== "ssh") return () => undefined;
       const physicalId = buildSshRemoteHostKey(target);
       const detach = desktopRemoteInteraction.attachReconnectAdapter(sessionId, {
-        retryNow: () => child.postMessage({ type: "remote-reconnect-command", connectionId: physicalId, action: "retry" }),
-        cancelReconnect: () => child.postMessage({ type: "remote-reconnect-command", connectionId: physicalId, action: "cancel" }),
+        retryNow: () =>
+          child.postMessage({
+            type: "remote-reconnect-command",
+            connectionId: physicalId,
+            action: "retry",
+          }),
+        cancelReconnect: () =>
+          child.postMessage({
+            type: "remote-reconnect-command",
+            connectionId: physicalId,
+            action: "cancel",
+          }),
         dispose: () => undefined,
       });
       bindings.set(sessionId, { physicalId, child, detach, kind: "connected" });
@@ -48,7 +61,11 @@ export function createDesktopRemoteReconnect(options: {
         if (event.kind === "disconnected") options.disconnect(sessionId);
         if (event.kind === "connected" && previous !== "connected") {
           void options.reattach(sessionId).catch((error) => {
-            desktopRemoteInteraction.emitStatus({ connectionId: sessionId, kind: "failed", message: error instanceof Error ? error.message : String(error) });
+            desktopRemoteInteraction.emitStatus({
+              connectionId: sessionId,
+              kind: "failed",
+              message: error instanceof Error ? error.message : String(error),
+            });
             options.onError(sessionId, error);
           });
         }

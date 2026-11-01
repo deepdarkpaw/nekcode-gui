@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -25,8 +24,6 @@ import {
   toLocatorCommand,
 } from "../../../services/src/nek-agent/nekLocator.js";
 import {
-  buildNekInstallCommand,
-  buildNekInstallPowerShellCommand,
   createRemoteBackend,
   detectRemoteNek,
   installRemoteNek,
@@ -38,6 +35,12 @@ import { NekRemoteConfigConnectionRegistry } from "./desktopMainIpcNekConfig.js"
 import type { RemoteCredentialSafeStorage } from "./remoteCredentialSafeStorage.js";
 import { desktopRemoteCredentialStore } from "./desktopCredentialBridge.js";
 import { SavedRemoteHostCredentials, savedHostAuthMethod } from "./savedRemoteHostCredentials.js";
+import {
+  localInstallInvocation,
+  mapInstallResult,
+  runLocalCommand,
+  type LogListener,
+} from "./desktopLocalNekInstall.js";
 
 interface StoredHost {
   connectionId: string;
@@ -48,12 +51,10 @@ interface StoredHost {
 }
 
 type HostListener = () => void;
-type LogListener = (line: string) => void;
 
 const GUI_DIR = join(homedir(), ".nek", "gui");
 const HOSTS_PATH = join(GUI_DIR, "hosts.json");
 const ONBOARDING_PATH = join(GUI_DIR, "onboarding.json");
-const MAX_LOG_BYTES = 64 * 1024;
 function asErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -72,78 +73,6 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   const temporary = `${path}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await rename(temporary, path);
-}
-
-function mapInstallResult(result: {
-  ok: boolean;
-  cancelled: boolean;
-  stderrSummary: string;
-  exitCode: number | null;
-  manualCommand?: string;
-}): NekInstallResult {
-  if (result.ok) {
-    return { ok: true, version: "unknown" };
-  }
-  return {
-    ok: false,
-    cancelled: result.cancelled,
-    message: result.stderrSummary || `installer exited with ${result.exitCode ?? "no code"}`,
-    manualCommand: result.manualCommand ?? "",
-  };
-}
-
-function appendLines(buffer: { value: string }, chunk: Buffer | string, onLog: LogListener): void {
-  buffer.value = `${buffer.value}${chunk.toString()}`.slice(-MAX_LOG_BYTES);
-  const lines = buffer.value.split(/\r?\n/u);
-  buffer.value = lines.pop() ?? "";
-  for (const line of lines) {
-    if (line.trim()) onLog(line);
-  }
-}
-
-/** 本机安装 nek 的命令：Windows 走官方 `install.ps1`，其他平台走 `install.sh`。 */
-function localInstallInvocation(options: NekInstallOptions): {
-  file: string;
-  args: string[];
-  manualCommand: string;
-} {
-  if (process.platform === "win32") {
-    const command = buildNekInstallPowerShellCommand(options);
-    return {
-      file: "powershell.exe",
-      args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
-      manualCommand: command,
-    };
-  }
-  const command = buildNekInstallCommand(options);
-  return { file: "sh", args: ["-lc", command], manualCommand: command };
-}
-
-async function runLocalCommand(
-  command: string,
-  args: string[],
-  signal: AbortSignal,
-  onLog: LogListener,
-  options: { windowsVerbatimArguments?: boolean } = {},
-): Promise<{ code: number | null; cancelled: boolean; output: string }> {
-  const child = spawn(command, args, {
-    cwd: homedir(),
-    windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsVerbatimArguments: options.windowsVerbatimArguments ?? false,
-  });
-  const output = { value: "" };
-  const abort = () => child.kill("SIGINT");
-  signal.addEventListener("abort", abort, { once: true });
-  child.stdout.on("data", (chunk: Buffer | string) => appendLines(output, chunk, onLog));
-  child.stderr.on("data", (chunk: Buffer | string) => appendLines(output, chunk, onLog));
-  const code = await new Promise<number | null>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", resolve);
-  });
-  signal.removeEventListener("abort", abort);
-  if (output.value.trim()) onLog(output.value);
-  return { code, cancelled: signal.aborted, output: output.value };
 }
 
 interface NekSettingsHostServiceOptions {
@@ -170,7 +99,9 @@ export class NekSettingsHostService implements INekSettingsHostApi {
 
   constructor(options: NekSettingsHostServiceOptions = {}) {
     this.locator = options.locator ?? new NekLocator();
-    this.credentials = new SavedRemoteHostCredentials(options.credentialStore ?? desktopRemoteCredentialStore);
+    this.credentials = new SavedRemoteHostCredentials(
+      options.credentialStore ?? desktopRemoteCredentialStore,
+    );
     this.remoteConfigs = options.remoteConfigs ?? new NekRemoteConfigConnectionRegistry();
     this.hostsPath = options.hostsPath ?? HOSTS_PATH;
   }
@@ -197,7 +128,13 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       authMethod: savedHostAuthMethod(input.target),
       fingerprints: current?.fingerprints ?? [],
     };
-    if (current && input.target.kind === "ssh" && !input.target.privateKeyPath && input.target.password === undefined) next.authMethod = current.authMethod;
+    if (
+      current &&
+      input.target.kind === "ssh" &&
+      !input.target.privateKeyPath &&
+      input.target.password === undefined
+    )
+      next.authMethod = current.authMethod;
     await this.credentials.save(connectionId, input.target, current?.target);
     const index = hosts.findIndex((host) => host.connectionId === connectionId);
     if (index === -1) hosts.push(next);
@@ -220,7 +157,10 @@ export class NekSettingsHostService implements INekSettingsHostApi {
   /** 建立配置读写用的远端连接；主机密钥由 SSH backend 的 known-hosts 存储负责，不伪造指纹。 */
   async connectHost(connectionId: string): Promise<void> {
     const host = await this.requireHost(connectionId);
-    await this.remoteConfigs.connect(connectionId, await this.credentials.restore(host.connectionId, host.target));
+    await this.remoteConfigs.connect(
+      connectionId,
+      await this.credentials.restore(host.connectionId, host.target),
+    );
     this.emitHostsChanged();
   }
 
@@ -250,7 +190,9 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     const startedAt = Date.now();
     let backend: IRemoteBackend | undefined;
     try {
-      backend = await createRemoteBackend(await this.credentials.restore(host.connectionId, host.target));
+      backend = await createRemoteBackend(
+        await this.credentials.restore(host.connectionId, host.target),
+      );
       const detected = await detectRemoteNek(backend);
       if (detected.status !== "ready")
         return { ok: false, message: detected.error ?? detected.status };
@@ -268,7 +210,9 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     onLog: LogListener,
   ): Promise<NekInstallResult> {
     const host = await this.requireHost(connectionId);
-    const backend = await createRemoteBackend(await this.credentials.restore(host.connectionId, host.target));
+    const backend = await createRemoteBackend(
+      await this.credentials.restore(host.connectionId, host.target),
+    );
     try {
       return mapInstallResult(await installRemoteNek(backend, { ...options, onLog }));
     } finally {
