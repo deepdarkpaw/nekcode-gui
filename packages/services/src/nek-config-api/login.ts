@@ -23,6 +23,7 @@ import type {
 import { NEK_STRUCTURED_KINDS } from "@zcode/shared/nek-protocol";
 import type { NekControlClient } from "./control.js";
 import { validationError } from "./errors.js";
+import type { NekLoginPortForward } from "./runtime.js";
 
 /** OAuth 回调端口（nek 内置 provider）；远程目标需要 host 转发这些端口。 */
 export const LOGIN_CALLBACK_PORTS: Readonly<Record<string, number>> = {
@@ -63,6 +64,7 @@ interface LoginRun {
   listeners: Set<(event: NekLoginEvent) => void>;
   prompts: Map<string, PendingPrompt>;
   detachAuth: () => void;
+  forwardedPorts?: NekLoginPortForward;
   finished: boolean;
 }
 
@@ -71,8 +73,8 @@ export interface NekLoginManagerOptions {
   control: (target: NekConfigTarget) => Promise<NekControlClient>;
   /** 登录在没有待答复提示时被取消：终止控制进程以中断 nek 侧的流程。 */
   abort?: (target: NekConfigTarget) => Promise<void>;
-  /** 远程目标需要端口转发时由 host 提供；返回真正建立的本机端口。 */
-  forwardPorts?: (target: NekConfigTarget, ports: number[]) => Promise<number[]>;
+  /** 远程目标需要端口转发时由 host 提供；调用方拥有并释放返回的 lease。 */
+  forwardPorts?: (target: NekConfigTarget, ports: number[]) => Promise<NekLoginPortForward>;
   logger?: { warn: (...args: unknown[]) => void };
 }
 
@@ -127,7 +129,15 @@ export class NekLoginManager {
       if (!active) return { type: "extension_ui_response", id: request.id, cancelled: true };
       return await this.handlePrompt(active, request, signal);
     });
-    const forwardedPorts = await this.forwardPorts(target, provider);
+    try {
+      run.forwardedPorts = await this.forwardPorts(target, provider);
+    } catch (error) {
+      this.finish(run, {
+        type: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     void control
       .call({ type: "auth_login", provider, method: "oauth" })
       .then(() => {
@@ -139,11 +149,12 @@ export class NekLoginManager {
           message: error instanceof Error ? error.message : String(error),
         });
       })
-      .finally(() => {
+      .finally(async () => {
         // 只摘掉自己：并发开始的下一次登录可能已经接管了处理器。
         if (this.activeByTarget.get(key) === run) this.activeByTarget.delete(key);
+        await this.closeForwardedPorts(run);
       });
-    return { loginId, forwardedPorts };
+    return { loginId, forwardedPorts: run.forwardedPorts?.ports ?? [] };
   }
 
   /** 答复登录提示：`promptId` 就是 nek 侧 structured 请求的 id。 */
@@ -231,6 +242,7 @@ export class NekLoginManager {
     for (const run of this.runs.values()) {
       run.detachAuth();
       run.listeners.clear();
+      void this.closeForwardedPorts(run);
     }
     this.runs.clear();
   }
@@ -269,17 +281,31 @@ export class NekLoginManager {
     return await response;
   }
 
-  private async forwardPorts(target: NekConfigTarget, provider: string): Promise<number[]> {
-    if (target.kind !== "remote") return [];
-    const ports = LOGIN_CALLBACK_PORTS[provider];
-    if (ports === undefined) return [];
+  private async forwardPorts(
+    target: NekConfigTarget,
+    provider: string,
+  ): Promise<NekLoginPortForward> {
+    if (target.kind !== "remote") return { ports: [], close: async () => undefined };
+    const port = LOGIN_CALLBACK_PORTS[provider];
+    if (port === undefined) return { ports: [], close: async () => undefined };
     if (!this.options.forwardPorts) {
       this.options.logger?.warn(
         `no port forwarding configured; ${provider} login on the remote target needs a manual code`,
       );
-      return [];
+      return { ports: [], close: async () => undefined };
     }
-    return await this.options.forwardPorts(target, [ports]);
+    return await this.options.forwardPorts(target, [port]);
+  }
+
+  private async closeForwardedPorts(run: LoginRun): Promise<void> {
+    const forwardedPorts = run.forwardedPorts;
+    run.forwardedPorts = undefined;
+    if (!forwardedPorts) return;
+    try {
+      await forwardedPorts.close();
+    } catch (error) {
+      this.options.logger?.warn("failed to close remote OAuth port forwarding", error);
+    }
   }
 
   private emit(run: LoginRun, event: NekLoginEvent): void {

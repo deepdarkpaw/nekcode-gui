@@ -919,6 +919,7 @@ const zhCN: Record<string, string> = {
   "update.toast.ready": "v{version} 已下载，重启即可安装",
   "update.toast.devSkipped": "开发环境不检查更新",
   "update.toast.error": "检查更新失败：{error}",
+  "remote.credential.notRemembered": "远程凭据无法用系统加密保存，仅在本次运行中有效：{error}",
   "forceUpdate.title": "需要升级 nekcode 后继续使用",
   "forceUpdate.description":
     "当前版本 v{currentVersion} 低于最低可用版本 v{minimalVersion}。请先完成升级，升级前暂时无法继续使用当前客户端。",

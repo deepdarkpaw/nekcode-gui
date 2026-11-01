@@ -1,4 +1,7 @@
-import { safeLogArgs } from "@zcode/shared";
+import { safeLogArgs, remoteDesktopMessageSchema } from "@zcode/shared";
+import { createHostCredentialBridge } from "./hostCredentialBridge.js";
+import { createHostRemoteReconnect } from "./hostRemoteReconnect.js";
+import { setupRemoteConnection } from "./setupRemoteConnection.js";
 /* eslint-disable max-lines -- Host 入口集中编排 local/remote service wiring，本次退出保护需要在同一处桥接 host 上报。 */
 /* eslint-disable max-lines -- host process 入口集中维护 local/remote 初始化和资源回收，realtime bridge 接入后先保持同文件收口。 */
 /**
@@ -53,7 +56,6 @@ import { createHostResourceUsageResponder } from "./hostResourceUsage.js";
 import {
   HostMessageTypes,
   HostResponseTypes,
-  ZCODE_VERSION,
   formatLogPrefix,
   formatZCodeHostProcessName,
   formatZodError,
@@ -77,7 +79,6 @@ import {
 // 改为动态 import，仅 remote 模式时才加载。
 import type {
   ConnectOptions,
-  DeployLockMode,
   IRemoteBackend,
   RemoteRuntimeNetworkOptions,
   RemoteConnection,
@@ -930,11 +931,15 @@ async function createWindowRemoteConnectionHandle(params: {
   };
 }
 
+const reconnectRemote = createHostRemoteReconnect(parentPort!, (...args) => logger.warn(...args));
 const windowRemoteConnectionRegistry = createWindowRemoteConnectionRegistry<
   ServiceCollection,
   HostRemoteConnectionCapabilities
 >({
-  connect: (request) => createWindowRemoteConnectionHandle(request),
+  connect: (request) =>
+    reconnectRemote(request, (signal) =>
+      createWindowRemoteConnectionHandle({ ...request, signal }),
+    ),
   createId: randomUUID,
   releaseWorkspace: async (services, context) => {
     await services.get(IZCodeTaskService).releaseWorkspacePreparation({
@@ -1446,6 +1451,8 @@ process.on(
 );
 
 parentPort.on("message", async (e: Electron.MessageEvent) => {
+  const remoteMessage = remoteDesktopMessageSchema.safeParse(e.data);
+  if (remoteMessage.success) return;
   const result = parseHostIncomingMessageEvent(e);
   if (!result.success) {
     logger.error("invalid parentPort message:", formatZodError(result.error));
@@ -1865,6 +1872,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
             const initializedServices = createLocalServices({
               parentPort,
               settingService,
+              credentialService: createHostCredentialBridge(parentPort),
               hostApiNetworkTransport,
               authorizeLocalMediaPreviewPath,
               runtimeProcessEnvPatch: msg.runtimeProcessEnvPatch,
@@ -1942,34 +1950,3 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     await databaseStartup.coordinator.start();
   }
 });
-
-async function setupRemoteConnection(
-  target: RemoteTarget,
-  remoteAssets: RemoteAssetDirs,
-  remoteRuntimeNetwork: RemoteRuntimeNetworkOptions | undefined,
-  onDidRemoteClose: (exitCode: number) => void,
-  deployLockMode: DeployLockMode = "remote",
-  signal?: AbortSignal,
-): Promise<HostRemoteConnection> {
-  // 延迟加载 remote backend，避免 local 模式下因 ssh2 依赖链进入 asar 后崩溃
-  const { createRemoteBackend, connectRemote, pickRemoteRuntimeEnv } =
-    await import("@zcode/server/remote");
-  const backend = await createRemoteBackend(target);
-  const connection = await connectRemote(backend, {
-    ...remoteAssets,
-    remoteRuntimeNetwork,
-    signal,
-    // SSH/Docker 远端 server 由 host process 单独启动，不能依赖桌面 main 的环境继承。
-    // 这里显式透传编译期版本，避免漏导入后生成裸 ZCODE_VERSION 引用导致 SSH 初始化直接 ReferenceError。
-    appVersion: ZCODE_VERSION,
-    // 远端 zcode-server/agent 是独立进程，不能继承 host 里的测试/生产 endpoint 选择。
-    // 这里只透传 server 侧白名单允许的公开环境变量，避免把 credential/token 带到远端机器。
-    remoteRuntimeEnv: pickRemoteRuntimeEnv(process.env),
-    // SSH 由窗口级 registry 串行复用，其余 transport 仍保留远端 connector 自身锁。
-    deployLockMode,
-    onDidRemoteClose: ({ code }) => {
-      onDidRemoteClose(code);
-    },
-  });
-  return { ...connection, backend };
-}

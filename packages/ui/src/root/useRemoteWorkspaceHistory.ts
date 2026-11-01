@@ -701,13 +701,27 @@ export function useRemoteWorkspaceHistory({
       }
 
       for (const credential of mutation.credentialsToSave) {
-        await services.credentialService.save(credential.key, credential.value);
+        try {
+          await services.credentialService.save(credential.key, credential.value);
+        } catch (error) {
+          // 系统凭据加密不可用时只在本次会话保留：连接照常进行，但必须告诉用户不会被记住。
+          logger.warn("[Root] 保存远程 workspace 凭据失败", {
+            credentialKey: credential.key,
+            error,
+          });
+          toast(
+            intl.formatMessage(
+              { id: "remote.credential.notRemembered" },
+              { error: getErrorMessage(error) },
+            ),
+          );
+        }
       }
 
       await syncPersistedWorkspaceSession(mutation.nextRemoteSessions);
       return mutation.entry;
     },
-    [services.credentialService, syncPersistedWorkspaceSession],
+    [intl, services.credentialService, syncPersistedWorkspaceSession],
   );
 
   const waitForRemoteWorkspaceSessionReady = useCallback(async (sessionId: string) => {

@@ -75,12 +75,12 @@ export class RemoteReconnectStateMachine {
     this.scheduleAttempt(this.generation, 1);
   }
 
-  /** 用户点击立即重试；跳过当前退避但仍从 attempt=1 计数。 */
+  /** 用户点击立即重试；跳过当前退避但仍从 attempt=1 计数。显式重试也解除此前的取消。 */
   retryNow(): void {
-    if (this.currentState.kind === "cancelled") return;
     this.cancelTimer();
     this.generation += 1;
     this.attempt = 0;
+    if (this.currentState.kind === "cancelled") this.currentState = { kind: "disconnected" };
     this.scheduleAttempt(this.generation, 1, 0);
   }
 

@@ -17,6 +17,8 @@ import {
 } from "@zcode/shared";
 import type { RemoteAssetDirs } from "./desktopRuntimeEnv.js";
 import { ProviderProvisioningEnvironmentCoordinator } from "./providerProvisioningEnvironmentCoordinator.js";
+import { createDesktopRemoteReconnect } from "./desktopRemoteReconnect.js";
+import { emitRemoteConnectionLog as emitConnectionLog } from "./desktopRemoteConnectionLog.js";
 
 interface RemoteWorkspaceSessionContext {
   workspacePath: string;
@@ -46,6 +48,7 @@ interface RemoteAttachmentRoute {
   };
   attachmentState: "attachable" | "closed";
   providerProvisioningDispose?: () => void;
+  reconnectDispose?: () => void;
 }
 
 interface PendingProviderProvisioningExecution {
@@ -155,33 +158,24 @@ export function createRemoteWorkspaceSessionManager(options: {
     return options.createMessageChannel?.() ?? new MessageChannelMain();
   }
 
-  function emitConnectionLog(
-    win: BrowserWindow,
-    payload: {
-      requestId?: string;
-      sessionId?: string;
-      level: "info" | "warn" | "error";
-      message: string;
+  const reconnect = createDesktopRemoteReconnect({
+    reattach: async (sessionId) => {
+      const route = routesBySessionId.get(sessionId);
+      const win =
+        route &&
+        BrowserWindow.getAllWindows().find((item) => item.webContents.id === route.webContentsId);
+      if (!route || !win) throw new Error("remote workspace window is unavailable");
+      await attachRendererPort(win, route, "ssh-reconnected");
+      route.attachmentState = "attachable";
     },
-  ): void {
-    if (win.isDestroyed() || win.webContents.isDestroyed()) return;
-    win.webContents.send(PlatformChannels.RemoteConnectionLog, {
-      label: `window-host-${win.webContents.id}`,
-      requestId: payload.requestId,
-      sessionId: payload.sessionId,
-      level: payload.level,
-      source: "window-host-controller",
-      message: payload.message,
-      // 改造曾把完整 ISO 时间直接交给连接日志 UI，长时间戳会挤压 flex 日志列并换行。
-      // 这里恢复既有的紧凑时钟展示契约，Host 的 requestId 路由和原始日志内容保持不变。
-      timestamp: new Date().toLocaleTimeString(undefined, {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
-    });
-  }
+    disconnect: (sessionId) => {
+      const route = routesBySessionId.get(sessionId);
+      if (route)
+        detachRouteAttachments(route, "ssh-disconnected", new Error("remote SSH connection lost"));
+    },
+    onError: (sessionId, error) =>
+      options.logger.error("remote SSH reattachment failed", { sessionId, error }),
+  });
 
   function detachServicePort(
     child: ElectronUtilityProcess,
@@ -354,6 +348,7 @@ export function createRemoteWorkspaceSessionManager(options: {
       descriptor,
       attachmentState: "attachable",
     };
+    route.reconnectDispose = reconnect.bind(descriptor.remoteSessionId, descriptor.target, child);
     routesBySessionId.set(descriptor.remoteSessionId, route);
     const environmentKey = buildRemoteEnvironmentKey(descriptor.target);
     const registration = providerProvisioningCoordinator.register(
@@ -376,6 +371,7 @@ export function createRemoteWorkspaceSessionManager(options: {
       })
       .catch((error: unknown) => {
         route.providerProvisioningDispose?.();
+        route.reconnectDispose?.();
         routesBySessionId.delete(descriptor.remoteSessionId);
         child.postMessage({
           type: HostMessageTypes.DisposeRemoteWorkspaceSession,
@@ -492,6 +488,7 @@ export function createRemoteWorkspaceSessionManager(options: {
     if (listenedHosts.has(child)) return;
     listenedHosts.add(child);
     child.on("message", (message: unknown) => {
+      if (reconnect.receive(child, message)) return;
       const parsed = hostResponseMessageSchema.safeParse(message);
       if (!parsed.success) return;
       if (parsed.data.type === HostResponseTypes.RemoteWorkspaceConnectionLog) {

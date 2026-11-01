@@ -350,6 +350,7 @@ export function createLocalServices(options: {
   parentPort?: Parameters<typeof createBroadcastService>[0];
   /** Host 装配层注入的设置权威；与网络 transport 必须来自同一 Window Host 生命周期。 */
   settingService?: ISettingService;
+  credentialService?: ICredentialService;
   /** 注入后由 ServiceCollection 接管释放，并供 Host 其它 app-managed 下载复用。 */
   hostApiNetworkTransport?: HostApiNetworkTransport;
   /** Desktop Host 请求 Main 登记 Agent 已授权的精确本地视频路径。 */
@@ -409,7 +410,6 @@ export function createLocalServices(options: {
     resolveRuntimeZCodeEndpointOrigin(process.env, {
       overrideOrigin: (await settingService.get()).zcodeEndpointOrigin,
     });
-  const credentialService = createCredentialService();
   const broadcastService = createBroadcastService(options?.parentPort ?? null);
   const gitCheckpointService = createGitCheckpointService();
   const hostApiNetworkTransport =
@@ -586,7 +586,7 @@ export function createLocalServices(options: {
     .register(ITerminalService, createTerminalService({ settingService }))
     .register(ISettingService, settingService)
     .register(IOnboardingRecordService, onboardingRecordService)
-    .register(ICredentialService, credentialService)
+    .register(ICredentialService, options.credentialService ?? createCredentialService())
     .register(IBroadcastService, broadcastService)
     .register(IZCodeTaskService, zcodeTaskService)
     .register(IZCodeAgentService, zcodeAgentService)

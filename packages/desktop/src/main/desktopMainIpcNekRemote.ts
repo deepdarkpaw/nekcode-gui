@@ -6,7 +6,13 @@ import type {
   RemotePromptResponse,
   RemoteConnectionStatusListener,
 } from "@zcode/shared/nek-protocol";
-import type { RemotePromptBroker, RemoteReconnectStatusAdapter } from "@zcode/server/remote";
+import type { RemotePromptBroker } from "@zcode/server/remote";
+
+interface ReconnectAdapter {
+  retryNow(): void;
+  cancelReconnect(): void;
+  dispose(): void;
+}
 
 type Listener<T> = (event: T) => void;
 
@@ -15,7 +21,8 @@ export class NekRemoteInteractionHostService implements IRemoteInteractionHostAp
   private readonly promptListeners = new Set<RemotePromptListener>();
   private readonly statusListeners = new Set<RemoteConnectionStatusListener>();
   private readonly brokers = new Map<string, RemotePromptBroker>();
-  private readonly reconnectAdapters = new Map<string, RemoteReconnectStatusAdapter>();
+  private readonly reconnectAdapters = new Map<string, ReconnectAdapter>();
+  private readonly statuses = new Map<string, RemoteConnectionStatusEvent>();
 
   onRemotePrompt(listener: RemotePromptListener): () => void {
     this.promptListeners.add(listener);
@@ -31,6 +38,7 @@ export class NekRemoteInteractionHostService implements IRemoteInteractionHostAp
 
   onRemoteConnectionStatus(listener: RemoteConnectionStatusListener): () => void {
     this.statusListeners.add(listener);
+    for (const status of this.statuses.values()) listener(status);
     return () => this.statusListeners.delete(listener);
   }
 
@@ -56,11 +64,15 @@ export class NekRemoteInteractionHostService implements IRemoteInteractionHostAp
     };
   }
 
-  attachReconnectAdapter(connectionId: string, adapter: RemoteReconnectStatusAdapter): () => void {
+  attachReconnectAdapter(connectionId: string, adapter: ReconnectAdapter): () => void {
+    if (!this.reconnectAdapters.has(connectionId) && this.reconnectAdapters.size >= 128) {
+      throw new Error("too many remote reconnect adapters");
+    }
     this.reconnectAdapters.set(connectionId, adapter);
     return () => {
       if (this.reconnectAdapters.get(connectionId) !== adapter) return;
       this.reconnectAdapters.delete(connectionId);
+      this.statuses.delete(connectionId);
       adapter.dispose();
     };
   }
@@ -70,6 +82,8 @@ export class NekRemoteInteractionHostService implements IRemoteInteractionHostAp
   }
 
   emitStatus(event: RemoteConnectionStatusEvent): void {
+    if (this.reconnectAdapters.has(event.connectionId))
+      this.statuses.set(event.connectionId, event);
     this.emit(this.statusListeners, event);
   }
 
@@ -78,6 +92,7 @@ export class NekRemoteInteractionHostService implements IRemoteInteractionHostAp
     for (const adapter of this.reconnectAdapters.values()) adapter.dispose();
     this.brokers.clear();
     this.reconnectAdapters.clear();
+    this.statuses.clear();
     this.promptListeners.clear();
     this.statusListeners.clear();
   }

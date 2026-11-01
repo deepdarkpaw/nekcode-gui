@@ -23,6 +23,7 @@ import type { NekControlClient } from "../src/nek-config-api/index.js";
 import { NekConfigApi, createMemoryNekConfigHostExecutor } from "../src/nek-config-api/index.js";
 import type {
   MemoryNekConfigHostExecutor,
+  NekConfigApiOptions,
   NekConfigSessionHandle,
   NekConfigTargetHost,
   NekStructuredHandler,
@@ -191,6 +192,7 @@ export interface HarnessOptions {
   control?: FakeControlClient;
   autoReload?: boolean;
   pollSeconds?: number;
+  forwardLoginPorts?: NekConfigApiOptions["forwardLoginPorts"];
 }
 
 export function createHarness(options: HarnessOptions = {}): Harness {
@@ -252,6 +254,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     },
     sessions: { sessions: () => harness.sessions },
     control: async () => currentControl,
+    forwardLoginPorts: options.forwardLoginPorts,
   });
   harness.disconnect = () => {
     connected = false;

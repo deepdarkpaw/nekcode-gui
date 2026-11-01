@@ -1,4 +1,5 @@
 import { recordDesktopDiagnostic } from "./localDiagnosticSink.js";
+import { attachDesktopCredentialBridge } from "./desktopCredentialBridge.js";
 import { ingestToolExecResource } from "./desktopResourceTelemetry.js";
 import { ingestMcpResourceSamples } from "./processResourceMcpTelemetrySource.js";
 /* eslint-disable max-lines -- host process 统一处理 main↔host 生命周期、日志、ZCode Agent，拆分前先保持跨进程消息收口。 */
@@ -185,10 +186,9 @@ export function spawnHostProcess(
     },
   });
 
-  dependencies.logger.info(
-    `[spawnHostProcess] forked host process for (${label}), pid=${child.pid}`,
-  );
-  dependencies.logger.info(`[spawnHostProcess] host module path: ${hostModulePath}`);
+  const { logger } = dependencies;
+  logger.info(`[spawnHostProcess] forked (${label}) pid=${child.pid} ${hostModulePath}`);
+  attachDesktopCredentialBridge(child);
   dependencies.logger.info(
     `[spawnHostProcess] BIGMODEL_OAUTH_APP_SECRET source: ${process.env.BIGMODEL_OAUTH_APP_SECRET ? "process" : dependencies.hostProcessLocalEnv.BIGMODEL_OAUTH_APP_SECRET ? "dotenv" : "fallback"}`,
   );

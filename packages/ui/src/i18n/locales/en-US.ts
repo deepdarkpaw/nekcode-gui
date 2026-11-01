@@ -993,6 +993,8 @@ const enUS: Record<string, string> = {
   "update.toast.ready": "v{version} downloaded, restart to install",
   "update.toast.devSkipped": "Updates are disabled in dev builds",
   "update.toast.error": "Update check failed: {error}",
+  "remote.credential.notRemembered":
+    "The remote credential could not be saved with OS encryption and is kept for this run only: {error}",
   "forceUpdate.title": "Update nekcode to continue",
   "forceUpdate.description":
     "Your current version v{currentVersion} is below the minimum supported version v{minimalVersion}. Update first before continuing with this client.",
