@@ -68,15 +68,18 @@ export class ChannelClient implements IChannelClient, IDisposable {
 
   private readonly _onDidSubscriptionError = new Emitter<IChannelSubscriptionFailure>();
   /**
-   * 服务端拒绝建立事件订阅时触发。这是订阅失败的**唯一**上报通道：
-   *
-   * `IChannel.listen` 只返回 `Event<T>`，订阅方没有 terminal 回调，帧流死掉与"暂时没有帧"
-   * 在类型上不可区分。因此连接 owner 必须消费这条事件，把它收进既有的诊断/错误通道，
-   * 而不是让状态卡与任务列表永久停在加载态。
-   *
-   * 重试边界：重新 `listen()` 会分配新的请求 id 与新的 emitter，旧流已死不阻塞新订阅。
+   * Connection-owner diagnostics and revocable manual retry capabilities. RPC relays additionally
+   * forward the Event registration's terminal callback through the existing request error packet.
+   * Retry allocates a new request id while preserving the logical subscription's original leases.
    */
-  readonly onDidSubscriptionError = this._onDidSubscriptionError.event;
+  readonly onDidSubscriptionError: Event<IChannelSubscriptionFailure> = (listener) =>
+    this._onDidSubscriptionError.event((failure) => {
+      try {
+        listener(failure);
+      } catch (error) {
+        console.error("[rpc:subscription] listener failed", error);
+      }
+    });
 
   constructor(private protocol: IMessagePassingProtocol) {
     this.protocolListener = this.protocol.onMessage((msg) => this.onBuffer(msg));

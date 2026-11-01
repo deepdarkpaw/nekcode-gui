@@ -238,7 +238,7 @@ test("dispose 之后的失败对象不能重试、不会向已终结的连接发
   assert.equal(failures.length, 1);
 
   client.dispose();
-  assert.equal(failures[0]?.isLive(), true);
+  assert.equal(failures[0]?.isLive(), false);
   failures[0]!.retry();
   await tick();
   assert.equal(listenCount, 1);

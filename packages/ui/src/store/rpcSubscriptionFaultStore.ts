@@ -65,9 +65,10 @@ export function registerRpcSubscriptionFault(failure: IChannelSubscriptionFailur
 
 /** A stale toast cannot retry or dismiss a newer failure of the same stream. */
 export function retryRpcSubscriptionFault(id: string, attempt: number): void {
-  useRpcSubscriptionFaultStore.getState().faults.find(
-    (fault) => fault.id === id && fault.attempt === attempt,
-  )?.retry();
+  useRpcSubscriptionFaultStore
+    .getState()
+    .faults.find((fault) => fault.id === id && fault.attempt === attempt)
+    ?.retry();
 }
 
 export function dismissRpcSubscriptionFault(id: string, attempt?: number): void {

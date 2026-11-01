@@ -38,7 +38,7 @@ function createFailure(
       ...detail,
       isLive: () => command !== undefined,
       retry: () => command?.(),
-      onDidInvalidate: invalidated.event,
+      onDidInvalidate: (listener) => invalidated.event(() => deliver(listener, undefined)),
     },
     invalidate: () => {
       command = undefined;
@@ -82,10 +82,10 @@ export function createChannelEvent<T>(port: SubscriptionPort<T>): Event<T> {
       },
     );
     leave({ kind: "failed", capability });
-    port.onFailure(capability.failure);
     for (const lease of Array.from(leases)) {
       if (lease.onError) deliver(lease.onError, error);
     }
+    deliver(port.onFailure, capability.failure);
   };
 
   const send = (): void => {

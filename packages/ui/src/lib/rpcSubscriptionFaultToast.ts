@@ -1,5 +1,44 @@
 import type { ToastOptions } from "@/components/ui/toast.js";
 
+type FaultIdentity = { id: string; attempt: number };
+type Labels = { title: string; retry: string; dismiss: string };
+
+/** Owns presentation leases only; callbacks resolve live capabilities by identity, never capture one. */
+export function createSubscriptionFaultToastPresenter(port: {
+  toast(message: string, options: ToastOptions): number;
+  dismissToast(id: number): void;
+  retry(id: string, attempt: number): void;
+  dismissFault(id: string, attempt: number): void;
+}) {
+  const shown = new Map<string, number>();
+  const dispose = (): void => {
+    for (const toastId of shown.values()) port.dismissToast(toastId);
+    shown.clear();
+  };
+  return {
+    dispose,
+    sync(faults: readonly FaultIdentity[], labels: Labels): void {
+      const liveKeys = new Set(faults.map((fault) => `${fault.id}#${fault.attempt}`));
+      for (const [key, toastId] of shown) {
+        if (liveKeys.has(key)) continue;
+        port.dismissToast(toastId);
+        shown.delete(key);
+      }
+      for (const { id, attempt } of faults) {
+        const key = `${id}#${attempt}`;
+        if (shown.has(key)) continue;
+        const plan = subscriptionFaultToastPlan(
+          { id, attempt },
+          labels,
+          () => port.retry(id, attempt),
+          () => port.dismissFault(id, attempt),
+        );
+        shown.set(key, port.toast(plan.message, plan.options));
+      }
+    },
+  };
+}
+
 /**
  * 一条订阅失败对应的既有 toast 配置。
  *

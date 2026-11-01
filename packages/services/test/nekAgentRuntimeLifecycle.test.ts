@@ -311,6 +311,30 @@ test("慢 workspace 在新 workspace 高频使用后回来，代际不回退也�
   lifecycle.dispose();
 });
 
+test("identity 读取淘汰全活跃表后不重复旧 generation，恢复事件与新查询仍同代", () => {
+  const harness = createRuntimeHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.source);
+  const { frames } = collect(lifecycle);
+  for (let index = 0; index < NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES; index += 1) {
+    harness.attach(`active-${index}`, `/active/${index}`);
+  }
+  const oldGeneration = frames[0]!.runtimeIdentity.generation;
+  // Touch every other active entry: /active/0 is now the LRU of an entirely active table.
+  for (let index = 1; index < NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES; index += 1) {
+    lifecycle.getIdentity(`/active/${index}`);
+  }
+  lifecycle.getIdentity("/cold/read-only");
+  const replacement = lifecycle.getIdentity("/active/0").generation;
+  assert.ok(replacement > oldGeneration);
+  assert.ok(replacement > NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES);
+  // The query has no event side effects. The next process fact uses the newly reserved ticket.
+  assert.equal(frames.length, NEK_RUNTIME_LIFECYCLE_MAX_WORKSPACES);
+  harness.attach("active-0", "/active/0");
+  assert.equal(frames.at(-1)!.runtimeIdentity.generation, replacement);
+  assert.equal(lifecycle.getIdentity("/active/0").generation, replacement);
+  lifecycle.dispose();
+});
+
 test("一个监听者抛错不影响其它监听者，错误仍冒泡给服务层记录", () => {
   const harness = createRuntimeHarness();
   const lifecycle = createNekAgentRuntimeLifecycle(harness.source);

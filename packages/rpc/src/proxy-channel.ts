@@ -27,7 +27,7 @@
  * - toService: 利用 ES6 Proxy 拦截属性访问，自动分派到 call/listen
  */
 
-import { Event, Emitter, IDisposable } from "./foundation.js";
+import type { Event } from "./foundation.js";
 import { IChannel, IServerChannel } from "./channels.js";
 
 // ============================================================================
@@ -46,12 +46,12 @@ export namespace ProxyChannel {
   export function fromService<TContext>(service: unknown): IServerChannel<TContext> {
     const handler = service as { [key: string]: unknown };
 
-    // 预缓存所有事件并 buffer
+    // Cache the source Event, not a second emitter/queue. Its registration owns synchronous frames
+    // and terminal callbacks; failed attachment must not leave an orphaned buffering lease.
     const eventMap = new Map<string, Event<unknown>>();
     for (const key in handler) {
       if (isEvent(key) && !isDynamicEvent(key) && typeof handler[key] === "function") {
-        // 把事件 buffer 化：即使没人订阅，事件也不会丢失
-        eventMap.set(key, bufferEvent(handler[key] as Event<unknown>));
+        eventMap.set(key, handler[key] as Event<unknown>);
       }
     }
 
@@ -71,7 +71,7 @@ export namespace ProxyChannel {
           }
           // 延迟发现的事件（Proxy 服务可能不会在 for-in 中出现）
           if (isEvent(event)) {
-            eventMap.set(event, bufferEvent(handler[event] as Event<unknown>));
+            eventMap.set(event, target as Event<unknown>);
             return eventMap.get(event) as Event<T>;
           }
         }
@@ -166,61 +166,4 @@ function isDynamicEvent(name: string): boolean {
     name.charCodeAt(9) >= 65 &&
     name.charCodeAt(9) <= 90
   );
-}
-
-/**
- * 缓冲事件：确保在订阅之前触发的事件不会丢失。
- * 未订阅时事件存入队列，一有订阅者就 flush。
- */
-function bufferEvent<T>(event: Event<T>): Event<T> {
-  let buffer: T[] = [];
-  let flushing = false;
-  let listener: IDisposable | undefined;
-  const failures = new Set<(error: Error) => void>();
-
-  const emitter = new Emitter<T>({
-    onWillAddFirstListener: () => {
-      listener = event(
-        (e) => {
-          if (flushing) emitter.fire(e);
-          else buffer.push(e);
-        },
-        (error) => {
-          for (const fail of Array.from(failures)) fail(error);
-        },
-      );
-    },
-    onDidRemoveLastListener: () => {
-      listener?.dispose();
-      listener = undefined;
-      buffer = [];
-      flushing = false;
-    },
-  });
-
-  // 一旦有订阅者，先 flush 缓冲区
-  const originalEvent = emitter.event;
-  return (listener_fn, onError) => {
-    const fail = (error: Error) => onError?.(error);
-    failures.add(fail);
-    let disposable: IDisposable;
-    try {
-      // A wrapper gives repeated registrations of the same callback independent leases.
-      disposable = originalEvent((value) => listener_fn(value));
-    } catch (error) {
-      failures.delete(fail);
-      throw error;
-    }
-    if (!flushing) {
-      flushing = true;
-      for (const item of buffer) emitter.fire(item);
-      buffer = [];
-    }
-    return {
-      dispose: () => {
-        failures.delete(fail);
-        disposable.dispose();
-      },
-    };
-  };
 }

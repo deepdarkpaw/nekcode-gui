@@ -10,9 +10,9 @@
  * - 重试走 `fault.retry()`：由 `ChannelClient` 保留原订阅者重新发 EventListen，不是新建空流；
  * - 不自动重试，避免坏 host 上出现热循环。
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { dismissToast, toast } from "@/components/ui/toast.js";
-import { subscriptionFaultToastPlan } from "@/lib/rpcSubscriptionFaultToast.js";
+import { createSubscriptionFaultToastPresenter } from "@/lib/rpcSubscriptionFaultToast.js";
 import { useZCodeIntl } from "@/i18n/index.js";
 import {
   dismissRpcSubscriptionFault,
@@ -23,37 +23,24 @@ import {
 export function RpcSubscriptionFaultNotifier() {
   const { intl } = useZCodeIntl();
   const faults = useRpcSubscriptionFaultStore((state) => state.faults);
-  /** `${id}#${attempt}` → toast id：同一条流的每次失败只提示一次。 */
-  const shownRef = useRef(new Map<string, number>());
+  const [presenter] = useState(() =>
+    createSubscriptionFaultToastPresenter({
+      toast,
+      dismissToast,
+      retry: retryRpcSubscriptionFault,
+      dismissFault: dismissRpcSubscriptionFault,
+    }),
+  );
 
   useEffect(() => {
-    const liveKeys = new Set(faults.map((fault) => `${fault.id}#${fault.attempt}`));
-    for (const [key, toastId] of shownRef.current) {
-      if (liveKeys.has(key)) continue;
-      dismissToast(toastId);
-      shownRef.current.delete(key);
-    }
+    presenter.sync(faults, {
+      title: intl.formatMessage({ id: "ui.rpcSubscription.failed" }),
+      retry: intl.formatMessage({ id: "common.retry" }),
+      dismiss: intl.formatMessage({ id: "common.close" }),
+    });
+  }, [faults, intl, presenter]);
 
-    for (const fault of faults) {
-      const key = `${fault.id}#${fault.attempt}`;
-      if (shownRef.current.has(key)) continue;
-      const { id, attempt } = fault;
-      const plan = subscriptionFaultToastPlan(
-        { id, attempt },
-        {
-          title: intl.formatMessage({ id: "ui.rpcSubscription.failed" }),
-          retry: intl.formatMessage({ id: "common.retry" }),
-          dismiss: intl.formatMessage({ id: "common.close" }),
-        },
-        () => {
-          // 先移出状态再重试：重试仍失败会带着新的 attempt 再次上报。
-          dismissRpcSubscriptionFault(fault.id);
-          fault.retry();
-        },
-      );
-      shownRef.current.set(key, toast(plan.message, plan.options));
-    }
-  }, [faults, intl]);
+  useEffect(() => () => presenter.dispose(), [presenter]);
 
   return null;
 }

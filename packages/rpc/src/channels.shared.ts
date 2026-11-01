@@ -75,7 +75,7 @@ export interface IChannelSubscriptionFailure {
   channelName: string;
   event: string;
   error: Error;
-  /** 该订阅是否仍有人监听；订阅者全部退订后不需要提示，也不需要重试。 */
+  /** This failure capability is live only until retry, last unsubscribe, or connection disposal. */
   isLive(): boolean;
   /**
    * 重新建立订阅。只在"失败且仍有人监听"时生效，重复调用或被退订后调用都是空操作——

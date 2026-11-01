@@ -485,19 +485,25 @@ export function createZCodeAgentConnectionScope(
       };
       route = created;
       routedFrameEvents.set(key, created);
-      const upstream = source(
-        (frame) => routeIncomingFrame(kind, target, frame, created.emitter),
-        (error) => {
-          created.failure = error;
-          if (routedFrameEvents.get(key) === created) routedFrameEvents.delete(key);
-          created.upstream.dispose();
-          created.errors.fire(error);
-          created.errors.dispose();
-          created.emitter.dispose();
-        },
-      );
-      if (created.failure) upstream.dispose();
-      else created.upstream = upstream;
+      const fail = (error: Error): void => {
+        if (created.failure) return;
+        created.failure = error;
+        if (routedFrameEvents.get(key) === created) routedFrameEvents.delete(key);
+        created.upstream.dispose();
+        created.errors.fire(error);
+        created.errors.dispose();
+        created.emitter.dispose();
+      };
+      try {
+        const upstream = source(
+          (frame) => routeIncomingFrame(kind, target, frame, created.emitter),
+          fail,
+        );
+        if (created.failure) upstream.dispose();
+        else created.upstream = upstream;
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+      }
     }
     const current = route;
     return (listener, onError) => {
