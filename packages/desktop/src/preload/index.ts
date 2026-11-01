@@ -380,9 +380,6 @@ contextBridge.exposeInMainWorld("zcode", {
   openInFileManager: (path: string) => ipcRenderer.invoke(PlatformChannels.OpenInFileManager, path),
   /** 使用系统默认应用打开本地文件 */
   openExternalFile: (path: string) => ipcRenderer.invoke(PlatformChannels.OpenExternalFile, path),
-  /** 查询当前生效的 Provider 配置物化副本 */
-  getBuiltinProviderConfigFile: () =>
-    ipcRenderer.invoke(PlatformChannels.GetBuiltinProviderConfigFile, undefined),
   /** 通知 main process renderer 已就绪 */
   notifyRendererReady: () => ipcRenderer.send(PlatformChannels.RendererReady),
   /** 发送本地诊断记录；使用 send 避免 IPC 往返阻塞业务。 */

@@ -16,8 +16,6 @@ import {
   IConversationShareService,
   IFileWatcherService,
   IModelSelectionService,
-  IProviderSettingsService,
-  IProviderProvisioningTargetService,
   IClientScenesService,
   ISkillsService,
   ISkillSyncService,
@@ -54,10 +52,7 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly zcodeSessionService: IZCodeSessionService;
   readonly conversationShareService: IConversationShareService;
   readonly fileWatcherService: IFileWatcherService;
-  readonly providerSettingsService: IProviderSettingsService;
   readonly modelSelectionService: IModelSelectionService;
-  /** Host-only target proxy；不属于 IServiceAccessor，避免向 Renderer 暴露 Secret 写入接口。 */
-  readonly providerProvisioningTargetService!: IProviderProvisioningTargetService;
   readonly clientScenesService: IClientScenesService;
   readonly skillsService: ISkillsService;
   readonly skillSyncService: ISkillSyncService;
@@ -120,18 +115,9 @@ export class RemoteServiceAccess implements IServiceAccessor {
     this.fileWatcherService = ProxyChannel.toService<IFileWatcherService>(
       channelClient.getChannel(IFileWatcherService.channelName),
     );
-    this.providerSettingsService = ProxyChannel.toService<IProviderSettingsService>(
-      channelClient.getChannel(IProviderSettingsService.channelName),
-    );
     this.modelSelectionService = ProxyChannel.toService<IModelSelectionService>(
       channelClient.getChannel(IModelSelectionService.channelName),
     );
-    Object.defineProperty(this, "providerProvisioningTargetService", {
-      value: ProxyChannel.toService<IProviderProvisioningTargetService>(
-        channelClient.getChannel(IProviderProvisioningTargetService.channelName),
-      ),
-      enumerable: false,
-    });
     this.clientScenesService = ProxyChannel.toService<IClientScenesService>(
       channelClient.getChannel(IClientScenesService.channelName),
     );

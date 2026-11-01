@@ -1884,22 +1884,6 @@ export const zcodeWorkspaceCancelGenerateTextResultSchema = z
   .object({ operationId: nonEmptyString, cancelled: z.boolean() })
   .strict();
 
-export const zcodeProviderTestModelConnectivityParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    selection: modelSelectionSchema,
-  })
-  .strict();
-export const zcodeProviderTestModelConnectivityResultSchema = z
-  .object({ success: z.literal(true) })
-  .strict();
-export type ZCodeProviderTestModelConnectivityParams = z.infer<
-  typeof zcodeProviderTestModelConnectivityParamsSchema
->;
-export type ZCodeProviderTestModelConnectivityResult = z.infer<
-  typeof zcodeProviderTestModelConnectivityResultSchema
->;
-
 export const zcodeInteractionPreferencesSchema = z
   .object({
     askUserQuestionAutoResolutionEnabled: z.boolean(),
@@ -2067,7 +2051,6 @@ export const zcodeProtocolMethods = {
   // （commit message），待 v4 workspace 查询/命令面覆盖后移除。
   workspaceGenerateText: "workspace/generateText",
   workspaceCancelGenerateText: "workspace/cancelGenerateText",
-  providerTestModelConnectivity: "provider/testModelConnectivity",
   mcpList: "mcp/list",
   skillsReferenceCatalog: "skills/referenceCatalog",
   // ZCode Protocol 对 agent 只暴露 session-first 方法；task 是 UI 投影概念，不能泄露进协议方法名。

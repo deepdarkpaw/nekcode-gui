@@ -25,15 +25,6 @@ export type {
   UpdateStatePayload,
 } from "./update.js";
 
-/**
- * 当前生效的 ZCode Built-in Provider Config 物化副本信息。
- * path 为 null 表示所在环境尚未物化（未启动过 server）或路径不可用。
- */
-export interface BuiltinProviderConfigFileInfo {
-  readonly path: string | null;
-  readonly exists: boolean;
-}
-
 export interface TaskNotificationPayload {
   taskId: string;
   status: "completed" | "failed" | "elicitation_request";
@@ -420,9 +411,6 @@ export interface IPlatformService {
 
   /** 使用系统默认应用打开本地文件；普通 Web 平台返回 unsupported。 */
   openExternalFile?(path: string): Promise<{ success: boolean; error?: string }>;
-
-  /** 查询当前生效的 ZCode Built-in Provider Config 物化副本；Web 平台不支持。 */
-  getBuiltinProviderConfigFile?(): Promise<BuiltinProviderConfigFileInfo>;
 
   /** 通知 main process renderer 已就绪，触发缓存的冷启动 deep link 转发 */
   notifyRendererReady(): void;

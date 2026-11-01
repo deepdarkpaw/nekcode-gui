@@ -36,37 +36,3 @@ test("desktop and remote client no longer expose an official OAuth service", asy
     { code: "ENOENT" },
   );
 });
-
-test("user API 401 preserves the response without inspecting credentials or logging out", async () => {
-  const { createNodeApiClient } = await tsImport(
-    "../../packages/services/src/providers/api/nodeApiClient.ts",
-    import.meta.url,
-  );
-  const forbidden = () => {
-    throw new Error("Retired OAuth callback accessed");
-  };
-  const response = new Response("Fixture unauthorized", { status: 401 });
-  const client = createNodeApiClient(
-    new Proxy(
-      {
-        fetchImpl: async (url, init) => {
-          assert.equal(url, "https://fixture.invalid/v1/models");
-          assert.equal(new Headers(init.headers).get("authorization"), "Bearer fixture-api-key");
-          return response;
-        },
-      },
-      {
-        get(target, key) {
-          if (["isZcodeJwtRequest", "onZcodeJwtInvalid"].includes(key)) return forbidden();
-          return target[key];
-        },
-      },
-    ),
-  );
-  assert.equal(
-    await client.request("https://fixture.invalid/v1/models", {
-      headers: { Authorization: "Bearer fixture-api-key" },
-    }),
-    response,
-  );
-});

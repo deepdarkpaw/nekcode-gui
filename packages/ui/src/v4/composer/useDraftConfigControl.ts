@@ -16,7 +16,7 @@ import type {
 } from "@zcode/shared";
 import type { SessionConfigState } from "@zcode/shared/zcode-protocol-v4";
 import type { IModelSelectionService } from "@zcode/services";
-import { completeNewModelSelection } from "@zcode/provider";
+import { completeNewModelSelection } from "@zcode/shared/model-selection-resolution";
 import {
   useModelSelectionServiceView,
   type ModelSelectionRead,

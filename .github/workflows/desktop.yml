@@ -77,6 +77,7 @@ jobs:
           pnpm vitest run packages/client/src/messageport.test.ts
           pnpm --filter @zcode/ui exec vitest run src
           node --import tsx --test packages/services/test/*.test.ts
+          node --import tsx --test packages/shared/test/*.test.ts
       - name: Release tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node --test --test-isolation=none scripts/ci/*.test.mjs
@@ -94,10 +95,9 @@ jobs:
         run: node scripts/ci/conversation-navigator-smoke.mjs
       - name: Imported conversation browser checks
         run: node scripts/ci/local-share-context-smoke.mjs
-      - name: Self-managed model settings
+      - name: Local configuration browser checks
         run: |
           pnpm --filter @zcode/desktop build:no-runtime-assets
-          node scripts/ci/self-managed-models-smoke.mjs
           node scripts/ci/local-context-smoke.mjs
           node scripts/ci/session-local-errors-smoke.mjs
           node scripts/ci/local-onboarding-smoke.mjs

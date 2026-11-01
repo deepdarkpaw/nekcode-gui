@@ -35,7 +35,6 @@ import type {
   DesktopWindowChromeState,
   WindowControlsOverlayMetrics,
   WindowControlsOverlayReadyPayload,
-  BuiltinProviderConfigFileInfo,
 } from "./platform.js";
 
 // ============================================================================
@@ -69,13 +68,8 @@ export const ServiceChannels = {
   ConversationShare: "conversation-share",
   /** 文件系统监视服务 */
   FileWatcher: "file-watcher",
-  /** OAuth 认证服务 */
-  /** 新 Provider Config 的设置读写 Facade */
-  ProviderSettings: "provider-settings",
-  /** 新 Provider Registry 的模型选择 Facade */
+  /** nek-backed model selection on the target machine. */
   ModelSelection: "model-selection",
-  /** 远端 Environment 内部 Provider Provisioning target */
-  ProviderProvisioningTarget: "provider-provisioning-target",
   /** ZCode 客户端场景配置服务 */
   ClientScenes: "client-scenes",
   /** Skills 管理服务 */
@@ -205,8 +199,6 @@ export const PlatformChannels = {
   OpenInFileManager: "zcode:open-in-file-manager",
   /** Renderer → Main：使用系统默认应用打开本地文件 */
   OpenExternalFile: "zcode:open-external-file",
-  /** Renderer → Main：查询当前生效的 Provider 配置文件路径 */
-  GetBuiltinProviderConfigFile: "zcode:get-builtin-provider-config-file",
   /** Renderer → Main：renderer 已就绪，可接收缓存的 deep link */
   RendererReady: "zcode:renderer-ready",
   ReportRendererHeapSample: "zcode:report-renderer-heap-sample",
@@ -362,8 +354,6 @@ export const HostMessageTypes = {
   SessionMessageDeliveryResult: "session-message-delivery-result",
   /** main → host：本地视频 canonical path 授权结果 */
   LocalMediaPreviewPathAuthorizeResult: "local-media-preview-path-authorize-result",
-  /** main → host：要求 Host 现读本地 Source，并同步指定 Remote Environment。 */
-  ProviderProvisioningExecute: "provider-provisioning-execute",
   /** main → host：资源管理器请求 Host 采样其后代进程（Agent / MCP / 终端）的 CPU 与内存 */
   ResourceUsageSnapshotRequest: "resource-usage-snapshot-request",
   ResourceUsageSnapshotCancel: "resource-usage-snapshot-cancel",
@@ -434,10 +424,6 @@ export const HostResponseTypes = {
   SessionMessageDeliverResult: "session-message-deliver-result",
   /** host → main：请求授权 Agent 已精确校验的本地视频路径 */
   LocalMediaPreviewPathAuthorizeRequest: "local-media-preview-path-authorize-request",
-  /** host → main：本地 Provisioning Source 成功持久化。 */
-  ProviderProvisioningSourceChanged: "provider-provisioning-source-changed",
-  /** host → main：一次 Remote Environment 同步执行完毕。 */
-  ProviderProvisioningExecutionResult: "provider-provisioning-execution-result",
 } as const;
 
 // ============================================================================
@@ -598,10 +584,6 @@ export interface PlatformChannelMap {
   [PlatformChannels.OpenExternalFile]: {
     request: string;
     response: { success: boolean; error?: string };
-  };
-  [PlatformChannels.GetBuiltinProviderConfigFile]: {
-    request: void;
-    response: BuiltinProviderConfigFileInfo;
   };
   [PlatformChannels.RendererReady]: {
     request: void;

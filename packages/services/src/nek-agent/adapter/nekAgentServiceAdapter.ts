@@ -73,7 +73,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly getSkillReferenceCatalog: IZCodeAgentService["getSkillReferenceCatalog"];
   declare readonly collectLocalRuntimeChildProcesses: IZCodeAgentService["collectLocalRuntimeChildProcesses"];
   declare readonly generateWorkspaceText: IZCodeAgentService["generateWorkspaceText"];
-  declare readonly testModelConnectivity: IZCodeAgentService["testModelConnectivity"];
   declare readonly sendPrompt: IZCodeAgentService["sendPrompt"];
   declare readonly compactSession: IZCodeAgentService["compactSession"];
   declare readonly goalSession: IZCodeAgentService["goalSession"];

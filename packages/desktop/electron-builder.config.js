@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { runCommand, runCommandAndReadStdout } from "../../scripts/spawn-command.mjs";
-import { loadBuiltinProviderConfig } from "../../scripts/builtin-provider-config.mjs";
+import { resolveBuildEnvironment } from "../../scripts/build-environment.mjs";
 import { verifyBundledRemoteAssets } from "../../scripts/bundle-remote-assets.mjs";
 import { noticesFileName, stageElectronNotices } from "../../scripts/third-party-notices.mjs";
 import { resolveNativeSearchReleasePlan } from "../../scripts/native-search-tools-config.mjs";
@@ -73,10 +73,9 @@ import {
 
 const buildMetadata = getBuildMetadata();
 const targetPlatform = getTargetPlatform();
-const builtinProviderConfig = await loadBuiltinProviderConfig();
 const desktopProductIdentity = resolveDesktopProductIdentity({
   ...process.env,
-  ZCODE_ENV: builtinProviderConfig.environment,
+  ZCODE_ENV: await resolveBuildEnvironment(),
 });
 const nativeSearchReleasePlan = resolveNativeSearchReleasePlan({
   platform: targetPlatform.os,
@@ -590,12 +589,6 @@ export default {
       // 显式放入 resources/config，与主进程的 process.resourcesPath 解析保持一致。
       from: resolve(workspaceRoot, "config/default.json"),
       to: "config/default.json",
-    },
-    {
-      // Provider Registry 的 ZCode Built-in Config 是静态 Provider/Model 事实的唯一内置来源。
-      // 显式随包发布，避免正式 Host 回退到旧 Catalog/Preset hardcode。
-      from: builtinProviderConfig.sourcePath,
-      to: "config/provider/zcode-builtin.json",
     },
     {
       // 应用图标：打包后放入 resources 目录，主进程通过 process.resourcesPath 加载

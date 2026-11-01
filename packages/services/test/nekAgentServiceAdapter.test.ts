@@ -291,7 +291,6 @@ const IZCODE_METHODS = [
   "getSkillReferenceCatalog",
   "collectLocalRuntimeChildProcesses",
   "generateWorkspaceText",
-  "testModelConnectivity",
   "sendPrompt",
   "compactSession",
   "goalSession",

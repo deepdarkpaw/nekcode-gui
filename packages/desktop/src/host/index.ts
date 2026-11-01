@@ -60,7 +60,6 @@ import {
   formatZCodeHostProcessName,
   formatZodError,
   buildRemoteWorkspaceIdentity,
-  buildRemoteEnvironmentKey,
   isRemoteWorkspaceIdentity,
   resolveWorkspaceKey,
   type ZCodePromptAttachment,
@@ -94,7 +93,6 @@ import {
 } from "./remoteMediaPreviewProxy.js";
 import { createHostRemoteWorkspaceProxyState } from "./hostRemoteWorkspaceProxyState.js";
 import { createRemoteWorkspaceServiceCollection } from "./remoteWorkspaceServiceCollection.js";
-import { getRemoteProviderProvisioningExecutor } from "./remoteProviderProvisioningService.js";
 import { createRemotePromptAttachmentTransferService } from "./promptAttachmentTransferService.js";
 import { shouldReportHostConsoleError, stringifyHostLogArg } from "./hostLog.js";
 import { flushHostE2ECoverage } from "./e2eCoverage.js";
@@ -1553,61 +1551,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     return;
   }
 
-  if (msg.type === HostMessageTypes.ProviderProvisioningExecute) {
-    const session = windowRemoteConnectionRegistry.getSession(msg.remoteSessionId);
-    if (
-      !session ||
-      !session.workspaceIdentity ||
-      buildRemoteEnvironmentKey(session.target) !== msg.environmentKey
-    ) {
-      parentPort.postMessage({
-        type: HostResponseTypes.ProviderProvisioningExecutionResult,
-        requestId: msg.requestId,
-        environmentKey: msg.environmentKey,
-        status: "failed",
-        error: "Remote Environment registration 已失效",
-      });
-      return;
-    }
-    const scope = {
-      kind: "remote",
-      remoteSessionId: session.remoteSessionId,
-      workspacePath: session.workspacePath ?? "/",
-      workspaceIdentity: session.workspaceIdentity,
-    } as const;
-    void Promise.resolve()
-      .then(() =>
-        (() => {
-          const provisioningService = getRemoteProviderProvisioningExecutor(
-            windowRemoteConnectionRegistry.resolveScopedServices(scope),
-          );
-          if (!provisioningService) {
-            throw new Error("Remote Environment 不支持 Provider Provisioning");
-          }
-          return provisioningService.syncLocalToRemote();
-        })(),
-      )
-      .then((result) => {
-        parentPort.postMessage({
-          type: HostResponseTypes.ProviderProvisioningExecutionResult,
-          requestId: msg.requestId,
-          environmentKey: msg.environmentKey,
-          status: result.status,
-          ...(result.errorMessage ? { error: result.errorMessage } : {}),
-        });
-      })
-      .catch((error: unknown) => {
-        parentPort.postMessage({
-          type: HostResponseTypes.ProviderProvisioningExecutionResult,
-          requestId: msg.requestId,
-          environmentKey: msg.environmentKey,
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    return;
-  }
-
   if (msg.type === HostMessageTypes.ConnectRemoteWorkspace) {
     const workspacePath = msg.workspacePath ?? "/";
     const workspaceIdentity =
@@ -1881,19 +1824,12 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
               },
               serviceAuthorityMode: "desktop-local",
               zcodeAgentSpawnFallbackCwd: msg.agentSpawnFallbackCwd,
-              zcodeBuiltinProviderConfigFilePath: msg.zcodeBuiltinProviderConfigFilePath,
               processLifecycleReporter: runtimeProcessLifecycleReporter,
               taskRuntimeReporter: runtimeTaskReporter,
               forwardSessionMessageSendRequested: (request) => {
                 parentPort?.postMessage({
                   type: HostResponseTypes.SessionMessageSendRequested,
                   request,
-                });
-              },
-              onProviderProvisioningSourceChanged: (trigger) => {
-                parentPort?.postMessage({
-                  type: HostResponseTypes.ProviderProvisioningSourceChanged,
-                  trigger,
                 });
               },
             });

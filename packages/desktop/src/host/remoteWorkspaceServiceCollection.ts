@@ -15,7 +15,6 @@ import {
   IConversationShareService,
   IFileWatcherService,
   IModelSelectionService,
-  IProviderSettingsService,
   IClientScenesService,
   ISkillsService,
   ISkillSyncService,
@@ -47,10 +46,6 @@ import {
   type ZCodeSessionRuntimePreferencesResult,
 } from "@zcode/shared";
 import { assertLegacyRemoteWorkspaceRpcContract } from "./legacyRemoteWorkspaceRpcContract.js";
-import {
-  createRemoteProviderProvisioningExecutorFromWorkspace,
-  registerRemoteProviderProvisioningExecutor,
-} from "./remoteProviderProvisioningService.js";
 
 const runtimePreferencesLogger = createServiceLogger("remote-runtime-preferences");
 
@@ -95,9 +90,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
   const remoteZCodeSessionService = params.createRemotePromptAttachmentSessionService(
     params.connectionServices.zcodeSessionService,
   );
-  const remoteProviderProvisioningService =
-    createRemoteProviderProvisioningExecutorFromWorkspace(params);
-
   // desktop-attached remote 的 Agent 运行在远端，但 app-global 设置权威仍在
   // desktop shared Host。通过窄化的 runtime-preferences 请求原路返回，避免远端读取自己的 setting。
   const { onError } = params.runtimePreferencesBridge;
@@ -217,10 +209,8 @@ export function createRemoteWorkspaceServiceCollection(params: {
     .register(IZCodeSessionService, remoteZCodeSessionService)
     .register(IConversationShareService, conversationShareService)
     .register(IFileWatcherService, params.connectionServices.fileWatcherService)
-    // Provider/Model 事实属于目标 Environment。远端 workspace 的选择和设置视图
-    // 必须直接读取远端 Registry，不能继续显示 Desktop 本地 Provider。
+    // Model facts belong to nek on the target machine, never the local desktop.
     .register(IModelSelectionService, params.connectionServices.modelSelectionService)
-    .register(IProviderSettingsService, params.connectionServices.providerSettingsService)
     .register(IClientScenesService, createClientScenesService())
     // 远端 workspace 的项目级 skills/plugins/commands 位于 SSH/Docker 文件系统。
     // 这里必须透出远端服务，避免本机服务拿远端 workspacePath 去本机目录扫描。
@@ -238,6 +228,5 @@ export function createRemoteWorkspaceServiceCollection(params: {
     )
     .register(IPromptAttachmentTransferService, params.promptAttachmentTransferService);
   registerHostApiNetworkTransportForDispose(services, hostApiNetworkTransport);
-  registerRemoteProviderProvisioningExecutor(services, remoteProviderProvisioningService);
   return services;
 }
