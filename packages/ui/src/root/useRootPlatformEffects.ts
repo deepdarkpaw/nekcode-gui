@@ -7,6 +7,7 @@ import { useTabStore } from "@/store/TabStoreProvider.js";
 import { logger } from "@/logger.js";
 import { toast } from "@/components/ui/toast.js";
 import { matchesPrimaryShortcut } from "@/lib/keyboardShortcuts.js";
+import { isShortcutRecordingActive } from "@/shortcuts/bindings.js";
 import { isRendererReloadNavigation } from "@/lib/rendererNavigation.js";
 import { shouldPublishCompleteWorkspaceSnapshot } from "@/root/rootPlatformWorkspaceSync.js";
 
@@ -251,6 +252,11 @@ export function useRootPlatformEffects({
     }
 
     function handleWindowKeydown(event: KeyboardEvent) {
+      // 录制态键盘归录制器独占。本监听先于录制监听注册（同 capture 阶段），
+      // 不短路的话录制期按 Cmd/Ctrl+N、O 预览会真实触发新建任务/打开工作区。
+      if (isShortcutRecordingActive()) {
+        return;
+      }
       const isNewTaskShortcut = matchesPrimaryShortcut(event, "n");
       const isOpenWorkspaceShortcut = matchesPrimaryShortcut(event, "o");
 

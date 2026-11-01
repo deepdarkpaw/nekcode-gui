@@ -444,6 +444,9 @@ export interface IPlatformService {
   /** 同步需要 main 进程即时感知的应用设置；Web fallback 可忽略 */
   syncAppSettings?(patch: Partial<AppSettings>): void;
 
+  /** 快捷键设置页录制态开关；桌面端 main 据此暂时摘除可配置菜单 accelerator，Web 可忽略 */
+  setShortcutRecordingActive?(active: boolean): void;
+
   /** 注册 main 进程要求聚焦某个 workspace tab 的回调，返回 disposer */
   onFocusTab(handler: (path: string) => void): () => void;
 

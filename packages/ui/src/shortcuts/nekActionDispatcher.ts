@@ -13,6 +13,7 @@ import type { KeyboardShortcutPlatformInfo } from "@/lib/keyboardShortcuts.js";
 import {
   isEditableShortcutEventTarget,
   isShiftOnlyPrintableBinding,
+  isShortcutRecordingActive,
   type ShortcutBindingEvent,
 } from "./bindings.js";
 import { matchesActionBinding } from "./actionBinding.js";
@@ -162,7 +163,7 @@ export function useNekActionKeyboard(platformInfo?: KeyboardShortcutPlatformInfo
 
   useEffect(() => {
     const dispatch = (event: KeyboardEvent, phase: NekActionDispatchPhase): void => {
-      if (event.repeat || event.isComposing) return;
+      if (event.repeat || event.isComposing || isShortcutRecordingActive()) return;
       // 内层组件已经消费这次按键（对话框关闭、mention/slash 面板 Esc）时让路。
       if (phase === "bubble" && event.defaultPrevented) return;
       const actionId = resolveNekActionKeyboardEvent(

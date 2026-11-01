@@ -525,6 +525,7 @@ export const diagnosticMessages: readonly string[] = [
   "[settings] 初始化运行时偏好失败",
   "[settings] 同步跨窗口运行时偏好失败",
   "[settings] 回写引导记录失败",
+  "[shortcuts] invalid recording-active payload:",
   "[shortcuts] 忽略非法覆盖条目",
   "[shortcuts] 覆盖绑定全部非法，回退默认",
   "[show-task-notification] click ignored: sender window is gone",

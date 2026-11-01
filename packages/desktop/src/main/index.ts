@@ -874,6 +874,40 @@ async function handleZCodeEndpointChanged() {
   rebuildMenu();
 }
 
+/** 快捷键设置页录制态（renderer 经 SetShortcutRecordingActive 同步）；true 时菜单摘除可配置 accelerator。 */
+let shortcutRecordingActive = false;
+/** 发起录制的 webContents id；窗口关闭/崩溃时 renderer 不会发复位 IPC，main 侧据此收口。 */
+let shortcutRecordingOwnerWebContentsId: number | null = null;
+
+function setShortcutRecordingActive(active: boolean, ownerWebContentsId: number | null = null) {
+  if (active) {
+    shortcutRecordingOwnerWebContentsId = ownerWebContentsId;
+  }
+  if (shortcutRecordingActive === active) {
+    return;
+  }
+  shortcutRecordingActive = active;
+  if (!active) {
+    shortcutRecordingOwnerWebContentsId = null;
+  }
+  rebuildMenu();
+}
+
+/**
+ * 录制态是跨进程的临时全局状态，收口不能依赖 renderer 合作——录制中关窗
+ * 或渲染进程崩溃时 React cleanup 与复位 IPC 都不会执行，标志会永久为 true，之后所有
+ * rebuildMenu（切语言/zoom/设置同步）都建出无 accelerator 的菜单且波及全部窗口。
+ * 在既有窗口销毁清理里按发起 webContents 复位。
+ */
+function resetShortcutRecordingForWebContents(webContentsId: number) {
+  if (!shortcutRecordingActive || shortcutRecordingOwnerWebContentsId !== webContentsId) {
+    return;
+  }
+  shortcutRecordingOwnerWebContentsId = null;
+  shortcutRecordingActive = false;
+  rebuildMenu();
+}
+
 function rebuildMenu() {
   void Promise.all([resolveZCodeEndpointSelection(), mainSettingService.get()]).then(
     ([zcodeEndpointSelection, settings]) => {
@@ -884,6 +918,9 @@ function rebuildMenu() {
         currentZoomLevel: resolveFocusedDesktopZoomLevel(),
         // 菜单 accelerator 跟随用户快捷键设置（shortcutBindings 用户覆盖）
         shortcutBindings: settings.shortcutBindings,
+        // 快捷键录制态：摘掉可配置 accelerator，防止录制 menu 通道命令时按键直接触发原命令
+        // （macOS 系统菜单先于 renderer 吃掉按键，renderer 侧 preventDefault 拦不住）。
+        disableShortcutAccelerators: shortcutRecordingActive,
       });
     },
   );
@@ -1451,6 +1488,7 @@ app.whenReady().then(async () => {
       runningAgentSessionCount: getRunningAgentSessionCount(),
     }),
     syncAppSettings: syncImmediateAppSettings,
+    setShortcutRecordingActive,
   });
 
   registerRemoteIpcHandlers({
@@ -1535,6 +1573,14 @@ app.on("browser-window-created", (_, win) => {
     // 之前这里现取 win.webContents.id，会在关窗收尾阶段抛出 "Object has been destroyed"。
     // 改为在窗口创建时缓存 webContents id，确保清理工作区深链接状态时不再访问已销毁对象。
     clearWorkspaceDeepLinkStateForWindow(windowWebContentsId);
+    // 录制中关窗/崩溃时 renderer 不会发复位 IPC，这里按发起 webContents 复位录制态，
+    // 防止菜单 accelerator 被永久摘除。
+    resetShortcutRecordingForWebContents(windowWebContentsId);
+  });
+  // 渲染进程崩溃但窗口存活时 closed 不会触发，崩溃路径同样按 owner 复位
+  // （owner 不匹配时天然幂等）。
+  win.webContents.on("render-process-gone", () => {
+    resetShortcutRecordingForWebContents(windowWebContentsId);
   });
 });
 app.on("window-all-closed", () => {

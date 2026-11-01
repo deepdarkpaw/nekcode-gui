@@ -3,6 +3,7 @@ import { SHORTCUT_COMMANDS, type ShortcutCommandId } from "@zcode/shared";
 import {
   isEditableShortcutEventTarget,
   isShiftOnlyPrintableBinding,
+  isShortcutRecordingActive,
   matchesShortcutBinding,
 } from "@/shortcuts/bindings.js";
 import { useEffectiveShortcutBindings } from "@/shortcuts/useShortcutBindings.js";
@@ -28,6 +29,12 @@ export function useAppKeyboard(handlers: AppKeyboardHandlers) {
       if (event.repeat || event.isComposing) {
         return;
       }
+      // 录制态短路：录制监听注册晚于本监听（同阶段先注册先执行），不短路的话
+      // 录制按下的组合会先触发原命令，改键永远不成功（见 setShortcutRecordingActive 注释）。
+      if (isShortcutRecordingActive()) {
+        return;
+      }
+
       const { handlers: currentHandlers, effective: currentEffective } = stateRef.current;
       // 纯 Shift+可打印键绑定（如 Shift+f）与「输入大写字母」是同一物理事件，
       // 焦点在可编辑元素（聊天输入框/搜索框/终端）时跳过这类绑定，否则用户打不出对应大写字母。
