@@ -62,9 +62,14 @@ test("our own writes are published to watchers immediately", async () => {
     isNew: false,
   });
   unsubscribe();
-  assert.equal(changes.length, 1, "exactly one change per write");
-  assert.equal(changes[0]?.file, MODELS_PATH);
-  assert.equal(changes[0]?.revision, (await harness.api.readModelsConfig(LOCAL)).revision);
+  const writtenRevision = (await harness.api.readModelsConfig(LOCAL)).revision;
+  assert.equal(
+    changes.filter((change) => change.revision === writtenRevision).length,
+    1,
+    "exactly one publication per write, in addition to initial observation",
+  );
+  assert.equal(changes.at(-1)?.file, MODELS_PATH);
+  assert.equal(changes.at(-1)?.revision, writtenRevision);
 });
 
 test("external edits are detected by polling with the configured interval", async () => {
@@ -77,6 +82,7 @@ test("external edits are detected by polling with the configured interval", asyn
   // 等第一轮扫描建立基线，再模拟"nek 或用户改了文件"。
   await new Promise((resolve) => setTimeout(resolve, 100));
   const before = (await harness.api.readModelsConfig(LOCAL)).revision;
+  changes.length = 0;
   harness.local.setFile(MODELS_PATH, modelsText("http://external"));
   await new Promise((resolve) => setTimeout(resolve, 1400));
   unsubscribe();
@@ -110,6 +116,75 @@ test("reload reaches every process and counts busy sessions as deferred", async 
   assert.equal(outcome.reloaded, 1);
   assert.equal(outcome.deferred, 1);
   assert.deepEqual(outcome.diagnostics, []);
+});
+
+test("MW-R1: scoped reload reaches its workspace plus control, never another workspace", async () => {
+  const harness = createHarness();
+  const calls: string[] = [];
+  harness.sessions.push(
+    {
+      ...session({
+        key: "a",
+        reload: async () => {
+          calls.push("a");
+          return { deferred: false, diagnostics: [] };
+        },
+      }),
+      cwd: "/a",
+    },
+    {
+      ...session({
+        key: "b",
+        reload: async () => {
+          calls.push("b");
+          return { deferred: false, diagnostics: [] };
+        },
+      }),
+      cwd: "/b",
+    },
+    session({
+      key: "unknown",
+      reload: async () => {
+        calls.push("unknown");
+        return { deferred: false, diagnostics: [] };
+      },
+    }),
+  );
+  await harness.api.getAuthStatus(LOCAL);
+  const result = await harness.api.reloadRunningSessions(LOCAL, "/a");
+  assert.deepEqual(calls, ["a"]);
+  assert.equal(result.reloaded, 2);
+  assert.equal(harness.control.commands.filter((command) => command.type === "reload").length, 1);
+  harness.api.dispose();
+});
+
+test("MW-R2: automatic project settings write does not reload other workspaces", async () => {
+  const harness = createHarness({ autoReload: true });
+  const calls: string[] = [];
+  for (const cwd of ["/a", "/b"])
+    harness.sessions.push({
+      ...session({
+        key: cwd,
+        reload: async () => {
+          calls.push(cwd);
+          return { deferred: false, diagnostics: [] };
+        },
+      }),
+      cwd,
+    });
+  const view = await harness.api.readSettings(LOCAL, "project", "/a");
+  const reloaded = new Promise<void>((resolve) =>
+    harness.api.onReloadResult(LOCAL, () => resolve()),
+  );
+  await harness.api.patchSettings(
+    LOCAL,
+    "project",
+    { defaultModel: "a" },
+    { revision: view.revision, cwd: "/a" },
+  );
+  await reloaded;
+  assert.deepEqual(calls, ["/a"]);
+  harness.api.dispose();
 });
 
 test("reload reports a failing session as a process failure instead of throwing", async () => {
@@ -191,7 +266,8 @@ test("mcp status and actions use the running session process", async () => {
       key: "session-1",
       call: (async (command) => {
         if (command.type !== "extension_call") throw new Error(`unexpected ${command.type}`);
-        if (command.method === "mcp.status") return { result: { servers: [status] } };
+        if ((command as NekRpcCommandOfType<"extension_call">).method === "mcp.status")
+          return { result: { servers: [status] } };
         return { result: { server: status } };
       }) as NekConfigSessionHandle["call"],
     }),

@@ -93,25 +93,16 @@ export function useModelSelectionServiceView(
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       retryTimer = undefined;
     };
-    setOwned((previous) => ({
+    setOwned({
       ...owner,
-      // 同一 owner 重读时保留上一次 ready 视图，避免每次重读都闪一下 loading；
-      // 读取失败会覆盖成 error，不让旧视图继续冒充当前事实。
-      state:
-        previous.service === normalizedService &&
-        previous.enabled === enabled &&
-        previous.inputKey === inputKey &&
-        previous.unavailableReason === unavailableReason
-          ? previous.state.status === "ready"
-            ? previous.state
-            : initialState(normalizedService, enabled, unavailableReason)
-          : initialState(normalizedService, enabled, unavailableReason),
-    }));
+      state: initialState(normalizedService, enabled, unavailableReason),
+    });
     if (!enabled || !normalizedService) return;
 
     const read = (): void => {
       cancelRetry();
       const current = ++request;
+      setOwned({ ...owner, state: { status: "loading" } });
       void normalizedService.getView(stableInput).then(
         (view) => {
           if (disposed || current !== request) return;
@@ -130,7 +121,17 @@ export function useModelSelectionServiceView(
         },
       );
     };
-    const subscription = normalizedService.onDidChange(() => read());
+    let subscription: { dispose(): void };
+    try {
+      subscription = normalizedService.onDynamicDidChange({
+        workspacePath: stableInput?.workspacePath,
+      })(read);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.warn("[model-selection] 目标 Host watch 订阅失败", { error });
+      setOwned({ ...owner, state: { status: "error", error } });
+      return;
+    }
     read();
     return () => {
       disposed = true;
