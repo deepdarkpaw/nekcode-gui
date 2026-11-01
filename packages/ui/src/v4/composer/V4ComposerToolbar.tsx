@@ -1,12 +1,12 @@
-/* oxlint-disable eslint(max-lines) -- V4ComposerToolbar 汇聚模型/思考深度/context usage 三件套；继续拆分会打散工具条热键与模型目录 memo 的共享状态。 */
+/* oxlint-disable eslint(max-lines) -- V4ComposerToolbar 汇聚模型/思考深度两件套；继续拆分会打散工具条热键与模型目录 memo 的共享状态。 */
 /**
  * V4 composer 工具条。
  *
  * 展示件全部复用旧 chat-input-toolbar 的纯 props 组件（ModelConfigSelect /
- * ChatModeSwitchControl / ThoughtLevelCycleControl / ChatContextUsage），外观与旧
+ * ChatModeSwitchControl / ThoughtLevelCycleControl），外观与旧
  * ChatInputToolbar 对齐；但状态编排是全新 v4 wiring，不复活旧 ChatInputToolbar 的
  * effect 链 / 旧协议写路径：
- * - 当前模型/档位来自 Composer；已运行会话的用量来自 snapshot.usage.contextWindow
+ * - 当前模型/档位来自 Composer；上下文用量与压缩入口只由 nek 状态槽的用量指示器展示
  * - 模型、思考深度和模式只更新下一次 Submission 的 Composer 意图
  * - 模型静态事实来自目标 Host ModelSelectionView；workspace configOptions 只提供
  *   mode 等非模型 presentation
@@ -30,7 +30,6 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js";
 import { Button } from "@/components/ui/button.js";
-import { ChatContextUsage } from "@/chat-input-toolbar/display.js";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
 import { getNextThoughtLevelValue } from "@/chat-input-toolbar/thoughtLevelOptions.js";
 import type { V4ComposerConfigPicker } from "@/v4/composer/configPickerState.js";
@@ -115,7 +114,6 @@ export interface V4ComposerToolbarProps {
     value: string,
     sourceModel: ModelSelectionSource | null,
   ) => Promise<void> | void;
-  onSendCompressionCommand?: (command: string) => void;
 }
 
 /** 模型 / 思考深度 / context usage 簇（渲染在发送键左侧，与旧 UI 同位）。 */
@@ -135,10 +133,9 @@ function V4ComposerModelControlsImpl({
   onConfigPickerOpenChange,
   onSelectModel,
   onSelectThought,
-  onSendCompressionCommand,
   onRecoverCustomModelSelection,
 }: V4ComposerToolbarProps) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl } = useZCodeIntl();
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
   // 配置面读取：workspace 缺省目录（taskId=null），不读旧会话态。
   const { error: configOptionsError } = useToolbarConfigOptions(
@@ -379,16 +376,6 @@ function V4ComposerModelControlsImpl({
     return true;
   }, [effectiveConfig, onSelectThought, thoughtOption]);
 
-  const taskUsage = useMemo(() => {
-    const contextWindow = usage?.contextWindow;
-    if (!contextWindow) return null;
-    return {
-      used: contextWindow.usedTokens,
-      size: contextWindow.maxTokens,
-      ...(contextWindow.cache ? { cache: contextWindow.cache } : {}),
-      ...(contextWindow.breakdown ? { breakdown: contextWindow.breakdown } : {}),
-    };
-  }, [usage?.contextWindow]);
   // 工具条 tooltip 的快捷键文案读 nek 动作生效表（Ctrl+L / Shift+Tab），
   // 改绑后按钮提示即时跟随（不能用硬编码文案）。
   const modelShortcutLabel = useActionShortcutLabel("app.model.select");
@@ -453,14 +440,6 @@ function V4ComposerModelControlsImpl({
         data-usage-used={usage?.contextWindow?.usedTokens ?? ""}
         data-usage-max={usage?.contextWindow?.maxTokens ?? ""}
         className="hidden"
-      />
-      <ChatContextUsage
-        taskUsage={taskUsage}
-        selectedProvider={displayProvider}
-        intl={intl}
-        locale={locale}
-        onSendCompressionCommand={onSendCompressionCommand}
-        compressionDisabled={disabled || recoveryPending}
       />
       {modelSelectionState.status === "error" && modelSelectionReload ? (
         <Button

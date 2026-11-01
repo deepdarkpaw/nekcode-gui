@@ -1,4 +1,4 @@
-export function formatCompactTokenNumber(
+function formatCompactTokenNumber(
   locale: string,
   value: number,
   options: { maximumFractionDigits?: number } = {},

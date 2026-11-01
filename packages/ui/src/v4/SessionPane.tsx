@@ -3110,17 +3110,6 @@ export function SessionPane({
     [handleDraftSwitchMode],
   );
 
-  // context usage 面板的压缩入口（命令文本 = "/compact"，复用 slash 解析路径）。
-  const handleSendCompressionCommand = useCallback(
-    (command: string) => {
-      if (!sessionId) return;
-      const parsed = parseV4VisibleSlashCommand(command);
-      if (!parsed) return;
-      void dispatchSlashCommand(parsed, sessionId, snapshotRef.current?.revision, undefined);
-    },
-    [dispatchSlashCommand, sessionId],
-  );
-
   // 误停排障需要区分按钮与 Esc；普通 info 在生产禁用，必须走生命周期日志。
   const handleStop = useCallback(
     (source: "button" | "escape") => {
@@ -3934,7 +3923,6 @@ export function SessionPane({
       // childSessionId 精确回退后的计数，让两个入口共享同一份运行态真值。
       runningSubagentCount={runningAgentCount}
       onRecoverCustomModelSelection={handleRecoverCustomModelSelection}
-      onSendCompressionCommand={handleSendCompressionCommand}
       error={composerError}
       onDismissError={handleDismissComposerError}
       onRetryError={composerErrorRetry}
