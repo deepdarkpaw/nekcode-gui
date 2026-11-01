@@ -121,7 +121,17 @@ export function useModelSelectionServiceView(
         },
       );
     };
-    const subscription = normalizedService.onDynamicDidChange({ workspacePath: stableInput?.workspacePath })(read);
+    let subscription: { dispose(): void };
+    try {
+      subscription = normalizedService.onDynamicDidChange({
+        workspacePath: stableInput?.workspacePath,
+      })(read);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.warn("[model-selection] 目标 Host watch 订阅失败", { error });
+      setOwned({ ...owner, state: { status: "error", error } });
+      return;
+    }
     read();
     return () => {
       disposed = true;

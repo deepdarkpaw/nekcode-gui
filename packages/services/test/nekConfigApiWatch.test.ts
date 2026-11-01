@@ -63,7 +63,11 @@ test("our own writes are published to watchers immediately", async () => {
   });
   unsubscribe();
   const writtenRevision = (await harness.api.readModelsConfig(LOCAL)).revision;
-  assert.equal(changes.filter((change) => change.revision === writtenRevision).length, 1, "exactly one publication per write, in addition to initial observation");
+  assert.equal(
+    changes.filter((change) => change.revision === writtenRevision).length,
+    1,
+    "exactly one publication per write, in addition to initial observation",
+  );
   assert.equal(changes.at(-1)?.file, MODELS_PATH);
   assert.equal(changes.at(-1)?.revision, writtenRevision);
 });
@@ -118,9 +122,33 @@ test("MW-R1: scoped reload reaches its workspace plus control, never another wor
   const harness = createHarness();
   const calls: string[] = [];
   harness.sessions.push(
-    { ...session({ key: "a", reload: async () => { calls.push("a"); return { deferred: false, diagnostics: [] }; } }), cwd: "/a" },
-    { ...session({ key: "b", reload: async () => { calls.push("b"); return { deferred: false, diagnostics: [] }; } }), cwd: "/b" },
-    session({ key: "unknown", reload: async () => { calls.push("unknown"); return { deferred: false, diagnostics: [] }; } }),
+    {
+      ...session({
+        key: "a",
+        reload: async () => {
+          calls.push("a");
+          return { deferred: false, diagnostics: [] };
+        },
+      }),
+      cwd: "/a",
+    },
+    {
+      ...session({
+        key: "b",
+        reload: async () => {
+          calls.push("b");
+          return { deferred: false, diagnostics: [] };
+        },
+      }),
+      cwd: "/b",
+    },
+    session({
+      key: "unknown",
+      reload: async () => {
+        calls.push("unknown");
+        return { deferred: false, diagnostics: [] };
+      },
+    }),
   );
   await harness.api.getAuthStatus(LOCAL);
   const result = await harness.api.reloadRunningSessions(LOCAL, "/a");
@@ -133,10 +161,27 @@ test("MW-R1: scoped reload reaches its workspace plus control, never another wor
 test("MW-R2: automatic project settings write does not reload other workspaces", async () => {
   const harness = createHarness({ autoReload: true });
   const calls: string[] = [];
-  for (const cwd of ["/a", "/b"]) harness.sessions.push({ ...session({ key: cwd, reload: async () => { calls.push(cwd); return { deferred: false, diagnostics: [] }; } }), cwd });
+  for (const cwd of ["/a", "/b"])
+    harness.sessions.push({
+      ...session({
+        key: cwd,
+        reload: async () => {
+          calls.push(cwd);
+          return { deferred: false, diagnostics: [] };
+        },
+      }),
+      cwd,
+    });
   const view = await harness.api.readSettings(LOCAL, "project", "/a");
-  const reloaded = new Promise<void>((resolve) => harness.api.onReloadResult(LOCAL, () => resolve()));
-  await harness.api.patchSettings(LOCAL, "project", { defaultModel: "a" }, { revision: view.revision, cwd: "/a" });
+  const reloaded = new Promise<void>((resolve) =>
+    harness.api.onReloadResult(LOCAL, () => resolve()),
+  );
+  await harness.api.patchSettings(
+    LOCAL,
+    "project",
+    { defaultModel: "a" },
+    { revision: view.revision, cwd: "/a" },
+  );
   await reloaded;
   assert.deepEqual(calls, ["/a"]);
   harness.api.dispose();
@@ -221,7 +266,8 @@ test("mcp status and actions use the running session process", async () => {
       key: "session-1",
       call: (async (command) => {
         if (command.type !== "extension_call") throw new Error(`unexpected ${command.type}`);
-        if (command.method === "mcp.status") return { result: { servers: [status] } };
+        if ((command as NekRpcCommandOfType<"extension_call">).method === "mcp.status")
+          return { result: { servers: [status] } };
         return { result: { server: status } };
       }) as NekConfigSessionHandle["call"],
     }),

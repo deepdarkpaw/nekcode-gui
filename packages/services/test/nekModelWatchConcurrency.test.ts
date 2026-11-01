@@ -41,6 +41,32 @@ test("MW-C2: a newer failed read fences an older successful snapshot", async () 
   service.dispose();
 });
 
+test("MW-C6: a superseded old failure cannot overwrite a newer successful observation", async () => {
+  const { api, service } = setup();
+  const gate = api.gateNextRead();
+  const older = service.getView();
+  api.setCatalog([B], [B]);
+  const newer = await service.getView();
+  gate.reject(new Error("outdated failure"));
+  assert.equal((await older).providers[0]?.models[0]?.modelId, "b");
+  assert.equal((await service.getView()).revision, newer.revision);
+  service.dispose();
+});
+
+test("MW-C7: a throwing invalidation listener cannot prevent inflight epoch fencing", async () => {
+  const { api, service } = setup();
+  service.onDidChange(() => {
+    throw new Error("observer failed");
+  });
+  const gate = api.gateNextRead();
+  const pending = service.getView();
+  api.setCatalog([B], [B]);
+  api.notifyWatch();
+  gate.resolve();
+  assert.equal((await pending).providers[0]?.models[0]?.modelId, "b");
+  service.dispose();
+});
+
 test("MW-C3: retry exhaustion is visible, not a last stale view", async () => {
   const { api, service } = setup();
   const gates = [api.gateNextRead(), api.gateNextRead(), api.gateNextRead()];
@@ -84,11 +110,16 @@ test("MW-W1: global + two workspace leases are scoped, reference counted and rel
   const b = service.onDynamicDidChange({ workspacePath: "/b" })(() => notifications.push("b"));
   const global = service.onDidChange(() => notifications.push("global"));
   assert.equal(countCalls(api, "watch"), 3, "global + one per workspace, not per consumer");
-  for (let index = 0; index < 10; index += 1) await service.getView({ selection: null, workspacePath: "/a" });
+  for (let index = 0; index < 10; index += 1)
+    await service.getView({ selection: null, workspacePath: "/a" });
   assert.equal(countCalls(api, "watch"), 3);
   api.notifyWatch("/a");
   assert.deepEqual(notifications, ["a", "a2"]);
-  assert.equal(countCalls(api, "reloadRunningSessions"), 0, "project defaults do not reload other sessions");
+  assert.equal(
+    countCalls(api, "reloadRunningSessions"),
+    0,
+    "project defaults do not reload other sessions",
+  );
   a.dispose();
   assert.equal(api.watchDisposed, 0);
   a2.dispose();
@@ -135,7 +166,11 @@ test("MW-E1: async watch failures invalidate ready and remain errors until recov
 
 test("MW-D1: partial or empty explicit defaults never choose the first model", async () => {
   const { api, service } = setup();
-  for (const defaults of [{ defaultProvider: "mock" }, { defaultModel: "a" }, { defaultProvider: "", defaultModel: "" }]) {
+  for (const defaults of [
+    { defaultProvider: "mock" },
+    { defaultModel: "a" },
+    { defaultProvider: "", defaultModel: "" },
+  ]) {
     api.setEffective(defaults);
     const view = await service.getView();
     assert.equal(view.preferredSelection, undefined);

@@ -183,7 +183,14 @@ describe("useDraftModelReadinessGate", () => {
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
     act(() => result.current.markProviderNotReady());
     expect(result.current.agentStartupAllowed).toBe(false);
-    host.setView({ ...READY_VIEW, preferredSelection: { providerId: "mock", modelId: "mock-model", options: { reasoningLevel: "off" } } });
+    host.setView({
+      ...READY_VIEW,
+      preferredSelection: {
+        providerId: "mock",
+        modelId: "mock-model",
+        options: { reasoningLevel: "off" },
+      },
+    });
     act(() => host.invalidate());
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
     expect(result.current.error).toBeNull();
@@ -194,7 +201,9 @@ describe("useDraftModelReadinessGate", () => {
     const { result } = renderGate(host.service);
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
     host.getView.mockRejectedValueOnce(new Error("control reload failed"));
-    await act(async () => { expect(await result.current.ensureReadyForSend()).toBe(false); });
+    await act(async () => {
+      expect(await result.current.ensureReadyForSend()).toBe(false);
+    });
     expect(result.current.error?.code).toBe("model_config_unreadable");
     act(() => host.invalidate());
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
@@ -215,14 +224,30 @@ describe("useDraftModelReadinessGate", () => {
 
   it("MW-G4: a send recheck from a previous workspace cannot poison its replacement", async () => {
     const host = createHostService(READY_VIEW);
-    const { result, rerender } = renderHook(({ workspacePath }) => useDraftModelReadinessGate({ workspacePath, sessionId: null, modelSelectionService: host.service }), { initialProps: { workspacePath: "/a" } });
+    const { result, rerender } = renderHook(
+      ({ workspacePath }) =>
+        useDraftModelReadinessGate({
+          workspacePath,
+          sessionId: null,
+          modelSelectionService: host.service,
+        }),
+      { initialProps: { workspacePath: "/a" } },
+    );
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
     let reject!: (error: Error) => void;
-    host.getView.mockImplementationOnce(() => new Promise<ModelSelectionView>((_resolve, fail) => { reject = fail; }));
+    host.getView.mockImplementationOnce(
+      () =>
+        new Promise<ModelSelectionView>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
     const old = result.current.ensureReadyForSend();
     rerender({ workspacePath: "/b" });
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
-    await act(async () => { reject(new Error("old A failed")); expect(await old).toBe(false); });
+    await act(async () => {
+      reject(new Error("old A failed"));
+      expect(await old).toBe(false);
+    });
     expect(result.current.agentStartupAllowed).toBe(true);
     expect(result.current.error).toBeNull();
   });
@@ -232,10 +257,20 @@ describe("useDraftModelReadinessGate", () => {
     const { result } = renderGate(host.service);
     await waitFor(() => expect(result.current.agentStartupAllowed).toBe(true));
     let reject!: (error: Error) => void;
-    host.getView.mockImplementationOnce(() => new Promise<ModelSelectionView>((_resolve, fail) => { reject = fail; }));
+    host.getView.mockImplementationOnce(
+      () =>
+        new Promise<ModelSelectionView>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
     const older = result.current.ensureReadyForSend();
-    await act(async () => { expect(await result.current.ensureReadyForSend()).toBe(true); });
-    await act(async () => { reject(new Error("outdated")); expect(await older).toBe(false); });
+    await act(async () => {
+      expect(await result.current.ensureReadyForSend()).toBe(true);
+    });
+    await act(async () => {
+      reject(new Error("outdated"));
+      expect(await older).toBe(false);
+    });
     expect(result.current.agentStartupAllowed).toBe(true);
     expect(result.current.error).toBeNull();
   });

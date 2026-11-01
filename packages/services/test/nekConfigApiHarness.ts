@@ -7,17 +7,19 @@
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { parse as parseJsonc } from "jsonc-parser";
-import type { NekAuthProviderStatusWire, NekBuiltinToolInfo } from "@zcode/shared/nek-protocol";
 import type {
+  NekAuthProviderStatusWire,
+  NekBuiltinToolInfo,
   NekConfigTarget,
   NekConfigTargetInfo,
-  NekControlClient,
+  NekExtensionUiResponse,
   NekRpcCommandOfType,
   NekRpcCommandType,
   NekRpcResponseDataFor,
   NekStructuredUiRequest,
   NekStructuredUiResponse,
-} from "../src/nek-config-api/index.js";
+} from "@zcode/shared/nek-protocol";
+import type { NekControlClient } from "../src/nek-config-api/index.js";
 import { NekConfigApi, createMemoryNekConfigHostExecutor } from "../src/nek-config-api/index.js";
 import type {
   MemoryNekConfigHostExecutor,
@@ -50,7 +52,7 @@ export class FakeControlClient implements NekControlClient {
   private loginResolve: ((value: { provider: string }) => void) | undefined;
   private loginReject: ((error: Error) => void) | undefined;
   private reloadDeferred = false;
-  readonly respondCalls: NekStructuredUiResponse[] = [];
+  readonly respondCalls: NekExtensionUiResponse[] = [];
 
   constructor(options: { authStatus?: NekAuthProviderStatusWire[]; loginDeferred?: boolean } = {}) {
     this.authStatus = options.authStatus ?? [];
@@ -70,7 +72,7 @@ export class FakeControlClient implements NekControlClient {
     return () => this.authListeners.delete(listener);
   }
 
-  respondExtensionUi(response: NekStructuredUiResponse): void {
+  respondExtensionUi(response: NekExtensionUiResponse): void {
     this.respondCalls.push(response);
   }
 

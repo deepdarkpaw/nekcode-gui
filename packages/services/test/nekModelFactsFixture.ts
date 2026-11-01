@@ -103,9 +103,13 @@ export type FakeFactsApi = NekModelFactsApi & {
 
 export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFactsApi {
   const calls: FakeFactsApi["calls"] = [];
-  const watchListeners = new Set<{ cwd?: string; notify: (cwd?: string, error?: string) => void }>();
+  const watchListeners = new Set<{
+    cwd?: string;
+    notify: (cwd?: string, error?: string, revision?: string) => void;
+  }>();
   const reloadGates: Deferred<void>[] = [];
   let watchDisposed = 0;
+  let watchRevision = 0;
   // 可变的编排状态：测试可以在中途“修好配置/解除错误”，模拟真实的重试路径。
   let available = options.available ?? [];
   let catalog = options.catalog ?? [];
@@ -143,11 +147,13 @@ export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFacts
       return {
         providers: (options.configuredProviders ?? []).map((provider) => ({
           ...provider,
-          api: "openai-completions",
+          api: "openai-completions" as const,
           baseUrl: "http://127.0.0.1:9/v1",
+          apiKey: { kind: "none" as const },
+          overridesBuiltin: false,
           models: [],
         })),
-      } as Awaited<ReturnType<NekModelFactsApi["readModelsConfig"]>>;
+      };
     },
     readSettings: async (target, scope, cwd) => {
       calls.push({ method: "readSettings", target, scope, cwd });
@@ -164,11 +170,16 @@ export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFacts
     },
     watch: (target, listener, cwd) => {
       calls.push({ method: "watch", target, cwd });
-      const entry = { cwd, notify: (changedCwd?: string, error?: string) => listener({
-        file: changedCwd ? `${changedCwd}/.nek/settings.json` : "models.json",
-        revision: "r2", scope: changedCwd ? "project" : "global",
-        ...(error ? { error: { message: error } } : {}),
-      }) };
+      const entry = {
+        cwd,
+        notify: (changedCwd?: string, error?: string, revision?: string) =>
+          listener({
+            file: changedCwd ? `${changedCwd}/.nek/settings.json` : "models.json",
+            revision: revision ?? `r${++watchRevision}`,
+            scope: changedCwd ? "project" : "global",
+            ...(error ? { error: { message: error } } : {}),
+          }),
+      };
       watchListeners.add(entry);
       return () => {
         watchDisposed += 1;
@@ -180,8 +191,9 @@ export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFacts
     ...api,
     calls,
     notifyWatch: (cwd, error) => {
+      const revision = `r${++watchRevision}`;
       for (const entry of watchListeners) {
-        if (!cwd || entry.cwd === cwd) entry.notify(cwd, error);
+        if (!cwd || entry.cwd === cwd) entry.notify(cwd, error, revision);
       }
     },
     gateNextReload: () => {

@@ -17,7 +17,7 @@
 import type {
   NekAuthProviderStatus,
   NekCatalogModel,
-  NekConfigScope,
+  INekConfigApi,
   NekConfigTarget,
   NekModelsConfigView,
   NekSessionReloadOutcome,
@@ -26,23 +26,16 @@ import type {
 import { clampNekThinkingLevel } from "./nekThinkingLevel.js";
 
 /** 事实读取只需要 `INekConfigApi` 的这些方法；生产环境注入真实实现。 */
-export interface NekModelFactsApi {
-  listAvailableModels(target: NekConfigTarget): Promise<NekCatalogModel[]>;
-  getModelCatalog(target: NekConfigTarget, ids?: string[]): Promise<NekCatalogModel[]>;
-  getAuthStatus(target: NekConfigTarget): Promise<NekAuthProviderStatus[]>;
+export interface NekModelFactsApi extends Pick<
+  INekConfigApi,
+  | "listAvailableModels"
+  | "getModelCatalog"
+  | "getAuthStatus"
+  | "readSettings"
+  | "reloadRunningSessions"
+  | "watch"
+> {
   readModelsConfig(target: NekConfigTarget): Promise<Pick<NekModelsConfigView, "providers">>;
-  readSettings(
-    target: NekConfigTarget,
-    scope: NekConfigScope,
-    cwd?: string,
-  ): Promise<NekSettingsReadResult>;
-  /** 配置变了以后，让目标机器上的 nek 进程重读（设置页写路径用的是同一入口）。 */
-  reloadRunningSessions(target: NekConfigTarget, cwd?: string): Promise<NekSessionReloadOutcome>;
-  watch(
-    target: NekConfigTarget,
-    listener: (change: { file: string; revision: string; scope: NekConfigScope; error?: { message: string } }) => void,
-    cwd?: string,
-  ): () => void;
 }
 
 const NEK_LOCAL_TARGET: NekConfigTarget = { kind: "local" };
@@ -117,11 +110,16 @@ export function createNekModelFactsSource(
   } = {},
 ): NekModelFactsSource {
   const target = options.target ?? NEK_LOCAL_TARGET;
-  const scopes = new Map<string, {
-    listeners: Set<() => void>;
-    errors: Map<string, string>;
-    stop(): void;
-  }>();
+  const scopes = new Map<
+    string,
+    {
+      listeners: Set<() => void>;
+      errors: Map<string, string>;
+      stop(): void;
+    }
+  >();
+  const globalErrors = new Map<string, string>();
+  const globalRevisions = new Map<string, string>();
   let disposed = false;
   let epoch = 0;
   let loadedEpoch = 0;
@@ -135,20 +133,37 @@ export function createNekModelFactsSource(
     } catch (error) {
       throw new NekModelFactsReloadError(error instanceof Error ? error.message : String(error));
     }
-    const failures = outcome.failures.filter((failure) => failure.sessionKey === "control" || failure.sessionKey === "runtime");
+    const failures = outcome.failures.filter(
+      (failure) => failure.sessionKey === "control" || failure.sessionKey === "runtime",
+    );
     if (failures.length > 0) {
-      throw new NekModelFactsReloadError(failures.map((failure) => failure.message).join("; "), outcome);
+      throw new NekModelFactsReloadError(
+        failures.map((failure) => failure.message).join("; "),
+        outcome,
+      );
     }
     loadedEpoch = generation;
-    if (outcome.failures.length > 0) options.log?.warn(undefined, "[model-selection] nek 会话重载未全部成功", { failures: outcome.failures });
+    if (outcome.failures.length > 0)
+      options.log?.warn(undefined, "[model-selection] nek 会话重载未全部成功", {
+        failures: outcome.failures,
+      });
+  };
+
+  const notifyListeners = (listeners: Set<() => void>): void => {
+    const snapshot = Array.from(listeners);
+    for (const notify of snapshot) {
+      try {
+        notify();
+      } catch (error) {
+        options.log?.warn(undefined, "[model-selection] invalidation listener failed", error);
+      }
+    }
   };
 
   const assertHealthy = (cwd: string): void => {
     if (disposed) throw new Error("NekModelFactsSource 已 dispose");
-    for (const key of new Set(["", cwd])) {
-      const errors = scopes.get(key)?.errors;
-      if (errors?.size) throw new Error(`nek config watch: ${[...errors.values()].join("; ")}`);
-    }
+    const errors = [...globalErrors.values(), ...(scopes.get(cwd)?.errors.values() ?? [])];
+    if (errors.length > 0) throw new Error(`nek config watch: ${errors.join("; ")}`);
   };
 
   return {
@@ -156,8 +171,12 @@ export function createNekModelFactsSource(
       const cwd = readOptions?.cwd?.trim() ?? "";
       assertHealthy(cwd);
       for (let attempt = 0; loadedEpoch !== epoch; attempt += 1) {
-        if (attempt === 3) throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
-        if (!reloading) reloading = reload().finally(() => { reloading = undefined; });
+        if (attempt === 3)
+          throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
+        if (!reloading)
+          reloading = reload().finally(() => {
+            reloading = undefined;
+          });
         await reloading;
         assertHealthy(cwd);
       }
@@ -169,13 +188,15 @@ export function createNekModelFactsSource(
         cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
       ]);
       assertHealthy(cwd);
-      if (settings.diagnostics.length > 0) throw new Error(settings.diagnostics.map((item) => item.message).join("; "));
+      if (settings.diagnostics.length > 0)
+        throw new Error(settings.diagnostics.map((item) => item.message).join("; "));
       return composeFacts({ available, catalog, authStatus, modelsConfig, settings });
     },
     onDidChange: (listener, readOptions) => {
       if (disposed) throw new Error("NekModelFactsSource 已 dispose");
       const cwd = readOptions?.cwd?.trim() ?? "";
-      if (!scopes.has(cwd) && scopes.size >= 128) throw new Error("Model observation capacity exceeded");
+      if (!scopes.has(cwd) && scopes.size >= 128)
+        throw new Error("Model observation capacity exceeded");
       let state = scopes.get(cwd);
       if (!state) {
         state = { listeners: new Set(), errors: new Map(), stop: () => undefined };
@@ -183,18 +204,40 @@ export function createNekModelFactsSource(
         scopes.set(cwd, state);
         let stop: () => void;
         try {
-          stop = api.watch(target, (change) => {
-          if (disposed || scopes.get(cwd) !== owned) return;
-          // Global delivery is owned by the global lease, not duplicated by every project lease.
-          if (cwd && change.scope === "global") return;
-          if (change.error) owned.errors.set(change.file, change.error.message);
-          else owned.errors.delete(change.file);
-          if (!cwd) epoch += 1;
-          for (const [key, scope] of scopes) {
-            if (cwd && key !== cwd) continue;
-            for (const notify of [...scope.listeners]) notify();
-          }
-          }, cwd || undefined);
+          stop = api.watch(
+            target,
+            (change) => {
+              if (disposed || scopes.get(cwd) !== owned) return;
+              const name = change.file.replaceAll("\\", "/").split("/").at(-1);
+              const observation = change.revision.startsWith("watch-");
+              if (
+                !observation &&
+                !["models.json", "settings.json", "auth.json"].includes(name ?? "")
+              )
+                return;
+              if (change.scope === "project" && !observation && name !== "settings.json") return;
+              if (change.scope === "global") {
+                const detail = change.error?.message ?? "";
+                const revisionKey = `${change.file}\u0000${change.revision}\u0000${detail}`;
+                if (globalRevisions.get(change.file) === revisionKey) return;
+                globalRevisions.set(change.file, revisionKey);
+                if (globalRevisions.size > 256)
+                  globalRevisions.delete(globalRevisions.keys().next().value!);
+                if (change.error) globalErrors.set(change.file, change.error.message);
+                else globalErrors.delete(change.file);
+                epoch += 1;
+                for (const scope of scopes.values()) {
+                  notifyListeners(scope.listeners);
+                }
+                return;
+              }
+              if (!cwd) return;
+              if (change.error) owned.errors.set(change.file, change.error.message);
+              else owned.errors.delete(change.file);
+              notifyListeners(owned.listeners);
+            },
+            cwd || undefined,
+          );
         } catch (error) {
           scopes.delete(cwd);
           throw error;
@@ -202,6 +245,7 @@ export function createNekModelFactsSource(
         state.stop = stop;
       }
       const owned = state;
+      if (owned.listeners.size >= 1024) throw new Error("Model observer capacity exceeded");
       const notify = () => listener();
       owned.listeners.add(notify);
       return () => {
@@ -209,6 +253,10 @@ export function createNekModelFactsSource(
         if (owned.listeners.size > 0 || scopes.get(cwd) !== owned) return;
         owned.stop();
         scopes.delete(cwd);
+        if (scopes.size === 0) {
+          globalErrors.clear();
+          globalRevisions.clear();
+        }
       };
     },
     dispose: () => {
@@ -216,6 +264,8 @@ export function createNekModelFactsSource(
       disposed = true;
       for (const state of scopes.values()) state.stop();
       scopes.clear();
+      globalErrors.clear();
+      globalRevisions.clear();
     },
   };
 }

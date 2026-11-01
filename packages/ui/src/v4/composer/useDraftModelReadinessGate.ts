@@ -6,7 +6,10 @@ import {
   buildModelConfigMissingUiError,
   buildModelConfigUnreadableUiError,
 } from "@/lib/chatPrepareError.js";
-import { useModelSelectionServiceView, type ModelSelectionState } from "@/hooks/useModelSelectionView.js";
+import {
+  useModelSelectionServiceView,
+  type ModelSelectionState,
+} from "@/hooks/useModelSelectionView.js";
 import { logger } from "@/logger.js";
 
 type DraftModelReadinessStatus = "checking" | "ready" | "missing" | "check-failed";
@@ -32,7 +35,9 @@ interface GateState {
 const INITIAL_GATE_STATE = { dismissed: false, blocked: false, failure: null } as const;
 
 function readinessOf(view: ModelSelectionView): "ready" | "missing" {
-  return view.providers.some((provider) => provider.models.some((model) => model.reasoningLevels.length > 0))
+  return view.providers.some((provider) =>
+    provider.models.some((model) => model.reasoningLevels.length > 0),
+  )
     ? "ready"
     : "missing";
 }
@@ -48,7 +53,10 @@ export function useDraftModelReadinessGate(params: {
   const { workspacePath, workspaceIdentity, provider, sessionId, modelSelectionService } = params;
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
   const enabled = sessionId === null && isZCodeAgentProvider(displayProvider);
-  const owner = useMemo(() => ({}), [workspacePath, workspaceIdentity, displayProvider, sessionId, modelSelectionService]);
+  const owner = useMemo(
+    () => ({}),
+    [workspacePath, workspaceIdentity, displayProvider, sessionId, modelSelectionService],
+  );
   const read = useModelSelectionServiceView(modelSelectionService, enabled, "remote-waiting", {
     selection: null,
     workspacePath,
@@ -58,16 +66,19 @@ export function useDraftModelReadinessGate(params: {
   active.current = { owner, observation };
   useEffect(() => {
     active.current = { owner, observation };
-    return () => { active.current = null; };
+    return () => {
+      active.current = null;
+    };
   }, [owner, observation]);
   const sendEpoch = useRef(0);
   const initial = { owner, observation, ...INITIAL_GATE_STATE };
   const [state, setState] = useState<GateState>(initial);
   // A newly successful read is a new adjudication, even when only workspace defaults changed.
   // Loading/error never silently clears a Host refusal or a failed send recheck.
-  const current = state.owner === owner && (observation.status !== "ready" || state.observation === observation)
-    ? state
-    : initial;
+  const current =
+    state.owner === owner && (observation.status !== "ready" || state.observation === observation)
+      ? state
+      : initial;
   const failure = observation.status === "error" ? observation.error : current.failure;
   const status: DraftModelReadinessStatus = !enabled
     ? "ready"
@@ -85,7 +96,10 @@ export function useDraftModelReadinessGate(params: {
     if (!enabled) return true;
     if (!modelSelectionService) return false;
     const request = ++sendEpoch.current;
-    const isCurrent = () => active.current?.owner === owner && active.current.observation === observation && request === sendEpoch.current;
+    const isCurrent = () =>
+      active.current?.owner === owner &&
+      active.current.observation === observation &&
+      request === sendEpoch.current;
     try {
       const view = await modelSelectionService.getView({ selection: null, workspacePath });
       if (!isCurrent()) return false;
@@ -99,7 +113,10 @@ export function useDraftModelReadinessGate(params: {
     } catch (error) {
       if (!isCurrent()) return false;
       const normalized = error instanceof Error ? error : new Error(String(error));
-      logger.warn("[v4-draft-readiness] 首发复查模型事实失败", { error: normalized.message, workspacePath });
+      logger.warn("[v4-draft-readiness] 首发复查模型事实失败", {
+        error: normalized.message,
+        workspacePath,
+      });
       setState({ owner, observation, ...INITIAL_GATE_STATE, failure: normalized });
       return false;
     }

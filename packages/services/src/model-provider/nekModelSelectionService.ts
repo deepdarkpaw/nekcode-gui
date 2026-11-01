@@ -31,7 +31,6 @@ export function createNekModelSelectionService(
   options: NekModelSelectionServiceOptions,
 ): NekModelSelectionService {
   const source = options.facts;
-  const listeners = new Set<() => void>();
   let revision = 0;
   let lastKey: string | null = null;
   /** Settled reads, including failures, fence older results. */
@@ -40,10 +39,14 @@ export function createNekModelSelectionService(
   let disposed = false;
 
   /** A temporary scope lease fences this read even when no other caller re-reads. */
-  const readFacts = async (input: ModelSelectionViewInput | undefined): Promise<ModelSelectionView> => {
+  const readFacts = async (
+    input: ModelSelectionViewInput | undefined,
+  ): Promise<ModelSelectionView> => {
     const scope = input?.workspacePath ? { cwd: input.workspacePath } : undefined;
     let epoch = 0;
-    const release = source.onDidChange(() => { epoch += 1; }, scope);
+    const release = source.onDidChange(() => {
+      epoch += 1;
+    }, scope);
     try {
       for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
         const generation = epoch;
@@ -52,9 +55,10 @@ export function createNekModelSelectionService(
         try {
           facts = await source.read(scope);
         } catch (error) {
+          const superseded = sequence < settledSequence;
           settledSequence = Math.max(settledSequence, sequence);
           if (disposed) throw new Error("ModelSelectionService 已 dispose");
-          if (generation !== epoch) continue;
+          if (generation !== epoch || superseded) continue;
           throw error;
         }
         if (disposed) throw new Error("ModelSelectionService 已 dispose");
@@ -74,11 +78,8 @@ export function createNekModelSelectionService(
     }
   };
 
-  const unsubscribe = source.onDidChange(() => {
-    if (disposed) return;
-    // 失效信号：不读、不改写任何状态。谁需要事实谁重读，读取失败由那次调用自己承担。
-    for (const listener of listeners) listener();
-  });
+  // The service lifetime owns global observation; workspace observation is always leased.
+  const unsubscribe = source.onDidChange(() => undefined);
 
   return {
     async getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView> {
@@ -92,14 +93,12 @@ export function createNekModelSelectionService(
     },
     onDidChange: (listener) => {
       if (disposed) return { dispose: () => undefined };
-      listeners.add(listener);
-      return { dispose: () => listeners.delete(listener) };
+      return { dispose: source.onDidChange(listener) };
     },
     dispose: () => {
       if (disposed) return;
       disposed = true;
       unsubscribe();
-      listeners.clear();
       source.dispose();
     },
   };

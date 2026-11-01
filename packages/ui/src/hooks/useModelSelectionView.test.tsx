@@ -8,7 +8,10 @@ const VIEW: ModelSelectionView = { revision: 1, providers: [] };
 function deferred() {
   let resolve!: (view: ModelSelectionView) => void;
   let reject!: (error: Error) => void;
-  const promise = new Promise<ModelSelectionView>((done, fail) => { resolve = done; reject = fail; });
+  const promise = new Promise<ModelSelectionView>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
   return { promise, resolve, reject };
 }
 function host() {
@@ -16,19 +19,51 @@ function host() {
   const getView = vi.fn(async () => VIEW);
   const service: IModelSelectionService = {
     getView,
-    onDidChange: () => { throw new Error("renderer must lease its workspace, not the global event"); },
-    onDynamicDidChange: ({ workspacePath }) => (listener) => {
-      listeners.set(listener, workspacePath);
-      return { dispose: () => listeners.delete(listener) };
+    onDidChange: () => {
+      throw new Error("renderer must lease its workspace, not the global event");
+    },
+    onDynamicDidChange:
+      ({ workspacePath }) =>
+      (listener) => {
+        listeners.set(listener, workspacePath);
+        return { dispose: () => listeners.delete(listener) };
+      },
+  };
+  return {
+    service,
+    getView,
+    listeners,
+    invalidate() {
+      for (const listener of listeners.keys()) listener();
     },
   };
-  return { service, getView, listeners, invalidate() { for (const listener of listeners.keys()) listener(); } };
 }
 
 describe("model selection read ownership", () => {
+  it("MW-U4: subscription admission failure is visible and retryable, not an effect crash", async () => {
+    const fake = host();
+    const subscribe = fake.service.onDynamicDidChange;
+    fake.service.onDynamicDidChange = () => {
+      throw new Error("watch capacity exceeded");
+    };
+    const { result } = renderHook(() => useModelSelectionServiceView(fake.service));
+    await waitFor(() => expect(result.current.state.status).toBe("error"));
+    expect(fake.getView).not.toHaveBeenCalled();
+    fake.service.onDynamicDidChange = subscribe;
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+  });
+
   it("MW-U1: workspace lease is stable across renders, replaced on switch and released on unmount", async () => {
     const fake = host();
-    const { result, rerender, unmount } = renderHook(({ path }) => useModelSelectionServiceView(fake.service, true, "remote-waiting", { selection: null, workspacePath: path }), { initialProps: { path: "/a" } });
+    const { result, rerender, unmount } = renderHook(
+      ({ path }) =>
+        useModelSelectionServiceView(fake.service, true, "remote-waiting", {
+          selection: null,
+          workspacePath: path,
+        }),
+      { initialProps: { path: "/a" } },
+    );
     await waitFor(() => expect(result.current.state.status).toBe("ready"));
     expect([...fake.listeners.values()]).toEqual(["/a"]);
     rerender({ path: "/a" });
@@ -46,7 +81,9 @@ describe("model selection read ownership", () => {
     await waitFor(() => expect(result.current.state.status).toBe("ready"));
     const older = deferred();
     const newer = deferred();
-    fake.getView.mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+    fake.getView
+      .mockImplementationOnce(() => older.promise)
+      .mockImplementationOnce(() => newer.promise);
     act(() => fake.invalidate());
     expect(result.current.state.status).toBe("loading");
     act(() => fake.invalidate());
@@ -63,7 +100,10 @@ describe("model selection read ownership", () => {
     const second = host();
     const old = deferred();
     first.getView.mockImplementationOnce(() => old.promise);
-    const { result, rerender } = renderHook(({ service }) => useModelSelectionServiceView(service), { initialProps: { service: first.service } });
+    const { result, rerender } = renderHook(
+      ({ service }) => useModelSelectionServiceView(service),
+      { initialProps: { service: first.service } },
+    );
     rerender({ service: second.service });
     await waitFor(() => expect(result.current.state.status).toBe("ready"));
     await act(async () => old.reject(new Error("old remote disconnected")));

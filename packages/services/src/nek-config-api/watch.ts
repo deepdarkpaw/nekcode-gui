@@ -24,6 +24,8 @@ export interface NekWatchTarget {
 export interface NekWatchHubOptions {
   debounceMs?: number;
   pollSeconds?: number;
+  /** Native adapter injection for deterministic lifecycle/error tests. */
+  observeDirectory?: typeof createDirectoryWatch;
   logger?: { warn: (...args: unknown[]) => void; debug?: (...args: unknown[]) => void };
 }
 
@@ -41,18 +43,26 @@ interface Observation {
 
 const MAX_DIRECTORIES = 512;
 const MAX_SUBSCRIPTIONS = 4096;
+const MAX_FILES_PER_DIRECTORY = 512;
 
 export class NekWatchHub {
   private readonly observations = new Map<string, Observation>();
   private subscriptions = 0;
+  private disposed = false;
 
   constructor(private readonly options: NekWatchHubOptions = {}) {}
 
   /** Each call is a distinct lease, including repeated subscriptions of the same callback. */
   subscribe(target: NekWatchTarget, listener: (change: NekWatchChange) => void): () => void {
-    const dirs = new Map(target.dirs.map((dir) => [this.directoryKey(target.key, dir.path, dir.scope), dir]));
+    if (this.disposed) throw new Error("nek config watch hub disposed");
+    const dirs = new Map(
+      target.dirs.map((dir) => [this.directoryKey(target.key, dir.path, dir.scope), dir]),
+    );
     const additions = [...dirs.keys()].filter((key) => !this.observations.has(key));
-    if (this.subscriptions >= MAX_SUBSCRIPTIONS || this.observations.size + additions.length > MAX_DIRECTORIES) {
+    if (
+      this.subscriptions >= MAX_SUBSCRIPTIONS ||
+      this.observations.size + additions.length > MAX_DIRECTORIES
+    ) {
       throw new Error("nek config watch capacity exceeded");
     }
     const notify = (change: NekWatchChange) => listener(change);
@@ -60,7 +70,15 @@ export class NekWatchHub {
     for (const [key, dir] of dirs) {
       let state = this.observations.get(key);
       if (!state) {
-        state = { key, target, ...dir, listeners: new Set(), episodes: new Map(), epoch: 0, stop: () => undefined };
+        state = {
+          key,
+          target,
+          ...dir,
+          listeners: new Set(),
+          episodes: new Map(),
+          epoch: 0,
+          stop: () => undefined,
+        };
         this.observations.set(key, state);
         state.listeners.add(notify);
         state.stop = this.start(state);
@@ -68,13 +86,25 @@ export class NekWatchHub {
         state.listeners.add(notify);
       }
       leased.push(state);
+      if (state.failure !== undefined) {
+        try {
+          notify({
+            file: state.path,
+            revision: "watch-error",
+            scope: state.scope,
+            error: { message: state.failure },
+          });
+        } catch (error) {
+          this.options.logger?.warn("nek config watch listener threw", error);
+        }
+      }
     }
     this.subscriptions += 1;
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      this.subscriptions -= 1;
+      if (!this.disposed) this.subscriptions -= 1;
       for (const state of leased) {
         state.listeners.delete(notify);
         if (state.listeners.size !== 0) continue;
@@ -85,7 +115,10 @@ export class NekWatchHub {
   }
 
   /** Publication fences scans already in flight; only leases covering this file receive it. */
-  publish(targetKey: string, changes: ReadonlyArray<Omit<NekWatchChange, "scope"> & { scope?: NekConfigScope }>): void {
+  publish(
+    targetKey: string,
+    changes: ReadonlyArray<Omit<NekWatchChange, "scope"> & { scope?: NekConfigScope }>,
+  ): void {
     for (const state of this.observations.values()) {
       if (state.target.key !== targetKey) continue;
       for (const change of changes) {
@@ -98,8 +131,11 @@ export class NekWatchHub {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     for (const state of this.observations.values()) state.stop();
     this.observations.clear();
+    this.subscriptions = 0;
   }
 
   private directoryKey(target: string, path: string, scope: NekConfigScope): string {
@@ -112,9 +148,13 @@ export class NekWatchHub {
 
   private emit(state: Observation, change: NekWatchChange): void {
     if (!this.active(state)) return;
-    for (const listener of [...state.listeners]) {
-      try { listener(change); }
-      catch (error) { this.options.logger?.warn("nek config watch listener threw", error); }
+    const listeners = Array.from(state.listeners);
+    for (const listener of listeners) {
+      try {
+        listener(change);
+      } catch (error) {
+        this.options.logger?.warn("nek config watch listener threw", error);
+      }
     }
   }
 
@@ -123,25 +163,42 @@ export class NekWatchHub {
     let pending: Promise<void> | undefined;
     let requested = 0;
     let completed = 0;
+    let priming = true;
     const scan = (): void => {
       requested += 1;
       if (pending) return;
       pending = (async () => {
         while (this.active(state) && completed < requested) {
           const request = requested;
-          await this.rescan(state);
+          await this.rescan(state, priming, native?.error);
+          priming = false;
           completed = request;
         }
-      })().finally(() => { pending = undefined; });
+      })().finally(() => {
+        pending = undefined;
+      });
     };
     const schedule = (): void => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => { timer = undefined; scan(); }, this.options.debounceMs ?? 200);
+      timer = setTimeout(() => {
+        timer = undefined;
+        scan();
+      }, this.options.debounceMs ?? 200);
       timer.unref?.();
     };
-    const native = state.target.local ? createDirectoryWatch(state.path, schedule, (error) => this.fail(state, error)) : undefined;
+    const native = state.target.local
+      ? (this.options.observeDirectory ?? createDirectoryWatch)(state.path, schedule, (error) =>
+          this.fail(state, error),
+        )
+      : undefined;
     // Reconciliation is also what discovers/re-arms missing or atomically replaced directories.
-    const poll = setInterval(() => { native?.refresh(); scan(); }, Math.max(1, this.options.pollSeconds ?? 5) * 1000);
+    const poll = setInterval(
+      () => {
+        native?.refresh();
+        scan();
+      },
+      Math.max(1, this.options.pollSeconds ?? 5) * 1000,
+    );
     poll.unref?.();
     scan();
     return () => {
@@ -155,28 +212,59 @@ export class NekWatchHub {
   private fail(state: Observation, error: unknown): void {
     if (!this.active(state)) return;
     const message = error instanceof Error ? error.message : String(error);
+    state.epoch += 1;
     state.failure = message;
     this.options.logger?.warn("nek config watch failed", state.path, error);
-    this.emit(state, { file: state.path, revision: "watch-error", scope: state.scope, error: { message } });
+    this.emit(state, {
+      file: state.path,
+      revision: "watch-error",
+      scope: state.scope,
+      error: { message },
+    });
   }
 
-  private async rescan(state: Observation): Promise<void> {
+  private async rescan(
+    state: Observation,
+    priming: boolean,
+    nativeError?: () => unknown,
+  ): Promise<void> {
     const epoch = state.epoch;
     try {
       const scanned = await this.scan(state);
-      if (!this.active(state) || epoch !== state.epoch) return;
+      const error = nativeError?.();
+      if (error !== undefined) throw error;
+      if (!this.active(state)) return;
+      if (epoch !== state.epoch) {
+        // A publish/native event won while the baseline was being read. Preserve its
+        // authoritative revision, and use the rest of the scan only as a baseline.
+        if (priming) {
+          for (const [file, revision] of scanned) {
+            if (!state.episodes.has(file)) state.episodes.set(file, revision);
+          }
+        }
+        return;
+      }
       const previous = state.episodes;
       const recovering = state.failure !== undefined;
       state.failure = undefined;
       state.episodes = scanned;
-      // An initial scan must notify: a change between subscribe and baseline is not safe to discard.
       for (const [file, revision] of scanned) {
-        if (previous.get(file) !== revision) this.emit(state, { file, revision, scope: state.scope });
+        if (!priming && previous.get(file) !== revision)
+          this.emit(state, { file, revision, scope: state.scope });
       }
-      for (const file of previous.keys()) {
-        if (!scanned.has(file)) this.emit(state, { file, revision: ABSENT_REVISION, scope: state.scope });
+      if (!priming) {
+        for (const file of previous.keys()) {
+          if (!scanned.has(file))
+            this.emit(state, { file, revision: ABSENT_REVISION, scope: state.scope });
+        }
       }
-      if (recovering) this.emit(state, { file: state.path, revision: "watch-recovered", scope: state.scope });
+      // The first observation closes the subscribe/baseline gap, even for absent files.
+      if (priming || recovering)
+        this.emit(state, {
+          file: state.path,
+          revision: priming ? "watch-ready" : "watch-recovered",
+          scope: state.scope,
+        });
     } catch (error) {
       if (epoch === state.epoch) this.fail(state, error);
     }
@@ -186,7 +274,10 @@ export class NekWatchHub {
     const executor = state.target.executor;
     const candidates = new Set(baselineConfigFiles(state.path));
     for (const entry of await executor.listDir(state.path)) {
-      if (!entry.isDirectory && entry.name.endsWith(".md")) candidates.add(join(state.path, entry.name));
+      if (!entry.isDirectory && entry.name.endsWith(".md"))
+        candidates.add(join(state.path, entry.name));
+      if (candidates.size > MAX_FILES_PER_DIRECTORY)
+        throw new Error("nek config watch file capacity exceeded");
     }
     const result = new Map<string, string>();
     for (const file of candidates) {
