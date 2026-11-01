@@ -26,10 +26,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000dependencies\u0000packages/desktop/package.json\u0000@zcode/provider",
-      "count": 1
-    },
-    {
       "key": "knip\u0000dependencies\u0000packages/desktop/package.json\u0000module-details-from-path",
       "count": 1
     },
@@ -59,10 +55,6 @@
     },
     {
       "key": "knip\u0000dependencies\u0000packages/desktop/package.json\u0000yauzl",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000dependencies\u0000packages/provider/package.json\u0000@zcode/model-option-map",
       "count": 1
     },
     {
@@ -266,10 +258,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000devDependencies\u0000packages/provider-node/package.json\u0000@zcode/model-option-map",
-      "count": 1
-    },
-    {
       "key": "knip\u0000devDependencies\u0000packages/server/package.json\u0000@types/ws",
       "count": 1
     },
@@ -466,15 +454,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/remoteCredentialSafeStorage.ts\u0000RemoteCredentialSafeStorage",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/desktop/src/main/resourceManagerWindow.ts\u0000getResourceManagerWindowId",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/provider/src/config/rule-data-schema.ts\u0000manualModelConfigSchema",
       "count": 1
     },
     {
@@ -491,18 +471,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/hooks/workspaceHookConfigMutation.ts\u0000writeWorkspaceHookConfiguredToggle",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/model-provider/legacyModelProviderSerialized.ts\u0000modelProviderCatalogFileSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/model-provider/legacyModelProviderSerialized.ts\u0000modelProviderDisplayOrderStateSchema",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/model-provider/legacyModelProviderSerialized.ts\u0000modelProviderStoreFileSchema",
       "count": 1
     },
     {
@@ -862,19 +830,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/providers/api/nodeApiClient.ts\u0000NodeApiClient",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/providers/api/nodeApiNetwork.ts\u0000resolveHostProxyForUrl",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/providers/api/requestIdHeaders.ts\u0000REQUEST_ID_HEADER_NAME",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/providers/api/requestIdHeaders.ts\u0000withRequestIdHeaderRecord",
       "count": 1
     },
     {
@@ -998,23 +954,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/contextUsage.tsx\u0000getContextCompressionCommand",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/contextUsage.tsx\u0000getRenderableTaskUsage",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/display.tsx\u0000ConfigSelect",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/display.tsx\u0000getContextCompressionCommand",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/chat-input-toolbar/display.tsx\u0000getRenderableTaskUsage",
       "count": 1
     },
     {
@@ -1059,10 +999,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/hooks/useAlertDialog.ts\u0000useAlertDialog",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/hooks/useBuiltinProviderConfigFile.ts\u0000resolveBuiltinProviderConfigDisabledReason",
       "count": 1
     },
     {
@@ -1154,10 +1090,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/registryProviderView.ts\u0000resolveProviderBaseURL",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/lib/subagentColors.ts\u0000SUBAGENT_COLORS",
       "count": 1
     },
@@ -1191,10 +1123,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/lib/typeToFocus.ts\u0000canReceiveTypedText",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/lib/typeToFocus.ts\u0000focusAtEnd",
       "count": 1
     },
     {
@@ -1402,18 +1330,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/ModelProviderSection.tsx\u0000fuzzyMatch",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/ModelProviderSection.tsx\u0000handleEndpointSuggestionPopoverOpenAutoFocus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/ModelProviderSection.tsx\u0000resolveEndpointSuggestionOpenRequest",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/RemoteSkillSyncDialog.tsx\u0000RemoteSkillSyncSelectionList",
       "count": 1
     },
@@ -1427,42 +1343,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/RemoteSyncActions.tsx\u0000useRemoteSyncDialogIntent",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/ProviderApiFormatSelect.tsx\u0000resolveProviderConnectionApiFormatOptions",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/ProviderCardSections.tsx\u0000formatModelContextWindowLabel",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/ProviderCardSections.tsx\u0000resolveProviderConnectionApiFormatDisplayLabel",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/ProviderCardSections.tsx\u0000resolveProviderConnectionApiFormatOptions",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/utils.tsx\u0000createPresetProviderNodeKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/utils.tsx\u0000fuzzyMatch",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/utils.tsx\u0000handleEndpointSuggestionPopoverOpenAutoFocus",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/utils.tsx\u0000resolveEndpointSuggestionOpenRequest",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/model-provider-section/utils.tsx\u0000resolveModelProviderNavLogo",
       "count": 1
     },
     {
@@ -1718,43 +1598,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000MOCK_SECOND_QUESTION_TEXT",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000MOCK_SLOW_CHUNKS",
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/mockLlm.mjs\u0000pickMockTurn",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000clickOptionAt",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000clickTestId",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000dispatchMouseClick",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000scripts/acceptance/lib/ui.mjs\u0000exists",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000scripts/architecture/index.mjs\u0000loadPolicy",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000scripts/builtin-provider-config.mjs\u0000resolveBuiltinProviderBuildEnvironment",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000scripts/builtin-provider-config.mjs\u0000stageBuiltinProviderConfig",
       "count": 1
     },
     {
@@ -2022,10 +1870,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/ui/test/providerModelCatalogSelection.test.ts\u0000packages/ui/test/providerModelCatalogSelection.test.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/zcode-server-cli/scripts/verify-remote-ssh-target.mjs\u0000packages/zcode-server-cli/scripts/verify-remote-ssh-target.mjs",
       "count": 1
     },
@@ -2082,10 +1926,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000scripts/ci/fixtures/personal-provider-provisioning.ts\u0000scripts/ci/fixtures/personal-provider-provisioning.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000scripts/ci/fixtures/remote-form.jsx\u0000scripts/ci/fixtures/remote-form.jsx",
       "count": 1
     },
@@ -2095,10 +1935,6 @@
     },
     {
       "key": "knip\u0000files\u0000scripts/ci/fixtures/root-startup.jsx\u0000scripts/ci/fixtures/root-startup.jsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000scripts/ci/fixtures/self-managed-models.jsx\u0000scripts/ci/fixtures/self-managed-models.jsx",
       "count": 1
     },
     {
@@ -2158,23 +1994,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/desktop/src/main/remoteCredentialSafeStorage.ts\u0000RemoteCredentialValue",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/desktop/src/main/resourceMetricsStats.ts\u0000AggregateStats",
       "count": 1
     },
     {
       "key": "knip\u0000types\u0000packages/desktop/src/preload/nekIpc.ts\u0000NekIpcPreloadBridge",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/provider/src/config/manual-model-config.ts\u0000ManualModelConfig",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/provider/src/config/rule-data-schema.ts\u0000ManualModelConfig",
       "count": 1
     },
     {
@@ -2191,10 +2015,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/hooks/workspaceHookConfigMutation.ts\u0000AtomicWorkspaceHookConfigWriteOptions",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/model-provider/providerSettingsConnectivity.ts\u0000ModelConnectivityResult",
       "count": 1
     },
     {
@@ -2235,10 +2055,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/nekAgentRuntimeLifecycle.ts\u0000NekRuntimeLifecycleSource",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/nek-agent/adapter/nekAgentServiceAdapterCommands.ts\u0000NekCommandContext",
       "count": 1
     },
     {
@@ -2446,10 +2262,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/services/src/nek-config-api/index.ts\u0000NekConfigApiOptions",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/services/src/nek-config-api/index.ts\u0000NekConfigErrorShape",
       "count": 1
     },
@@ -2551,10 +2363,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/nek-config-api/watch.ts\u0000NekWatchHubOptions",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/nek-config-api/watch.ts\u0000NekWatchTarget",
       "count": 1
     },
     {
@@ -2686,14 +2494,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/hooks/useBuiltinProviderConfigFile.ts\u0000BuiltinProviderConfigFileInfo",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/hooks/useBuiltinProviderConfigFile.ts\u0000BuiltinProviderConfigFileState",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/hooks/useConversationImport.tsx\u0000ConversationImportAction",
       "count": 1
     },
@@ -2719,10 +2519,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/lib/foldState.ts\u0000FoldSnapshot",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/lib/modelSelectionGroups.ts\u0000ModelProviderGroupLabelOptions",
       "count": 1
     },
     {
@@ -3587,14 +3383,6 @@
     },
     {
       "key": "knip\u0000unlisted\u0000scripts/ci/root-startup-smoke.mjs\u0000playwright-core",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/self-managed-models-smoke.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/self-managed-models-smoke.mjs\u0000playwright-core",
       "count": 1
     },
     {
