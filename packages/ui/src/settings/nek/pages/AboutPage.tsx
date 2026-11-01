@@ -192,9 +192,9 @@ export function AboutPage() {
           <SettingRow label={t("settings.nek.about.platform")}>
             <span className="font-mono text-ui-base">{info?.platform ?? "—"}</span>
           </SettingRow>
-          <SettingRow label={t("settings.shortcuts.command.openOnboarding")}>
+          <SettingRow label={t("settings.nek.about.openOnboarding")}>
             <Button type="button" variant="outline" onClick={requestNekOnboardingOpen}>
-              {t("settings.shortcuts.command.openOnboarding")}
+              {t("settings.nek.about.openOnboarding")}
             </Button>
           </SettingRow>
         </SettingSection>

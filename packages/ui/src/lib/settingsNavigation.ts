@@ -4,67 +4,47 @@ import { isNekSettingsSectionId, type NekSettingsSectionId } from "@/settings/ne
 
 export type SettingsSectionId =
   | "general"
-  | "appearance"
   | "migration"
-  | "modelProvider"
   | "memory"
-  | "mcp"
   | "skill"
-  | "subagents"
   | "commands"
   | "hooks"
   | "workspaceFileSearch"
-  | "shortcuts"
   | NekSettingsSectionId;
 
 const SETTINGS_SECTION_INTENT_KEY = "zcode-settings-section-intent";
-const SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY = "zcode-settings-model-provider-id-intent";
 const SETTINGS_SECTION_INTENT_EVENT = "zcode:settings-section-intent",
   SETTINGS_LAST_SECTION_STORAGE_KEY = "zcode-settings-last-section";
 const HIDDEN_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   // 工作区搜索（.zcodiumignore）设置入口先隐藏：规则文件仍生效并可手动编辑，
   // 编辑页代码保留，放开时从这里移除即可。
   "workspaceFileSearch",
-  // 由 nek 设置中心取代（旧组件暂留，后续统一清理）。
-  "modelProvider",
-  "mcp",
-  "appearance",
-  "shortcuts",
-  "subagents",
 ]);
 
 /** 旧入口 → nek 设置中心对应页面（保留历史偏好与已有跳转调用）。 */
-const LEGACY_SECTION_REDIRECTS: Partial<Record<SettingsSectionId, NekSettingsSectionId>> = {
+const LEGACY_SECTION_REDIRECTS = {
   modelProvider: "nekProviders",
   mcp: "nekMcp",
   appearance: "nekAppearance",
   shortcuts: "nekShortcuts",
   subagents: "nekAgent",
-};
+} as const satisfies Record<string, NekSettingsSectionId>;
+
+type SettingsSectionInput = SettingsSectionId | keyof typeof LEGACY_SECTION_REDIRECTS;
 
 interface SettingsSectionIntentEventDetail {
-  section: SettingsSectionId;
-  modelProviderId?: string;
-}
-
-export interface SettingsModelProviderTarget {
-  providerId: string;
+  section: SettingsSectionInput;
 }
 
 function isSettingsSectionId(value: string): value is SettingsSectionId {
   return (
     value === "general" ||
-    value === "appearance" ||
     value === "migration" ||
-    value === "modelProvider" ||
     value === "memory" ||
-    value === "mcp" ||
     value === "skill" ||
-    value === "subagents" ||
     value === "commands" ||
     value === "hooks" ||
     value === "workspaceFileSearch" ||
-    value === "shortcuts" ||
     isNekSettingsSectionId(value)
   );
 }
@@ -73,12 +53,19 @@ export function isSettingsSectionEnabled(section: SettingsSectionId): boolean {
   return !HIDDEN_SETTINGS_SECTIONS.has(section);
 }
 
+function isLegacySettingsSection(value: string): value is keyof typeof LEGACY_SECTION_REDIRECTS {
+  return Object.hasOwn(LEGACY_SECTION_REDIRECTS, value);
+}
+
+function isSettingsSectionInput(value: string): value is SettingsSectionInput {
+  return isSettingsSectionId(value) || isLegacySettingsSection(value);
+}
+
 export function resolveSettingsSection(
-  section: SettingsSectionId,
+  section: SettingsSectionInput,
   fallbackSection: SettingsSectionId = "general",
 ): SettingsSectionId {
-  const redirect = LEGACY_SECTION_REDIRECTS[section];
-  if (redirect) return redirect;
+  if (isLegacySettingsSection(section)) return LEGACY_SECTION_REDIRECTS[section];
   return isSettingsSectionEnabled(section) ? section : fallbackSection;
 }
 
@@ -114,10 +101,10 @@ function readLastSettingsSectionPreference(
     }
     // 旧版“代码预览”已并入“外观”，保留用户上次停留位置的迁移语义。
     if (raw === "codePreview") {
-      storage.setItem(SETTINGS_LAST_SECTION_STORAGE_KEY, "appearance");
-      return "appearance";
+      storage.setItem(SETTINGS_LAST_SECTION_STORAGE_KEY, "nekAppearance");
+      return "nekAppearance";
     }
-    if (raw && isSettingsSectionId(raw)) {
+    if (raw && isSettingsSectionInput(raw)) {
       return resolveSettingsSection(raw, fallbackSection);
     }
     if (raw !== null) {
@@ -132,7 +119,7 @@ function readLastSettingsSectionPreference(
   return fallbackSection;
 }
 
-export function writeLastSettingsSectionPreference(section: SettingsSectionId): void {
+export function writeLastSettingsSectionPreference(section: SettingsSectionInput): void {
   const resolvedSection = resolveSettingsSection(section);
   const storage = getLocalStorage();
   if (!storage) {
@@ -158,27 +145,17 @@ export function consumeInitialSettingsSection(
   return resolveSettingsSection(consumePendingSettingsSection(lastSection), lastSection);
 }
 
-export function setPendingSettingsSection(section: SettingsSectionId): void {
+export function setPendingSettingsSection(section: SettingsSectionInput): void {
   setPendingSettingsSectionIntent(section);
 }
 
-export function setPendingSettingsSectionIntent(
-  section: SettingsSectionId,
-  options: {
-    modelProviderId?: string;
-  } = {},
-): void {
+export function setPendingSettingsSectionIntent(section: SettingsSectionInput): void {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
     window.sessionStorage.setItem(SETTINGS_SECTION_INTENT_KEY, section);
-    if (options.modelProviderId) {
-      window.sessionStorage.setItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY, options.modelProviderId);
-    } else {
-      window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
-    }
   } catch {
     // 忽略浏览器存储异常，不影响主流程。
   }
@@ -189,7 +166,6 @@ export function setPendingSettingsSectionIntent(
     new CustomEvent<SettingsSectionIntentEventDetail>(SETTINGS_SECTION_INTENT_EVENT, {
       detail: {
         section,
-        modelProviderId: options.modelProviderId,
       },
     }),
   );
@@ -202,7 +178,6 @@ function clearPendingSettingsSectionIntent(): void {
 
   try {
     window.sessionStorage.removeItem(SETTINGS_SECTION_INTENT_KEY);
-    window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
   } catch {
     // 忽略浏览器存储异常，不影响主流程。
   }
@@ -225,7 +200,7 @@ function consumePendingSettingsSection(
       // 旧 Skills 使用复数 id；迁移到当前独立 skill 分区。
       return "skill";
     }
-    if (raw && isSettingsSectionId(raw)) {
+    if (raw && isSettingsSectionInput(raw)) {
       return resolveSettingsSection(raw, fallbackSection);
     }
   } catch {
@@ -235,30 +210,8 @@ function consumePendingSettingsSection(
   return fallbackSection;
 }
 
-export function consumePendingSettingsModelProviderTarget():
-  | SettingsModelProviderTarget
-  | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  try {
-    const providerId = window.sessionStorage.getItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
-    window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
-    if (!providerId?.trim()) {
-      return undefined;
-    }
-    return {
-      providerId: providerId.trim(),
-    };
-  } catch {
-    // 忽略浏览器存储异常，不影响主流程。
-    return undefined;
-  }
-}
-
 export function addPendingSettingsSectionListener(
-  listener: (section: SettingsSectionId, detail?: SettingsSectionIntentEventDetail) => void,
+  listener: (section: SettingsSectionId) => void,
 ): () => void {
   if (typeof window === "undefined") {
     return () => {};
@@ -266,12 +219,12 @@ export function addPendingSettingsSectionListener(
 
   const handleIntent = (event: Event) => {
     const detail = (event as CustomEvent<SettingsSectionIntentEventDetail>).detail;
-    if (detail?.section && isSettingsSectionId(detail.section)) {
+    if (detail?.section && isSettingsSectionInput(detail.section)) {
       // 设置页已打开时，事件已经承载了这次跳转意图。
       // 这里同步清掉 sessionStorage，避免用户随后切到别的分区并退出后，
       // 下次挂载又被陈旧 pending 意图覆盖“上次停留分区”。
       clearPendingSettingsSectionIntent();
-      listener(detail.section, detail);
+      listener(resolveSettingsSection(detail.section));
     }
   };
 

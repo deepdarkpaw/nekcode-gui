@@ -1,36 +1,18 @@
 import {
-  Monitor,
-  Moon,
   Settings,
   Settings2,
-  Package,
-  Bot,
-  Palette,
-  Sun,
   Terminal,
   Anchor,
   Brain,
-  Cable,
   WandSparkles,
-  Keyboard,
   FileSearch,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
-import type { Theme } from "@/useTheme.js";
 import {
   NEK_SETTINGS_GROUPS,
   NEK_SETTINGS_SECTIONS,
   type NekSettingsGroupId,
 } from "./nek/sections.js";
-
-export const THEME_MODES: Array<{
-  mode: Theme;
-  icon: typeof Sun;
-}> = [
-  { mode: "system", icon: Monitor },
-  { mode: "zai-dark", icon: Moon },
-  { mode: "zai-light", icon: Sun },
-];
 
 type SettingsSectionGroupId = "basics" | "agentCapabilities" | NekSettingsGroupId;
 
@@ -64,33 +46,9 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     groupId: "basics",
   },
   {
-    id: "appearance",
-    icon: Palette,
-    titleId: "settings.appearanceTitle",
-    groupId: "basics",
-  },
-  {
-    id: "modelProvider",
-    icon: Package,
-    titleId: "settings.modelProviderTitle",
-    groupId: "basics",
-  },
-  {
     id: "memory",
     icon: Brain,
     titleId: "settings.memory",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "subagents",
-    icon: Bot,
-    titleId: "settings.subagents.title",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "mcp",
-    icon: Cable,
-    titleId: "settings.mcpTitle",
     groupId: "agentCapabilities",
   },
   {
@@ -110,13 +68,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: Anchor,
     titleId: "settings.hooks.title",
     groupId: "agentCapabilities",
-  },
-  // 键盘快捷键：本机效率配置，收纳在基础设置尾部。
-  {
-    id: "shortcuts",
-    icon: Keyboard,
-    titleId: "settings.shortcuts.title",
-    groupId: "basics",
   },
   // 工作区搜索范围（.zcodiumignore）：面向所有用户的基础工作区行为配置，收在基础设置末尾。
   {

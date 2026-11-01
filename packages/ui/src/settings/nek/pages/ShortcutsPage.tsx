@@ -19,9 +19,11 @@ import { SettingSection } from "@/components/ui/setting-fields.js";
 import { Textarea } from "@/components/ui/textarea.js";
 import { cn } from "@/components/lib/utils.js";
 import { useFocusRestore } from "@/hooks/useFocusRestore.js";
+import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { formatActionBindingLabelParts } from "@/shortcuts/actionBinding.js";
+import { setShortcutRecordingActive } from "@/shortcuts/bindings.js";
 import {
   checkActionBindingConflict,
   findActionConflicts,
@@ -69,6 +71,20 @@ function useRecorder(
   commit: (next: ActionShortcutOverrides) => void,
 ) {
   const { intl } = useZCodeIntl();
+  // 菜单快捷键只在桌面端存在；没有平台（Web / 测试）时只需 renderer 侧短路。
+  const platform = useOptionalPlatform();
+  const active = recording !== null;
+  // 录制期间键盘归录制器独占：nek 动作分发器与旧命令表更早注册在同一 capture 阶段，
+  // 菜单快捷键又先于 renderer 生效；不短路的话，录 Ctrl+K / Ctrl+N 会先真的执行原动作。
+  useEffect(() => {
+    if (!active) return undefined;
+    setShortcutRecordingActive(true);
+    platform?.setShortcutRecordingActive?.(true);
+    return () => {
+      setShortcutRecordingActive(false);
+      platform?.setShortcutRecordingActive?.(false);
+    };
+  }, [active, platform]);
   useEffect(() => {
     if (!recording) return undefined;
     const effective = resolveEffectiveActionBindings(overrides);

@@ -58,7 +58,6 @@ import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { useRemoteWorkspaceHistory } from "@/root/useRemoteWorkspaceHistory.js";
 import { useRemoteWorkspaceTabLifecycle } from "@/root/useRemoteWorkspaceTabLifecycle.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
-import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsSnapshot.js";
 import { useDesktopNativeThemeSync } from "@/root/useDesktopNativeThemeSync.js";
 import { useRootPlatformEffects } from "@/root/useRootPlatformEffects.js";
 import { useRootWorkspaceActions } from "@/root/useRootWorkspaceActions.js";
@@ -313,8 +312,6 @@ function RootInner({
   const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const activateTabByPath = useTabStore((state) => state.activateTabByPath);
   const tabStoreApi = useTabStoreApi();
-  useRootProviderSettingsSnapshot(services);
-
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
   useEffect(() => {
     // 跨 workspace 任务列表需要一个稳定的“本地/root services”入口。

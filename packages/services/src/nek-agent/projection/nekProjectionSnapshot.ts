@@ -220,8 +220,17 @@ export function buildConversationSnapshot(args: {
     seq: args.seq,
     revision: args.revision,
     control: args.control,
-    availability: buildAvailability(),
-    inputRouting: { mode: "startNow" },
+    availability: args.control.readOnly
+      ? (Object.fromEntries(
+          Object.keys(buildAvailability()).map((key) => [
+            key,
+            { allowed: false, reasonCode: "guard.sessionLocked" },
+          ]),
+        ) as SessionActionAvailability)
+      : buildAvailability(),
+    inputRouting: args.control.readOnly
+      ? { mode: "reject", reasonCode: "guard.sessionLocked" }
+      : { mode: "startNow" },
     meta: { title: args.title, titleSource: args.title === "" ? "default" : "custom" },
     config: args.config,
     modelTransition: null,

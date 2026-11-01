@@ -2045,8 +2045,7 @@ export const zcodeProtocolMethods = {
   // @deprecated：host 客户端方法已删（已收敛 v4 cancelBackgroundWork 命令）。
   // wire case 留兼容，随旧词整体删除时一并移除。
   sessionCancelBackgroundTask: "session/cancelBackgroundTask",
-  // @deprecated：host 客户端方法已删（v4 forkAssistant 原生 handler 经
-  // forkSessionAtMessage 钩子直调 server-operations.forkSession op）。wire case 与
+  // @deprecated：host 客户端方法已删。wire case 与
   // fork params/result schema 保留＝op 存活面；fork record 归 v4 原生重写。
   sessionFork: "session/fork",
   sessionCompact: "session/compact",
