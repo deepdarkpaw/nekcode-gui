@@ -12,15 +12,15 @@ import {
   resolveInitialModelSelection,
   type ModelSelectionView,
   type ModelSelectionViewInput,
-} from "@zcode/provider";
-import type { IModelSelectionService } from "./providerFacadeServices.js";
+} from "@zcode/shared/model-selection-resolution";
+import type { IModelSelectionService } from "./modelSelectionService.js";
 import type { NekModelFacts, NekModelFactsSource } from "./nekModelFacts.js";
 
 interface NekModelSelectionServiceOptions {
   readonly facts: NekModelFactsSource;
 }
 
-export interface NekModelSelectionService extends IModelSelectionService {
+interface NekModelSelectionService extends IModelSelectionService {
   dispose(): void;
 }
 

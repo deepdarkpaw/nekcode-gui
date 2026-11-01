@@ -8,7 +8,7 @@
   "scripts": {
     "pre-dev": "node scripts/ensure-local-runtime-assets.mjs && node -e \"require('node:fs').rmSync('./out',{recursive:true,force:true})\"",
     "dev": "node ../../scripts/dev-desktop-env.mjs production",
-    "dev:runtime": "concurrently -k -n tsup,vite,electron \"tsup --watch src --watch ../services/src --watch ../server/src --watch ../shared/src --watch ../rpc/src --watch ../client/src --watch ../provider/src --watch ../provider-node/src --ignore-watch 'mock-cdn/**' --ignore-watch 'bundled-agents/**' --ignore-watch '.e2e-cache/**' --ignore-watch '.e2e-artifacts/**' --ignore-watch '.e2e-home-*/**'\" \"vite dev\" \"node scripts/dev.mjs\"",
+    "dev:runtime": "concurrently -k -n tsup,vite,electron \"tsup --watch src --watch ../services/src --watch ../server/src --watch ../shared/src --watch ../rpc/src --watch ../client/src --ignore-watch 'mock-cdn/**' --ignore-watch 'bundled-agents/**' --ignore-watch '.e2e-cache/**' --ignore-watch '.e2e-artifacts/**' --ignore-watch '.e2e-home-*/**'\" \"vite dev\" \"node scripts/dev.mjs\"",
     "prepare:build-meta": "node scripts/build-metadata.mjs",
     "prepare:runtime-assets": "node scripts/prepare-runtime-assets.mjs",
     "prepare:remote-assets": "node ../../scripts/prepare-prebuilds.mjs",
@@ -27,8 +27,6 @@
     "@lydell/node-pty-linux-arm64": "1.2.0-beta.10",
     "@lydell/node-pty-linux-x64": "1.2.0-beta.10",
     "@zcode/client": "workspace:*",
-    "@zcode/provider": "workspace:*",
-    "@zcode/provider-node": "workspace:*",
     "@zcode/rpc": "workspace:*",
     "@zcode/server": "workspace:*",
     "@zcode/services": "workspace:*",

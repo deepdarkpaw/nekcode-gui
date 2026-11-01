@@ -11,10 +11,7 @@ import type { IZCodeTaskService } from "./session/zcodeTaskService.js";
 import type { IZCodeAgentService } from "./zcode-agent/zcodeAgent.js";
 import type { IZCodeSessionService } from "./zcode-session/zcodeSession.js";
 import type { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
-import type {
-  IModelSelectionService,
-  IProviderSettingsService,
-} from "./model-provider/providerFacadeServices.js";
+import type { IModelSelectionService } from "./model-provider/modelSelectionService.js";
 import type { IClientScenesService } from "./client-scenes/clientScenes.js";
 import type { ISkillsService } from "./skills/skills.js";
 import type { ISkillSyncService } from "./skill-sync/skillSync.js";
@@ -49,9 +46,7 @@ export interface IServiceAccessor {
   readonly zcodeSessionService: IZCodeSessionService;
   readonly conversationShareService: IConversationShareService;
   readonly fileWatcherService: IFileWatcherService;
-  /** 当前 Environment 的 Provider 配置与设置视图。 */
-  readonly providerSettingsService: IProviderSettingsService;
-  /** 当前 Environment Registry 发布的唯一模型选择 View。 */
+  /** 当前目标机器上 nek 发布的唯一模型选择 View。 */
   readonly modelSelectionService: IModelSelectionService;
   readonly clientScenesService: IClientScenesService;
   /** 闲时任务管理（独立服务面）。 */

@@ -26,7 +26,6 @@ export function buildRemoteWorkspaceSessionServices(
     fileWatcherService: remoteServices.fileWatcherService,
     // Provider/Model 事实属于目标 Environment；不能因 merge 先展开 baseServices 而回落到本地。
     modelSelectionService: remoteServices.modelSelectionService,
-    providerSettingsService: remoteServices.providerSettingsService,
     // SSH/Docker remote 项目的 skills/commands 目录位于远端文件系统。
     // 之前这里沿用本机 base services，会拿远端 workspacePath 去本机扫描，导致项目级能力读不到。
     skillsService: remoteServices.skillsService,

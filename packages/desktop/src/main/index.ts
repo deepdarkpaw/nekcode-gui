@@ -112,7 +112,6 @@ import {
   syncApplicationUnreadBadge,
   handleDesktopWindowCloseRequest,
 } from "./desktopWindowLifecycle.js";
-import { resolveZCodeBuiltinProviderConfigFilePath } from "./desktopProviderConfig.js";
 import {
   getCredentialsDir,
   isDockerDaemonAvailable,
@@ -1181,12 +1180,7 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
       spawnHostProcess(
         win,
         label,
-        {
-          ...initMessage,
-          zcodeBuiltinProviderConfigFilePath: resolveZCodeBuiltinProviderConfigFilePath({
-            env: { ...hostProcessLocalEnv, ...process.env },
-          }),
-        },
+        initMessage,
         {
           hostProcessLocalEnv,
           logger,

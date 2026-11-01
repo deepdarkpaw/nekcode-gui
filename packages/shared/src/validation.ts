@@ -7,7 +7,6 @@ import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { zcodeProviderSchema } from "./providers.js";
 import { zcodeAgentProviderSchema } from "./zcode-agent-policy.js";
 import { zcodeProcessDiagnosticSchema } from "./process-diagnostic.js";
-import { providerProvisioningTriggerSchema } from "./provider-provisioning.js";
 import {
   taskOwnerCommandDeliverySchema,
   taskOwnerCommandRequestSchema,
@@ -155,7 +154,6 @@ export const hostInitLocalMessageSchema = z.object({
   workspaceIdentity: nonEmptyStringSchema.optional(),
   agentWarmupTargets: z.array(hostAgentWarmupTargetSchema).max(3).optional(),
   agentSpawnFallbackCwd: nonEmptyStringSchema.optional(),
-  zcodeBuiltinProviderConfigFilePath: nonEmptyStringSchema,
   runtimeProcessEnvPatch: z
     .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string())
     .optional(),
@@ -330,16 +328,6 @@ export const hostLocalMediaPreviewPathAuthorizeResultMessageSchema = z
   })
   .strict();
 
-export const hostProviderProvisioningExecuteMessageSchema = z
-  .object({
-    type: z.literal("provider-provisioning-execute"),
-    requestId: nonEmptyStringSchema,
-    environmentKey: nonEmptyStringSchema,
-    remoteSessionId: nonEmptyStringSchema,
-    trigger: providerProvisioningTriggerSchema,
-  })
-  .strict();
-
 export const hostResourceUsageSnapshotRequestMessageSchema = z
   .object({
     type: z.literal("resource-usage-snapshot-request"),
@@ -375,7 +363,6 @@ export const hostIncomingMessageSchema = z.discriminatedUnion("type", [
   hostSessionMessageDeliverMessageSchema,
   hostSessionMessageDeliveryResultMessageSchema,
   hostLocalMediaPreviewPathAuthorizeResultMessageSchema,
-  hostProviderProvisioningExecuteMessageSchema,
 ]);
 
 export const hostRemoteWorkspaceConnectedResponseSchema = z
@@ -701,23 +688,6 @@ export const hostNetworkTelemetryBatchResponseSchema = z.object({
   observations: z.array(networkObservationSchema).max(500),
 });
 
-export const hostProviderProvisioningSourceChangedResponseSchema = z
-  .object({
-    type: z.literal("provider-provisioning-source-changed"),
-    trigger: providerProvisioningTriggerSchema.exclude(["environment-online"]),
-  })
-  .strict();
-
-export const hostProviderProvisioningExecutionResultResponseSchema = z
-  .object({
-    type: z.literal("provider-provisioning-execution-result"),
-    requestId: nonEmptyStringSchema,
-    environmentKey: nonEmptyStringSchema,
-    status: z.enum(["applied", "already-applied", "unsupported", "failed", "rollback_failed"]),
-    error: z.string().optional(),
-  })
-  .strict();
-
 export const hostResourceUsageProcessSchema = z
   .object({
     pid: z.number().int().positive(),
@@ -780,8 +750,6 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostSessionMessageDeliverResultResponseSchema,
   hostLocalMediaPreviewPathAuthorizeRequestResponseSchema,
   hostNetworkTelemetryBatchResponseSchema,
-  hostProviderProvisioningSourceChangedResponseSchema,
-  hostProviderProvisioningExecutionResultResponseSchema,
 ]);
 
 export const zcodeTaskPersistStatusSchema = z.enum(["running", "completed", "error"]);

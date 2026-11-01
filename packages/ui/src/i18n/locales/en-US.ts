@@ -901,12 +901,6 @@ const enUS: Record<string, string> = {
   "chat.codeCommentCards.collapseAll": "Collapse comments",
   "chat.codeCommentCards.openReview": "Open code review for {title}",
   "appHeader.openInFinder": "Open in Finder",
-  "appHeader.builtinProviderConfigOpenFailed": "Could not open the provider config file",
-  "appHeader.builtinProviderConfigMissing":
-    "The provider config file has not been generated yet. Start a session first.",
-  "appHeader.builtinProviderConfigUnsupported":
-    "Opening the provider config file is not supported on this platform.",
-  "appHeader.goToProviderConfig": "Go to config",
   "appHeader.openInFileExplorer": "Open in File Explorer",
   "appHeader.openInFileManager": "Open in File Manager",
   "appHeader.openInFileManagerFailed": "Could not open in the system file manager",

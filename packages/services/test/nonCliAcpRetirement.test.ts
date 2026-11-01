@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   ZCODE_PROTOCOL_NAME,
   ZCODE_PROTOCOL_VERSION,
@@ -19,7 +18,6 @@ import {
 } from "../src/paths.js";
 import { createMemoryService } from "../src/memory/memoryService.js";
 import { parseLegacyTaskSessionFile } from "../src/session/legacyTaskSessionFile.js";
-import { createProviderConfigRuntime } from "../src/model-provider/providerConfigRuntime.js";
 
 const meta = {
   taskId: "wrapper-example",
@@ -220,27 +218,5 @@ test("current session recovery preserves Desktop and replayable projections", as
     assert.equal(indexed.length, 3);
   } finally {
     service.disposeAll();
-  }
-});
-
-test("current Provider configuration starts without an old config migration callback", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "zcode-provider-current-"));
-  const runtime = createProviderConfigRuntime({
-    zcodeBuiltinFilePath: fileURLToPath(
-      new URL("../../../config/provider/zcode-builtin.json", import.meta.url),
-    ),
-    personalFilePath: join(dir, "personal.json"),
-    personalPollingIntervalMs: false,
-    watch: false,
-  });
-  try {
-    await runtime.start();
-    const config = await runtime.configService.read();
-    assert.ok(config.zcodeBuiltinRevision);
-    assert.deepEqual(config.personalProviderOrder, []);
-    assert.deepEqual(config.personalProviders.toJSON(), []);
-  } finally {
-    runtime.dispose();
-    await rm(dir, { recursive: true, force: true });
   }
 });

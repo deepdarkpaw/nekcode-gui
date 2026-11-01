@@ -8,12 +8,6 @@ modules:
   - id: shared
     roots: [packages/shared/src]
     managed: false
-  - id: provider
-    roots: [packages/provider/src]
-    managed: false
-  - id: provider-node
-    roots: [packages/provider-node/src]
-    managed: false
   - id: services
     roots: [packages/services/src]
     managed: false

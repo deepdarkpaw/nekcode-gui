@@ -9,7 +9,6 @@ import {
   type RemoteTarget,
 } from "@zcode/shared";
 import { dispatchTaskNotification } from "./desktopNotifications.js";
-import { getBuiltinProviderConfigFileInfo } from "./desktopProviderConfig.js";
 import {
   clearWorkspaceDeepLinkStateForWindow,
   deliverPendingWorkspaceOpen,
@@ -112,10 +111,6 @@ export function registerRemoteIpcHandlers(options: {
 
   ipcMain.handle(PlatformChannels.OpenExternalFile, async (_event, rawPath: string) =>
     openPathInDefaultApp(rawPath, options.logger),
-  );
-
-  ipcMain.handle(PlatformChannels.GetBuiltinProviderConfigFile, async () =>
-    getBuiltinProviderConfigFileInfo(),
   );
 
   ipcMain.on(PlatformChannels.RendererReady, (event) => {

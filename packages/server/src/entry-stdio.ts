@@ -1,4 +1,4 @@
-import { disposeServiceResourcesAndWait, getAppConfigDir } from "@zcode/services/node";
+import { disposeServiceResourcesAndWait } from "@zcode/services/node";
 import {
   ZCODE_VERSION,
   SERVICE_AUTHORITY_MODE_ENV,
@@ -11,10 +11,6 @@ import type { HelloMessage, HelloAckMessage } from "@zcode/shared";
 import { createStdioServer } from "./stdio.js";
 import { registerStdioProcessLifecycle } from "./stdio-lifecycle.js";
 import { createStdioServices } from "./stdioServices.js";
-import {
-  materializeBundledZCodeBuiltinProviderConfig,
-  readBundledZCodeBuiltinProviderConfig,
-} from "./bundledZCodeBuiltinProviderConfig.js";
 
 // In stdio mode, all logging goes to stderr
 const log = (...args: unknown[]) =>
@@ -55,13 +51,8 @@ async function main() {
   log(`client connected: ${ack.clientId} (v${ack.version})`);
 
   // Phase 3: Initialize services and start stdio RPC server
-  const zcodeBuiltinProviderConfigFilePath = await materializeBundledZCodeBuiltinProviderConfig({
-    environmentConfigRoot: getAppConfigDir(),
-    content: readBundledZCodeBuiltinProviderConfig(),
-  });
   const { authorityModeParseResult, services } = createStdioServices({
     env: process.env,
-    zcodeBuiltinProviderConfigFilePath,
   });
   if (authorityModeParseResult.invalidRawValue) {
     log(

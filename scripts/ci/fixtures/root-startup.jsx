@@ -55,13 +55,6 @@ const serviceValues = {
       return modelView;
     },
   },
-  providerSettingsService: {
-    onDidChange: () => ({ dispose() {} }),
-    async getView() {
-      fixture.calls.push("provider.getView");
-      return { revision: 1, providers: [], providerTemplates: [], providerOrder: [] };
-    },
-  },
   codingPlanSubscriptionService: {
     async getDynamicWorkflowClientConfig() {
       fixture.calls.push("workflow.localConfig");

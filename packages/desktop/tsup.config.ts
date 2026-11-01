@@ -5,11 +5,10 @@ import { pathToFileURL } from "node:url";
 import { defineConfig } from "tsup";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
-// tsup 会先打包配置文件；动态加载构建工具，避免其 import.meta.dirname 被重定位到 desktop。
-const { loadBuiltinProviderConfig } = await import(
-  pathToFileURL(resolve(import.meta.dirname, "../../scripts/builtin-provider-config.mjs")).href
-);
 
+const { resolveBuildEnvironment } = await import(
+  pathToFileURL(resolve(import.meta.dirname, "../../scripts/build-environment.mjs")).href
+);
 const buildMetadata = getBuildMetadata();
 
 // 手动加载 .env 文件，tsup 不像 Vite 会自动读取 .env.*；这些文件只提供链接常量。
@@ -59,7 +58,7 @@ function loadEnvFiles(): Record<string, string> {
 }
 
 const env = loadEnvFiles();
-const { environment: zcodeEnv } = await loadBuiltinProviderConfig();
+const zcodeEnv = await resolveBuildEnvironment();
 // 安装包身份与后端环境分轴：ZCODE_PREVIEW_IDENTITY=1 让生产后端的构建仍以 ZCode Preview 身份打包运行。
 const zcodeProductFlavor = resolveDesktopProductFlavor({ ...process.env, ZCODE_ENV: zcodeEnv });
 console.log(`[tsup] ZCODE_ENV=${zcodeEnv} ZCODE_PRODUCT_FLAVOR=${zcodeProductFlavor}`);
@@ -157,10 +156,6 @@ export default defineConfig([
       "@zcode/rpc",
       "@zcode/services",
       "@zcode/client",
-      // Provider Refactor 的 workspace 包导出 TypeScript 源码；Electron 生产运行时没有
-      // TS loader，必须随 Desktop bundle 内联，不能留下指向 src/index.ts 的裸包引用。
-      "@zcode/provider",
-      "@zcode/provider-node",
     ],
     define: createSharedDefines(),
     // main/host 同时 watch 且共享 out 根目录时，默认 chunk 命名会互相覆盖，
@@ -212,8 +207,6 @@ export default defineConfig([
       "@zcode/rpc",
       "@zcode/services",
       "@zcode/client",
-      "@zcode/provider",
-      "@zcode/provider-node",
     ],
     define: createSharedDefines(),
     // 与 main 保持一致的 chunk 隔离策略，避免 host/main 产物相互覆盖。

@@ -3,16 +3,9 @@ export { type ServiceDescriptor, createServiceDescriptor } from "./descriptors.j
 export { ServiceCollection } from "./collection.js";
 export {
   IModelSelectionService,
-  IProviderSettingsService,
   type ModelSelectionView,
   type ModelSelectionViewInput,
-  type ListProviderModelsInput,
-  type ProviderModelCatalogMetadata,
-  type ProviderModelCatalogResult,
-  type ProviderSettingsProviderView,
-  type ProviderSettingsView,
-} from "./model-provider/providerFacadeServices.js";
-export { IProviderProvisioningTargetService } from "./model-provider/providerProvisioning.js";
+} from "./model-provider/modelSelectionService.js";
 export {
   collectServiceMemoryDiagnostics,
   memoryDiagnosticsRegistry,

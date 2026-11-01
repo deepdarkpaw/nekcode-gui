@@ -29,7 +29,6 @@ test("Host boundaries reject removed feedback archive commands in both direction
 test("Host initialization does not propagate obsolete feedback endpoints or device identity", () => {
   const init = {
     type: "init-local",
-    zcodeBuiltinProviderConfigFilePath: "/bundled/provider.json",
     workspacePath: "/workspace",
     workspaceIdentity: "fixture-identity",
   };
