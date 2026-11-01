@@ -1,5 +1,5 @@
-import { useConfirmDialogStore } from "@/store/confirmDialogStore.js";
+import { useConfirmDialogStore, type ConfirmDialogRequest } from "@/store/confirmDialogStore.js";
 
-export function useConfirmDialog() {
+export function useConfirmDialog(): (payload: ConfirmDialogRequest) => Promise<boolean> {
   return useConfirmDialogStore((state) => state.requestConfirmation);
 }

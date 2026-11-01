@@ -31,17 +31,13 @@ import { getPathLeaf } from "@/lib/path.js";
 import {
   addPendingSettingsSectionListener,
   consumeInitialSettingsSection,
-  consumePendingSettingsModelProviderTarget,
   resolveSettingsSection,
   writeLastSettingsSectionPreference,
-  type SettingsModelProviderTarget,
 } from "@/lib/settingsNavigation.js";
-import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
 import { CapabilitySection } from "@/settings/CapabilitySection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
-import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
 import { NekSettingsSection } from "@/settings/nek/NekSettingsSection.js";
 import { isNekSettingsSectionId } from "@/settings/nek/sectionIds.js";
@@ -67,14 +63,12 @@ import { ServiceProvider, useServices } from "@/hooks/useServices.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { resolveModelProviderConnectivityWorkspacePath } from "@/lib/modelProviderConnectivityTarget.js";
 import {
   createSettingsPageConfig,
   GeneralSectionContent,
   GeneralSectionHeader,
   resolveSettingsSectionForPlatform,
 } from "./settingsPageHelpers.js";
-import { AppearanceSectionContent } from "./settingsCodePreview.js";
 import type { SettingsSectionId } from "@/lib/settingsNavigation.js";
 
 function SettingsSidebarButton({
@@ -160,18 +154,10 @@ export function SettingsPage({
   const setInterfaceMode = useZCodeStore((state) => state.setInterfaceMode);
   const theme = useZCodeStore((state) => state.theme);
   const setTheme = useZCodeStore((state) => state.setTheme);
-  const codePreviewSettings = useZCodeStore((state) => state.codePreviewSettings);
-  const setCodePreviewSettings = useZCodeStore((state) => state.setCodePreviewSettings);
-  const uiFontSizePx = useZCodeStore((state) => state.uiFontSizePx);
-  const setUiFontSizePx = useZCodeStore((state) => state.setUiFontSizePx);
   const notificationEnabled = useZCodeStore((state) => state.notificationEnabled);
   const setNotificationEnabled = useZCodeStore((state) => state.setNotificationEnabled);
   const notificationSoundEnabled = useZCodeStore((state) => state.notificationSoundEnabled);
   const setNotificationSoundEnabled = useZCodeStore((state) => state.setNotificationSoundEnabled);
-  const [initialModelProviderTarget] = useState(() => consumePendingSettingsModelProviderTarget());
-  const [pendingModelProviderTarget, setPendingModelProviderTarget] = useState<
-    SettingsModelProviderTarget | undefined
-  >(() => initialModelProviderTarget);
   const setNewUserOnboardingOpen = useZCodeStore((state) => state.setNewUserOnboardingOpen);
   const requestOnboardingDialog = () => setNewUserOnboardingOpen(true);
   const setActiveSettingsSection = useCallback(
@@ -189,38 +175,6 @@ export function SettingsPage({
   // 这里改为读取 tabStore 维护的“最近激活 workspace identity”，让插件管理继续命中正确远端。
   const activeWorkspaceIdentity = useTabStore(
     (state) => state.activeWorkspaceIdentity ?? undefined,
-  );
-  const activeWorkspaceTab = useTabStore((state) => {
-    const workspacePath = state.activeWorkspacePath;
-    if (!workspacePath) {
-      return null;
-    }
-    const workspaceIdentity = state.activeWorkspaceIdentity ?? undefined;
-    const matchingTabs = state.tabs
-      .filter(isWorkspaceTab)
-      .filter((tab) => tab.workspacePath === workspacePath);
-    return (
-      matchingTabs.find((tab) =>
-        workspaceIdentity ? tab.workspaceIdentity === workspaceIdentity : !tab.workspaceIdentity,
-      ) ??
-      matchingTabs[0] ??
-      null
-    );
-  });
-  const localModelProviderConnectivityWorkspacePath = useMemo(
-    () =>
-      resolveModelProviderConnectivityWorkspacePath({
-        activeWorkspacePath,
-        activeWorkspaceIdentity,
-        activeWorkspaceTab,
-        workspaceTabs,
-      }),
-    [activeWorkspaceIdentity, activeWorkspacePath, activeWorkspaceTab, workspaceTabs],
-  );
-  const isRemoteModelProviderWorkspace = Boolean(
-    activeWorkspaceIdentity?.trim() ||
-    activeWorkspaceTab?.remoteSessionId?.trim() ||
-    activeWorkspaceTab?.remoteTarget,
   );
   const selectDirectory = useSelectDirectory();
   const services = useServices();
@@ -277,18 +231,13 @@ export function SettingsPage({
 
   useEffect(
     () =>
-      addPendingSettingsSectionListener((section, detail) => {
+      addPendingSettingsSectionListener((section) => {
         // SettingsPage 已打开时再次从 quickpick 点“个性化/MCP”等设置入口，
         // 页面不会重新挂载，之前写入的 pending section 无人消费，看起来像点击没反应。
         // 这里订阅同窗口跳转意图，立即切换当前设置分区。
         setActiveSettingsSection(section, activeSection);
         // 设置入口是一级路由边界。即使仍落在同一 section，也必须销毁旧的 New/Edit/Detail 子状态。
         setSettingsSectionNavigationVersion((version) => version + 1);
-        if (section === "modelProvider" && detail?.modelProviderId) {
-          setPendingModelProviderTarget({
-            providerId: detail.modelProviderId,
-          });
-        }
       }),
     [activeSection, setActiveSettingsSection],
   );
@@ -572,12 +521,6 @@ export function SettingsPage({
       }
     },
     [setTheme],
-  );
-  const handleCodePreviewSettingsChange = useCallback(
-    (patch: Parameters<typeof setCodePreviewSettings>[0]) => {
-      return setCodePreviewSettings(patch);
-    },
-    [setCodePreviewSettings],
   );
   const activeSectionMeta = settingsSections.find((section) => section.id === activeSection);
   // 灰度裁决异步到达：sections 列表可能在挂载后变化。
@@ -939,32 +882,6 @@ export function SettingsPage({
                             }
                             onOpenOnboardingDialog={() => requestOnboardingDialog()}
                           />
-                        ) : activeSection === "appearance" ? (
-                          <AppearanceSectionContent
-                            codePreviewSettings={codePreviewSettings}
-                            setCodePreviewSettings={handleCodePreviewSettingsChange}
-                            theme={theme}
-                            setTheme={(nextTheme) => handleFooterThemeChange(nextTheme)}
-                            uiFontSizePx={uiFontSizePx}
-                            setUiFontSizePx={(fontSizePx) => setUiFontSizePx(fontSizePx)}
-                          />
-                        ) : activeSection === "shortcuts" ? (
-                          <ShortcutSettingsSection isDesktop={Boolean(isDesktop)} />
-                        ) : activeSection === "modelProvider" ? (
-                          <ServiceProvider services={localHostServices}>
-                            {/* 模型配置属于本机全局事实源；激活远端 workspace 时也不能注入远端 Host。 */}
-                            <ModelProviderSection
-                              workspacePath={activeWorkspacePath ?? captionWorkspacePath ?? ""}
-                              connectivityWorkspacePath={
-                                localModelProviderConnectivityWorkspacePath
-                              }
-                              connectivityWorkspaceRequired={isRemoteModelProviderWorkspace}
-                              pendingModelProviderTarget={pendingModelProviderTarget}
-                              onConsumePendingModelProviderTarget={() =>
-                                setPendingModelProviderTarget(undefined)
-                              }
-                            />
-                          </ServiceProvider>
                         ) : activeSection === "memory" ? (
                           <ServiceProvider services={localHostServices}>
                             {/* Memory catalog 始终使用本地 Host，避免远程 workspace 误读本机数据。 */}
