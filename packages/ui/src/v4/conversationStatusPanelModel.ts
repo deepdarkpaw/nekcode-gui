@@ -2,8 +2,6 @@ import type { GitRepositorySummary } from "@zcode/shared";
 import type {
   BackgroundWorkSummary,
   GoalState,
-  PlanState,
-  RunningSubagentSummary,
   ToolCallRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import { extractPlanToolCallContent, getPlanDirectoryTitle } from "@/lib/planToolCall.js";
@@ -19,14 +17,6 @@ export interface ConversationStatusPanelGitModel {
   isClean: boolean;
 }
 
-export interface ConversationStatusPanelPlanModel {
-  items: PlanState["items"];
-  displayItems: PlanState["items"];
-  completedCount: number;
-  waitingCount: number;
-  totalCount: number;
-}
-
 export interface ConversationStatusPanelSessionPlanItem {
   rowId: number;
   toolCallId: string;
@@ -39,19 +29,16 @@ export interface ConversationStatusPanelSessionPlansModel {
   items: ConversationStatusPanelSessionPlanItem[];
 }
 
-export interface ConversationStatusPanelRunningSubagent extends RunningSubagentSummary {
-  controlWorkId?: string;
-  cancellable?: boolean;
-}
-
+/**
+ * 面板只承载 nek 状态槽没有的信息：git 改动、目标、计划文档、后台终端。
+ * 待办与子代理由输入框上方的 nek 状态槽展示，这里不再重复。
+ */
 export interface ConversationStatusPanelModel {
   hasContent: boolean;
   git: ConversationStatusPanelGitModel | null;
   goal: GoalState | null;
   sessionPlans: ConversationStatusPanelSessionPlansModel | null;
-  plan: ConversationStatusPanelPlanModel | null;
   runningBashWorks: BackgroundWorkSummary[];
-  runningSubagentWorks: ConversationStatusPanelRunningSubagent[];
 }
 
 interface BuildConversationStatusPanelModelInput {
@@ -62,9 +49,7 @@ interface BuildConversationStatusPanelModelInput {
   goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
   workspacePath?: string;
-  plan?: PlanState | null;
   backgroundWorks?: readonly BackgroundWorkSummary[];
-  runningSubagents?: readonly RunningSubagentSummary[];
 }
 
 function buildGitModel({
@@ -104,22 +89,6 @@ function buildGitModel({
   };
 }
 
-function buildPlanModel(plan: PlanState | null | undefined) {
-  if (!plan || plan.items.length === 0) {
-    return null;
-  }
-  const completed = plan.items.filter((item) => item.status === "completed");
-  return {
-    items: plan.items,
-    // 按状态重新分组会让 Todo 完成时从原位置跳到列表末尾，破坏 TodoWrite
-    // snapshot 的权威顺序。这里完整保留原数组，只由 renderer 负责滚动和状态样式。
-    displayItems: plan.items,
-    completedCount: completed.length,
-    waitingCount: plan.items.length - completed.length,
-    totalCount: plan.items.length,
-  };
-}
-
 function buildSessionPlansModel(
   rows: readonly ToolCallRow[] | undefined,
   workspacePath: string | undefined,
@@ -155,69 +124,15 @@ export function buildConversationStatusPanelModel(
   const git = input.isOfficeMode ? null : buildGitModel(input);
   const goal = input.goal ?? null;
   const sessionPlans = buildSessionPlansModel(input.sessionPlans, input.workspacePath);
-  const plan = buildPlanModel(input.plan);
-  const runningBashWorks: BackgroundWorkSummary[] = [];
-  const subagentControlByChildSessionId = new Map<string, BackgroundWorkSummary | null>();
-  for (const work of input.backgroundWorks ?? []) {
-    if (work.status !== "running") continue;
-    if (work.kind === "bash") {
-      runningBashWorks.push(work);
-    } else if (work.kind === "subagent" && work.childSessionId) {
-      // 目录投影接管 Agent 展示后，旧 backgroundWorks 的 workId/cancellable
-      // 没有再关联回来，导致 Stop 入口消失。只接受唯一 childSessionId 精确匹配；重复或
-      // 缺失身份时宁可不显示控制，也不能按标题、时间猜测并停止错误任务。
-      const existing = subagentControlByChildSessionId.get(work.childSessionId);
-      subagentControlByChildSessionId.set(
-        work.childSessionId,
-        existing === undefined ? work : null,
-      );
-    }
-  }
-  const runningSubagentWorks: ConversationStatusPanelRunningSubagent[] = (
-    input.runningSubagents ?? []
-  ).map((subagent) => {
-    const controlWork = subagentControlByChildSessionId.get(subagent.childSessionId);
-    if (!controlWork) return subagent;
-    return {
-      ...subagent,
-      controlWorkId: controlWork.workId,
-      cancellable: controlWork.cancellable !== false,
-    };
-  });
-  const projectedChildSessionIds = new Set(
-    runningSubagentWorks.map((subagent) => subagent.childSessionId),
+  const runningBashWorks = (input.backgroundWorks ?? []).filter(
+    (work) => work.status === "running" && work.kind === "bash",
   );
-  for (const [childSessionId, controlWork] of subagentControlByChildSessionId) {
-    if (!controlWork || projectedChildSessionIds.has(childSessionId)) continue;
-    // backgroundWorks 已有精确 childSessionId 的 running 事实，但
-    // subagents cold/live 投影交接的短窗口可能暂时缺行；旧模型会把 Agent 控制
-    // 整条隐藏。这里只用唯一身份的权威 work 补齐同一控制，重复身份仍拒绝猜测。
-    runningSubagentWorks.push({
-      agentId: controlWork.workId,
-      childSessionId,
-      controlWorkId: controlWork.workId,
-      subagentType: "subagent",
-      title: controlWork.title,
-      status: controlWork.blocked ? "blocked" : "running",
-      startedAt: controlWork.startedAt,
-      cancellable: controlWork.cancellable !== false,
-    });
-  }
 
   return {
     git,
     goal,
     sessionPlans,
-    plan,
     runningBashWorks,
-    runningSubagentWorks,
-    hasContent: Boolean(
-      git ||
-      goal ||
-      sessionPlans ||
-      plan ||
-      runningBashWorks.length > 0 ||
-      runningSubagentWorks.length > 0,
-    ),
+    hasContent: Boolean(git || goal || sessionPlans || runningBashWorks.length > 0),
   };
 }

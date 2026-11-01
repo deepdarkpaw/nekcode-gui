@@ -263,7 +263,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleOpenCodeViewer,
   handleOpenSubagentSession,
   handleOpenBackgroundBash,
-  handleOpenSubagentDirectory,
   handleSyncSubagentSessionTabs,
   handleOpenSelectionSideChat,
   handleOpenPlanDetail,
@@ -1523,7 +1522,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             onOpenCodeViewer={handleOpenCodeViewer}
                             onOpenBackgroundBash={handleOpenBackgroundBash}
                             onOpenSubagentSession={handleOpenSubagentSession}
-                            onOpenSubagentDirectory={handleOpenSubagentDirectory}
                             onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
                             onOpenSelectionSideChat={handleOpenSelectionSideChat}
                             onOpenPlanDetail={handleOpenPlanDetail}

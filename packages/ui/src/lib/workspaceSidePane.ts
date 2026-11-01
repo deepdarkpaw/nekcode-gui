@@ -85,19 +85,6 @@ export interface SubagentSessionSidePaneTab {
   title: string;
 }
 
-export interface SubagentDirectorySidePaneTab {
-  id: string;
-  type: "subagent-directory";
-  ownerTaskId?: string | null;
-  openedAt?: number;
-  workspaceKey: string;
-  workspacePath: string;
-  workspaceIdentity?: string;
-  remoteSessionId?: string;
-  rootSessionId: string;
-  parentSessionId: string;
-}
-
 export interface SelectionSideChatPaneTab {
   id: string;
   type: "selection-side-chat";
@@ -158,17 +145,6 @@ export interface OpenSubagentSideTabRequest {
   title: string;
 }
 
-export interface OpenSubagentDirectorySideTabRequest {
-  rootSessionId?: string;
-  parentSessionId: string;
-}
-
-export interface OpenScopedSubagentDirectorySideTabRequest extends OpenSubagentDirectorySideTabRequest {
-  workspacePath: string;
-  workspaceIdentity?: string;
-  remoteSessionId?: string;
-}
-
 export interface SyncSubagentSessionTabsRequest {
   rootSessionId: string;
   parentSessionId: string;
@@ -189,7 +165,6 @@ export type WorkspaceSidePaneTab =
   | DeveloperToolsSidePaneTab
   | TerminalSidePaneTab
   | SubagentSessionSidePaneTab
-  | SubagentDirectorySidePaneTab
   | SelectionSideChatPaneTab
   | PlanDetailSidePaneTab;
 
@@ -208,6 +183,20 @@ export interface WorkspaceSidePaneState {
   activeTabId: string;
 }
 
+const SUPPORTED_SIDE_PANE_TAB_TYPES = new Set<string>(
+  Object.keys({
+    "bash-output": true,
+    git: true,
+    "code-viewer": true,
+    "model-trajectory": true,
+    "developer-tools": true,
+    terminal: true,
+    "subagent-session": true,
+    "selection-side-chat": true,
+    "plan-detail": true,
+  } satisfies Record<WorkspaceSidePaneTab["type"], true>),
+);
+
 export function normalizeWorkspaceSidePaneState(
   current: WorkspaceSidePaneState | null,
 ): WorkspaceSidePaneState | null {
@@ -215,7 +204,9 @@ export function normalizeWorkspaceSidePaneState(
     return null;
   }
 
-  if (current.tabs.length === 0) {
+  // 恢复边界只接纳当前支持的 tab 类型；已移除的类型不能流入 pane 渲染分支。
+  const supportedTabs = current.tabs.filter((tab) => SUPPORTED_SIDE_PANE_TAB_TYPES.has(tab.type));
+  if (supportedTabs.length === 0) {
     return null;
   }
 
@@ -223,7 +214,7 @@ export function normalizeWorkspaceSidePaneState(
   // 字段，直接参与 getNextSelectionSideChatOrdinal 会得到 NaN/undefined 并造成标题
   // 编号冲突。这里在状态边界按 parent 分组回填最小可用编号，保持既有编号不变。
   let migratedOrdinal = false;
-  const tabs = current.tabs.map((tab, index, allTabs) => {
+  const tabs = supportedTabs.map((tab, index, allTabs) => {
     if (tab.type !== "selection-side-chat" || Number.isInteger(tab.ordinal)) {
       return tab;
     }
@@ -339,33 +330,6 @@ function createSubagentSessionSidePaneTab(options: {
     childSessionId: options.childSessionId,
     subagentType: options.subagentType,
     title: options.title.trim(),
-  };
-}
-
-function createSubagentDirectorySidePaneTab(options: {
-  workspaceKey: string;
-  workspacePath: string;
-  workspaceIdentity?: string;
-  remoteSessionId?: string;
-  rootSessionId?: string;
-  parentSessionId: string;
-}): SubagentDirectorySidePaneTab {
-  const rootSessionId = options.rootSessionId ?? options.parentSessionId;
-  return {
-    id: [
-      "subagent-directory",
-      encodeSidePaneTabIdPart(options.workspaceKey),
-      encodeSidePaneTabIdPart(rootSessionId),
-      encodeSidePaneTabIdPart(options.parentSessionId),
-    ].join(":"),
-    type: "subagent-directory",
-    openedAt: Date.now(),
-    workspaceKey: options.workspaceKey,
-    workspacePath: options.workspacePath,
-    ...(options.workspaceIdentity ? { workspaceIdentity: options.workspaceIdentity } : {}),
-    ...(options.remoteSessionId ? { remoteSessionId: options.remoteSessionId } : {}),
-    rootSessionId,
-    parentSessionId: options.parentSessionId,
   };
 }
 
@@ -575,11 +539,7 @@ function getVisibleSidePaneTabsByScope(
   return tabs.filter((tab) => {
     if (!sidePaneTabMatchesWorkspace(tab, scope.workspaceKey)) return false;
     if (isWorkspaceGlobalSidePaneTab(tab)) return true;
-    if (
-      tab.type === "subagent-session" ||
-      tab.type === "subagent-directory" ||
-      tab.type === "bash-output"
-    ) {
+    if (tab.type === "subagent-session" || tab.type === "bash-output") {
       return tab.rootSessionId === scope.ownerTaskId;
     }
     if (tab.type === "selection-side-chat" || tab.type === "plan-detail") {
@@ -736,25 +696,6 @@ export function openSubagentSessionSidePane(
   );
 }
 
-export function openSubagentDirectorySidePane(
-  current: WorkspaceSidePaneState | null,
-  options: {
-    workspaceKey: string;
-    workspacePath: string;
-    workspaceIdentity?: string;
-    remoteSessionId?: string;
-    rootSessionId?: string;
-    parentSessionId: string;
-  },
-): WorkspaceSidePaneState {
-  const nextTab = createSubagentDirectorySidePaneTab(options);
-  const existing = current?.tabs.find(
-    (tab): tab is SubagentDirectorySidePaneTab =>
-      tab.type === "subagent-directory" && tab.id === nextTab.id,
-  );
-  return activateSidePaneTab(current, existing ? { ...existing, ...nextTab } : nextTab);
-}
-
 export function syncSubagentSessionSidePaneTabs(
   current: WorkspaceSidePaneState | null,
   options: SyncSubagentSessionTabsRequest,
@@ -773,10 +714,6 @@ export function syncSubagentSessionSidePaneTabs(
   const tabs = current.tabs.filter((tab) => !removedIds.has(tab.id));
   if (tabs.length === 0) return null;
   if (!removedIds.has(current.activeTabId)) return { ...current, tabs };
-  const directory = tabs.find(
-    (tab) => tab.type === "subagent-directory" && tab.rootSessionId === options.rootSessionId,
-  );
-  if (directory) return { tabs, activeTabId: directory.id };
   const removedIndex = current.tabs.findIndex((tab) => tab.id === current.activeTabId);
   const previous = tabs[Math.max(0, Math.min(removedIndex - 1, tabs.length - 1))];
   return { tabs, activeTabId: previous?.id ?? tabs.at(-1)!.id };
@@ -856,11 +793,7 @@ export function isSidePaneTabVisibleForParent(
   if (tab.type === "selection-side-chat" || tab.type === "plan-detail") {
     return tab.parentSessionId === parentSessionId;
   }
-  if (
-    tab.type === "subagent-session" ||
-    tab.type === "subagent-directory" ||
-    tab.type === "bash-output"
-  ) {
+  if (tab.type === "subagent-session" || tab.type === "bash-output") {
     return tab.rootSessionId === parentSessionId;
   }
   return true;
@@ -905,7 +838,6 @@ function selectSidePaneTabsForParent(
     visibleTabs.findLast(
       (tab) =>
         tab.type === "subagent-session" ||
-        tab.type === "subagent-directory" ||
         tab.type === "selection-side-chat" ||
         tab.type === "plan-detail",
     ) ??

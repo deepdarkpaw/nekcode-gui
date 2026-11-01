@@ -36,7 +36,6 @@ import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable.js";
 import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs.js";
 import { SidePaneTabOverview } from "@/app-shell/SidePaneTabOverview.js";
 import { SubagentSessionSidePane } from "@/app-shell/SubagentSessionSidePane.js";
-import { SubagentDirectorySidePane } from "@/app-shell/SubagentDirectorySidePane.js";
 import { SelectionSideChatPane } from "@/app-shell/SelectionSideChatPane.js";
 import { BackgroundBashOutputSidePane } from "@/app-shell/BackgroundBashOutputSidePane.js";
 import { PlanDetailSidePane } from "@/app-shell/PlanDetailSidePane.js";
@@ -763,9 +762,6 @@ export function AnimatedSidePanePanel({
         }),
         terminalTitle: intl.formatMessage({ id: "terminal.title" }),
         subagentTypeLabel: intl.formatMessage({ id: "sidePane.subagent" }),
-        subagentDirectoryTitle: intl.formatMessage({
-          id: "sidePane.subagentDirectory",
-        }),
         selectionChatTitle: intl.formatMessage({
           id: "sidePane.selectionChat",
         }),
@@ -947,11 +943,6 @@ export function AnimatedSidePanePanel({
                             onOpenFileLink={onOpenFileLink}
                             onOpenSubagentSession={onOpenSubagentSession}
                             onOpenBackgroundBash={onOpenBackgroundBash}
-                          />
-                        ) : tab.type === "subagent-directory" ? (
-                          <SubagentDirectorySidePane
-                            tab={tab}
-                            onOpenSubagentSession={onOpenSubagentSession}
                           />
                         ) : tab.type === "selection-side-chat" ? (
                           <SelectionSideChatPane

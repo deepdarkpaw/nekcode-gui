@@ -11,7 +11,6 @@ import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js"
 import type {
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
-  OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
   SyncSubagentSessionTabsRequest,
@@ -98,7 +97,6 @@ interface V4WorkspaceChatAreaProps {
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
-  onOpenSubagentDirectory?: (request: OpenScopedSubagentDirectorySideTabRequest) => void;
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
@@ -152,7 +150,6 @@ export function V4WorkspaceChatArea({
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
-  onOpenSubagentDirectory,
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
   onOpenPlanDetail,
@@ -270,7 +267,6 @@ export function V4WorkspaceChatArea({
       onOpenFileLink,
       onOpenSubagentSession,
       onOpenBackgroundBash,
-      onOpenSubagentDirectory,
       onSyncSubagentSessionTabs,
       onOpenSelectionSideChat,
       onOpenPlanDetail,
@@ -308,7 +304,6 @@ export function V4WorkspaceChatArea({
       onOpenFileLink,
       onOpenSubagentSession,
       onOpenBackgroundBash,
-      onOpenSubagentDirectory,
       onSyncSubagentSessionTabs,
       onOpenSelectionSideChat,
       onOpenPlanDetail,

@@ -8,7 +8,6 @@ export interface SidePaneTabPresentationLabels {
   developerToolsTitle: string;
   terminalTitle: string;
   subagentTypeLabel: string;
-  subagentDirectoryTitle: string;
   selectionChatTitle: string;
   planTitle: string;
 }
@@ -22,9 +21,6 @@ export function getSidePaneTabSearchHint(tab: WorkspaceSidePaneTab): string {
   }
   if (tab.type === "subagent-session") {
     return `${tab.title ?? ""} ${tab.subagentType} ${tab.parentSessionId} ${tab.childSessionId}`;
-  }
-  if (tab.type === "subagent-directory") {
-    return `${tab.rootSessionId} ${tab.parentSessionId} subagent directory`;
   }
   if (tab.type === "git") return "git diff";
   if (tab.type === "model-trajectory") {
@@ -50,7 +46,6 @@ export function getLocalizedSidePaneTabTitle(
       "developerTools.title": labels.developerToolsTitle,
       "terminal.title": labels.terminalTitle,
       "sidePane.subagent": labels.subagentTypeLabel,
-      "sidePane.subagentDirectory": labels.subagentDirectoryTitle,
       "sidePane.selectionChat": labels.selectionChatTitle,
       "planTool.panel.planTab": labels.planTitle,
     };
@@ -67,7 +62,6 @@ export function getSidePaneTabTypeLabel(
   if (tab.type === "subagent-session") {
     return tab.subagentType.trim() || labels.subagentTypeLabel;
   }
-  if (tab.type === "subagent-directory") return labels.subagentDirectoryTitle;
   if (tab.type === "git") return labels.reviewTitle;
   if (tab.type === "model-trajectory") return labels.modelTrajectoryTitle;
   if (tab.type === "developer-tools") return labels.developerToolsTitle;

@@ -8,7 +8,6 @@ import {
   FileCode2Icon,
   FileDiffIcon,
   MessageSquareTextIcon,
-  ListTreeIcon,
   NotepadTextIcon,
   SquareTerminalIcon,
   WaypointsIcon,
@@ -269,10 +268,6 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <BotIcon className="size-3.5" />;
   }
 
-  if (tab.type === "subagent-directory") {
-    return <ListTreeIcon className="size-3.5" />;
-  }
-
   if (tab.type === "git") {
     return <FileDiffIcon className="size-3.5" />;
   }
@@ -431,10 +426,6 @@ export function getSidePaneTabTitle(
   }
   if (tab.type === "subagent-session") {
     return tab.title?.trim() || formatMessage({ id: "sidePane.subagent" });
-  }
-
-  if (tab.type === "subagent-directory") {
-    return formatMessage({ id: "sidePane.subagentDirectory" });
   }
 
   if (tab.type === "git") {
