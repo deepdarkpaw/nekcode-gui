@@ -15,7 +15,7 @@ import {
   applyExtensionEvent,
   applyRetryMarker,
 } from "./nekLiveMarkers.js";
-import { buildQueueItems } from "./nekProjectionSnapshot.js";
+import { buildQueueItems, withNekModelSelection } from "./nekProjectionSnapshot.js";
 
 export { applySubagentRecord } from "./nekLiveTools.js";
 export { applyBashCommandResultRow, applySessionState } from "./nekLiveMarkers.js";
@@ -63,7 +63,10 @@ export function applyNekLiveEvent(ctx: NekLiveContext, event: NekRpcEvent): void
       };
       return;
     case "thinking_level_changed":
-      ctx.store.state.config = { ...ctx.store.state.config, thought: event.level };
+      ctx.store.state.config = withNekModelSelection({
+        ...ctx.store.state.config,
+        thought: event.level,
+      });
       return;
     case "session_info_changed":
       ctx.store.state.title = event.name ?? "";

@@ -111,6 +111,22 @@ function identity(
   return { entityId, rowId, turnId, createdAt };
 }
 
+/** Canonical session seed comes from nek's accepted facts, never from renderer draft storage. */
+export function withNekModelSelection(config: SessionConfigState): SessionConfigState {
+  const { provider, model, thought } = config;
+  return {
+    ...config,
+    modelSelection:
+      provider && model
+        ? {
+            providerId: provider,
+            modelId: model,
+            ...(thought ? { options: { reasoningLevel: thought } } : {}),
+          }
+        : undefined,
+  };
+}
+
 export function buildConfigState(
   state: NekRpcSessionState | undefined,
   provider: string,
@@ -118,7 +134,7 @@ export function buildConfigState(
   thought: string,
   mode: string,
 ): SessionConfigState {
-  return {
+  return withNekModelSelection({
     provider,
     model,
     thought,
@@ -127,7 +143,7 @@ export function buildConfigState(
     // 回合中的输入在 nek 里一律排队（steering 才是 guide），所以这里固定 queue。
     followupMode: "queue",
     mode,
-  };
+  });
 }
 
 /** 会话控制态：nek 没有 v4 那么细的状态机，这里给出最小但真实的映射。 */

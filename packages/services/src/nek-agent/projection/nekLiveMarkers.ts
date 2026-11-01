@@ -14,6 +14,7 @@ import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentRecord } from "./nekLiveTools.js";
 import { applyCustomMessage } from "./nekLiveMessages.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
+import { withNekModelSelection } from "./nekProjectionSnapshot.js";
 
 /**
  * 时间线标记、扩展追加的条目、直接 bash 的结果与扩展状态。
@@ -114,10 +115,11 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
           ),
         );
       }
-      ctx.store.state.config =
+      ctx.store.state.config = withNekModelSelection(
         entry.type === "model_change"
           ? { ...config, provider: entry.provider, model: entry.modelId }
-          : { ...config, thought: entry.thinkingLevel };
+          : { ...config, thought: entry.thinkingLevel },
+      );
       return;
     }
     case "compaction": {
@@ -269,10 +271,10 @@ export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEven
 /** `get_state` 的响应合并进快照字段。 */
 export function applySessionState(ctx: NekLiveContext, state: NekRpcSessionState): void {
   const current = ctx.store.state.config;
-  ctx.store.state.config = {
+  ctx.store.state.config = withNekModelSelection({
     ...current,
     provider: state.model?.provider ?? current.provider,
     model: state.model?.id ?? current.model,
     thought: state.thinkingLevel,
-  };
+  });
 }
