@@ -19,7 +19,7 @@ export function workspaceKey(target: NekWorkspaceTarget): string {
 }
 
 export function sessionMapKey(target: NekWorkspaceTarget, sessionId: string): string {
-  return `${workspaceKey(target)}\0${sessionId}`;
+  return `${target.workspacePath}\0${sessionId}`;
 }
 
 export function makeSubscriptionId(topic: string): string {

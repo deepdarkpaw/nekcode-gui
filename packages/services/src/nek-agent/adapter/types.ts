@@ -86,6 +86,11 @@ export interface NekAgentServiceAdapterApi {
   listNekSessions(
     target: NekWorkspaceTarget,
   ): Promise<import("@zcode/shared/nek-protocol").NekSessionSummary[]>;
+  ensureNekSessionBinding(
+    target: NekWorkspaceTarget,
+    sessionId: string,
+    refreshLocked?: boolean,
+  ): Promise<NekSessionBinding>;
   closeNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean>;
   readNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<ConversationSnapshot>;
   readNekSessionMessages(

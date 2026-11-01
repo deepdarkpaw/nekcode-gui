@@ -1,6 +1,7 @@
 import type { NekSubagentRecord } from "@zcode/shared/nek-protocol";
 import type { ConversationRow, ToolCallRow, ToolOutput } from "@zcode/shared/zcode-protocol-v4";
 import { buildToolCallRow, toolResultDisplay, toolResultText } from "./nekRows.js";
+import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { subagentRowFromRecord } from "./nekProjectionSnapshot.js";
@@ -30,13 +31,15 @@ function upsertToolRow(
   const existing = ctx.store.getRow<ToolCallRow>(rowId);
   if (!existing) {
     ctx.store.add(
-      buildToolCallRow(rowIdentity(`tool:${toolCallId}`, rowId, currentTurnId(ctx), ctx.now()), {
-        toolCallId,
-        toolName,
-        status: "inputStreaming",
-        inputText: "",
-        startedAt: ctx.now(),
-      }),
+      patch(
+        buildToolCallRow(rowIdentity(`tool:${toolCallId}`, rowId, currentTurnId(ctx), ctx.now()), {
+          toolCallId,
+          toolName,
+          status: "inputStreaming",
+          inputText: "",
+          startedAt: ctx.now(),
+        }),
+      ),
     );
     return;
   }
@@ -71,6 +74,7 @@ export function applyToolExecutionStart(
           ...row,
           status: "running",
           input: row.input === undefined ? args : row.input,
+          inputText: row.inputText || (args === undefined ? "" : JSON.stringify(args, null, 2)),
           startedAt: row.startedAt ?? startedAt,
         }
       : row,
@@ -90,6 +94,7 @@ export function applyToolExecutionUpdate(
     ...row,
     status: "running",
     input: row.input === undefined ? args : row.input,
+    inputText: row.inputText || (args === undefined ? "" : JSON.stringify(args, null, 2)),
     // partialResult 是"最新部分结果"，按替换处理（由工具的契约决定语义）。
     output,
   }));
@@ -102,18 +107,17 @@ export function applyToolExecutionEnd(
   result: unknown,
   isError: boolean,
 ): void {
-  const text = toolResultText(result);
   const details = (result as { details?: unknown } | undefined)?.details;
   if (details !== undefined) ctx.toolDetails.set(toolCallId, details);
-  const output: ToolOutput = { text, display: toolResultDisplay(toolName, result, text) };
   const endedAt = ctx.now();
-  upsertToolRow(ctx, toolCallId, toolName, (row) => ({
-    ...row,
-    status: isError ? "error" : "success",
-    output,
-    ...(isError ? { error: { code: "tool_error", message: text.slice(0, 2000) } } : {}),
-    endedAt,
-  }));
+  const rowId = toolRowId(ctx, toolCallId);
+  ctx.store.add(
+    mergeToolResultRow(
+      rowIdentity(`tool:${toolCallId}`, rowId, currentTurnId(ctx), endedAt),
+      ctx.store.getRow(rowId),
+      { toolCallId, toolName, result, isError, endedAt },
+    ),
+  );
   if (toolName === "subagent") {
     const record = subagentRecordFrom(details);
     if (record) applySubagentRecord(ctx, record, toolCallId);

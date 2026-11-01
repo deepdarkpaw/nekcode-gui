@@ -133,24 +133,14 @@ export function legacySessionInfo(
 export async function bindingSnapshot(
   target: NekAgentServiceAdapterLegacyTarget,
   input: Parameters<IZCodeAgentService["readSession"]>[0],
+  refreshLocked = false,
 ): Promise<LegacySnapshot> {
-  const sessionKey = target.resolveSessionKey(input, input.sessionId);
-  if (!sessionKey) {
-    const summary = (await target.listNekSessions(input)).find(
-      (item) => item.id === input.sessionId,
-    );
-    if (!summary) throw new Error(`nek session ${input.sessionId} is not open`);
-    const resumed = await target.resumeNekSession({
-      workspacePath: input.workspacePath,
-      sessionPath: summary.path,
-    });
-    return legacySnapshotFromResult(input, resumed);
-  }
-  const session = target.service.getSession(sessionKey);
-  if (!session) throw new Error(`nek session ${input.sessionId} is not open`);
+  const binding = await target.ensureNekSessionBinding(input, input.sessionId, refreshLocked);
+  const session = target.service.getSession(binding.sessionKey);
+  if (!session) throw new Error(`nek session ${input.sessionId} was not restored`);
   return legacySnapshotFromResult(input, {
     ...session,
-    conversation: target.service.conversationSnapshot(sessionKey),
+    conversation: target.service.conversationSnapshot(binding.sessionKey),
   });
 }
 

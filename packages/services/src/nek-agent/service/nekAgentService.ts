@@ -8,10 +8,9 @@ import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentServiceCommandMethods } from "./nekAgentServiceCommandMethods.js";
 import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
-import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
+import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
 
 import {
-  isNekSessionSnapshot,
   type NekAgentServiceOptions,
   type NekConversationListener,
   type NekMode,
@@ -29,7 +28,7 @@ import {
  * 每个命令都通过 `withSession` 持有一次进程引用，命令结束即归还，空闲进程因此可以被进程池回收。
  */
 export class NekAgentService
-  extends NekAgentServiceRuntimeBase
+  extends NekAgentSessionResumeBase
   implements NekAgentServiceCommandMethods
 {
   constructor(options: NekAgentServiceOptions) {
@@ -334,64 +333,6 @@ export class NekAgentService
     }
   }
 
-  /** 恢复会话：被外部占用时只读打开快照；否则启动进程并装载历史。 */
-  async resumeSession(input: { sessionPath: string; cwd?: string }): Promise<NekSessionResult> {
-    this.assertAlive();
-    const existing = this.byPath.get(input.sessionPath);
-    if (existing?.process && !existing.readonly) return this.result(existing);
-    const control = await this.pool.ensureControl();
-    const snapshot = await control.client.call({
-      type: "read_session_snapshot",
-      sessionPath: input.sessionPath,
-    });
-    if (!isNekSessionSnapshot(snapshot))
-      throw new Error("nek returned an invalid session snapshot");
-    if (snapshot.session.locked) return this.openLockedSnapshot(snapshot, input.cwd);
-
-    const record =
-      existing ??
-      this.createRecord({
-        key: input.sessionPath,
-        sessionId: snapshot.session.id,
-        path: input.sessionPath,
-        cwd: input.cwd ?? snapshot.session.cwd,
-        phase: "idle",
-        readonly: false,
-        closing: false,
-      });
-    record.readonly = false;
-    record.lockedBy = undefined;
-    record.snapshot = undefined;
-    const approval = await this.resolveProjectApproval(record.cwd);
-    await this.openProcess(record, {
-      sessionKey: record.key,
-      cwd: record.cwd,
-      sessionPath: input.sessionPath,
-      approve: approval,
-      extensionUi: this.extensionUiFor({ workspacePath: record.cwd, sessionKey: record.key }),
-    });
-    if (record.state?.isStreaming) {
-      this.emit({
-        type: "resume_notice",
-        session: this.publicSession(record),
-        message: "正在继续上次中断的回合",
-      });
-      this.setPhase(record, "running");
-    }
-    return this.result(record);
-  }
-
-  /** 进程崩溃或会话被外部释放后重新打开同一个会话文件。 */
-  async restartSession(sessionKey: string): Promise<NekSessionResult> {
-    const record = this.requireRecord(sessionKey);
-    if (!record.path) throw new Error("cannot restart a session without a session path");
-    record.readonly = false;
-    record.lockedBy = undefined;
-    const approval = await this.resolveProjectApproval(record.cwd);
-    await this.openProcess(record, { ...this.processRequest(record), approve: approval });
-    return this.result(record);
-  }
-
   async closeSession(sessionKey: string | { sessionKey: string }): Promise<boolean> {
     const record = this.requireRecord(
       typeof sessionKey === "string" ? sessionKey : sessionKey.sessionKey,
@@ -476,14 +417,5 @@ export class NekAgentService
       phase: record.phase,
       setPhase: (phase) => this.setPhase(record, phase),
     };
-  }
-
-  /** 打开失败时尽力回收进程：原始错误照原样抛出，回收失败只记账。 */
-  private async reclaimQuietly(record: NekSessionRecord, message: string): Promise<void> {
-    try {
-      await this.pool.reclaimSession(record.key, "dispose");
-    } catch (error) {
-      this.logger?.warn(message, error);
-    }
   }
 }
