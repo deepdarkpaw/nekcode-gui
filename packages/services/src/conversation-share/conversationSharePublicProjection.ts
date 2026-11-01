@@ -235,13 +235,11 @@ function projectTimelineMarker(
         ...(row.marker.tokensAfter === undefined ? {} : { tokensAfter: row.marker.tokensAfter }),
       };
     case "modelChange":
-      return { ...row.marker };
     case "goalSet":
-      return { ...row.marker };
     case "goalVerify":
-      return { ...row.marker };
     case "retryNotice":
       return { ...row.marker };
+    case "extensionError":
     case "forkNotice":
     case "forkCreated":
     case "checkpointRestored":

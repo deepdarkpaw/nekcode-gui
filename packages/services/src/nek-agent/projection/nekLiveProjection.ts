@@ -26,8 +26,8 @@ export type { NekLiveContext, NekLiveTurn } from "./nekLiveTurn.js";
  * 事件分发：把 nek 的一条 RPC 事件并入投影状态。
  *
  * 只做状态迁移；行的增量（appended/upserted/delta）由 `NekProjectionStore` 统一产生。
- * 未列出的事件（`turn_start` / `turn_end` / `agent_end` / 重试细节 / `extension_error`）不改变行，
- * 会话层可以自己订阅 `onAnyEvent` 消费。
+ * `extension_error` is owned by the projector's bounded notice ledger, outside turn lifecycle.
+ * Other unlisted events do not change rows.
  */
 export function applyNekLiveEvent(ctx: NekLiveContext, event: NekRpcEvent): void {
   if (applyTurnLifecycleEvent(ctx, event)) return;

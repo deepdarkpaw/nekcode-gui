@@ -233,6 +233,7 @@ export function buildUserInputRow(
     kind: "userInput",
     text: args.text,
     origin: args.origin ?? "realUser",
+    ...(identity.entityId.startsWith("entry:") ? { actions: { canFork: true as const } } : {}),
     ...(args.guided ? { guided: true as const } : {}),
   };
 }

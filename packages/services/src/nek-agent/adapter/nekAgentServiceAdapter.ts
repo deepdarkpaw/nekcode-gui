@@ -149,7 +149,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
         listSessions: async (input) => await this.service.listSessions(input),
       });
     this.conversations = new NekConversationSubscriptions(this.service, (target, sessionId) =>
-      this.ensureNekSessionBinding(target, sessionId),
+      this.ensureNekSessionBinding(target, sessionId, true),
     );
     this.topics = new NekAgentServiceTopics(
       this.service,
@@ -324,6 +324,10 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       {
         service: this.service,
         createSession: async (request) => await this.createNekSession(request),
+        bindSession: (target, result) => {
+          this.bindings.bind(target, result);
+          this.status.publish(target, result.sessionKey);
+        },
         ensureBinding: (target, sessionId) => this.ensureNekSessionBinding(target, sessionId),
         removeBinding: (target, sessionId) => this.bindings.remove(target, sessionId),
       },

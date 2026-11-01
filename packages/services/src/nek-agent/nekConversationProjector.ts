@@ -15,6 +15,7 @@ import type { NekSnapshotInput } from "./projection/nekEntryProjection.js";
 import { projectEntries } from "./projection/nekEntryProjection.js";
 import { buildControlState, planFromNekState } from "./projection/nekProjectionSnapshot.js";
 import { NekProjectionStore } from "./projection/nekProjectionStore.js";
+import { NekExtensionErrors } from "./projection/nekExtensionErrors.js";
 import type { NekLiveContext } from "./projection/nekLiveProjection.js";
 import {
   applyBashCommandResultRow,
@@ -75,6 +76,7 @@ export class NekConversationProjector {
   private readonly listeners = new Set<(frame: ConversationTopicFrame) => void>();
   private store: NekProjectionStore;
   private live: NekLiveContext;
+  private readonly extensionErrors = new NekExtensionErrors();
   private seq = 0;
   private revisionValue = 0;
   private cancelFlush: (() => void) | undefined;
@@ -152,6 +154,7 @@ export class NekConversationProjector {
       existing: undefined,
     });
     this.store.replaceRows(projected.rows, projected.byEntity, projected.nextRowId);
+    this.extensionErrors.project(this.store, projected.rows.at(-1)?.turnId ?? "turn-0");
     this.store.state = {
       ...this.store.state,
       title: projected.title || this.store.state.title,
@@ -168,7 +171,10 @@ export class NekConversationProjector {
   /** 并入一条 RPC 事件；有变化时按合并窗口下发增量帧。 */
   handleEvent(event: NekRpcEvent): void {
     if (this.disposed) return;
-    applyNekLiveEvent(this.live, event);
+    if (event.type === "extension_error") {
+      this.extensionErrors.record(event, this.now());
+      this.extensionErrors.project(this.store, this.live.turn?.turnId ?? "turn-0");
+    } else applyNekLiveEvent(this.live, event);
     this.scheduleFlush();
   }
 
@@ -229,6 +235,11 @@ export class NekConversationProjector {
       payload: { kind: "deltas", deltas },
     };
     this.emitFrame(frame);
+  }
+
+  /** Read-only admission facts belong to the service, not to pane-local guesses. */
+  applyReadOnly(readOnly: NonNullable<ConversationSnapshot["control"]["readOnly"]>): void {
+    this.store.state.control = { ...this.store.state.control, readOnly };
   }
 
   /** 当前快照（不发帧；给需要直接读状态的调用方）。 */
