@@ -1,8 +1,14 @@
 import type { NekMode, NekThinkingLevel } from "@zcode/shared/nek-protocol";
-import type { CommandAck } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandAck, CommandsQueryResult } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionResult } from "../service/types.js";
 import { toNekImages } from "./attachmentImages.js";
-import { acceptedCommand, asRecord, readString, unsupportedCommand } from "./frameHelpers.js";
+import {
+  acceptedCommand,
+  asRecord,
+  readString,
+  unsupportedCommand,
+  workspaceKey,
+} from "./frameHelpers.js";
 import type { NekSessionBinding, NekSessionCommandEnvelope, NekWorkspaceTarget } from "./types.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 
@@ -24,8 +30,32 @@ export interface NekCommandContext {
     thinking?: NekThinkingLevel;
     mode?: NekMode;
   }): Promise<NekSessionResult>;
-  requireBinding(target: NekWorkspaceTarget, sessionId: string): NekSessionBinding;
+  ensureBinding(target: NekWorkspaceTarget, sessionId: string): Promise<NekSessionBinding>;
   removeBinding(target: NekWorkspaceTarget, sessionId: string): void;
+}
+
+/** 命令对账与发送共用绑定 admission，时钟查询不打开任何会话。 */
+export async function queryConversationCommands(
+  context: Pick<NekCommandContext, "service" | "ensureBinding">,
+  input: {
+    target: NekWorkspaceTarget;
+    commands: Array<{ sessionId: string | null; commandId: string }>;
+    clock?: true;
+  },
+): Promise<CommandsQueryResult> {
+  if (input.clock) {
+    const now = Date.now();
+    return {
+      results: input.commands.map((key) => ({ key, result: "unknown" as const })),
+      clock: { instanceId: `nek:${workspaceKey(input.target)}`, receivedAt: now, sentAt: now },
+    };
+  }
+  for (const command of input.commands) {
+    if (!command.sessionId) continue;
+    const binding = await context.ensureBinding(input.target, command.sessionId);
+    await context.service.getCommands(binding.sessionKey);
+  }
+  return { results: input.commands.map((key) => ({ key, result: "unknown" as const })) };
 }
 
 export async function sendConversationCommand(
@@ -37,7 +67,7 @@ export async function sendConversationCommand(
   if (envelope.type === "createSession")
     return await createFromCommand(context, input.target, envelope, payload);
   if (!envelope.sessionId) return unsupportedCommand(envelope, "sessionId is required");
-  const binding = context.requireBinding(input.target, envelope.sessionId);
+  const binding = await context.ensureBinding(input.target, envelope.sessionId);
   const revision = context.service.conversationSnapshot(binding.sessionKey).revision;
   switch (envelope.type) {
     case "sendText": {
@@ -120,14 +150,7 @@ async function createFromCommand(
   const model = asRecord(firstInput?.modelSelection ?? config?.modelSelection);
   const result = await context.createSession({
     workspacePath: target.workspacePath,
-    ...(model
-      ? {
-          model: {
-            provider: readString(model, "provider") ?? "",
-            modelId: readString(model, "modelId") ?? "",
-          },
-        }
-      : {}),
+    ...(model ? { model: modelSelectionOf(model) } : {}),
     ...(readString(config ?? {}, "thought")
       ? { thinking: thoughtLevel(readString(config ?? {}, "thought")) }
       : {}),
@@ -148,6 +171,24 @@ async function createFromCommand(
   });
 }
 
+/**
+ * 协议里的 ModelSelection 用 `providerId`，nek 的 `set_model` / 会话创建用 `provider`。
+ *
+ * 这里只做字段改名：漏读 `providerId` 会让 nek 收到 `/{modelId}`，首发直接被
+ * `Model not found` 拒绝。
+ */
+function modelSelectionOf(model: Record<string, unknown>): {
+  provider: string;
+  modelId: string;
+} {
+  const providerId = readString(model, "providerId");
+  const modelId = readString(model, "modelId");
+  if (!providerId || !modelId) {
+    throw new Error(`invalid model selection: provider=${providerId ?? ""} model=${modelId ?? ""}`);
+  }
+  return { provider: providerId, modelId };
+}
+
 async function applySelection(
   service: NekAgentService,
   sessionKey: string,
@@ -155,11 +196,7 @@ async function applySelection(
 ): Promise<void> {
   const model = asRecord(payload.modelSelection);
   if (model) {
-    await service.setModel({
-      sessionKey,
-      provider: readString(model, "provider") ?? "",
-      modelId: readString(model, "modelId") ?? "",
-    });
+    await service.setModel({ sessionKey, ...modelSelectionOf(model) });
   }
   if (readString(payload, "mode")) await setModeFromPayload(service, sessionKey, payload);
 }

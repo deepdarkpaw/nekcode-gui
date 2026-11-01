@@ -4,20 +4,28 @@ import {
   type ZCodeProvider,
   type ZCodeError,
 } from "@zcode/shared";
-import { normalizeZCodeUiError } from "@/lib/zcodeUiError.js";
+import { normalizeZCodeUiError, type ZCodeUiError } from "@/lib/zcodeUiError.js";
 
-export const MODEL_CONFIG_MISSING_UI_ERROR_CODE = "model_config_missing";
-
-export type ModelConfigMissingUiError = ZCodeError & {
-  code: typeof MODEL_CONFIG_MISSING_UI_ERROR_CODE;
-};
-
-export function buildModelConfigMissingUiError(): ModelConfigMissingUiError {
-  // provider_not_ready 是进程启动门禁的内部等待原因，直接展示会被当成
-  // Agent 故障。草稿首页统一投影成已有 modelConfigMissing banner 的稳定 code。
+/** provider_not_ready 是进程启动门禁的内部等待原因，直接展示会被当成 Agent 故障。 */
+export function buildModelConfigMissingUiError(): ZCodeUiError {
+  // 草稿首页统一投影成已有 modelConfigMissing banner 的稳定 code。
   return {
-    code: MODEL_CONFIG_MISSING_UI_ERROR_CODE,
+    code: "model_config_missing",
     message: "No usable model provider is configured.",
+  };
+}
+
+/**
+ * 读取 nek 的模型事实失败（坏 models.json / 权限 / nek 不可用）。
+ *
+ * 这条错误必须可见且可重试：不能把“读不到”投影成“没有模型”，也不能静默放行首发。
+ * detail 带上事实来源自己的错误文本，复制与诊断入口照常可用。
+ */
+export function buildModelConfigUnreadableUiError(error: unknown): ZCodeUiError {
+  return {
+    code: "model_config_unreadable",
+    message: "Cannot read the model configuration from nek.",
+    detail: getChatErrorMessage(error),
   };
 }
 

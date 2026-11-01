@@ -56,6 +56,8 @@ const MODEL_CONFIG_MISSING_CODES = new Set([
   "ModelConfigMissing",
 ]);
 
+const MODEL_CONFIG_UNREADABLE_CODES = new Set(["model_config_unreadable"]);
+
 function isModelConfigMissingError(error: Pick<ZCodeUiError, "code" | "message">): boolean {
   // 桌面端发送前 registry 为空时，agent 会退回 CLI config 并抛 Model config is missing。
   // 真实原因是“当前没有可用模型”，不能把 CLI 配置路径直接暴露给桌面用户。
@@ -64,12 +66,20 @@ function isModelConfigMissingError(error: Pick<ZCodeUiError, "code" | "message">
   return Boolean(error.code && MODEL_CONFIG_MISSING_CODES.has(error.code));
 }
 
+/** 读取模型事实失败：可见、可重试，但仍保留复制与详情入口。 */
+function isModelConfigUnreadableError(error: Pick<ZCodeUiError, "code">): boolean {
+  return Boolean(error.code && MODEL_CONFIG_UNREADABLE_CODES.has(error.code));
+}
+
 export function resolveChatErrorBannerDisplayMessage(
   error: ZCodeUiError,
   intl: IntlInstance,
 ): string {
   if (isModelConfigMissingError(error)) {
     return intl.formatMessage({ id: "chat.error.noAvailableModel" });
+  }
+  if (isModelConfigUnreadableError(error)) {
+    return intl.formatMessage({ id: "chat.error.modelConfigUnreadable" });
   }
 
   // 数字错误码由用户选择的模型供应商定义，不能全局套用官方账号/套餐含义。

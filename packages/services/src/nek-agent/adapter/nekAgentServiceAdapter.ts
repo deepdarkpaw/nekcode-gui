@@ -22,7 +22,10 @@ import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
-import { sendConversationCommand } from "./nekAgentServiceAdapterCommands.js";
+import {
+  queryConversationCommands,
+  sendConversationCommand,
+} from "./nekAgentServiceAdapterCommands.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
 import type { NekAgentStatusChannel } from "./nekAgentStatusChannel.js";
@@ -39,6 +42,8 @@ import type {
   NekWorkspaceConfigSubscribeParams,
   NekWorkspaceTarget,
 } from "./types.js";
+
+type ConversationEmitter = Emitter<ConversationTopicWireCandidate>;
 
 interface ConversationSubscription {
   id: string;
@@ -133,18 +138,18 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   private readonly topics: NekAgentServiceTopics;
   private readonly interactions: NekAgentInteractionChannel;
   private readonly status: NekAgentStatusChannel;
-  private readonly bindings = new NekSessionBindings();
-  /** 绑定解析（状态薄壳与命令层共用）；未打开的会话直接抛错。 */
-  readonly requireBinding = (target: NekWorkspaceTarget, sessionId: string): NekSessionBinding =>
-    this.bindings.require(target, sessionId);
+  private readonly bindings: NekSessionBindings;
+  private disposed = false;
   private readonly conversationSubscriptions = new Map<string, ConversationSubscription>();
-  private readonly conversationEmitters = new Map<
-    string,
-    Emitter<ConversationTopicWireCandidate>
-  >();
+  private readonly conversationEmitters = new Map<string, ConversationEmitter>();
 
   constructor(options: NekAgentServiceAdapterOptions) {
     this.service = new NekAgentService(options);
+    this.bindings = new NekSessionBindings({
+      getSession: (key) => this.service.getSession(key),
+      listSessions: (target) => this.listNekSessions(target),
+      resumeSession: (input) => this.resumeNekSession(input),
+    });
     const syncer =
       options.sessionIndexSyncer ??
       new NekSessionIndexSyncer({
@@ -208,8 +213,17 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     return await this.service.listSessions({ cwd: target.workspacePath });
   }
 
+  async ensureNekSessionBinding(
+    target: NekWorkspaceTarget,
+    sessionId: string,
+    refreshLocked = false,
+  ): Promise<NekSessionBinding> {
+    return await this.bindings.ensure(target, sessionId, refreshLocked);
+  }
+
   async closeNekSession(input: NekWorkspaceTarget & { sessionId: string }): Promise<boolean> {
-    const binding = this.requireBinding(input, input.sessionId);
+    await this.bindings.waitForPending(input, input.sessionId);
+    const binding = this.bindings.require(input, input.sessionId);
     const result = await this.service.closeSession(binding.sessionKey);
     this.bindings.remove(input, input.sessionId);
     // nek status feed：会话关闭后 renderer 必须丢掉本地状态，不能继续显示上一次的行。
@@ -220,14 +234,14 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   async readNekSession(
     input: NekWorkspaceTarget & { sessionId: string },
   ): Promise<ConversationSnapshot> {
-    const binding = this.requireBinding(input, input.sessionId);
+    const binding = await this.ensureNekSessionBinding(input, input.sessionId);
     return this.service.conversationSnapshot(binding.sessionKey);
   }
 
   async readNekSessionMessages(
     target: NekWorkspaceTarget & { sessionId: string },
   ): Promise<NekAgentMessage[]> {
-    const binding = this.requireBinding(target, target.sessionId);
+    const binding = await this.ensureNekSessionBinding(target, target.sessionId);
     const session = this.service.getSession(binding.sessionKey);
     if (session?.readonly) return (session.snapshot?.messages ?? []) as NekAgentMessage[];
     return (
@@ -242,12 +256,13 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     input: NekConversationSubscribeParams,
   ): Promise<V4ConversationSubscribeResult> {
     this.assertSubscriptionCapacity();
-    const binding = this.requireBinding(input, input.sessionId);
+    const binding = await this.ensureNekSessionBinding(input, input.sessionId);
     const id = makeSubscriptionId(`conversation/${input.sessionId}`);
     const topic = `conversation/${input.sessionId}`;
     let firstFrame: ConversationTopicFrame | undefined;
-    let ordinal = 0;
     let first = true;
+    // 实时帧与恢复帧共用 subscription.ordinal：客户端丢弃不大于已处理最大序号的帧，
+    // 恢复帧若沿用过期序号会被静默丢弃，恢复只能超时。
     const subscription: ConversationSubscription = {
       id,
       workspaceKey: workspaceKey(input),
@@ -258,16 +273,16 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     };
     subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
       firstFrame ??= frame;
+      subscription.ordinal += 1;
       const mapped = makeWireFrame(
         { ...frame, topic },
         id,
-        ++ordinal,
+        subscription.ordinal,
         first ? "initial" : "online",
       );
       first = false;
       this.conversationEmitter(subscription.workspaceKey).fire(mapped);
     });
-    subscription.ordinal = ordinal;
     this.conversationSubscriptions.set(id, subscription);
     return {
       ack: {
@@ -370,7 +385,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       {
         service: this.service,
         createSession: async (request) => await this.createNekSession(request),
-        requireBinding: (target, sessionId) => this.requireBinding(target, sessionId),
+        ensureBinding: (target, sessionId) => this.ensureNekSessionBinding(target, sessionId),
         removeBinding: (target, sessionId) => this.bindings.remove(target, sessionId),
       },
       input,
@@ -382,23 +397,19 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     commands: Array<{ sessionId: string | null; commandId: string }>;
     clock?: true;
   }): Promise<CommandsQueryResult> {
-    if (input.clock) {
-      const now = Date.now();
-      return {
-        results: input.commands.map((key) => ({ key, result: "unknown" as const })),
-        clock: { instanceId: `nek:${workspaceKey(input.target)}`, receivedAt: now, sentAt: now },
-      };
-    }
-    for (const command of input.commands) {
-      if (command.sessionId) {
-        const binding = this.requireBinding(input.target, command.sessionId);
-        await this.service.getCommands(binding.sessionKey);
-      }
-    }
-    return { results: input.commands.map((key) => ({ key, result: "unknown" as const })) };
+    return await queryConversationCommands(
+      {
+        service: this.service,
+        ensureBinding: (target, sessionId) => this.ensureNekSessionBinding(target, sessionId),
+      },
+      input,
+    );
   }
 
   async dispose(): Promise<void> {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.bindings.dispose();
     for (const subscription of this.conversationSubscriptions.values()) subscription.detach();
     this.conversationSubscriptions.clear();
     for (const emitter of this.conversationEmitters.values()) emitter.dispose();
@@ -406,7 +417,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.interactions.dispose();
     this.status.dispose();
     await this.topics.dispose();
-    this.bindings.clear();
     await this.service.dispose();
   }
 
@@ -419,7 +429,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       throw new Error("nek conversation subscription limit exceeded (128)");
   }
 
-  private conversationEmitter(workspace: string): Emitter<ConversationTopicWireCandidate> {
+  private conversationEmitter(workspace: string): ConversationEmitter {
     let emitter = this.conversationEmitters.get(workspace);
     if (!emitter) {
       emitter = new Emitter<ConversationTopicWireCandidate>();

@@ -18,6 +18,8 @@ export interface ToastOptions {
   variant?: ToastVariant;
   actionLabel?: string;
   onAction?: () => void;
+  /** User close only; programmatic removal and action completion do not dismiss business state. */
+  onDismiss?: () => void;
   dismissible?: boolean;
   dismissLabel?: string;
   anchorId?: string;
@@ -33,6 +35,8 @@ export interface ToastItem {
   variant?: ToastVariant;
   actionLabel?: string;
   onAction?: () => void;
+  /** User close only; programmatic removal and action completion do not dismiss business state. */
+  onDismiss?: () => void;
   dismissible?: boolean;
   dismissLabel?: string;
   anchorId?: string;
@@ -279,7 +283,10 @@ function ToastMessage({
       title={title}
       body={body}
       onAction={handleAction}
-      onDismiss={dismissWithTransition}
+      onDismiss={() => {
+        item.onDismiss?.();
+        dismissWithTransition();
+      }}
     />
   );
 }
@@ -427,6 +434,7 @@ export function toast(message: string, options?: ToastOptions): number {
         variant,
         actionLabel,
         onAction,
+        onDismiss: options?.onDismiss,
         dismissible,
         dismissLabel,
         anchorId,

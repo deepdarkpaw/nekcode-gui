@@ -8,16 +8,12 @@ import type {
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
 import type { ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
-import {
-  buildModelChangeMarker,
-  buildTimelineMarkerRow,
-  buildToolCallRow,
-  toEpochMs,
-} from "./nekRows.js";
+import { buildTimelineMarkerRow, buildToolCallRow, toEpochMs } from "./nekRows.js";
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentRecord } from "./nekLiveTools.js";
 import { applyCustomMessage } from "./nekLiveMessages.js";
+import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 
 /**
  * 时间线标记、扩展追加的条目、直接 bash 的结果与扩展状态。
@@ -103,24 +99,25 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
   if (!entry) return;
   const createdAt = toEpochMs(entry.timestamp);
   switch (entry.type) {
-    case "model_change": {
-      const entityId = `entry:${entry.id}`;
-      const rowId = ctx.store.allocate(entityId);
+    case "model_change":
+    case "thinking_level_change": {
       const config = ctx.store.state.config;
-      ctx.store.add(
-        buildTimelineMarkerRow(
-          rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt),
-          buildModelChangeMarker({
-            ...(config.provider && config.model
-              ? { from: { provider: config.provider, model: config.model } }
-              : {}),
-            to: { provider: entry.provider, model: entry.modelId },
-            toThought: config.thought,
-          }),
-          "lightBoundary",
-        ),
-      );
-      ctx.store.state.config = { ...config, provider: entry.provider, model: entry.modelId };
+      const { marker } = projectSelectionEntry(config, entry);
+      if (marker) {
+        const entityId = `entry:${entry.id}`;
+        const rowId = ctx.store.allocate(entityId);
+        ctx.store.add(
+          buildTimelineMarkerRow(
+            rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt),
+            marker,
+            "lightBoundary",
+          ),
+        );
+      }
+      ctx.store.state.config =
+        entry.type === "model_change"
+          ? { ...config, provider: entry.provider, model: entry.modelId }
+          : { ...config, thought: entry.thinkingLevel };
       return;
     }
     case "compaction": {

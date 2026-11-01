@@ -32,6 +32,8 @@ import {
   unsupported,
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { workspaceKey } from "./frameHelpers.js";
+import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
+import { isListedNekSession } from "./nekSessionListing.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
   if (typeof value !== "object" || value === null) return false;
@@ -69,6 +71,8 @@ function planRow(
 }
 
 export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarget): LegacyMethods {
+  // 被动事件与 identity 查询共用同一份代际记忆。
+  const runtimeLifecycle = createNekAgentRuntimeLifecycle(target.service);
   const methods: LegacyMethods = {
     async prepareStorage() {
       await target.service.commandContext().control();
@@ -81,11 +85,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return;
     },
     async getWorkspaceRuntimeIdentity(input) {
-      return {
-        generation: 1,
-        identity: `nek:${workspaceKey(input)}`,
-        workspaceKey: workspaceKey(input),
-      };
+      return runtimeLifecycle.getIdentity(input.workspacePath);
     },
     async createSession(input) {
       const result = await target.createNekSession({
@@ -99,41 +99,31 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return legacySnapshotFromResult(input, result, input.mode ?? "agent");
     },
     async resumeSession(input) {
-      const summary = (await target.listNekSessions(input)).find(
-        (item) => item.id === input.sessionId,
-      );
-      if (!summary) throw new Error(`nek session ${input.sessionId} was not found`);
-      const result = await target.resumeNekSession({
-        workspacePath: input.workspacePath,
-        sessionPath: summary.path,
-      });
-      return legacySnapshotFromResult(input, result);
+      return await bindingSnapshot(target, input, true);
     },
     async listSessions(input) {
       const summaries = await target.listNekSessions(input);
-      return summaries.map((summary) => legacySessionInfo(input, summary));
+      return summaries
+        .filter(isListedNekSession)
+        .map((summary) => legacySessionInfo(input, summary));
     },
     async listSessionSubagents() {
       return { revision: 0, childSessionIds: [], running: [], ended: { total: 0, items: [] } };
     },
     async stopSubagent(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       return await target.service.stopSubagent({ sessionKey, id: input.id });
     },
     async getSubagentTranscript(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       return await target.service.getSubagentTranscript({ sessionKey, id: input.id });
     },
     async listAgentTypes(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       return await target.service.listAgentTypes(sessionKey);
     },
     async getTaskTokenUsage(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       const stats = await target.service.getStats(sessionKey);
       return {
         sessionId: input.sessionId,
@@ -152,8 +142,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return await bindingSnapshot(target, input);
     },
     async readSessionMessages(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      await target.ensureNekSessionBinding(input, input.sessionId);
       return [];
     },
     async readSessionDebug(input) {
@@ -190,8 +179,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return { success: true };
     },
     async sendPrompt(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       if (input.modelSelection) {
         await target.service.setModel({
           sessionKey,
@@ -212,8 +200,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       } satisfies LegacySendResult;
     },
     async compactSession(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       const result = await target.service.compact({ sessionKey, instructions: input.instructions });
       return {
         response: result.summary,
@@ -226,8 +213,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return await target.closeNekSession(input);
     },
     async setModel(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       await target.service.setModel({
         sessionKey,
         provider: input.model.providerId,
@@ -236,14 +222,12 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       return (await bindingSnapshot(target, input)) satisfies LegacyModelResult;
     },
     async setThoughtLevel(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       await target.service.setThinkingLevel({ sessionKey, level: input.thoughtLevel as never });
       return (await bindingSnapshot(target, input)) satisfies LegacyThoughtResult;
     },
     async setMode(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       await target.service.setMode({ sessionKey, mode: input.mode });
       return (await bindingSnapshot(target, input)) satisfies LegacyModeResult;
     },
@@ -262,8 +246,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
     },
     setConnectionFlowStateV4: () => unsupported("setConnectionFlowStateV4"),
     async conversationRowsRangeV4(input) {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       const snapshot = target.service.conversationSnapshot(sessionKey);
       const beforeRowId = input.beforeRowId;
       const beforeIndex =
@@ -286,8 +269,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       };
     },
     async conversationPlansV4(input): Promise<V4ConversationPlansResult> {
-      const sessionKey = target.resolveSessionKey(input, input.sessionId);
-      if (!sessionKey) throw new Error(`nek session ${input.sessionId} is not open`);
+      const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       const commandTarget = target.service.commandContext().target(sessionKey);
       const stateResponse = await commandTarget.client.call({
         type: "extension_call",
@@ -354,6 +336,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       });
       return { dispose: detach };
     },
+    onAgentRuntimeLifecycle: (listener) => runtimeLifecycle.onDidChange(listener),
     async disposeWorkspace(input) {
       const sessions = await target.listNekSessions(input);
       for (const summary of sessions) {
@@ -362,6 +345,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       }
     },
     disposeAll() {
+      runtimeLifecycle.dispose();
       void target.dispose();
     },
   };

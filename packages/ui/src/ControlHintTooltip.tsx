@@ -2,6 +2,7 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
+  useState,
   type ComponentProps,
   type ReactNode,
   type Ref,
@@ -21,6 +22,7 @@ interface ControlHintTooltipProps {
   description?: string;
   shortcut?: string;
   standalone?: boolean;
+  /** 强制显示/隐藏；undefined 时跟随悬停与焦点。 */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   side?: ComponentProps<typeof TooltipContent>["side"];
@@ -65,6 +67,16 @@ export function ControlHintTooltip({
   triggerClassName,
   triggerRef,
 }: ControlHintTooltipProps) {
+  // Radix Root 始终受控：调用方的 open 只是覆盖值。若把 open 在 undefined 与布尔之间切换
+  // 直接透传，Radix 会在受控/非受控间来回切换并告警，悬停状态也会丢失。
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      setHoverOpen(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
   const useAppleShortcutFont = isAppleKeyboardPlatform();
   const shortcutFontClassName = useAppleShortcutFont ? "tracking-normal" : "font-mono";
   const shortcutFontStyle = useAppleShortcutFont
@@ -103,7 +115,7 @@ export function ControlHintTooltip({
   // 大会话会为每条消息动作渲染大量 ControlHintTooltip，逐个创建 Provider
   // 会把 Radix 上下文树放大到消息数量级；共享 Provider 统一放在 Root。
   const tooltip = (
-    <Tooltip open={open} onOpenChange={onOpenChange}>
+    <Tooltip open={open ?? hoverOpen} onOpenChange={handleOpenChange}>
       <TooltipTrigger asChild>{trigger}</TooltipTrigger>
       <TooltipContent
         align={align}

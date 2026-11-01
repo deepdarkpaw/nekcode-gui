@@ -1,11 +1,14 @@
 import { VSBuffer } from "./buffer.js";
+import { createChannelEvent } from "./eventSubscription.js";
 import { CancellationToken, Event, Emitter, type IDisposable } from "./foundation.js";
 import { BufferReader, BufferWriter, deserialize, serialize } from "./serialization.js";
 import type { IMessagePassingProtocol } from "./protocol.js";
 import {
   type IChannel,
   type IChannelClient,
+  type IChannelSubscriptionFailure,
   type IHandler,
+  type IRawErrorPayload,
   type IRawResponse,
   RequestType,
   ResponseType,
@@ -16,9 +19,42 @@ enum State {
   Idle,
 }
 
+const ERROR_PASSTHROUGH_KEYS = [
+  "code",
+  "kind",
+  "status",
+  "retryAfterMs",
+  "data",
+  "detail",
+  "details",
+  "taskId",
+  "traceId",
+] as const;
+
+/** 把线上错误载荷还原成 Error；与 ChannelServer 的白名单字段一一对应。 */
+function createErrorFromPayload(payload: IRawErrorPayload): Error {
+  const error = new Error(payload.message) as Error & Record<string, unknown>;
+  error.name = payload.name;
+  if (payload.stack) {
+    error.stack = payload.stack.join("\n");
+  }
+  for (const key of ERROR_PASSTHROUGH_KEYS) {
+    const value = payload[key];
+    if (value !== undefined) {
+      error[key] = value;
+    }
+  }
+  return error;
+}
+
+let nextConnectionId = 0;
+
 export class ChannelClient implements IChannelClient, IDisposable {
+  private readonly connectionId = nextConnectionId++;
+  private nextSubscriptionId = 0;
   private state = State.Uninitialized;
   private isDisposed = false;
+  /** 进行中的 Promise 取消令牌与事件订阅；连接终结时统一收口。 */
   private activeRequests = new Set<IDisposable>();
   private handlers = new Map<number, IHandler>();
   // Promise 请求和事件监听共用 handlers，但只有前者需要在连接终结时 reject。
@@ -29,6 +65,21 @@ export class ChannelClient implements IChannelClient, IDisposable {
 
   private readonly _onDidInitialize = new Emitter<void>();
   readonly onDidInitialize = this._onDidInitialize.event;
+
+  private readonly _onDidSubscriptionError = new Emitter<IChannelSubscriptionFailure>();
+  /**
+   * Connection-owner diagnostics and revocable manual retry capabilities. RPC relays additionally
+   * forward the Event registration's terminal callback through the existing request error packet.
+   * Retry allocates a new request id while preserving the logical subscription's original leases.
+   */
+  readonly onDidSubscriptionError: Event<IChannelSubscriptionFailure> = (listener) =>
+    this._onDidSubscriptionError.event((failure) => {
+      try {
+        listener(failure);
+      } catch (error) {
+        console.error("[rpc:subscription] listener failed", error);
+      }
+    });
 
   constructor(private protocol: IMessagePassingProtocol) {
     this.protocolListener = this.protocol.onMessage((msg) => this.onBuffer(msg));
@@ -83,29 +134,7 @@ export class ChannelClient implements IChannelClient, IDisposable {
             case ResponseType.PromiseError: {
               this.handlers.delete(id);
               this.pendingRejections.delete(id);
-              const error = new Error(response.data.message) as Error & Record<string, unknown>;
-              error.name = response.data.name;
-              if (response.data.stack) {
-                error.stack = response.data.stack.join("\n");
-              }
-              const passthroughKeys = [
-                "code",
-                "kind",
-                "status",
-                "retryAfterMs",
-                "data",
-                "detail",
-                "details",
-                "taskId",
-                "traceId",
-              ] as const;
-              for (const key of passthroughKeys) {
-                const value = response.data[key];
-                if (value !== undefined) {
-                  error[key] = value;
-                }
-              }
-              reject(error);
+              reject(createErrorFromPayload(response.data));
               return;
             }
             case ResponseType.PromiseErrorObj:
@@ -117,7 +146,13 @@ export class ChannelClient implements IChannelClient, IDisposable {
         };
 
         this.handlers.set(id, handler);
-        this.sendRequest(RequestType.Promise, id, channelName, name, arg);
+        try {
+          this.sendRequest(RequestType.Promise, id, channelName, name, arg);
+        } catch (error) {
+          this.handlers.delete(id);
+          this.pendingRejections.delete(id);
+          reject(error);
+        }
       };
 
       if (this.state === State.Idle) {
@@ -146,33 +181,46 @@ export class ChannelClient implements IChannelClient, IDisposable {
     });
   }
 
-  private requestEvent(channelName: string, name: string, arg?: any): Event<any> {
-    const id = this.lastRequestId++;
-    const emitter = new Emitter<any>({
-      onWillAddFirstListener: () => {
-        const doRequest = () => {
-          this.activeRequests.add(emitter);
+  /** Protocol adapter for the connection-owned logical subscription state machine. */
+  private requestEvent<T>(channelName: string, name: string, arg?: unknown): Event<T> {
+    return createChannelEvent<T>({
+      id: `${this.connectionId}:${this.nextSubscriptionId++}`,
+      channelName,
+      event: name,
+      initialized: () => this.state === State.Idle,
+      isDisposed: () => this.isDisposed,
+      onDidInitialize: this.onDidInitialize,
+      retain: (subscription) => this.activeRequests.add(subscription),
+      release: (subscription) => this.activeRequests.delete(subscription),
+      onFailure: (failure) => this._onDidSubscriptionError.fire(failure),
+      listen: (onData, onError) => {
+        const id = this.lastRequestId++;
+        this.handlers.set(id, (response) => {
+          if (response.type === ResponseType.EventFire) {
+            onData(response.data as T);
+            return;
+          }
+          this.handlers.delete(id);
+          if (response.type === ResponseType.PromiseError) {
+            onError(createErrorFromPayload(response.data));
+          } else if (response.type === ResponseType.PromiseErrorObj) {
+            onError(new Error(String(response.data)));
+          }
+        });
+        try {
           this.sendRequest(RequestType.EventListen, id, channelName, name, arg);
-        };
-
-        if (this.state === State.Idle) {
-          doRequest();
-        } else {
-          this.whenInitialized().then(doRequest);
+        } catch (error) {
+          this.handlers.delete(id);
+          onError(error instanceof Error ? error : new Error(String(error)));
         }
-      },
-      onDidRemoveLastListener: () => {
-        this.activeRequests.delete(emitter);
-        this.sendCancelOrDispose(RequestType.EventDispose, id);
-        this.handlers.delete(id);
+        return {
+          dispose: () => {
+            if (!this.handlers.delete(id) || this.isDisposed) return;
+            this.sendCancelOrDispose(RequestType.EventDispose, id);
+          },
+        };
       },
     });
-
-    this.handlers.set(id, (response) => {
-      emitter.fire((response as { data: any }).data);
-    });
-
-    return emitter.event;
   }
 
   private sendRequest(
@@ -180,16 +228,12 @@ export class ChannelClient implements IChannelClient, IDisposable {
     id: number,
     channelName: string,
     name: string,
-    arg?: any,
+    arg?: unknown,
   ): void {
     const writer = new BufferWriter();
     serialize(writer, [type, id, channelName, name]);
     serialize(writer, arg);
-    try {
-      this.protocol.send(writer.buffer);
-    } catch {
-      /* noop */
-    }
+    this.protocol.send(writer.buffer);
   }
 
   private sendCancelOrDispose(
@@ -270,6 +314,9 @@ export class ChannelClient implements IChannelClient, IDisposable {
     }
     this.activeRequests.clear();
     this.pendingRejections.clear();
+    // 事件订阅的 handler 不在 pendingRejections 里，单独清掉，避免终结后的连接继续留表。
+    this.handlers.clear();
     this._onDidInitialize.dispose();
+    this._onDidSubscriptionError.dispose();
   }
 }

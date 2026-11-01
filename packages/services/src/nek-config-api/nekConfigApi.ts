@@ -140,8 +140,8 @@ export class NekConfigApi implements INekConfigApi {
   // ---- 校验与重载 ----
 
   validate: INekConfigApi["validate"] = (...args) => this.control.validate(...args);
-  reloadRunningSessions: INekConfigApi["reloadRunningSessions"] = async (target) =>
-    await this.runtime.reload(target);
+  reloadRunningSessions: INekConfigApi["reloadRunningSessions"] = async (target, cwd) =>
+    await this.runtime.reload(target, cwd);
   onReloadResult: INekConfigApi["onReloadResult"] = (target, listener) =>
     this.runtime.onReloadResult(target, listener);
 

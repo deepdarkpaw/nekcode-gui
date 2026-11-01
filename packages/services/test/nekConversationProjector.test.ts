@@ -101,7 +101,7 @@ const entries: NekSessionEntry[] = [
       content: [
         { type: "thinking", thinking: "let me look" },
         { type: "text", text: "hi there" },
-        { type: "toolCall", id: "call_1", name: "bash", arguments: { command: "ls" } },
+        { type: "toolCall", id: "call_1", name: "ls", arguments: { path: "/workspace/src" } },
       ],
       api: "anthropic-messages",
       provider: "anthropic",
@@ -119,7 +119,7 @@ const entries: NekSessionEntry[] = [
     message: {
       role: "toolResult",
       toolCallId: "call_1",
-      toolName: "bash",
+      toolName: "ls",
       content: [{ type: "text", text: "file.txt" }],
       details: { truncated: false },
       isError: false,
@@ -182,7 +182,16 @@ test("projects entries into v4 rows and emits a full snapshot first", () => {
   assert.equal(text?.kind === "assistantText" && text.text, "hi there");
   assert.equal(tool?.kind === "toolCall" && tool.status, "success");
   assert.equal(tool?.kind === "toolCall" && tool.output?.text, "file.txt");
-  assert.ok(tool?.kind === "toolCall" && tool.output?.display?.kind === "bash_output");
+  assert.equal(tool?.kind === "toolCall" && tool.toolName, "ls");
+  assert.equal(
+    tool?.kind === "toolCall" &&
+      typeof tool.input === "object" &&
+      tool.input !== null &&
+      "path" in tool.input &&
+      tool.input.path,
+    "/workspace/src",
+  );
+  assert.equal(tool?.kind === "toolCall" && tool.inputText.includes("/workspace/src"), true);
   assert.equal(modelChange?.kind === "timelineMarker" && modelChange.marker.type, "modelChange");
   assert.equal(compact?.kind === "timelineMarker" && compact.marker.type, "compact");
   assert.equal(plan?.kind === "artifact" && plan.displayName, "Plan A");
@@ -245,7 +254,7 @@ test("live event replay produces a coalesced delta stream that recreates the sam
         type: "toolcall_start",
         contentIndex: 2,
         id: "call_9",
-        toolName: "bash",
+        toolName: "ask_question",
       },
     },
     {
@@ -259,7 +268,12 @@ test("live event replay produces a coalesced delta stream that recreates the sam
       assistantMessageEvent: {
         type: "toolcall_end",
         contentIndex: 2,
-        toolCall: { type: "toolCall", id: "call_9", name: "bash", arguments: { command: "ls" } },
+        toolCall: {
+          type: "toolCall",
+          id: "call_9",
+          name: "ask_question",
+          arguments: { questions: [{ question: "Which path?" }, { question: "Continue?" }] },
+        },
       },
     },
     {
@@ -269,7 +283,12 @@ test("live event replay produces a coalesced delta stream that recreates the sam
         content: [
           { type: "text", text: "Let me check." },
           { type: "thinking", thinking: "reasons" },
-          { type: "toolCall", id: "call_9", name: "bash", arguments: { command: "ls" } },
+          {
+            type: "toolCall",
+            id: "call_9",
+            name: "ask_question",
+            arguments: { questions: [{ question: "Which path?" }, { question: "Continue?" }] },
+          },
         ],
         api: "anthropic-messages",
         provider: "anthropic",
@@ -282,20 +301,20 @@ test("live event replay produces a coalesced delta stream that recreates the sam
     {
       type: "tool_execution_start",
       toolCallId: "call_9",
-      toolName: "bash",
-      args: { command: "ls" },
+      toolName: "ask_question",
+      args: { questions: [{ question: "Which path?" }, { question: "Continue?" }] },
     },
     {
       type: "tool_execution_update",
       toolCallId: "call_9",
-      toolName: "bash",
-      args: { command: "ls" },
+      toolName: "ask_question",
+      args: { questions: [{ question: "Which path?" }, { question: "Continue?" }] },
       partialResult: { content: [{ type: "text", text: "file.txt" }] },
     },
     {
       type: "tool_execution_end",
       toolCallId: "call_9",
-      toolName: "bash",
+      toolName: "ask_question",
       result: { content: [{ type: "text", text: "file.txt" }], details: { truncated: false } },
       isError: false,
     },
@@ -334,7 +353,17 @@ test("live event replay produces a coalesced delta stream that recreates the sam
   const tool = snapshot.rows.window.find((row) => row.kind === "toolCall");
   assert.equal(tool?.kind === "toolCall" && tool.status, "success");
   assert.equal(tool?.kind === "toolCall" && tool.output?.text, "file.txt");
-  assert.equal(tool?.kind === "toolCall" && tool.inputText.includes("ls"), true);
+  assert.equal(tool?.kind === "toolCall" && tool.toolName, "ask_question");
+  assert.equal(tool?.kind === "toolCall" && tool.inputText.includes("Continue?"), true);
+  assert.equal(
+    tool?.kind === "toolCall" &&
+      typeof tool.input === "object" &&
+      tool.input !== null &&
+      "questions" in tool.input &&
+      Array.isArray(tool.input.questions) &&
+      tool.input.questions.length,
+    2,
+  );
   const header = snapshot.rows.window[0];
   assert.equal(header?.kind === "turnHeader" && header.state, "completedSuccess");
   const markers = snapshot.rows.window.filter((row) => row.kind === "timelineMarker");

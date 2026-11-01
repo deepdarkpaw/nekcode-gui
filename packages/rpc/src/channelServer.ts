@@ -1,14 +1,50 @@
 import { VSBuffer } from "./buffer.js";
-import { type IDisposable, CancellationTokenSource, toDisposable } from "./foundation.js";
+import {
+  type IDisposable,
+  CancellationTokenSource,
+  DisposableStore,
+  toDisposable,
+} from "./foundation.js";
 import { BufferReader, BufferWriter, deserialize, serialize } from "./serialization.js";
 import type { IMessagePassingProtocol } from "./protocol.js";
 import {
   type IChannelServer,
+  type IRawErrorPayload,
   type IRawResponse,
   type IServerChannel,
   RequestType,
   ResponseType,
 } from "./channels.shared.js";
+
+/** 跨进程错误只透传这些结构化字段；其余业务对象不进入线上载荷。 */
+const ERROR_PASSTHROUGH_KEYS = [
+  "code",
+  "kind",
+  "status",
+  "retryAfterMs",
+  "data",
+  "detail",
+  "details",
+  "taskId",
+  "traceId",
+] as const;
+
+/** 把异常折叠成线上错误载荷：message/name/stack 之外只保留白名单字段。 */
+export function toRpcErrorPayload(error: Error): IRawErrorPayload {
+  const payload: IRawErrorPayload = {
+    message: error.message,
+    name: error.name,
+    stack: error.stack ? error.stack.split("\n") : undefined,
+  };
+  const record = error as Error & Record<string, unknown>;
+  for (const key of ERROR_PASSTHROUGH_KEYS) {
+    const value = record[key];
+    if (value !== undefined) {
+      payload[key] = value;
+    }
+  }
+  return payload;
+}
 
 export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
   private channels = new Map<string, IServerChannel<TContext>>();
@@ -132,62 +168,36 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
           });
         },
         (error) => {
-          if (error instanceof Error) {
-            const rpcErrorPayload: {
-              message: string;
-              name: string;
-              stack: string[] | undefined;
-              code?: unknown;
-              kind?: unknown;
-              status?: unknown;
-              retryAfterMs?: unknown;
-              data?: unknown;
-              detail?: unknown;
-              details?: unknown;
-              taskId?: unknown;
-              traceId?: unknown;
-            } = {
-              message: error.message,
-              name: error.name,
-              stack: error.stack ? error.stack.split("\n") : undefined,
-            };
-            const errorRecord = error as Error & Record<string, unknown>;
-            const passthroughKeys = [
-              "code",
-              "kind",
-              "status",
-              "retryAfterMs",
-              "data",
-              "detail",
-              "details",
-              "taskId",
-              "traceId",
-            ] as const;
-            for (const key of passthroughKeys) {
-              const value = errorRecord[key];
-              if (value !== undefined) {
-                rpcErrorPayload[key] = value;
-              }
-            }
-            this.sendResponse({
-              id: request.id,
-              data: rpcErrorPayload,
-              type: ResponseType.PromiseError,
-            });
-            return;
-          }
-
-          this.sendResponse({
-            id: request.id,
-            data: error,
-            type: ResponseType.PromiseErrorObj,
-          });
+          this.sendRequestFailure(request.id, error);
         },
       )
       .finally(() => {
         disposable.dispose();
         this.activeRequests.delete(request.id);
       });
+  }
+
+  /**
+   * Promise 拒绝与事件订阅失败的统一回包。
+   *
+   * 订阅失败必须回给客户端而不是抛给协议层：ChannelServer 运行在各进程的消息分发栈里，
+   * 一次抛出会变成 uncaughtException 直接杀掉整个 host，连带所有会话与窗口。
+   */
+  private sendRequestFailure(id: number, error: unknown): void {
+    if (error instanceof Error) {
+      this.sendResponse({
+        id,
+        data: toRpcErrorPayload(error),
+        type: ResponseType.PromiseError,
+      });
+      return;
+    }
+
+    this.sendResponse({
+      id,
+      data: error,
+      type: ResponseType.PromiseErrorObj,
+    });
   }
 
   private onEventListen(request: {
@@ -203,27 +213,51 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       return;
     }
 
-    const disposable = channel.listen(
-      this.ctx,
-      request.name,
-      request.arg,
-    )((data) => {
-      this.sendResponse({
-        id: request.id,
-        data,
-        type: ResponseType.EventFire,
+    const scope = new DisposableStore();
+    this.activeRequests.set(request.id, scope);
+    const fail = (error: unknown): void => {
+      if (this.activeRequests.get(request.id) !== scope) return;
+      this.activeRequests.delete(request.id);
+      scope.dispose();
+      this.sendRequestFailure(request.id, error);
+    };
+    try {
+      const disposable = channel.listen(
+        this.ctx,
+        request.name,
+        request.arg,
+      )((data) => {
+        if (this.activeRequests.get(request.id) !== scope) return;
+        this.sendResponse({ id: request.id, data, type: ResponseType.EventFire });
+      }, fail);
+      // A proxy may fail synchronously before its registration lease returns.
+      if (this.activeRequests.get(request.id) === scope) scope.add(disposable);
+      else disposable.dispose();
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  private removePendingRequest(id: number): void {
+    for (const [channelName, entries] of this.pendingRequests) {
+      const remaining = entries.filter((entry) => {
+        if (entry.request.id !== id) return true;
+        clearTimeout(entry.timer);
+        return false;
       });
-    });
-    this.activeRequests.set(request.id, disposable);
+      if (remaining.length === 0) this.pendingRequests.delete(channelName);
+      else this.pendingRequests.set(channelName, remaining);
+    }
   }
 
   private disposeActiveRequest(id: number): void {
+    this.removePendingRequest(id);
     const disposable = this.activeRequests.get(id);
     if (!disposable) {
       return;
     }
-    disposable.dispose();
     this.activeRequests.delete(id);
+    disposable.dispose();
   }
 
   private collectPendingRequest(request: any): void {
@@ -233,11 +267,12 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
     }
 
     const timer = setTimeout(() => {
+      const entries = this.pendingRequests.get(request.channelName);
+      if (!entries?.some((entry) => entry.timer === timer)) return;
+      this.removePendingRequest(request.id);
       console.error(`Unknown channel: ${request.channelName}`);
-      if (request.type !== RequestType.Promise) {
-        return;
-      }
-
+      // Promise 与事件订阅共用同一份错误回包：EventListen 若只打日志不回包，客户端会
+      // 拿到一条永远没有帧、也没有失败事实的死流（订阅方没有任何 terminal 回调）。
       this.sendResponse({
         id: request.id,
         data: {
@@ -258,8 +293,11 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
       return;
     }
 
-    for (const { request, timer } of requests) {
-      clearTimeout(timer);
+    for (const entry of requests) {
+      // A synchronous reply from an earlier entry can cancel a later one during this flush.
+      if (!this.pendingRequests.get(channelName)?.includes(entry)) continue;
+      const { request } = entry;
+      this.removePendingRequest(request.id);
       switch (request.type) {
         case RequestType.Promise:
           this.onPromise(request);
@@ -269,15 +307,17 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
           break;
       }
     }
-    this.pendingRequests.delete(channelName);
   }
 
   dispose(): void {
     this.protocolListener?.dispose();
     this.protocolListener = null;
-    for (const disposable of this.activeRequests.values()) {
-      disposable.dispose();
+    for (const entries of this.pendingRequests.values()) {
+      for (const entry of entries) clearTimeout(entry.timer);
     }
+    this.pendingRequests.clear();
+    const active = Array.from(this.activeRequests.values());
     this.activeRequests.clear();
+    for (const disposable of active) disposable.dispose();
   }
 }

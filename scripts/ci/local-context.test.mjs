@@ -6,7 +6,12 @@ import { loadComponentCallback } from "./fixtures/component-callback.mjs";
 const toolbar = "packages/ui/src/v4/composer/V4ComposerToolbar.tsx";
 
 test("composer context display has no official account, quota, or settings read dependencies", async () => {
-  for (const path of [toolbar, "packages/ui/src/chat-input-toolbar/contextUsage.tsx"]) {
+  // 上下文用量只由 nek 状态槽的用量指示器展示（输入框里的旧用量环已删除）。
+  for (const path of [
+    toolbar,
+    "packages/ui/src/nek/status/NekUsageIndicatorView.tsx",
+    "packages/ui/src/nek/status/useUsageIndicatorController.ts",
+  ]) {
     const source = ts.createSourceFile(
       path,
       await readFile(path, "utf8"),

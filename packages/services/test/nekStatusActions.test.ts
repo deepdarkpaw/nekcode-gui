@@ -312,16 +312,16 @@ test("routes status actions to nek RPCs and returns bounded queue contents", asy
   }
 });
 
-test("rejects status actions for sessions that are not open", async () => {
+test("rejects status actions when the session cannot be found on disk", async () => {
   const { service } = createAdapter();
   try {
     await assert.rejects(
       service.abortNekRetry({ workspacePath: "/workspace", sessionId: "gone" }),
-      /is not open/u,
+      /was not found/u,
     );
     await assert.rejects(
       service.getNekStatusSnapshot({ workspacePath: "/workspace", sessionId: "gone" }),
-      /is not open/u,
+      /was not found/u,
     );
   } finally {
     await service.disposeAll();

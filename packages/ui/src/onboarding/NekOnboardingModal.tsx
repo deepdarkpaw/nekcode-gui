@@ -48,6 +48,7 @@ export function NekOnboardingModal(props: NekOnboardingModalProps) {
   const [dismissed, setDismissed] = useState(false);
   const [startStep, setStartStep] = useState(props.startStep ?? "nek");
   const controllerRef = useRef<OnboardingController | null>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const controlled = props.open !== undefined;
   const isOpen = controlled
     ? props.open === true
@@ -125,36 +126,60 @@ export function NekOnboardingModal(props: NekOnboardingModalProps) {
         if (!open) void navigation.close.run();
       }}
     >
-      <DialogContent showCloseButton={false} className="max-w-2xl">
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-2xl"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          titleRef.current?.focus();
+        }}
+      >
         <DialogHeader>
-          <DialogTitle>{formatOnboardingMessage(intl, "onboarding.dialog.title")}</DialogTitle>
+          <DialogTitle ref={titleRef} tabIndex={-1} className="outline-none">
+            {formatOnboardingMessage(intl, "onboarding.dialog.title")}
+          </DialogTitle>
           <DialogDescription>
             {formatOnboardingMessage(intl, "onboarding.dialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div onKeyDown={controller.onKeyDown} className="flex flex-col gap-4">
-          <nav aria-label="引导步骤" className="flex flex-wrap gap-2">
-            {ONBOARDING_STEPS.map((item) => {
+          <nav
+            aria-label={formatOnboardingMessage(intl, "onboarding.steps.label")}
+            className="flex flex-wrap items-center gap-2"
+          >
+            {ONBOARDING_STEPS.map((item, index) => {
               const action = navigation.jumpTo(item);
               const active = item === step;
-              return (
-                <OnboardingActionButton
-                  key={item}
-                  action={action}
-                  label={ONBOARDING_STEP_LABELS[item]}
-                  intl={intl}
-                  variant={active ? "default" : "ghost"}
-                  onClick={() => void action.run()}
-                >
-                  {active ? (
-                    <>
-                      <CheckIcon aria-hidden="true" />
-                      {ONBOARDING_STEP_LABELS[item]}
-                    </>
+              const label = formatOnboardingMessage(intl, ONBOARDING_STEP_LABELS[item]);
+              const content = (
+                <>
+                  {controller.view.steps[item] === "done" ? (
+                    <CheckIcon className="size-4" aria-hidden="true" />
                   ) : (
-                    ONBOARDING_STEP_LABELS[item]
+                    <span className="text-ui-sm tabular-nums" aria-hidden="true">
+                      {index + 1}
+                    </span>
                   )}
-                </OnboardingActionButton>
+                  {label}
+                </>
+              );
+              return (
+                <span key={item} aria-current={active ? "step" : undefined}>
+                  {action.visible ? (
+                    <OnboardingActionButton
+                      action={action}
+                      label={label}
+                      intl={intl}
+                      variant={active ? "outline" : "ghost"}
+                    >
+                      {content}
+                    </OnboardingActionButton>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 px-3 py-2 text-ui-base text-foreground-subtlest">
+                      {content}
+                    </span>
+                  )}
+                </span>
               );
             })}
           </nav>
@@ -178,7 +203,6 @@ export function NekOnboardingModal(props: NekOnboardingModalProps) {
               label={formatOnboardingMessage(intl, "onboarding.back")}
               intl={intl}
               variant="outline"
-              ref={controller.focus.ref("next")}
             >
               <ChevronLeftIcon aria-hidden="true" />
               {formatOnboardingMessage(intl, "onboarding.back")}
@@ -188,7 +212,6 @@ export function NekOnboardingModal(props: NekOnboardingModalProps) {
               label={formatOnboardingMessage(intl, "onboarding.skip")}
               intl={intl}
               variant="ghost"
-              ref={controller.focus.ref("next")}
             />
             <OnboardingActionButton
               action={navigation.next}

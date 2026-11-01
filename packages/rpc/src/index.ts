@@ -77,6 +77,7 @@ export {
   type IServerChannel,
   type IChannelServer,
   type IChannelClient,
+  type IChannelSubscriptionFailure,
   ChannelServer,
   ChannelClient,
   getDelayedChannel,

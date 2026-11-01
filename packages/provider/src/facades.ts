@@ -20,18 +20,9 @@ import {
   parseProviderConfig,
 } from "./config/index.js";
 import type { ProviderRegistryView } from "./registry.js";
-import {
-  serializeRegistryModelConfig,
-  serializeRegistryProviderConfig,
-  type ProviderConfigResolution,
-  type RegistryModelConfigObject,
-} from "./resolver.js";
-import { resolveInitialModelSelection } from "./model-selection-config.js";
-import {
-  resolveEffectiveModelSelection,
-  type EffectiveModelSelectionResult,
-  type ModelSelectionProviderClassifier,
-} from "./effective-model-selection.js";
+import type { ProviderConfigResolution, RegistryModelConfigObject } from "./resolver.js";
+import type { EffectiveModelSelectionResult } from "./effective-model-selection.js";
+import type { ModelSelectionPreferredIssue } from "./model-selection-config.js";
 import type { ModelSelection } from "./registry.js";
 import type {
   ProviderRegistryServiceChangedEvent,
@@ -182,26 +173,47 @@ export interface ProviderSettingsCreationResult {
 
 export interface ModelSelectionModelView {
   readonly modelId: ModelId;
-  readonly config: RegistryModelConfigObject;
+  readonly displayName: string;
+  /**
+   * 模型支持的思考等级（低→高），来自事实来源自己的判定（nek：`getSupportedThinkingLevels`）。
+   * `ModelSelection.options.reasoningLevel` 只能取这里的值；空数组表示没有可提交的等级。
+   */
+  readonly reasoningLevels: readonly string[];
+  /**
+   * 该模型的默认思考等级：事实来源的模型级覆盖 → 默认等级，按来源自己的规则夹到受支持等级
+   * （nek：`modelThinkingLevels` → `defaultThinkingLevel` → `clampThinkingLevel`）。
+   * `reasoningLevels` 为空时缺省。
+   */
+  readonly defaultReasoningLevel?: string;
+  readonly supportsImage: boolean;
 }
 
-export interface ModelSelectionProviderView extends Pick<
-  ProviderConfigRule,
-  "providerName" | "templateId"
-> {
+/** 选择候选服务商。只承载选择与展示事实，不携带端点、凭证或 Registry 配置。 */
+export interface ModelSelectionProviderView {
   readonly providerId: ProviderId;
-  readonly config: ProviderConfigObject;
+  readonly displayName: string;
   readonly models: readonly ModelSelectionModelView[];
 }
 
 export interface ModelSelectionViewInput {
   readonly selection: ModelSelection | null;
+  /**
+   * 目标机器上的 workspace 根目录。事实来源按它合并项目级配置（nek：
+   * `<workspace>/.nek/settings.json` 覆盖全局默认模型/思考等级）。
+   */
+  readonly workspacePath?: string;
 }
 
 export interface ModelSelectionView extends Partial<EffectiveModelSelectionResult> {
+  /** Catalog identity only: excludes workspace defaults. Not a readiness/recovery token. */
   readonly revision: number;
   readonly providers: readonly ModelSelectionProviderView[];
   readonly preferredSelection?: ModelSelection;
+  /**
+   * 配置里的显式默认模型不可用。此时不给 `preferredSelection`，也不静默改用别的服务商：
+   * 调用方必须让用户重新选择（nek 自己在启动回合时会回落首个可用模型，GUI 不复制该隐式行为）。
+   */
+  readonly preferredSelectionIssue?: ModelSelectionPreferredIssue;
 }
 
 export class ProviderSettingsFacade {
@@ -493,98 +505,6 @@ export class ProviderSettingsFacade {
     await this.#mutations.refresh(`settings:${reason}`);
     return { result, view: this.getView() };
   }
-}
-
-export class ModelSelectionFacade {
-  readonly #source: ProviderRegistryFacadeSource;
-  readonly #classifyProvider: ModelSelectionProviderClassifier;
-  readonly #resolveLegacyReasoningLevel?: (
-    snapshot: ProviderRegistryServiceSnapshot,
-    selection: ModelSelection,
-  ) => string | undefined;
-
-  constructor(
-    source: ProviderRegistryFacadeSource,
-    classifyProvider: ModelSelectionProviderClassifier = () => "ordinary",
-    resolveLegacyReasoningLevel?: (
-      snapshot: ProviderRegistryServiceSnapshot,
-      selection: ModelSelection,
-    ) => string | undefined,
-  ) {
-    this.#source = source;
-    this.#classifyProvider = classifyProvider;
-    this.#resolveLegacyReasoningLevel = resolveLegacyReasoningLevel;
-  }
-
-  getView(
-    configuredDefault?: ModelSelection,
-    revision?: number,
-    input?: ModelSelectionViewInput,
-  ): ModelSelectionView {
-    // 账号事实与候选从同一已应用快照读取；不把最新 Settings 配给旧 Registry。
-    const snapshot = input ? requireSnapshot(this.#source) : this.#source.getSnapshot();
-    const registry = snapshot?.registry ?? this.#source.getView();
-    const resolveLegacyReasoningLevel =
-      snapshot && this.#resolveLegacyReasoningLevel
-        ? (selection: ModelSelection) => this.#resolveLegacyReasoningLevel!(snapshot, selection)
-        : undefined;
-    // 默认偏好只归一化档位，不借此改写账号身份或保存配置。
-    const normalizedDefault =
-      configuredDefault && resolveLegacyReasoningLevel
-        ? (resolveEffectiveModelSelection({
-            selection: configuredDefault,
-            registry,
-            classifyProvider: () => "ordinary",
-            resolveLegacyReasoningLevel,
-          }).effectiveSelection ?? undefined)
-        : configuredDefault;
-    const initial = resolveInitialModelSelection({
-      registry,
-      configuredDefault: normalizedDefault,
-    });
-    return Object.freeze({
-      revision: revision ?? registry.revision,
-      providers: Object.freeze(
-        registry.providers
-          .filter((provider) => provider.config.visibility !== "hidden")
-          .map(projectModelSelectionProviderView),
-      ),
-      ...(initial.source === "none" ? {} : { preferredSelection: initial.selection }),
-      ...(input
-        ? resolveEffectiveModelSelection({
-            selection: input.selection,
-            registry,
-            accountStates: snapshot?.account.states,
-            classifyProvider: this.#classifyProvider,
-            resolveLegacyReasoningLevel,
-          })
-        : {}),
-    });
-  }
-
-  onDidChange(listener: (view: ModelSelectionView) => void): () => void {
-    return this.#source.onDidChange(() => listener(this.getView()));
-  }
-}
-
-/** 把一个已进入 Registry 的 Provider 投影为标准模型选择候选。调用方负责产品作用域。 */
-export function projectModelSelectionProviderView(
-  provider: ProviderRegistryView["providers"][number],
-): ModelSelectionProviderView {
-  return Object.freeze({
-    providerId: provider.providerId,
-    providerName: provider.providerName,
-    templateId: provider.templateId,
-    config: serializeRegistryProviderConfig(provider.config),
-    models: Object.freeze(
-      provider.models.map((model) =>
-        Object.freeze({
-          modelId: model.modelId,
-          config: serializeRegistryModelConfig(model.config),
-        }),
-      ),
-    ),
-  });
 }
 
 function requireSnapshot(source: ProviderRegistryFacadeSource): ProviderRegistryServiceSnapshot {

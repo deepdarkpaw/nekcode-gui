@@ -1,10 +1,7 @@
 /* eslint-disable max-lines -- host process 服务注册和启动装配需要集中维护，拆散后会更难追踪依赖注入顺序 */
 // Node.js service implementations — NOT safe to import in browser code
 import { join } from "node:path";
-import {
-  NodeModelSelectionConfigRepository,
-  PERSONAL_PROVIDER_CONFIG_FILE_NAME,
-} from "@zcode/provider-node";
+import { PERSONAL_PROVIDER_CONFIG_FILE_NAME } from "@zcode/provider-node";
 import { getAppConfigDir as resolveAppConfigDir } from "./paths.js";
 import {
   buildLocalMediaPreviewUrl,
@@ -119,7 +116,6 @@ export {
   type ProviderProvisioningTargetOptions,
 } from "./model-provider/providerProvisioningTarget.js";
 export {
-  createModelSelectionService,
   createProviderSettingsService,
   IModelSelectionService,
   IProviderSettingsService,
@@ -241,6 +237,15 @@ import {
   IModelSelectionService,
   IProviderSettingsService,
 } from "./model-provider/providerFacadeServices.js";
+import {
+  createNekModelFactsSource,
+  type NekModelFactsSource,
+} from "./model-provider/nekModelFacts.js";
+import {
+  createNekModelSelectionService,
+  type NekModelSelectionService,
+} from "./model-provider/nekModelSelectionService.js";
+import { NekConfigApi, createLocalNekConfigTargetHost } from "./nek-config-api/index.js";
 import { createProviderSettingsConnectivityTester } from "./model-provider/providerSettingsConnectivity.js";
 import { createProviderModelCatalogLister } from "./model-provider/providerModelCatalog.js";
 import {
@@ -312,6 +317,8 @@ const providerProvisioningTriggerDisposers = new WeakMap<
   ServiceCollection,
   readonly (() => void)[]
 >();
+// 模型选择服务与它的 nek 配置后端（含控制进程）按 ServiceCollection 登记，随 Host 一起收口。
+const managedModelSelections = new WeakMap<ServiceCollection, { dispose(): void }>();
 // TaskIndexRepo 等各自持有 tasks-index.sqlite 的连接句柄；
 // dispose 链必须统一关闭：Windows 上句柄悬着会让宿主回收后临时目录 rm 撞 EBUSY
 // （stdioDesktopPresentationSurface 单测稳定复现），Linux 的 unlink-while-open 语义掩盖了泄漏。
@@ -448,9 +455,6 @@ export function createLocalServices(options: {
     // Repository 仅在新 Personal 配置不存在时导入，并保留旧文件以便回滚。
     readLegacyProviders: () => readLegacyZCodeConfigProviders(),
   });
-  const modelSelectionConfiguredDefaultSource = new NodeModelSelectionConfigRepository({
-    personalRepository: providerConfigRuntime.personalRepository,
-  });
   const providerProvisioningSource = createProviderProvisioningSource({
     personalRepository: providerConfigRuntime.personalRepository,
     personalConfigFilePath: join(resolveAppConfigDir(), PERSONAL_PROVIDER_CONFIG_FILE_NAME),
@@ -469,9 +473,6 @@ export function createLocalServices(options: {
     | undefined;
   const providerRuntime = createProviderRuntimeFromConfigRuntime({
     configRuntime: providerConfigRuntime,
-    modelSelectionConfiguredDefaultSource,
-    disposeModelSelectionConfiguredDefaultSource: () =>
-      modelSelectionConfiguredDefaultSource.dispose(),
     testConnectivity: createProviderSettingsConnectivityTester({
       testModelConnectivity: async (input) => {
         if (!providerConnectivityAgentService) {
@@ -482,6 +483,19 @@ export function createLocalServices(options: {
     }),
     // 自定义 Provider 的模型目录读取走宿主 ApiClient（代理/超时/ZCode 端点判定复用同一出口）。
     modelCatalog: createProviderModelCatalogLister({ apiClient }),
+  });
+  // 模型选择的唯一事实来源是 nek 自己：models.json / settings.json + 控制进程的官方模型目录。
+  // 这里装配的是"本机目标"的最小配置后端；远端 workspace 由远端 gui-server 的同名服务回答。
+  const nekModelLog = createServiceLogger("nek-model-selection");
+  const nekConfigApi = new NekConfigApi({
+    hosts: createLocalNekConfigTargetHost(),
+    logger: { warn: (...args) => nekModelLog.warn(undefined, ...args) },
+  });
+  const nekModelFacts: NekModelFactsSource = createNekModelFactsSource(nekConfigApi, {
+    log: nekModelLog,
+  });
+  const modelSelectionService: NekModelSelectionService = createNekModelSelectionService({
+    facts: nekModelFacts,
   });
   // mcpSync/hooks 里引用 zcodeAgentService 的闭包是惰性调用，声明顺序不影响初始化。
   const skillsService = createSkillsService({ isDesktopRuntime: true });
@@ -512,10 +526,15 @@ export function createLocalServices(options: {
   });
   const gitCommitMessageGenerator = new GitCommitMessageGenerator({
     currentModelProvider: {
-      async readCurrentModel() {
-        // Git sidecar 属于目标 Environment；初始模型直接读取同一 Host View，
-        // 不再通过临时 Agent workspace state 反推模型与 reasoning。
-        return (await providerRuntime.modelSelection.getView()).preferredSelection ?? null;
+      async readCurrentModel(params) {
+        // Git sidecar 属于目标 Environment；初始模型直接读取同一 Host View（带 workspace 根，
+        // 让项目级 settings 的默认模型也参与推荐），不再通过临时 Agent workspace state 反推。
+        return (
+          (await modelSelectionService.getView({
+            selection: null,
+            workspacePath: params.workspacePath,
+          })).preferredSelection ?? null
+        );
       },
     },
     textGenerator: {
@@ -595,9 +614,15 @@ export function createLocalServices(options: {
   providerRuntimes.set(services, providerRuntime);
   providerProvisioningSources.set(services, providerProvisioningSource);
   providerProvisioningTriggerDisposers.set(services, providerProvisioningDisposers);
+  managedModelSelections.set(services, {
+    dispose: () => {
+      modelSelectionService.dispose();
+      nekConfigApi.dispose();
+    },
+  });
   services
     .register(IProviderSettingsService, providerRuntime.providerSettings)
-    .register(IModelSelectionService, providerRuntime.modelSelection);
+    .register(IModelSelectionService, modelSelectionService);
   if (isDesktopAttachedRemote || options.providerProvisioningTargetEnabled === true) {
     services.register(
       IProviderProvisioningTargetService,
@@ -650,6 +675,8 @@ export function disposeServiceResources(services: ServiceCollection): void {
   for (const repo of sharedSqliteRepos.get(services) ?? []) repo.close();
   sharedSqliteRepos.delete(services);
   providerRuntimes.get(services)?.dispose();
+  managedModelSelections.get(services)?.dispose();
+  managedModelSelections.delete(services);
   for (const dispose of providerProvisioningTriggerDisposers.get(services) ?? []) dispose();
   providerProvisioningTriggerDisposers.delete(services);
   providerProvisioningSources.delete(services);
@@ -679,6 +706,8 @@ export async function disposeServiceResourcesAndWait(services: ServiceCollection
   for (const repo of sharedSqliteRepos.get(services) ?? []) repo.close();
   sharedSqliteRepos.delete(services);
   providerRuntimes.get(services)?.dispose();
+  managedModelSelections.get(services)?.dispose();
+  managedModelSelections.delete(services);
   for (const dispose of providerProvisioningTriggerDisposers.get(services) ?? []) dispose();
   providerProvisioningTriggerDisposers.delete(services);
   providerProvisioningSources.delete(services);

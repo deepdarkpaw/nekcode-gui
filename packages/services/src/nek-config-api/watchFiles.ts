@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 export const CONFIG_FILE_NAMES: readonly string[] = [
   "models.json",
+  "auth.json",
   "settings.json",
   "mcp.json",
   "nek.yaml",

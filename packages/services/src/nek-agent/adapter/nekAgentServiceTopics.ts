@@ -1,5 +1,5 @@
 import { Emitter, type Event } from "@zcode/rpc";
-import type { NekModel, NekRpcSlashCommand, NekSessionSummary } from "@zcode/shared/nek-protocol";
+import type { NekModel, NekRpcSlashCommand } from "@zcode/shared/nek-protocol";
 import type {
   SessionsIndexSnapshot,
   SessionsIndexTopicFrame,
@@ -15,6 +15,7 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import type { NekSessionIndexItem } from "../index/types.js";
+import { isListedNekSession } from "./nekSessionListing.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 import { isNekState, type NekAgentServiceEvent } from "../service/types.js";
 import { makeSessionsIndexWireFrame, makeWorkspaceConfigWireFrame } from "./frameHelpers.js";
@@ -49,26 +50,16 @@ interface TopicState<T> {
 
 const MAX_SUBSCRIPTIONS = 128;
 
-function sessionPhase(
-  summary: NekSessionSummary,
-): "draft" | "prewarming" | "running" | "completedSuccess" | "completedInterrupted" | "error" {
-  return summary.locked
-    ? "completedInterrupted"
-    : summary.messageCount > 0
-      ? "completedSuccess"
-      : "draft";
-}
-
 function sessionSummary(item: NekSessionIndexItem, workspaceId: string) {
   const summary = item.summary;
-  if (!summary) return undefined;
-  const phase = sessionPhase(summary);
+  if (!summary || !isListedNekSession(summary)) return undefined;
   return {
     sessionId: summary.id,
     workspaceId,
-    title: (summary.name ?? summary.firstMessage) || "未命名会话",
-    phase,
-    sessionEnded: phase === "completedSuccess" || phase === "completedInterrupted",
+    title: summary.name ?? summary.firstMessage,
+    // 磁盘目录只有已结束的会话；被其他进程锁住的视为中断。运行态来自会话订阅，不在目录里。
+    phase: summary.locked ? ("completedInterrupted" as const) : ("completedSuccess" as const),
+    sessionEnded: true,
     hasBackgroundWork: false,
     lastActivityAt: Date.parse(summary.modifiedAt),
     createdAt: Date.parse(summary.createdAt),
@@ -203,7 +194,14 @@ export class NekAgentServiceTopics {
   }
 
   private handleServiceEvent(event: NekAgentServiceEvent): void {
-    if (event.type !== "state" && event.type !== "rpc_event" && event.type !== "resume_notice")
+    // `process_attached` 是新会话/恢复会话的第一条事实：新建会话的 phase 从 idle 开始，
+    // 随后 setPhase 遇到相同值不再发 state，只认 state 会让新会话迟迟不进索引。
+    if (
+      event.type !== "state" &&
+      event.type !== "rpc_event" &&
+      event.type !== "resume_notice" &&
+      event.type !== "process_attached"
+    )
       return;
     const target = { workspacePath: event.session.cwd };
     const workspaceId = workspaceKey(target);

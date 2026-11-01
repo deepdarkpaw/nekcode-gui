@@ -1,7 +1,7 @@
 import type { ZCodeConfigOption } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/services";
 
-/** 从 Registry 的 ModelConfig Option Specs 读取思考档位。 */
+/** 从 Selection View 读取模型支持的思考档位（nek：`getSupportedThinkingLevels`）。 */
 export function resolveModelThoughtOption(params: {
   modelSelectionView: ModelSelectionView;
   providerId: string;
@@ -13,8 +13,8 @@ export function resolveModelThoughtOption(params: {
     (candidate) => candidate.providerId === params.providerId,
   );
   const model = provider?.models.find((candidate) => candidate.modelId === params.modelId);
-  const reasoning = model?.config.optionSpecs.reasoningLevel;
-  if (!reasoning || reasoning.values.length === 0) return null;
+  const values = model?.reasoningLevels ?? [];
+  if (values.length === 0) return null;
 
   return {
     id: "thought_level",
@@ -23,10 +23,8 @@ export function resolveModelThoughtOption(params: {
     type: "select",
     // Reasoning 没有默认档位；空字符串表示模型已选但用户尚未选择 reasoning。
     currentValue:
-      params.currentValue && reasoning.values.includes(params.currentValue)
-        ? params.currentValue
-        : "",
-    options: reasoning.values.map((level) => ({
+      params.currentValue && values.includes(params.currentValue) ? params.currentValue : "",
+    options: values.map((level) => ({
       value: level,
       name: params.formatLevelName?.(level) ?? level,
     })),

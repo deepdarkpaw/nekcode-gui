@@ -45,20 +45,35 @@ class LoggingServerChannel<TContext> implements IServerChannel<TContext> {
       return result;
     } catch (err) {
       const elapsed = Math.round((performance.now() - start) * 10) / 10;
-      this.logger("[rpc:call] failed", { durationMs: elapsed, status: "error" });
+      this.logger("[rpc:call] failed", { durationMs: elapsed, status: "error" }, err);
       throw err;
     }
   }
 
   listen<T>(ctx: TContext, event: string, arg?: any): Event<T> {
+    let subscribed: Event<T>;
     try {
-      const result = this.inner.listen<T>(ctx, event, arg);
-      this.logger("[rpc:listen] subscribed");
-      return result;
+      subscribed = this.inner.listen<T>(ctx, event, arg);
     } catch (err) {
-      this.logger("[rpc:listen] failed");
+      // 失败必须带异常对象：诊断日志层只保留 errorType 与源码栈帧，这是定位
+      // "哪个订阅炸了、炸在谁身上"的唯一隐私安全证据。
+      this.logger("[rpc:listen] failed", err);
       throw err;
     }
+    this.logger("[rpc:listen] subscribed");
+    // 首订阅回调同样可能抛错（服务 attach 失败 / 未知事件在订阅时才解析）。这发生在
+    // ChannelServer 拿到返回值之后，包在 listen 外层的 try 抓不到，必须在这里补上。
+    return (listener, onError) => {
+      try {
+        return subscribed(listener, (error) => {
+          this.logger("[rpc:listen] failed", error);
+          onError?.(error);
+        });
+      } catch (err) {
+        this.logger("[rpc:listen] failed", err);
+        throw err;
+      }
+    };
   }
 }
 

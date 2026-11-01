@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type {
   IModelSelectionService,
   ModelSelectionView,
@@ -15,6 +15,7 @@ export type ModelSelectionState =
 
 export interface ModelSelectionRead {
   state: ModelSelectionState;
+  /** 重新读取（读取失败、配置刚修好、用户点重试时使用）。 */
   reload(): void;
 }
 
@@ -26,8 +27,9 @@ interface OwnedModelSelectionState {
   state: ModelSelectionState;
 }
 
-// 首读的临时 IO 失败未必产生 Provider 变化事件；只重读两次，不轮询业务状态或重试写操作。
+// 首读的临时 IO 失败未必产生失效信号；只重读两次，不轮询业务状态或重试写操作。
 const INITIAL_READ_RETRY_DELAYS = [500, 1500] as const;
+
 function isTransientReadError(cause: unknown): boolean {
   if (!cause || typeof cause !== "object") return false;
   const error = cause as { code?: unknown; name?: unknown; message?: unknown };
@@ -48,7 +50,12 @@ function initialState(
     : { status: "unavailable", reason: unavailableReason };
 }
 
-/** 订阅明确 Host Service；返回状态在同一次 render 即绑定新 owner，不暴露旧 Host View。 */
+/**
+ * 模型选择的唯一 renderer 读取入口。
+ *
+ * 契约只有一条：`onDidChange` 是**失效信号**（不携带快照）。收到后重新 `getView()`；
+ * 读取成功 = ready，读取失败 = error（可见、可重试），不会保留上一次的 ready 冒充当前事实。
+ */
 export function useModelSelectionServiceView(
   service: IModelSelectionService | null | undefined,
   enabled = true,
@@ -56,7 +63,7 @@ export function useModelSelectionServiceView(
   input?: ModelSelectionViewInput,
 ): ModelSelectionRead {
   const normalizedService = service ?? null;
-  // 调用方可每次 render 创建参数对象；所有权按选择内容绑定，不按对象引用反复订阅。
+  // 调用方可每次 render 创建参数对象；所有权按内容绑定，不按对象引用反复订阅。
   const inputKey = input === undefined ? undefined : JSON.stringify(input);
   const stableInput = useMemo(() => input, [inputKey]);
   const [reloadVersion, reload] = useReducer((value: number) => value + 1, 0);
@@ -67,9 +74,6 @@ export function useModelSelectionServiceView(
     inputKey,
     state: initialState(normalizedService, enabled, unavailableReason),
   }));
-  const ownedRef = useRef(owned);
-  ownedRef.current = owned;
-  const generationRef = useRef(0);
   const ownerMatches =
     owned.service === normalizedService &&
     owned.enabled === enabled &&
@@ -80,89 +84,57 @@ export function useModelSelectionServiceView(
     : initialState(normalizedService, enabled, unavailableReason);
 
   useEffect(() => {
-    generationRef.current += 1;
-    const generation = generationRef.current;
-    const previous = ownedRef.current;
-    const retainedReady =
-      previous.service === normalizedService &&
-      previous.enabled === enabled &&
-      previous.inputKey === inputKey &&
-      previous.unavailableReason === unavailableReason &&
-      previous.state.status === "ready"
-        ? previous.state
-        : null;
-    setOwned({
-      service: normalizedService,
-      enabled,
-      unavailableReason,
-      inputKey,
-      state: retainedReady ?? initialState(normalizedService, enabled, unavailableReason),
-    });
-    if (!enabled || !normalizedService) return;
-
-    let latestRevision = retainedReady?.view.revision ?? -1;
-    let hasReadyView = retainedReady !== null;
-    let requestId = 0;
+    const owner = { service: normalizedService, enabled, unavailableReason, inputKey };
+    let disposed = false;
+    let request = 0;
     let retryCount = 0;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const cancelRetry = () => {
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       retryTimer = undefined;
     };
-    const commit = (candidate: ModelSelectionView): void => {
-      if (generation !== generationRef.current || candidate.revision < latestRevision) return;
-      latestRevision = candidate.revision;
-      hasReadyView = true;
-      cancelRetry();
-      setOwned({
-        service: normalizedService,
-        enabled,
-        unavailableReason,
-        inputKey,
-        state: { status: "ready", view: candidate },
-      });
-    };
+    setOwned({
+      ...owner,
+      state: initialState(normalizedService, enabled, unavailableReason),
+    });
+    if (!enabled || !normalizedService) return;
+
     const read = (): void => {
       cancelRetry();
-      const request = ++requestId;
+      const current = ++request;
+      setOwned({ ...owner, state: { status: "loading" } });
       void normalizedService.getView(stableInput).then(
-        (candidate) => {
-          if (request === requestId) commit(candidate);
+        (view) => {
+          if (disposed || current !== request) return;
+          setOwned({ ...owner, state: { status: "ready", view } });
         },
         (cause: unknown) => {
-          if (generation !== generationRef.current || request !== requestId) return;
+          if (disposed || current !== request) return;
           const error = cause instanceof Error ? cause : new Error(String(cause));
           logger.warn("[model-selection] 目标 Host View 读取失败", { error });
-          // 读取失败不是选择失效。成功后的刷新失败保留原 View；首次失败可见且有界重读。
-          if (!hasReadyView) {
-            setOwned({
-              service: normalizedService,
-              enabled,
-              unavailableReason,
-              inputKey,
-              state: { status: "error", error },
-            });
-            const delay = INITIAL_READ_RETRY_DELAYS[retryCount];
-            if (delay !== undefined && isTransientReadError(cause)) {
-              retryCount += 1;
-              retryTimer = setTimeout(read, delay);
-            }
+          setOwned({ ...owner, state: { status: "error", error } });
+          const delay = INITIAL_READ_RETRY_DELAYS[retryCount];
+          if (delay !== undefined && isTransientReadError(cause)) {
+            retryCount += 1;
+            retryTimer = setTimeout(read, delay);
           }
         },
       );
     };
-    const subscription = normalizedService.onDidChange((candidate) => {
-      if (generation !== generationRef.current) return;
-      if (stableInput === undefined) commit(candidate);
-      else {
-        // 公共事件没有某个调用者的原意图；只能用它触发当前输入重读，不能直接接管结果。
-        latestRevision = Math.max(latestRevision, candidate.revision);
-        read();
-      }
-    });
+    let subscription: { dispose(): void };
+    try {
+      subscription = normalizedService.onDynamicDidChange({
+        workspacePath: stableInput?.workspacePath,
+      })(read);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.warn("[model-selection] 目标 Host watch 订阅失败", { error });
+      setOwned({ ...owner, state: { status: "error", error } });
+      return;
+    }
     read();
     return () => {
-      generationRef.current += 1;
+      disposed = true;
       cancelRetry();
       subscription.dispose();
     };

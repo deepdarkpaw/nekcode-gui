@@ -8,6 +8,8 @@ import type { NekExtensionUiHandler } from "../src/nek-agent/nekExtensionUiRoute
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
 import { NekProcessPool } from "../src/nek-agent/nekProcessPool.js";
 import { NekAgentService } from "../src/nek-agent/service/nekAgentService.js";
+import { createNekAgentRuntimeLifecycle } from "../src/nek-agent/adapter/nekAgentRuntimeLifecycle.js";
+import type { NekAgentServiceEvent } from "../src/nek-agent/service/types.js";
 
 const guiInfo = {
   protocolVersion: 1,
@@ -84,6 +86,7 @@ interface FakeProcess {
   commands: NekRpcCommand[];
   emit(record: unknown): void;
   exit(info?: Partial<NekRpcProcessExit>): void;
+  setSnapshotLocked(locked: boolean): void;
 }
 
 function fakeProcess(
@@ -103,6 +106,7 @@ function fakeProcess(
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let exited = false;
   let streaming = false;
+  let snapshotLocked = true;
   let input = "";
   stdin.on("data", (chunk: Buffer) => {
     input += chunk.toString("utf8");
@@ -121,7 +125,7 @@ function fakeProcess(
         if (command.type === "get_project_trust") {
           data = { cwd: command.cwd, ...projectTrust, resources: [] };
         } else if (command.type === "read_session_snapshot") {
-          data = snapshot(true, lockHolder);
+          data = snapshot(snapshotLocked, lockHolder);
         } else if (command.type === "list_sessions") {
           data = { sessions: [] };
         } else if (command.type === "get_mention_targets") {
@@ -227,6 +231,9 @@ function fakeProcess(
       },
     },
     commands,
+    setSnapshotLocked: (locked) => {
+      snapshotLocked = locked;
+    },
     emit: (record) => stdout.write(`${JSON.stringify(record)}\n`),
     exit: (info = {}) => emitExit({ code: info.code ?? 1, signal: info.signal ?? null, ...info }),
   };
@@ -400,10 +407,31 @@ test("enters error on an unexpected exit and can restart", async () => {
   const result = await harness.service.createSession({ cwd: "/workspace" });
   harness.sessions[0]!.exit({ code: 2 });
   assert.equal(harness.service.getSession(result.sessionKey)?.phase, "error");
+  harness.control.setSnapshotLocked(false);
   const restarted = await harness.service.restartSession(result.sessionKey);
   assert.equal(restarted.phase, "idle");
   assert.equal(harness.sessions.length, 2);
   await harness.service.dispose();
+});
+
+test("SR-4: restart rechecks the external lock instead of forcing a writable process", async () => {
+  const holder = {
+    pid: 4242,
+    hostname: "other-process",
+    kind: "tui" as const,
+    startedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const harness = serviceHarness(undefined, holder);
+  try {
+    const created = await harness.service.createSession({ cwd: "/workspace" });
+    harness.sessions[0]!.exit({ code: 2 });
+    const restarted = await harness.service.restartSession(created.sessionKey);
+    assert.equal(restarted.readonly, true);
+    assert.deepEqual(restarted.lockHolder, holder);
+    assert.equal(harness.sessions.length, 1);
+  } finally {
+    await harness.service.dispose();
+  }
 });
 
 test("routes structured UI and cancels it through the injected router", async () => {
@@ -754,5 +782,80 @@ test("reopens a session process reclaimed by the idle sweep", async () => {
     assert.equal(sessions.length, 2, "下一条命令按同一会话文件重连");
   } finally {
     await service.dispose();
+  }
+});
+
+test("process_attached 只在记录登记之后发出，订阅者当下就能查到活会话", async () => {
+  const harness = serviceHarness();
+  const observed: { sessionKey: string; live: boolean; open: number; processId?: number }[] = [];
+  const detach = harness.service.onEvent((event: NekAgentServiceEvent) => {
+    if (event.type !== "process_attached") return;
+    // 同步监听者看到的是已经登记的记录与已挂接的进程，不是半初始化的快照。
+    assert.ok(harness.service.getSession(event.session.sessionKey));
+    observed.push({
+      sessionKey: event.session.sessionKey,
+      live: harness.service.hasLiveSessionProcess(event.session.cwd),
+      open: harness.service.listOpenSessions(event.session.cwd).length,
+      ...(event.session.processId ? { processId: event.session.processId } : {}),
+    });
+  });
+  try {
+    const created = await harness.service.createSession({ cwd: "/workspace" });
+    assert.deepEqual(observed, [
+      { sessionKey: created.sessionKey, live: true, open: 1, processId: 42 },
+    ]);
+    assert.equal(harness.service.hasLiveSessionProcess("/workspace"), true);
+  } finally {
+    detach();
+    await harness.service.dispose();
+  }
+});
+
+test("真实 service：正常关闭不换代，崩溃后重新挂进程才换代", async () => {
+  const harness = serviceHarness();
+  const lifecycle = createNekAgentRuntimeLifecycle(harness.service);
+  const frames: [string, number][] = [];
+  const subscription = lifecycle.onDidChange((event) =>
+    frames.push([event.state, event.runtimeIdentity.generation]),
+  );
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  try {
+    const created = await harness.service.createSession({ cwd: "/workspace" });
+    assert.equal(frames.length, 1);
+    assert.equal(frames[0]?.[0], "available");
+    const firstGeneration = frames[0]?.[1] ?? 0;
+    assert.equal(lifecycle.getIdentity("/workspace").generation, firstGeneration);
+
+    // 正常关闭：不是错误恢复，帧流不会断，不发 unavailable。
+    await harness.service.closeSession(created.sessionKey);
+    await sleep(20);
+    assert.deepEqual(frames, [["available", firstGeneration]]);
+    assert.equal(harness.service.hasLiveSessionProcess("/workspace"), false);
+
+    // 重新打开同一 workspace：仍是同一代，观察者不必重订阅。
+    const reopened = await harness.service.createSession({ cwd: "/workspace" });
+    await sleep(20);
+    assert.deepEqual(frames, [["available", firstGeneration]]);
+
+    // 进程崩溃：最后一条存活进程消失，才发 unavailable（携带被淘汰的那一代）。
+    harness.sessions.at(-1)!.exit();
+    await sleep(20);
+    assert.deepEqual(frames, [
+      ["available", firstGeneration],
+      ["unavailable", firstGeneration],
+    ]);
+    assert.equal(harness.service.hasLiveSessionProcess("/workspace"), false);
+
+    // 下一次命令按同一会话文件重连：新进程挂上即恢复，代际前进。
+    await harness.service.getStats(reopened.sessionKey);
+    await sleep(20);
+    assert.equal(frames.length, 3);
+    assert.equal(frames[2]?.[0], "available");
+    assert.ok((frames[2]?.[1] ?? 0) > firstGeneration);
+    assert.equal(lifecycle.getIdentity("/workspace").generation, frames[2]?.[1]);
+    assert.equal(harness.service.hasLiveSessionProcess("/workspace"), true);
+  } finally {
+    subscription.dispose();
+    await harness.service.dispose();
   }
 });

@@ -10,11 +10,16 @@ import {
   ZCodeIntlProvider,
   registerBaseWorkspaceServices,
   registerRemoteWorkspaceSession,
+  registerRpcSubscriptionFault,
   createRemoteWorkspaceDisconnectedError,
   playTaskNotificationSound,
 } from "@zcode/ui";
 import "@zcode/ui/styles.css";
-import { connectViaMessagePort, createMessagePortServiceConnection } from "@zcode/client";
+import {
+  connectViaMessagePort,
+  createMessagePortServiceConnection,
+  type ServiceConnectionOptions,
+} from "@zcode/client";
 import {
   InternalChannels,
   databaseStartupStateSchema,
@@ -139,6 +144,34 @@ const desktopPlatform = createDesktopPlatform({ isLocalDevelopmentRuntime });
 initializeDesktopLocalTtft(desktopPlatform);
 
 /**
+ * RPC 订阅失败的 renderer 出口：既有结构化诊断 + 既有提示状态（headless）。
+ *
+ * `IChannel.listen` 没有 terminal 回调，服务端拒绝订阅时订阅方只会拿到一条永远没有帧的
+ * Event。只记日志等于把界面留在加载态，所以这里注册一份可见状态（由既有 toast 呈现并带
+ * 重试），同时用 `desktopPlatform.reportDiagnostic` 记录一条 renderer 诊断——错误类型与
+ * 源码栈帧由产生失败的一侧（host 的 `[rpc:listen] failed`）保留。
+ *
+ * 失败不终结连接，也不影响其它 channel；重试走 `failure.retry()` 重新建立同一条订阅。
+ */
+const reportServiceSubscriptionFailure: ServiceConnectionOptions["onSubscriptionFailure"] = (
+  failure,
+) => {
+  // 订阅者已经全部退订的流不需要打扰用户。
+  if (!failure.isLive()) return;
+  desktopPlatform.reportDiagnostic?.({
+    name: "error",
+    component: "renderer",
+    status: "error",
+    metrics: { count: 1 },
+  });
+  registerRpcSubscriptionFault(failure);
+};
+
+const serviceConnectionOptions: ServiceConnectionOptions = {
+  onSubscriptionFailure: reportServiceSubscriptionFailure,
+};
+
+/**
  * 等待 preload 通过 window.postMessage 转发 MessagePort。
  *
  * MessagePort 不能经过 contextBridge（会丢失原生方法），
@@ -207,7 +240,10 @@ function registerRemoteWorkspaceServicePort(params: RemoteWorkspaceServicePortRe
     return;
   }
 
-  const remoteConnection = createMessagePortServiceConnection(params.port);
+  const remoteConnection = createMessagePortServiceConnection(
+    params.port,
+    serviceConnectionOptions,
+  );
   const remoteServices = remoteConnection.services;
   const services = buildRemoteWorkspaceSessionServices(
     baseServicesForRemoteSessions,
@@ -290,7 +326,7 @@ function handleServicePortMessage(event: MessageEvent): void {
 
 function initializeBusinessRoot(port: MessagePort): void {
   appInitialized = true;
-  const services = connectViaMessagePort(port);
+  const services = connectViaMessagePort(port, serviceConnectionOptions);
   baseServicesForRemoteSessions = services;
   registerBaseWorkspaceServices(services);
   flushPendingRemoteWorkspaceServicePorts();

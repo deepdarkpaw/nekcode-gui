@@ -1,106 +1,120 @@
-import {
-  validateModelSelectionOptions,
-  type ModelSelection,
-  type ProviderRegistryView,
-} from "./registry.js";
+import type { ModelSelectionCatalog } from "./effective-model-selection.js";
+import { validateModelSelectionOptions, type ModelSelection } from "./registry.js";
 
-export type InitialModelSelectionResolution =
-  | {
-      readonly source: "configured-default" | "registry-fallback";
-      readonly selection: ModelSelection;
-    }
-  | { readonly source: "none" };
+/**
+ * 事实来源的显式默认不可用（例如 settings.json 里的 defaultProvider/defaultModel 已从目录消失）。
+ *
+ * 这时不给首选模型，也不静默换成别的服务商：调用方要让用户重新选择。nek 自己在启动回合时
+ * 会回落到首个可用模型（`resolveModelFromSettings`），但那是 CLI 的隐式行为，GUI 不复制它。
+ */
+export type ModelSelectionPreferredIssue = "configured-default-unavailable";
 
-interface ModelSelectionCompletionView {
-  readonly providers: readonly {
-    readonly providerId: string;
-    readonly models: readonly {
-      readonly modelId: string;
-      readonly config: {
-        readonly optionSpecs: {
-          readonly reasoningLevel: { readonly values: readonly string[] };
-        };
-      };
-    }[];
-  }[];
+export interface ModelSelectionPreferredModel {
+  readonly providerId: string;
+  readonly modelId: string;
 }
 
+export interface InitialModelSelectionResolution {
+  readonly selection?: ModelSelection;
+  readonly issue?: ModelSelectionPreferredIssue;
+  /** 这次推荐的来源：显式默认（含项目级覆盖）/ 目录顺序的确定性首选 / 无可用模型。 */
+  readonly source: "configured-default" | "catalog-default" | "none";
+}
+
+/**
+ * Host 对全新草稿的初始推荐。
+ *
+ * - 配置里有显式默认：只接受它；不可用时给出 `configured-default-unavailable`，不换成别的服务商。
+ * - 没有显式默认：按目录顺序取第一条有思考等级的模型（确定性首选，归属 `catalog-default`）。
+ *
+ * 思考等级取自模型自己的 `defaultReasoningLevel`（事实来源已按自己的规则夹到受支持等级）。
+ */
 export function resolveInitialModelSelection(input: {
-  readonly configuredDefault?: ModelSelection;
-  readonly registry: ProviderRegistryView;
+  readonly catalog: ModelSelectionCatalog;
+  readonly configuredDefault?: ModelSelectionPreferredModel;
 }): InitialModelSelectionResolution {
-  // 这里只构造 Host 的初始推荐，不解析已有会话意图。失效默认是可丢弃偏好，
-  // 应继续按 Registry 顺序推荐；不能把历史选择留空的规则误用于新草稿初始化。
-  if (input.configuredDefault) {
-    if (isSelectable(input.registry, input.configuredDefault)) {
-      return {
-        source: "configured-default",
-        selection: freezeSelection(input.configuredDefault),
-      };
+  const { catalog, configuredDefault } = input;
+  if (configuredDefault) {
+    const model = findModel(catalog, configuredDefault.providerId, configuredDefault.modelId);
+    if (!model?.defaultReasoningLevel) {
+      return { issue: "configured-default-unavailable", source: "configured-default" };
     }
+    return {
+      selection: freezeSelection({
+        providerId: configuredDefault.providerId,
+        modelId: configuredDefault.modelId,
+        options: { reasoningLevel: model.defaultReasoningLevel },
+      }),
+      source: "configured-default",
+    };
   }
-
-  // 仅用于全新草稿的 Host 初始推荐；历史未绑定状态不能进入这个初始化分支。
-  for (const provider of input.registry.providers) {
-    if (provider.config.visibility === "hidden") continue;
-    for (const model of provider.models) {
-      const selection = completeNewModelSelection(input.registry, {
-        providerId: provider.providerId,
-        modelId: model.modelId,
-      });
-      if (selection) return { source: "registry-fallback", selection: freezeSelection(selection) };
-    }
-  }
-  return { source: "none" };
-}
-
-/** 仅在用户主动选模型或全新初始化时构造最高档；不能用于恢复/重解析已有选择。 */
-export function completeNewModelSelection(
-  registry: ModelSelectionCompletionView,
-  selection: ModelSelection,
-): ModelSelection | undefined {
-  const model = registry.providers
-    .find((provider) => provider.providerId === selection.providerId)
-    ?.models.find((candidate) => candidate.modelId === selection.modelId);
-  const reasoningLevel = model?.config.optionSpecs.reasoningLevel.values.at(-1);
-  if (!reasoningLevel) return undefined;
+  const first = findFirstSelectableModel(catalog);
+  if (!first) return { source: "none" };
   return {
-    providerId: selection.providerId,
-    modelId: selection.modelId,
-    options: { reasoningLevel },
+    selection: freezeSelection({
+      providerId: first.providerId,
+      modelId: first.modelId,
+      options: { reasoningLevel: first.defaultReasoningLevel },
+    }),
+    source: "catalog-default",
   };
 }
 
 /**
- * 规范化一份待提交的 Selection。
- * 已有选择缺失或失效时只保留模型身份，等待用户选择档位；主动选模型另走 completion。
- * 任何执行入口都必须在此之后再次确认 Selection 完整，不能静默补档位。
+ * 用户主动选模型时的完整选择：只确定模型身份与它自己的默认档位。
+ * 之后用户仍可从该模型的 `reasoningLevels` 里改档位。
  */
-export function normalizeModelSelection(
-  registry: ModelSelectionCompletionView,
+export function completeNewModelSelection(
+  catalog: ModelSelectionCatalog,
   selection: ModelSelection,
 ): ModelSelection | undefined {
-  const model = registry.providers
-    .find((provider) => provider.providerId === selection.providerId)
-    ?.models.find((candidate) => candidate.modelId === selection.modelId);
-  if (!model) return undefined;
-  const values = model.config.optionSpecs.reasoningLevel.values;
-  const reasoningLevel = selection.options?.reasoningLevel;
-  if (reasoningLevel !== undefined && values.includes(reasoningLevel)) return selection;
-  return {
+  const model = findModel(catalog, selection.providerId, selection.modelId);
+  if (!model?.defaultReasoningLevel) return undefined;
+  return freezeSelection({
     providerId: selection.providerId,
     modelId: selection.modelId,
-  };
+    options: { reasoningLevel: model.defaultReasoningLevel },
+  });
 }
 
-function isSelectable(registry: ProviderRegistryView, selection: ModelSelection): boolean {
-  const provider = registry.providers.find(
-    (candidate) => candidate.providerId === selection.providerId,
-  );
-  if (provider?.config.visibility === "hidden") return false;
-  const model = provider?.models.find((candidate) => candidate.modelId === selection.modelId);
-  if (!model) return false;
-  return validateModelSelectionOptions(model, selection).ok;
+/** 调用方已经显式给出档位时只确认它仍然受支持；不支持时保留模型身份等待重选。 */
+export function normalizeModelSelection(
+  catalog: ModelSelectionCatalog,
+  selection: ModelSelection,
+): ModelSelection | undefined {
+  const model = findModel(catalog, selection.providerId, selection.modelId);
+  if (!model) return undefined;
+  return validateModelSelectionOptions(model, selection).ok
+    ? freezeSelection(selection)
+    : freezeSelection({ providerId: selection.providerId, modelId: selection.modelId });
+}
+
+interface CatalogModel {
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly reasoningLevels: readonly string[];
+  readonly defaultReasoningLevel?: string;
+}
+
+function findModel(
+  catalog: ModelSelectionCatalog,
+  providerId: string | undefined,
+  modelId: string | undefined,
+): CatalogModel | undefined {
+  if (!providerId || !modelId) return undefined;
+  const provider = catalog.providers.find((candidate) => candidate.providerId === providerId);
+  const model = provider?.models.find((candidate) => candidate.modelId === modelId);
+  return model ? { ...model, providerId, modelId } : undefined;
+}
+
+function findFirstSelectableModel(catalog: ModelSelectionCatalog): CatalogModel | undefined {
+  for (const provider of catalog.providers) {
+    for (const model of provider.models) {
+      if (!model.defaultReasoningLevel) continue;
+      return { ...model, providerId: provider.providerId };
+    }
+  }
+  return undefined;
 }
 
 function freezeSelection(selection: ModelSelection): ModelSelection {

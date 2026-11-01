@@ -30,6 +30,23 @@ test("desktop workflow is valid YAML with the expected jobs", async () => {
   ]);
 });
 
+test("packaged smoke only executes native targets and puts evidence in runner.temp", async () => {
+  const jobs = await loadJobs();
+  for (const id of ["build", "build-macos"]) {
+    const smoke = jobs[id].steps.find((step) => step.name === "Packaged startup smoke");
+    assert.ok(smoke);
+    for (const key of ["TMPDIR", "TMP", "TEMP"]) assert.equal(smoke.env[key], "${{ runner.temp }}");
+    assert.equal(smoke["continue-on-error"], undefined);
+    if (id === "build") assert.equal(smoke.if, "${{ !matrix.target.crossArch }}");
+    else assert.match(smoke.run, /\$\{#apps\[@\]\}/u);
+    const artifacts = jobs[id].steps.find(
+      (step) => step.name === "Upload packaged smoke artifacts",
+    );
+    assert.equal(artifacts.if, "${{ failure() }}");
+    assert.match(artifacts.with.path, /runner.temp/u);
+  }
+});
+
 test("remote assets start independently of checks and only gate on cancellation", async () => {
   const jobs = await loadJobs();
   const assets = jobs["remote-assets"];

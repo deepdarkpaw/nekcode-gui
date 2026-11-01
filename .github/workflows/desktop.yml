@@ -74,9 +74,15 @@ jobs:
           pnpm vitest run packages/shared/src/zcode-protocol-v4
           pnpm vitest run --config packages/ui/vitest.holes.config.ts
           pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnRenderUnits.test.ts
+          pnpm vitest run packages/client/src/messageport.test.ts
+          pnpm --filter @zcode/ui exec vitest run src
+          node --import tsx --test packages/services/test/*.test.ts
       - name: Release tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node --test --test-isolation=none scripts/ci/*.test.mjs
+      - name: Validate workflow syntax
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: npx --yes @action-validator/cli .github/workflows/desktop.yml
       - name: Conversation navigator regressions
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnNavigatorPreview.test.ts
@@ -232,6 +238,19 @@ jobs:
         run: pnpm build:bootstrap
       - name: Package and verify desktop
         run: pnpm bundle:desktop -- --os "$ZCODE_TARGET_OS" --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
+      - name: Packaged startup smoke
+        # x64 Windows runner 不能执行 arm64 交叉产物；该目标仍执行原有静态打包校验。
+        if: ${{ !matrix.target.crossArch }}
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a node scripts/acceptance/packaged-smoke.mjs
+          else
+            node scripts/acceptance/packaged-smoke.mjs
+          fi
       - name: Collect installers
         run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -241,6 +260,16 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      - name: Upload packaged smoke artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: packaged-smoke-${{ matrix.flavor }}-${{ matrix.target.platform }}-${{ matrix.target.arch }}
+          path: |
+            /tmp/nekcode-acceptance-*
+            ${{ runner.temp }}/nekcode-acceptance-*
+          if-no-files-found: warn
+          retention-days: 7
 
   build-macos:
     name: Build (${{ matrix.flavor }} mac ${{ matrix.target.arch }})
@@ -314,6 +343,16 @@ jobs:
         run: pnpm build:bootstrap
       - name: Package and verify desktop
         run: pnpm bundle:desktop -- --os mac --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
+      - name: Packaged startup smoke
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: |
+          shopt -s nullglob
+          apps=(packages/desktop/dist/mac*/nekcode*.app/Contents/MacOS/nekcode*)
+          test "${#apps[@]}" -eq 1 || { echo "expected one packaged app, found ${#apps[@]}"; exit 1; }
+          node scripts/acceptance/packaged-smoke.mjs --app "${apps[0]}"
       - name: Collect installers
         run: node scripts/ci/desktop-release.mjs collect mac "$ZCODE_TARGET_ARCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -323,6 +362,16 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      - name: Upload packaged smoke artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: packaged-smoke-${{ matrix.flavor }}-mac-${{ matrix.target.arch }}
+          path: |
+            /tmp/nekcode-acceptance-*
+            ${{ runner.temp }}/nekcode-acceptance-*
+          if-no-files-found: warn
+          retention-days: 7
 
   release:
     name: Draft release
