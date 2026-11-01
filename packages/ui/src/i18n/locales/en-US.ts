@@ -1066,7 +1066,7 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.newConversation": "New task",
   "workspaceSidebar.reorderSection": "Move {section} section",
   "workspaceSidebar.addProject": "Add project",
-  "workspaceSidebar.noConversations": "No tasks yet",
+  "workspaceSidebar.noConversations": "Tasks outside a project appear here",
   "workspaceSidebar.noProjects": "No open projects",
   "workspaceSidebar.viewByWorkspace": "By project",
   "workspaceSidebar.organizeChronologicalList": "Timeline",

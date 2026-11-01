@@ -987,7 +987,7 @@ const zhCN: Record<string, string> = {
   "workspaceSidebar.newConversation": "新建任务",
   "workspaceSidebar.reorderSection": "移动{section}分区",
   "workspaceSidebar.addProject": "添加项目",
-  "workspaceSidebar.noConversations": "还没有任务",
+  "workspaceSidebar.noConversations": "不属于任何项目的任务会显示在这里",
   "workspaceSidebar.noProjects": "尚未打开项目",
   "workspaceSidebar.viewByWorkspace": "按项目",
   "workspaceSidebar.organizeChronologicalList": "时间线",
