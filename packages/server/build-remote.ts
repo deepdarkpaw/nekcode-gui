@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { build, type Plugin } from "esbuild";
 import { collectRollingAppVersion } from "../../scripts/rolling-app-version.mjs";
+import { remoteBundleAlias } from "./buildRemoteResolution.js";
 import { validateRemoteServerBundle } from "./buildRemoteValidation.js";
 import { stageThirdPartyNotices } from "../../scripts/third-party-notices.mjs";
 import { createRemotePtyBuildPlugin } from "../../scripts/remote-pty-build.mjs";
@@ -36,6 +37,7 @@ const buildResult = await build({
   platform: "node",
   format: "cjs",
   target: "node22",
+  alias: { ...remoteBundleAlias },
   plugins: [createRemotePtyBuildPlugin(), nativeAddonPlugin],
   // CJS 环境没有 import.meta.url，通过 banner 注入等价变量，
   // 再用 define 全局替换，这样源码无需关心最终打包格式。
