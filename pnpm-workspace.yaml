@@ -1,5 +1,10 @@
 packages:
   - packages/*
+
+# 平铺 node_modules：electron-builder 打包与运行时依赖闭包按 npm 式目录解析。
+# 结构类设置放在这里而不是 .npmrc（pnpm 11 起 .npmrc 只读认证与 registry）。
+nodeLinker: hoisted
+
 supportedArchitectures:
   os:
     - current

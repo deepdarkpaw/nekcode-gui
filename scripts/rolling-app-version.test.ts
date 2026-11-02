@@ -1,6 +1,36 @@
 import semver from "semver";
 import { describe, expect, it } from "vitest";
-import { collectRollingAppVersion, formatRollingAppVersion } from "./rolling-app-version.mjs";
+import {
+  collectRollingAppVersion,
+  formatRollingAppVersion,
+  resolveAppVersion,
+} from "./rolling-app-version.mjs";
+
+describe("resolveAppVersion", () => {
+  const facts = { baseline: "0.1.0", buildDate: "20261102", commitCount: "400" };
+
+  it("HEAD 带 v<基线> tag 时是正式版，版本串就是基线", () => {
+    expect(resolveAppVersion({ ...facts, headTags: ["v0.1.0"] })).toEqual({
+      appVersion: "0.1.0",
+      isRelease: true,
+    });
+  });
+
+  it("没有发版 tag 或 tag 与基线不符时是滚动串", () => {
+    for (const headTags of [[], ["v0.2.0"], ["nightly"], ["0.1.0"]]) {
+      expect(resolveAppVersion({ ...facts, headTags })).toEqual({
+        appVersion: "0.1.0-20261102.400",
+        isRelease: false,
+      });
+    }
+  });
+
+  it("同一基线的正式版高于它之前的全部滚动构建", () => {
+    const release = resolveAppVersion({ ...facts, headTags: ["v0.1.0"] }).appVersion;
+    const rolling = resolveAppVersion({ ...facts, headTags: [] }).appVersion;
+    expect(semver.gt(release, rolling)).toBe(true);
+  });
+});
 
 describe("formatRollingAppVersion", () => {
   it("按 <上游基线>-<YYYYMMDD>.<commitCount> 拼装", () => {
@@ -26,8 +56,10 @@ describe("formatRollingAppVersion", () => {
 
 describe("collectRollingAppVersion", () => {
   it("版本串 semver 合法，electron-updater 的 AppUpdater 构造可直接解析", () => {
-    const { appVersion, upstreamBaseline } = collectRollingAppVersion();
-    expect(appVersion).toMatch(/^\d+\.\d+\.\d+-\d{8}\.\d+$/);
+    const { appVersion, upstreamBaseline, isRelease } = collectRollingAppVersion();
+    // 发版 tag 上的 CI 构建是正式版（等于基线），其他检出是滚动串。
+    if (isRelease) expect(appVersion).toBe(upstreamBaseline);
+    else expect(appVersion).toMatch(/^\d+\.\d+\.\d+-\d{8}\.\d+$/);
     expect(semver.valid(appVersion)).toBe(appVersion);
     expect(upstreamBaseline).toMatch(/^\d+\.\d+\.\d+$/);
   });

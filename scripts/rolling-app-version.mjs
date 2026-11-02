@@ -4,10 +4,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * nekcode 滚动版本串的唯一派生实现。
+ * nekcode 版本串的唯一派生实现。
  *
- * 规则（.agents/specs/rolling-update.md）：
- * - 版本串 = `<nekcode 基线>-<YYYYMMDD>.<commitCount>`，例 `0.1.0-20261102.400`；
+ * 规则：
+ * - 正式版：HEAD 带 `v<基线>` tag（`pnpm release` 打的发版 tag）时，版本串就是基线，
+ *   例 `0.1.0`，安装包名为 `nekcode-0.1.0-win-x64.exe`；
+ * - 其他构建是滚动串 `<nekcode 基线>-<YYYYMMDD>.<commitCount>`，例 `0.1.0-20261102.400`；
  * - 基线由根 package.json 的 version 管理，从 nekcode 自己的 0.1.0 起步，不跟随 ZCodium；
  * - 日期段取 commit 的 committer date（UTC），commitCount 取 `git rev-list --count HEAD`：
  *   版本串是 commit 的纯函数，同一 commit 在任意时间、任意 CI job 派生结果一致。
@@ -29,6 +31,25 @@ const NUMERIC_PATTERN = /^\d+$/;
 /** 滚动版本串：`<nekcode 基线>-<YYYYMMDD>.<commitCount>`。 */
 export function formatRollingAppVersion(baseline, buildDate, commitCount) {
   return `${baseline}-${buildDate}.${commitCount}`;
+}
+
+/** 正式版 tag 名：`v<基线>`。 */
+export function releaseTagName(baseline) {
+  return `v${baseline}`;
+}
+
+/**
+ * 版本串派生（纯函数）：HEAD 带 `v<基线>` tag 时是正式版，版本串就是基线；
+ * 否则是滚动串。tag 名与基线不一致（如手打的 `v9.9.9`）不算正式版。
+ */
+export function resolveAppVersion({ baseline, headTags, buildDate, commitCount }) {
+  if (headTags.includes(releaseTagName(baseline))) {
+    return { appVersion: baseline, isRelease: true };
+  }
+  return {
+    appVersion: formatRollingAppVersion(baseline, buildDate, commitCount),
+    isRelease: false,
+  };
 }
 
 function normalizeVersion(version) {
@@ -117,15 +138,34 @@ function resolveCommitCount() {
   return fromEnv && NUMERIC_PATTERN.test(fromEnv) ? fromEnv : "0";
 }
 
-/** 桌面 / server / web 构建配置的统一入口：一次取出滚动版本串与 nekcode 基线。 */
+/** HEAD 上的 tag 列表；CI 必须 fetch-depth: 0 才会检出 tag。 */
+function resolveHeadTags() {
+  try {
+    return execSync("git tag --points-at HEAD", {
+      cwd: workspaceDir,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .split(/\r?\n/)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  } catch {
+    // 非 git 检出（源码 tar 包等）没有 tag，按滚动版本构建
+    return [];
+  }
+}
+
+/**
+ * 桌面 / server / web 构建配置的统一入口：一次取出版本串、nekcode 基线与是否正式版。
+ * （函数名沿用历史的 rolling：日常构建仍是滚动串，只有发版 tag 上是基线。）
+ */
 export function collectRollingAppVersion() {
   const upstreamBaseline = resolveUpstreamBaseline();
-  return {
-    appVersion: formatRollingAppVersion(
-      upstreamBaseline,
-      resolveCommitBuildDate(),
-      resolveCommitCount(),
-    ),
-    upstreamBaseline,
-  };
+  const { appVersion, isRelease } = resolveAppVersion({
+    baseline: upstreamBaseline,
+    headTags: resolveHeadTags(),
+    buildDate: resolveCommitBuildDate(),
+    commitCount: resolveCommitCount(),
+  });
+  return { appVersion, upstreamBaseline, isRelease };
 }

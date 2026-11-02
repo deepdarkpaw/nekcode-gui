@@ -133,7 +133,7 @@ test("checks job runs the three gate ratchets exactly, without bypass wrappers",
   assert.doesNotMatch(allRuns, /^\s*pnpm (?:lint|fmt:check)\s*$/m);
 });
 
-test("dual-product matrix expands two jobs on PR/main and eight jobs on dispatch/tag", async () => {
+test("build matrix ships only the nekcode product for Windows x64/arm64 and macOS arm64/x64", async () => {
   const jobs = await loadJobs();
   const desktop = jobs.build;
   const matrix = desktop.strategy.matrix;
@@ -141,20 +141,15 @@ test("dual-product matrix expands two jobs on PR/main and eight jobs on dispatch
     matrix.target.map(({ platform, arch }) => `${platform}-${arch}`),
     ["win-x64", "win-arm64"],
   );
-  assert.equal(
-    matrix.flavor,
-    "${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && '[\"production\",\"preview\"]' || '[\"production\"]') }}",
-  );
+  // 发布只含正式产品：preview 身份不进 CI 矩阵（它不接收自动更新，放进 Release 只会让人选错）。
+  assert.equal(matrix.flavor, undefined);
   assert.equal((await parse(await readFile(workflowPath, "utf8"))).env.ZCODE_ENV, "production");
   assert.equal(desktop.env?.ZCODE_ENV, undefined);
   assert.equal(desktop.env?.ZCODE_TARGET_OS, "${{ matrix.target.platform }}");
   assert.equal(desktop.env?.ZCODE_TARGET_ARCH, "${{ matrix.target.arch }}");
-  assert.equal(
-    desktop.env?.ZCODE_PREVIEW_IDENTITY,
-    "${{ matrix.flavor == 'preview' && '1' || '0' }}",
-  );
+  assert.equal(desktop.env?.ZCODE_PREVIEW_IDENTITY, "0");
   assert.equal(desktop.strategy["fail-fast"], false);
-  assert.ok(desktop.name.includes("matrix.flavor"));
+  assert.ok(desktop.name.includes("matrix.target.platform"));
   const mac = jobs["build-macos"];
   assert.equal(mac.strategy["fail-fast"], false);
   assert.deepEqual(
@@ -163,17 +158,18 @@ test("dual-product matrix expands two jobs on PR/main and eight jobs on dispatch
   );
   assert.match(String(mac.if), /workflow_dispatch/);
   assert.match(String(mac.if), /github\.event_name == 'push'.*github\.ref_type == 'tag'/);
-  assert.equal(mac.env?.ZCODE_PREVIEW_IDENTITY, desktop.env.ZCODE_PREVIEW_IDENTITY);
+  assert.equal(mac.strategy.matrix.flavor, undefined);
+  assert.equal(mac.env?.ZCODE_PREVIEW_IDENTITY, "0");
 });
 
-test("actual event expressions expand to two daily or eight dual-product jobs", async () => {
+test("actual event expressions expand to two daily Windows jobs or four release jobs", async () => {
   const jobs = await loadJobs();
   for (const [event, refType, expected] of [
     ["pull_request", "branch", 2],
     ["push", "branch", 2],
-    ["workflow_dispatch", "branch", 8],
-    ["workflow_dispatch", "tag", 8],
-    ["push", "tag", 8],
+    ["workflow_dispatch", "branch", 4],
+    ["workflow_dispatch", "tag", 4],
+    ["push", "tag", 4],
   ]) {
     const context = {
       github: { event_name: event, ref_type: refType },
@@ -189,24 +185,24 @@ test("actual event expressions expand to two daily or eight dual-product jobs", 
         .replaceAll("needs.remote-assets", 'needs["remote-assets"]');
       const enabled = runInNewContext(condition, context, { timeout: 1000 });
       if (!enabled) continue;
-      const expression = job.strategy.matrix.flavor.match(/^\$\{\{\s*fromJSON\((.*)\)\s*\}\}$/)[1];
-      const flavors = JSON.parse(runInNewContext(expression, context, { timeout: 1000 }));
-      for (const flavor of flavors)
-        for (const target of job.strategy.matrix.target)
-          combinations.push(`${flavor}/${target.platform ?? "mac"}/${target.arch}`);
+      for (const target of job.strategy.matrix.target)
+        combinations.push(`${target.platform ?? "mac"}/${target.arch}`);
     }
     assert.equal(combinations.length, expected, `${event}/${refType}`);
     assert.equal(new Set(combinations).size, expected);
-    if (expected === 2) assert.ok(combinations.every((item) => item.startsWith("production/")));
-    else assert.equal(combinations.filter((item) => item.startsWith("preview/")).length, 4);
+    // 日常构建只打 Windows；macOS（10 倍计费）只在发版 tag 与手动触发时打包。
+    assert.equal(
+      combinations.some((item) => item.startsWith("mac/")),
+      expected === 4,
+    );
   }
 });
 
-test("release downloads every flavor/platform/arch artifact into per-job directories", async () => {
+test("release downloads every platform/arch artifact into per-job directories", async () => {
   const jobs = await loadJobs();
   const release = jobs.release;
   const downloads = uses(release, "actions/download-artifact");
-  // 8 个 artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载，
+  // 4 个 artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载，
   // 否则后一个架构的更新元数据会静默覆盖前一个。
   assert.equal(downloads.length, 1);
   assert.equal(downloads[0].with?.pattern, "desktop-*");
@@ -234,15 +230,14 @@ test("packaging jobs collect the platform update metadata required by electron-u
     assert.equal(upload.with?.path, "dist/release-assets/*");
     assert.equal(upload.with?.["if-no-files-found"], "error");
   }
-  // update metadata 名字由发布脚本统一派生：latest.yml / latest-mac.yml（不发布 Linux 桌面包），
-  // Preview 走 latest-preview* 通道，两个身份不会互相覆盖。
-  assert.deepEqual(
-    releaseUpdateInfoNames([desktopProductIdentities.production, desktopProductIdentities.preview]),
-    ["latest-mac.yml", "latest-preview-mac.yml", "latest-preview.yml", "latest.yml"],
-  );
+  // update metadata 名字由发布脚本统一派生：latest.yml / latest-mac.yml（不发布 Linux 桌面包）。
+  assert.deepEqual(releaseUpdateInfoNames([desktopProductIdentities.production]), [
+    "latest-mac.yml",
+    "latest.yml",
+  ]);
 });
 
-test("release publishes only through gh drafts with a scoped token", async () => {
+test("release publishes only through gh with a scoped token", async () => {
   const document = parse(await readFile(workflowPath, "utf8"));
   const jobs = document.jobs;
   // 发布 job 之外的权限只有读；写权限只在发布 job 内。
@@ -292,14 +287,14 @@ test("signing runs only when certificate secrets exist and says so when it canno
     assert.match(String(step.run), /::notice::未配置/);
     assert.match(String(step.run), /CSC_IDENTITY_AUTO_DISCOVERY=true/);
   }
-  // macOS 签名仍需显式开关，避免 preview 在无身份时静默走未签名链路。
+  // macOS 证书签名仍需显式开关；没有证书时 electron-builder 配置走 ad-hoc 签名。
   const macStep = jobs["build-macos"].steps.find(
     (item) => item.name === "Resolve signing configuration",
   );
   assert.match(String(macStep.run), /ZCODE_ENABLE_MAC_SIGN=1/);
 });
 
-test("release still requires checks success before publishing a draft", async () => {
+test("release still requires checks success before publishing", async () => {
   const jobs = await loadJobs();
   const release = jobs.release;
   // 默认 needs 语义要求全部 needs success；checks 在列表内即发布 guard。

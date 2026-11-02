@@ -6,11 +6,10 @@
   "workspaces": {
     ".": {
       "entry": [
-        ".release-it.mjs",
         ".vscode/*.mjs",
         "scripts/check-workspace-freshness.mjs",
         "scripts/acceptance/*.mjs",
-        "scripts/mise-run.mjs"
+        "scripts/release.mjs"
       ]
     },
     "packages/desktop": {

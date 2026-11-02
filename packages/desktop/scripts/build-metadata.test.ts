@@ -16,7 +16,10 @@ afterEach(() => {
 describe("collectBuildMetadata", () => {
   it("版本串 semver 合法，electron-updater 的 AppUpdater 构造可直接解析", () => {
     const metadata = collectBuildMetadata();
-    expect(metadata.appVersion).toMatch(/^\d+\.\d+\.\d+-\d{8}\.\d+$/);
+    // 发版 tag 上的构建（正式版）版本串等于基线，其他检出是滚动串。
+    if (metadata.appVersion !== metadata.upstreamBaseline) {
+      expect(metadata.appVersion).toMatch(/^\d+\.\d+\.\d+-\d{8}\.\d+$/);
+    }
     expect(semver.valid(metadata.appVersion)).toBe(metadata.appVersion);
     expect(metadata.upstreamBaseline).toMatch(/^\d+\.\d+\.\d+$/);
   });

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-import { withPinnedNodePath } from "./mise-toolchain-env.mjs";
+import { withPinnedNodePath } from "./pinned-node-path.mjs";
 import { quoteArgsForWindowsShell } from "./spawn-command.mjs";
 
 const requestedEnv = process.argv[2]?.trim().toLowerCase();

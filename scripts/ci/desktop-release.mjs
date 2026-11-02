@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -9,7 +8,6 @@ import {
 import { getBuildMetadata } from "../../packages/desktop/scripts/build-metadata.mjs";
 import { collectRollingAppVersion } from "../rolling-app-version.mjs";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import {
   asUpdateInfoString,
   RELEASE_ARCHES,
@@ -20,6 +18,7 @@ import {
   stringifyUpdateInfo,
   updateInfoChannelName,
 } from "../../packages/desktop/scripts/desktop-update-info.mjs";
+import { publishRelease, releaseNotes, releaseTitle } from "./desktop-release-publish.mjs";
 
 export {
   mergeUpdateInfo,
@@ -29,33 +28,24 @@ export {
   updateInfoChannelName,
 };
 
-const execFileAsync = promisify(execFile);
-// 用户指定以 Shakespeare《Hamlet》原文开头并附中文，避免默认发行文案偏离本次授权要求。
-const RELEASE_MESSAGE_HEADING =
-  "To be, or not to be, that is the question.\n\n" +
-  "生存还是毁灭，这是一个问题。\n\n" +
-  "— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》";
-const RELEASE_PRODUCT_SUMMARY = `Products: ${desktopProductIdentities.production.productName} is the production desktop app; ${desktopProductIdentities.preview.productName} is the preview-channel build and must not replace a production install.`;
-const RELEASE_MESSAGE_BODY =
-  `${RELEASE_PRODUCT_SUMMARY}\n\n` +
-  "Features: nek CLI parity through the GUI RPC channel. Manual platform acceptance is not complete.\n\n" +
-  "Windows x64/arm64 and macOS arm64/x64 (no Linux desktop build; Linux is supported as a remote SSH host). Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.";
+// 发布只包含正式产品 nekcode；preview 身份仅用于本地开发构建（它不接收自动更新）。
+const RELEASE_IDENTITIES = [desktopProductIdentities.production];
 // electron-builder 按发行格式改写 ${arch}，必须匹配实际产物而非统一猜测 x64。
 // macOS 同时发 arm64 与 x64（Intel），两者各自在原生 runner 上构建（macos-15 /
 // macos-15-intel）：交叉架构打包会混入错误架构的原生预编译产物
 // （node-pty prebuild、bundled 工具链）。dmg 面向人工安装，zip 面向自动化分发。
 // 不发布 Linux 桌面包：Linux 只作为 SSH 远程主机，远程运行时由 remote-assets 单独产出。
 const extensions = {
+  win: [
+    // Windows 同时发 x64 与 arm64：electron-builder 可在 x64 runner 上交叉构建 arm64。
+    { extension: "exe", arch: "x64" },
+    { extension: "exe", arch: "arm64" },
+  ],
   mac: [
     { extension: "dmg", arch: "arm64" },
     { extension: "zip", arch: "arm64" },
     { extension: "dmg", arch: "x64" },
     { extension: "zip", arch: "x64" },
-  ],
-  win: [
-    // Windows 同时发 x64 与 arm64：electron-builder 可在 x64 runner 上交叉构建 arm64。
-    { extension: "exe", arch: "x64" },
-    { extension: "exe", arch: "arm64" },
   ],
 };
 const number = "(?:0|[1-9][0-9]*)";
@@ -179,7 +169,7 @@ export async function assembleReleaseAssets({
   artifactsRoot,
   destination,
   version,
-  identities = [desktopProductIdentities.production, desktopProductIdentities.preview],
+  identities = RELEASE_IDENTITIES,
 }) {
   if (!Array.isArray(identities) || identities.length === 0)
     throw new Error("Release identities must not be empty");
@@ -290,45 +280,6 @@ export async function verifyReleaseAssets(
   return [...files, ...updateInfoFiles, checksumFile];
 }
 
-export async function publishDraft({ tag, repo, files, run = execFileAsync }) {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("Invalid GitHub repository");
-  const gh = (args) => run("gh", [...args, "--repo", repo], { maxBuffer: 4 * 1024 * 1024 });
-  // 查询失败必须阻断写入，不能把网络或鉴权故障误当成 Release 不存在。
-  const { stdout } = await gh(["release", "list", "--limit", "1000", "--json", "tagName,isDraft"]);
-  const existing = JSON.parse(stdout).find((release) => release.tagName === tag);
-  if (existing && !existing.isDraft)
-    throw new Error(`Refusing to overwrite published release ${tag}`);
-  const title = `${desktopProductIdentities.production.productName} + ${desktopProductIdentities.preview.productName} ${tag}`;
-  const notes = `${RELEASE_MESSAGE_HEADING}\n\n${RELEASE_MESSAGE_BODY}`;
-  if (!existing) {
-    await gh([
-      "release",
-      "create",
-      tag,
-      "--verify-tag",
-      "--draft",
-      ...(tag.includes("-") ? ["--prerelease"] : []),
-      "--title",
-      title,
-      "--generate-notes",
-      "--notes",
-      notes,
-    ]);
-  } else {
-    // 草稿可能按单产品预建；补齐产品说明，但不能抹掉维护者备注或自动生成的变更日志。
-    const { stdout: detail } = await gh(["release", "view", tag, "--json", "body"]);
-    const body = JSON.parse(detail).body;
-    if (typeof body !== "string") throw new Error("Invalid draft release body");
-    const updatedNotes = !body
-      ? notes
-      : body.includes(RELEASE_PRODUCT_SUMMARY)
-        ? body
-        : `${body.trimEnd()}\n\n${RELEASE_PRODUCT_SUMMARY}`;
-    await gh(["release", "edit", tag, "--title", title, "--notes", updatedNotes]);
-  }
-  await gh(["release", "upload", tag, ...files, "--clobber"]);
-}
-
 async function main() {
   const [command, platform, positionalArch] = process.argv.slice(2);
   const root = resolve(import.meta.dirname, "../..");
@@ -366,17 +317,25 @@ async function main() {
     console.log(`Assembled update metadata: ${written.join(", ")}`);
   } else if (command === "publish") {
     if (process.env.GITHUB_EVENT_NAME !== "push" || process.env.GITHUB_REF_TYPE !== "tag") {
-      throw new Error("Draft releases require a tag push");
+      throw new Error("Releases require a tag push");
     }
     const tag = process.env.GITHUB_REF_NAME;
     const rollingVersion = collectRollingAppVersion().appVersion;
     validateTag(tag, version, rollingVersion);
     // tag 与产物必须来自当前被打标 commit 的滚动派生值；不读 build-meta 缓存，避免陈旧值让错误 tag/产物蒙混通过。
-    const files = await verifyReleaseAssets(artifacts, rollingVersion, [
-      desktopProductIdentities.production,
-      desktopProductIdentities.preview,
-    ]);
-    await publishDraft({ tag, repo: process.env.GITHUB_REPOSITORY, files });
+    const files = await verifyReleaseAssets(artifacts, rollingVersion, RELEASE_IDENTITIES);
+    const { productName } = desktopProductIdentities.production;
+    await publishRelease({
+      tag,
+      repo: process.env.GITHUB_REPOSITORY,
+      files,
+      title: releaseTitle(productName, tag),
+      notes: releaseNotes({
+        productName,
+        version: rollingVersion,
+        platforms: Object.keys(extensions),
+      }),
+    });
   } else {
     throw new Error(
       "Usage: desktop-release.mjs check-version | collect <win|mac> | assemble | publish",

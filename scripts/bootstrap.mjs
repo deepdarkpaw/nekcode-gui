@@ -21,15 +21,14 @@ function resolvePinnedNodeBin() {
     return undefined;
   }
 
-  const miseConfigPath = resolve(rootDir, "mise.toml");
-  if (!existsSync(miseConfigPath)) {
+  // .nvmrc 是仓库唯一的 Node 版本钉（精确版本，CI 的 setup-node 也读它）。
+  const nvmrcPath = resolve(rootDir, ".nvmrc");
+  if (!existsSync(nvmrcPath)) {
     return undefined;
   }
 
-  const miseConfig = readFileSync(miseConfigPath, "utf8");
-  const match = miseConfig.match(/^\s*node\s*=\s*"([^"]+)"/m);
-  const version = match?.[1]?.trim();
-  if (!version) {
+  const version = readFileSync(nvmrcPath, "utf8").trim().replace(/^v/, "");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
     return undefined;
   }
 
@@ -69,7 +68,6 @@ function resolveBootstrapWithRemoteEnv(baseEnv = process.env) {
   return {
     // bootstrap:with-remote 是手动远程资源初始化入口，自动化等非 TTY 环境里
     // pnpm install 可能要求确认清理 node_modules。只在该入口禁用确认，不改变 CI/生产构建命令。
-    HUSKY: "0",
     PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false",
     npm_config_confirm_modules_purge: "false",
     // remote assets 和 bootstrap build 同一轮里会触发大量 workspace 构建。

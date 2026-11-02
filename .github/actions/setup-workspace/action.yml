@@ -10,17 +10,14 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Read pinned toolchain
-      id: toolchain
-      shell: bash
-      run: node scripts/ci/toolchain.mjs
+    # pnpm 版本取 package.json 的 packageManager；Node 版本取 .nvmrc（精确版本）。
     - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       if: inputs.install-pnpm == 'true'
       with:
         run_install: false
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
       with:
-        node-version: ${{ steps.toolchain.outputs.node }}
+        node-version-file: .nvmrc
         cache: ${{ inputs.install-dependencies == 'true' && 'pnpm' || '' }}
         cache-dependency-path: pnpm-lock.yaml
         package-manager-cache: false
@@ -28,5 +25,3 @@ runs:
       if: inputs.install-dependencies == 'true'
       shell: bash
       run: pnpm install --frozen-lockfile
-      env:
-        HUSKY: "0"

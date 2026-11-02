@@ -13,6 +13,9 @@
 /.nek/
 /.vscode/
 /.idea/
+/.claude/
+/.cursor/
+/.husky/
 **/.vscode/
 **/.idea/
 **/.tui-staging/
@@ -82,10 +85,17 @@ binding.Makefile
 **/build/Makefile
 **/build/Release/*.node
 
-# 本地环境变量
+# 本地环境变量：仓库不提供 .env 模板，所有 .env* 都是本机文件
 .env
-.env.local
-.env.*.local
+.env.*
+
+# 个人工具链与包管理器配置：Node 版本钉在 .nvmrc，pnpm 设置在 pnpm-workspace.yaml。
+# .npmrc 常含 registry 令牌，一律不入库。
+.npmrc
+mise.toml
+mise.local.toml
+.mise.toml
+.tool-versions
 
 # 日志、临时文件、系统垃圾
 logs/
@@ -98,9 +108,6 @@ Thumbs.db
 desktop.ini
 .VSCodeCounter
 
-# 本地安装包产物
-/nekcode-*.deb
+# 本地安装包产物（.exe 已由上面的二进制规则覆盖）
 /nekcode-*.dmg
-/nekcode-*.exe
-/nekcode-*.AppImage
-/nekcode-*.rpm
+/nekcode-*.zip

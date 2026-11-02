@@ -15,7 +15,6 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 env:
-  HUSKY: "0"
   ZCODE_ENV: production
   ZCODE_SKIP_REMOTE_ASSETS: "1"
   # 默认不签名、不做本机身份自动发现。打包 step 之前由「Resolve signing configuration」
@@ -139,7 +138,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: Build (${{ matrix.flavor }} ${{ matrix.target.platform }} ${{ matrix.target.arch }})
+    name: Build (${{ matrix.target.platform }} ${{ matrix.target.arch }})
     needs: remote-assets
     # 打包只等待 assets 真实产出，不等待 checks 完成，也不看 checks 是否通过：
     # - checks 失败但 assets 成功 -> 继续打包，保留「检查与打包独立」的产品规则；
@@ -149,7 +148,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavor: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && '["production","preview"]' || '["production"]') }}
         target:
           - platform: win
             runner: windows-2025
@@ -168,7 +166,8 @@ jobs:
     env:
       ZCODE_TARGET_OS: ${{ matrix.target.platform }}
       ZCODE_TARGET_ARCH: ${{ matrix.target.arch }}
-      ZCODE_PREVIEW_IDENTITY: ${{ matrix.flavor == 'preview' && '1' || '0' }}
+      # 只发正式产品 nekcode；preview 身份仅用于本地开发构建。
+      ZCODE_PREVIEW_IDENTITY: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -235,7 +234,7 @@ jobs:
         run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: desktop-${{ matrix.flavor }}-${{ matrix.target.platform }}-${{ matrix.target.arch }}
+          name: desktop-production-${{ matrix.target.platform }}-${{ matrix.target.arch }}
           path: dist/release-assets/*
           if-no-files-found: error
           compression-level: 0
@@ -244,14 +243,14 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: packaged-smoke-${{ matrix.flavor }}-${{ matrix.target.platform }}-${{ matrix.target.arch }}
+          name: packaged-smoke-${{ matrix.target.platform }}-${{ matrix.target.arch }}
           # 冒烟步骤把 TMPDIR/TMP/TEMP 指向 runner.temp，沙箱只会出现在这里。
           path: ${{ runner.temp }}/nekcode-acceptance-*
           if-no-files-found: warn
           retention-days: 7
 
   build-macos:
-    name: Build (${{ matrix.flavor }} mac ${{ matrix.target.arch }})
+    name: Build (mac ${{ matrix.target.arch }})
     # macOS runner 按 10 倍费率计分钟，只在发版 tag 与手动触发时打包；
     # 日常 push/PR 的打包回归由 win 矩阵与 checks 覆盖。
     if: ${{ !cancelled() && needs.remote-assets.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) }}
@@ -259,7 +258,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavor: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && '["production","preview"]' || '["production"]') }}
         target:
           # arm64 与 x64 各自用原生 runner：Apple Silicon 上交叉打 x64 会带上
           # 错误架构的原生预编译产物（node-pty prebuild、bundled 工具链）。
@@ -272,7 +270,7 @@ jobs:
     env:
       ZCODE_TARGET_OS: mac
       ZCODE_TARGET_ARCH: ${{ matrix.target.arch }}
-      ZCODE_PREVIEW_IDENTITY: ${{ matrix.flavor == 'preview' && '1' || '0' }}
+      ZCODE_PREVIEW_IDENTITY: "0"
     defaults:
       run:
         shell: bash
@@ -336,7 +334,7 @@ jobs:
         run: node scripts/ci/desktop-release.mjs collect mac "$ZCODE_TARGET_ARCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: desktop-${{ matrix.flavor }}-mac-${{ matrix.target.arch }}
+          name: desktop-production-mac-${{ matrix.target.arch }}
           path: dist/release-assets/*
           if-no-files-found: error
           compression-level: 0
@@ -345,14 +343,14 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: packaged-smoke-${{ matrix.flavor }}-mac-${{ matrix.target.arch }}
+          name: packaged-smoke-mac-${{ matrix.target.arch }}
           # 冒烟步骤把 TMPDIR/TMP/TEMP 指向 runner.temp，沙箱只会出现在这里。
           path: ${{ runner.temp }}/nekcode-acceptance-*
           if-no-files-found: warn
           retention-days: 7
 
   release:
-    name: Draft release
+    name: Release
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: [checks, build, build-macos]
     runs-on: ubuntu-24.04
@@ -375,11 +373,12 @@ jobs:
           pattern: desktop-*
           path: dist/artifacts
       # 安装包平铺到 dist/release-assets，Windows/macOS 的更新元数据按架构合并成一份。
-      # electron-updater 按 latest.yml / latest-linux.yml / latest-linux-arm64.yml /
-      # latest-mac.yml 拉取更新（provider=github），缺一份就会 ERR_UPDATER_CHANNEL_FILE_NOT_FOUND。
+      # electron-updater 按 latest.yml / latest-mac.yml 拉取更新（provider=github），
+      # 缺一份就会 ERR_UPDATER_CHANNEL_FILE_NOT_FOUND。
       - name: Assemble release assets
         run: node scripts/ci/desktop-release.mjs assemble
-      - name: Verify assets and create or update draft
+      # 先建草稿并上传全部资产，最后一步才公开（latest.yml 先于用户可见）。
+      - name: Verify assets and publish the release
         run: node scripts/ci/desktop-release.mjs publish
         env:
           GH_TOKEN: ${{ github.token }}
