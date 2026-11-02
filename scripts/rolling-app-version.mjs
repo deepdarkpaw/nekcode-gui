@@ -4,11 +4,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * ZCodium Exp. 滚动版本串的唯一派生实现（无发版版号，学 Arch）。
+ * nekcode 滚动版本串的唯一派生实现。
  *
  * 规则（.agents/specs/rolling-update.md）：
- * - 版本串 = `<上游基线>-<YYYYMMDD>.<commitCount>`，例 `3.14.3-20261008.1234`；
- * - 上游基线只升不降，仅同步上游时手改根 package.json 的 version；
+ * - 版本串 = `<nekcode 基线>-<YYYYMMDD>.<commitCount>`，例 `0.1.0-20261102.400`；
+ * - 基线由根 package.json 的 version 管理，从 nekcode 自己的 0.1.0 起步，不跟随 ZCodium；
  * - 日期段取 commit 的 committer date（UTC），commitCount 取 `git rev-list --count HEAD`：
  *   版本串是 commit 的纯函数，同一 commit 在任意时间、任意 CI job 派生结果一致。
  *   electron-builder beforePack 的 bundled-remote manifest 相等校验、desktop-release collect
@@ -26,7 +26,7 @@ const workspaceDir = resolve(scriptDir, "..");
 const UPSTREAM_BASELINE_PATTERN = /^\d+\.\d+\.\d+$/;
 const NUMERIC_PATTERN = /^\d+$/;
 
-/** 滚动版本串：`<上游基线>-<YYYYMMDD>.<commitCount>`。 */
+/** 滚动版本串：`<nekcode 基线>-<YYYYMMDD>.<commitCount>`。 */
 export function formatRollingAppVersion(baseline, buildDate, commitCount) {
   return `${baseline}-${buildDate}.${commitCount}`;
 }
@@ -117,7 +117,7 @@ function resolveCommitCount() {
   return fromEnv && NUMERIC_PATTERN.test(fromEnv) ? fromEnv : "0";
 }
 
-/** 桌面 / server / web 构建配置的统一入口：一次取出滚动版本串与上游基线。 */
+/** 桌面 / server / web 构建配置的统一入口：一次取出滚动版本串与 nekcode 基线。 */
 export function collectRollingAppVersion() {
   const upstreamBaseline = resolveUpstreamBaseline();
   return {

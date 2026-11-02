@@ -26,7 +26,7 @@
 export const NEKCODE_DEEP_LINK_SCHEME = "nekcode";
 
 /** GitHub Releases 更新源的默认 owner / repo，可用构建期环境变量覆盖。 */
-const DEFAULT_GITHUB_PUBLISH_OWNER = "nekcode";
+const DEFAULT_GITHUB_PUBLISH_OWNER = "deepdarkpaw";
 const DEFAULT_GITHUB_PUBLISH_REPO = "nekcode-gui";
 
 /**

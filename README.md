@@ -15,8 +15,7 @@ process drives `nek --mode rpc`; the renderer is React + Vite. It is a modified 
 
 1. 从 [GitHub Releases](https://github.com/deepdarkpaw/nekcode-gui/releases) 下载
    `nekcode-<版本>-win-x64.exe`（NSIS 安装包）并运行。安装向导可以选择安装目录，默认按当前用户安装到
-   `%LOCALAPPDATA%\Programs
-ekcode`，并创建开始菜单与桌面快捷方式「nekcode」。
+   `%LOCALAPPDATA%\Programs\nekcode`，并创建开始菜单与桌面快捷方式「nekcode」。
 2. 之后从开始菜单或桌面快捷方式启动；程序本体是安装目录下的 `nekcode.exe`。卸载在「设置 → 应用」里进行。
 3. 首次启动的引导会检测本机的 nek；没有安装时可以在引导里一键安装（stable 渠道，即最新的 `nek-v*` 发布版）。
 

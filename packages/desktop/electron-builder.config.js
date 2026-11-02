@@ -161,7 +161,7 @@ const PACMAN_RUNTIME_DEPENDENCIES = [
   "xdg-utils",
 ];
 
-const WINDOWS_INSTALL_MANIFEST_NAME = ".zcodium-install-manifest";
+const WINDOWS_INSTALL_MANIFEST_NAME = ".nekcode-install-manifest";
 
 async function writeWindowsInstallManifest(context) {
   if (context.electronPlatformName !== "win32") return;
@@ -467,7 +467,7 @@ export default {
   extraMetadata: {
     version: buildMetadata.appVersion,
     zcodeProductFlavor: desktopProductIdentity.flavor,
-    homepage: "https://github.com/nekcode/nekcode-gui",
+    homepage: "https://github.com/deepdarkpaw/nekcode-gui",
     author: {
       name: "nekcode",
       email: "dev@nekcode.ai",
@@ -737,7 +737,14 @@ export default {
   },
   nsis: {
     oneClick: false,
+    perMachine: false,
+    selectPerMachineByDefault: false,
     allowToChangeInstallationDirectory: true,
+    createStartMenuShortcut: true,
+    createDesktopShortcut: true,
+    shortcutName: desktopProductIdentity.productName,
+    uninstallDisplayName: desktopProductIdentity.productName,
+    runAfterFinish: true,
     // Windows 安装流程使用独立安装图标，和应用运行时图标解耦。
     installerIcon: "build/icon_installer.ico",
     uninstallerIcon: "build/icon_installer.ico",
@@ -746,7 +753,7 @@ export default {
   detectUpdateChannel: false,
   // 更新源是 GitHub Releases：electron-builder 会把这段 publish 配置写进安装包的
   // app-update.yml，electron-updater 的 GitHub provider 据此拉取 latest*.yml 与安装包。
-  // owner/repo 可用构建期环境变量覆盖（fork 或镜像发版），默认 nekcode/nekcode-gui。
+  // owner/repo 可用构建期环境变量覆盖（fork 或镜像发版），默认 deepdarkpaw/nekcode-gui。
   publish: {
     provider: "github",
     owner: resolveGithubPublishOwner(process.env),
