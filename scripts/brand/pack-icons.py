@@ -32,4 +32,8 @@ for size in [16, 24, 32, 48, 64, 128, 256, 512, 1024]:
 # renderer 内的应用标志：index.html 启动占位、启动徽标、关于页与 Windows 左上角共用这一张。
 renderer_logo = Path("packages/desktop/src/renderer/public/logo/icons/512x512.png")
 shutil.copyfile(out / "app-512.png", renderer_logo)
-print(f"packed icons into {build} and {renderer_logo}")
+# UI 包按 import.meta.url 引用仓库根 public/ 的同一张图（侧栏、关于页、启动徽标、更新对话框），必须与上面保持一致。
+shared_logo = Path("public/logo/icons/512x512.png")
+shutil.copyfile(out / "app-512.png", shared_logo)
+shutil.copyfile(out / "app-1024.png", Path("public/icon_512@2x.png"))
+print(f"packed icons into {build}, {renderer_logo} and {shared_logo.parent.parent.parent}")
