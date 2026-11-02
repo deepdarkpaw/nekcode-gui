@@ -12,6 +12,7 @@ import process from "node:process";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { findDynamicRequireCalls } from "./esm-dynamic-require.mjs";
+import { verifyPackagedAppEntry } from "./packaged-app-entry-check.mjs";
 import { collectRuntimeModuleClosureEntries } from "./runtime-dependency-closure.mjs";
 import { resolveDesktopProductIdentity } from "./desktop-product-identity.mjs";
 import {
@@ -756,6 +757,9 @@ async function main() {
 
   runTimedSync("bundle:verify-runtime-dependencies", () =>
     verifyPackagedRuntimeDependencies(os, arch),
+  );
+  runTimedSync("bundle:verify-app-entry", () =>
+    verifyPackagedAppEntry(resolveAppAsarPath(os, arch)),
   );
 
   const artifactPath = findBuiltArtifact(os, arch);
