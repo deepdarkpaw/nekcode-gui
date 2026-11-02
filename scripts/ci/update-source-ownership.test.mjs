@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 // 更新源归属是发布安全属性，不是实现细节：上游 manifest 分发的是官方 ZCode 安装包
 // （appId dev.zcode.app），ZCodium 是 dev.zcodium.app。一旦更新源退回上游，用户点更新
 // 会把自己的客户端覆盖成上游版本。这里用源码级断言把该属性固定在 CI 里。
-// 详见 .agents/specs/update-source-ownership.md。
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
 const UPDATE_PATH_SOURCES = [
@@ -86,11 +85,4 @@ test("更新缓存目录在打包后被改写为按 appId 隔离的名字", asyn
     !/^\s+updaterCacheDirName:/m.test(source),
     "updaterCacheDirName 不应作为 config key 声明（该 key 不生效）",
   );
-});
-
-test("更新源与缓存目录各有对应 spec", async () => {
-  for (const spec of ["update-source-ownership.md", "update-cache-isolation.md"]) {
-    const source = await readFile(join(root, ".agents/specs", spec), "utf8");
-    assert.ok(source.length > 0, `缺少 spec：${spec}`);
-  }
 });
