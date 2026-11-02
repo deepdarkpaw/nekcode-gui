@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { defaultExecutable } from "../acceptance/lib/app.mjs";
+import { defaultExecutable, removeSandbox, stopApp } from "../acceptance/lib/app.mjs";
 import {
   MOCK_FIRST_PROMPT,
   MOCK_LONG_PROMPT,
@@ -160,4 +161,22 @@ test("packaged entry detection returns Linux path and refuses ambiguous Windows 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("stopApp resolves only after the app process exited, then the sandbox can be removed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "nekcode-stop-test-"));
+  const held = join(root, "held.sqlite");
+  // 子进程打开沙箱里的文件后常驻，模拟应用持有 SQLite 句柄；与 launchApp 一样在 POSIX 上独立进程组。
+  const script = `require("fs").openSync(${JSON.stringify(held)}, "w"); process.stdout.write("ready"); setInterval(() => {}, 1000);`;
+  const child = spawn(process.execPath, ["-e", script], {
+    stdio: ["ignore", "pipe", "ignore"],
+    detached: process.platform !== "win32",
+  });
+  await new Promise((resolve) => child.stdout.once("data", resolve));
+  await stopApp(child);
+  assert.ok(child.exitCode !== null || child.signalCode !== null, "stopApp returned before exit");
+  // 已退出的进程再次 stop 是空操作。
+  await stopApp(child);
+  await removeSandbox({ root });
+  await assert.rejects(stat(root), { code: "ENOENT" });
 });

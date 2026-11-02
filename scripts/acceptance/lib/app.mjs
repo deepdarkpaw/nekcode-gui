@@ -4,7 +4,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, readdirSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -113,9 +113,35 @@ export function launchApp({
   return child;
 }
 
-/** 结束应用整棵进程树。 */
-export function stopApp(child) {
-  if (child.exitCode !== null || child.pid === undefined) return;
+/** 结束进程树后等待主进程退出的上限；超时说明进程没被结束，直接报错。 */
+const APP_EXIT_TIMEOUT_MS = 15_000;
+/**
+ * 删除沙箱时的有界重试：Windows 上进程退出后，子进程持有的文件句柄（如 SQLite）
+ * 释放有延迟，立即删除会 EBUSY。fs.rm 对 EBUSY/EPERM 等按线性退避重试，用尽仍失败则抛出。
+ */
+const SANDBOX_RM_RETRIES = 10;
+const SANDBOX_RM_RETRY_DELAY_MS = 200;
+
+/** 等待子进程 exit 事件；超时抛错。 */
+async function waitForExit(exited, pid) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`app pid ${pid} did not exit within ${APP_EXIT_TIMEOUT_MS}ms`)),
+      APP_EXIT_TIMEOUT_MS,
+    );
+  });
+  try {
+    await Promise.race([exited, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 结束应用整棵进程树，并等主进程真正退出后再返回（taskkill/SIGKILL 只是发出结束请求）。 */
+export async function stopApp(child) {
+  if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return;
+  const exited = new Promise((resolve) => child.once("exit", resolve));
   if (process.platform === "win32") {
     const result = spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
       encoding: "utf8",
@@ -124,7 +150,18 @@ export function stopApp(child) {
     if (result.status !== 0) {
       throw new Error(`taskkill failed (${result.status}): ${result.stderr}`);
     }
-    return;
+  } else {
+    process.kill(-child.pid, "SIGKILL");
   }
-  process.kill(-child.pid, "SIGKILL");
+  await waitForExit(exited, child.pid);
+}
+
+/** 删除沙箱目录（应用须已由 stopApp 结束）。 */
+export async function removeSandbox(sandbox) {
+  await rm(sandbox.root, {
+    recursive: true,
+    force: true,
+    maxRetries: SANDBOX_RM_RETRIES,
+    retryDelay: SANDBOX_RM_RETRY_DELAY_MS,
+  });
 }

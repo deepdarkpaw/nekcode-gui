@@ -5,10 +5,17 @@
  * 用法：node scripts/acceptance/packaged-smoke.mjs [--app <可执行文件>] [--keep]
  * 退出码：0 通过；1 失败（原因打印到 stderr，截图与日志留在 sandbox 目录）。
  */
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { createSandbox, defaultExecutable, freePort, launchApp, stopApp } from "./lib/app.mjs";
+import {
+  createSandbox,
+  defaultExecutable,
+  freePort,
+  launchApp,
+  removeSandbox,
+  stopApp,
+} from "./lib/app.mjs";
 import { connectRenderer, evaluate, screenshot, waitForPage } from "./lib/cdp.mjs";
 
 /** renderer 错误边界的固定文案（zh-CN / en-US）。 */
@@ -48,7 +55,7 @@ async function runSmoke(executable, sandbox) {
     return { failures, warnings: session.problems.filter((p) => p.kind !== "exception") };
   } finally {
     session?.close();
-    stopApp(child);
+    await stopApp(child);
   }
 }
 
@@ -69,6 +76,6 @@ try {
   console.error(`[smoke] FAIL ${error instanceof Error ? error.message : String(error)}`);
   console.error(`[smoke] artifacts: ${sandbox.root}`);
 } finally {
-  if (!failed && !values.keep) await rm(sandbox.root, { recursive: true, force: true });
+  if (!failed && !values.keep) await removeSandbox(sandbox);
   process.exitCode = failed ? 1 : 0;
 }

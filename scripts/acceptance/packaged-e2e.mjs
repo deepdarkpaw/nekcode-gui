@@ -3,7 +3,7 @@
  * 用法：node scripts/acceptance/packaged-e2e.mjs [--app <path>] [--keep]
  * NEK_RPC_WORKTREE 指向预构建的 nek 开发版；失败与 blocked 均非通过，并保留全部证据。
  */
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import {
@@ -11,6 +11,7 @@ import {
   defaultExecutable,
   freePort,
   launchApp,
+  removeSandbox,
   stopApp,
   writeNekShim,
 } from "./lib/app.mjs";
@@ -92,15 +93,16 @@ async function launchAndConnect() {
   );
 }
 
-function closeSession() {
+async function closeSession() {
   if (session) {
     problems.push(...session.problems);
     session.close();
     session = undefined;
   }
   if (app) {
-    stopApp(app);
+    const stopping = app;
     app = undefined;
+    await stopApp(stopping);
   }
 }
 
@@ -166,7 +168,7 @@ try {
   await step(
     "09-session-resume",
     async () => {
-      closeSession();
+      await closeSession();
       await new Promise((resolve) => setTimeout(resolve, 2_000));
       await launchAndConnect();
       await checkRestoredSession(session);
@@ -178,7 +180,7 @@ try {
   matrix.push({ name: "harness", status: "fail", error: String(error) });
 } finally {
   try {
-    closeSession();
+    await closeSession();
   } catch (error) {
     matrix.push({ name: "app-cleanup", status: "fail", error: String(error) });
   }
@@ -198,6 +200,6 @@ try {
     console.log(`${row.name}: ${row.status}${row.error ? ` — ${row.error}` : ""}`);
   console.log(`sandbox: ${sandbox.root}`);
   const failed = matrix.length === 0 || matrix.some((row) => row.status !== "pass");
-  if (!failed && !values.keep) await rm(sandbox.root, { recursive: true, force: true });
+  if (!failed && !values.keep) await removeSandbox(sandbox);
   process.exitCode = failed ? 1 : 0;
 }
