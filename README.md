@@ -11,10 +11,25 @@ process drives `nek --mode rpc`; the renderer is React + Vite. It is a modified 
 [ZCodium](https://github.com/axiom-desu/ZCodium) (Apache-2.0) — see [NOTICE.md](NOTICE.md) and
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
+## 安装与启动（Windows）
+
+1. 从 [GitHub Releases](https://github.com/deepdarkpaw/nekcode-gui/releases) 下载
+   `nekcode-<版本>-win-x64.exe`（NSIS 安装包）并运行。安装向导可以选择安装目录，默认按当前用户安装到
+   `%LOCALAPPDATA%\Programs
+ekcode`，并创建开始菜单与桌面快捷方式「nekcode」。
+2. 之后从开始菜单或桌面快捷方式启动；程序本体是安装目录下的 `nekcode.exe`。卸载在「设置 → 应用」里进行。
+3. 首次启动的引导会检测本机的 nek；没有安装时可以在引导里一键安装（stable 渠道，即最新的 `nek-v*` 发布版）。
+
+nekcode 需要 **nek 0.4.0 或更高版本**（GUI 协议版本 1，见
+[nek v0.4.0](https://github.com/deepdarkpaw/nekcode/releases/tag/nek-v0.4.0)）；更旧的 nek 没有
+`nek gui-info`，引导页会提示 nek 版本过旧。已安装的 nek 用 `nek update --channel stable` 升级。
+
+安装包目前没有代码签名，Windows SmartScreen 可能提示「已保护你的电脑」，点「更多信息 → 仍要运行」即可。
+
 ## 它是什么
 
 - **桌面壳**：窗口、菜单、快捷键、托盘图标、自动更新、本地 IPC 与远端会话都在本仓库的 Electron 进程里实现。
-- **agent 不随包分发**：对话、工具执行与文件改动由本机的 `nek` CLI 完成（`nek --mode rpc`）。GUI 通过
+- **agent 不随包分发**：对话、工具执行与文件改动由本机的 nek CLI（[deepdarkpaw/nekcode](https://github.com/deepdarkpaw/nekcode)）完成（`nek --mode rpc`）。GUI 通过
   `nek gui-info --json` 校验协议版本；启动器查找顺序是「设置里配置的路径 → `PATH` 里的 `nek` →
   Windows 的 `%LOCALAPPDATA%\nekcode\bin\nek.cmd`、其他平台的 `~/.local/bin/nek`」。
 - **配置同源**：设置中心直接读写 nek 的配置（`~/.nek/agent`），不在 GUI 侧另存一份模型与工具配置。
@@ -67,12 +82,10 @@ ZCODE_ENV=production ZCODE_SKIP_REMOTE_ASSETS=1 pnpm build:bootstrap
 ### 运行
 
 ```bash
-pnpm dev:desktop        # 开发态，连接生产后端（ZCODE_ENV=production）
-pnpm dev:desktop:test   # 开发态，连接测试后端（ZCODE_ENV=test）
+pnpm dev:desktop        # 开发态启动桌面端（独立的 dev 应用身份，不影响已安装的正式版）
 ```
 
-开发态默认读写真实的 `~/.nek/gui`。需要完全隔离时设置 `ZCODE_DATA_BASE_DIR=<临时目录>`（`mise run dev` 就是这么
-做的，它把数据根指到 `~/.zcode-dev-home`）。
+开发态默认读写真实的 `~/.nek/gui`。需要完全隔离时设置 `ZCODE_DATA_BASE_DIR=<临时目录>`。
 
 ### 测试与门禁
 
@@ -96,6 +109,23 @@ pnpm architecture:check # 模块与分层边界
 单个文件的格式化与检查：`npx oxfmt <files>`、`npx oxlint <files>`。
 
 ### 打包
+
+本地生成 Windows 安装包只需要一条命令（正式身份 `nekcode`，构建 → 打包 → 运行时依赖校验 → 体积审计）：
+
+```bash
+pnpm dist:win
+```
+
+产物：
+
+- `packages/desktop/dist/nekcode-<版本>-win-x64.exe`：安装包（setup），发给用户的就是它；
+- `packages/desktop/dist/win-unpacked/nekcode.exe`：免安装目录，可直接运行，用于本地冒烟。
+
+版本号是滚动版本 `<根 package.json 的 version>-<构建日期>.<提交数>`，例如 `0.1.0-20261102.400`。
+没有设置 `ZCODE_ENV=production` 的构建是 Preview 身份（`nekcode-preview`，文件名带 `_TEST`），只用于测试，
+可以与正式版并排安装。
+
+其他平台与分步命令：
 
 ```bash
 # 仓库标准入口：构建 → electron-builder → 运行时依赖校验 → 体积审计
@@ -140,7 +170,8 @@ Windows 本地打包提示：electron-builder 解压 `winCodeSign`（内含 `rce
 - 客户端实际请求的通道名由 electron-updater 按当前版本与 Release tag 的 prerelease 段推导，取不到时回退到
   `latest*.yml`；因此 Preview 版目前也通过 `latest*.yml` 更新，`latest-preview*.yml` 是为独立通道预留的产物。
 - 安装包内的 `app-update.yml` 由 electron-builder 按 `publish: { provider: "github", owner, repo }` 生成，默认指向
-  `nekcode/nekcode-gui`，可用 `NEKCODE_UPDATE_OWNER` / `NEKCODE_UPDATE_REPO` 覆盖（fork 发版用）。
+  [`deepdarkpaw/nekcode-gui`](https://github.com/deepdarkpaw/nekcode-gui)，可用 `NEKCODE_UPDATE_OWNER` /
+  `NEKCODE_UPDATE_REPO` 覆盖（fork 发版用）。
 - 签名：只有配置了证书 secret（Windows `WINDOWS_CSC_LINK` + `WINDOWS_CSC_KEY_PASSWORD`；macOS `MACOS_CSC_LINK`
   - `MACOS_CSC_KEY_PASSWORD` + `MACOS_SIGNING_IDENTITY`）时才会签名。缺 secret 时产物保持未签名，并在工作流日志里
     给出明确提示。macOS 公证（notarize）尚未接入。
