@@ -143,7 +143,7 @@ jobs:
     needs: remote-assets
     # 打包只等待 assets 真实产出，不等待 checks 完成，也不看 checks 是否通过：
     # - checks 失败但 assets 成功 -> 继续打包，保留「检查与打包独立」的产品规则；
-    # - assets 失败/取消 -> build 跳过，避免四个平台各自下载缺失 artifact 制造重复噪声；
+    # - assets 失败/取消 -> build 跳过，避免各平台各自下载缺失 artifact 制造重复噪声；
     # 不使用 continue-on-error 或 artifact 静默 fallback，跳过状态如实反映 assets 失败。
     if: ${{ !cancelled() && needs.remote-assets.result == 'success' }}
     strategy:
@@ -151,14 +151,6 @@ jobs:
       matrix:
         flavor: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) && '["production","preview"]' || '["production"]') }}
         target:
-          - platform: linux
-            runner: ubuntu-24.04
-            arch: x64
-          # Linux arm64：使用 GitHub 公共仓库免费提供的原生 arm64 runner，
-          # 这样打包后的 Electron 运行时能真正执行探针，而不是只能校验文件。
-          - platform: linux
-            runner: ubuntu-24.04-arm
-            arch: arm64
           - platform: win
             runner: windows-2025
             arch: x64
@@ -182,11 +174,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install Linux packaging tools
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rpm libarchive-tools zstd
       - uses: ./.github/actions/setup-workspace
       - name: Resolve signing configuration
         shell: bash
@@ -223,8 +210,6 @@ jobs:
             else
               echo "::notice::未配置 MACOS_CSC_LINK / MACOS_SIGNING_IDENTITY：本次 macOS 产物不签名"
             fi
-          else
-            echo "::notice::Linux 产物无代码签名步骤：AppImage/deb/rpm/pacman 不签名"
           fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -245,12 +230,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            xvfb-run -a node scripts/acceptance/packaged-smoke.mjs
-          else
-            node scripts/acceptance/packaged-smoke.mjs
-          fi
+        run: node scripts/acceptance/packaged-smoke.mjs
       - name: Collect installers
         run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -274,7 +254,7 @@ jobs:
   build-macos:
     name: Build (${{ matrix.flavor }} mac ${{ matrix.target.arch }})
     # macOS runner 按 10 倍费率计分钟，只在发版 tag 与手动触发时打包；
-    # 日常 push/PR 的打包回归由 linux/win 矩阵与 checks 覆盖。
+    # 日常 push/PR 的打包回归由 win 矩阵与 checks 覆盖。
     if: ${{ !cancelled() && needs.remote-assets.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) }}
     needs: remote-assets
     strategy:
@@ -312,7 +292,7 @@ jobs:
           MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          # 与 linux/win 同一个判定：有证书 secret 才签名，缺 secret 时明确记录未签名产物。
+          # 与 win 同一个判定：有证书 secret 才签名，缺 secret 时明确记录未签名产物。
           if [ "$RUNNER_OS" = "macOS" ]; then
             if [ -n "$MACOS_CSC_LINK" ] && [ -n "$MACOS_SIGNING_IDENTITY" ]; then
               {
@@ -329,7 +309,7 @@ jobs:
           else
             echo "::notice::$RUNNER_OS 产物无代码签名步骤"
           fi
-      # 与 linux/win 同样下载 ubuntu 上产出的 Linux x64 远端运行时：
+      # 与 win 同样下载 ubuntu 上产出的 Linux x64 远端运行时：
       # 打包链路在 beforePack/afterPack 里无条件校验 bundled-remote-assets。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:

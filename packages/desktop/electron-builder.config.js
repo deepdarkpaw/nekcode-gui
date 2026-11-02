@@ -73,6 +73,12 @@ import {
 
 const buildMetadata = getBuildMetadata();
 const targetPlatform = getTargetPlatform();
+// 只发布 Windows 与 macOS 桌面包。Linux 只作为 SSH 远程主机，远程运行时由 bundle-remote-assets 单独产出。
+if (targetPlatform.os === "linux") {
+  throw new Error(
+    "[electron-builder.config] Linux 桌面包不发布：Linux 仅作为 SSH 远程主机使用（远程运行时见 scripts/bundle-remote-assets.mjs）",
+  );
+}
 const desktopProductIdentity = resolveDesktopProductIdentity({
   ...process.env,
   ZCODE_ENV: await resolveBuildEnvironment(),
@@ -147,20 +153,6 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   "proper-lockfile",
   "ssh-config",
 ];
-// pacman 依赖必须使用 Arch 官方仓库中的包名。electron-builder 的历史默认集合包含
-// 已移除的 libappindicator-gtk3/http-parser，且缺少 Electron 实际需要的运行库；显式
-// 维护最小运行时闭包，避免 pacman -U 无法解析依赖或启动时才暴露缺库。
-const PACMAN_RUNTIME_DEPENDENCIES = [
-  "gtk3",
-  "nss",
-  "libxss",
-  "libxtst",
-  "libnotify",
-  "alsa-lib",
-  "mesa",
-  "xdg-utils",
-];
-
 const WINDOWS_INSTALL_MANIFEST_NAME = ".nekcode-install-manifest";
 
 async function writeWindowsInstallManifest(context) {
@@ -197,29 +189,6 @@ function resolveElectronDownloadMirror(env = process.env) {
   }
 
   return DEFAULT_ELECTRON_MIRROR;
-}
-
-// 本地缺 rpmbuild / rpm / pacman 时只能打部分 Linux 格式；发布工作流不设置该变量，
-// 始终按完整列表出包。异常写法直接失败，避免静默少出产物被当成完整发布。
-function resolveLinuxTargets(env = process.env) {
-  const allowed = new Set(["AppImage", "deb", "rpm", "pacman"]);
-  const raw = env.ZCODE_DESKTOP_LINUX_TARGETS?.trim();
-  if (!raw) {
-    return ["AppImage", "deb", "rpm", "pacman"];
-  }
-  const targets = raw
-    .split(",")
-    .map((target) => target.trim())
-    .filter(Boolean);
-  if (targets.length === 0) {
-    throw new Error("ZCODE_DESKTOP_LINUX_TARGETS 不能为空");
-  }
-  for (const target of targets) {
-    if (!allowed.has(target)) {
-      throw new Error(`不支持的 Linux target: ${target}；可选值 ${[...allowed].join("/")}`);
-    }
-  }
-  return targets;
 }
 
 const commandStdoutMaxBuffer = 64 * 1024 * 1024;
@@ -462,16 +431,12 @@ function assertPackagedNodePtyPrebuild(context) {
 /** @type {import("electron-builder").Configuration} */
 export default {
   appId: desktopProductIdentity.appId,
-  // Linux deb 打包（fpm）会校验 package metadata 中的 homepage、author.email、maintainer。
-  // CI 环境下若这些字段缺失会在产物阶段直接失败。这里统一在构建配置补齐，避免依赖外部注入。
+  // 安装包元数据只写项目主页与名字，不公开邮箱。
   extraMetadata: {
     version: buildMetadata.appVersion,
     zcodeProductFlavor: desktopProductIdentity.flavor,
     homepage: "https://github.com/deepdarkpaw/nekcode-gui",
-    author: {
-      name: "nekcode",
-      email: "dev@nekcode.ai",
-    },
+    author: { name: "nekcode" },
   },
   // macOS 签名阶段会对 Electron Framework 下每个语言包逐个 codesign。
   // 默认全量语言会产生大量 locale.pak 签名调用，显著拉长打包时长。
@@ -595,20 +560,6 @@ export default {
       from: "build/icon.png",
       to: "icon.png",
     },
-    ...(targetPlatform.os === "linux"
-      ? [
-          {
-            // AppImage 用户级 hicolor 图标安装使用真实 512x512 资源，避免目录标称尺寸和 PNG IHDR 不一致。
-            from: "build/icons/512x512.png",
-            to: "icon_512x512.png",
-          },
-          {
-            // Linux 窗口/任务栏图标保持满幅，不复用 macOS 已按 1024/824 补留白的 icon.png。
-            from: "build/icon_linux.png",
-            to: "icon_linux.png",
-          },
-        ]
-      : []),
     {
       // Windows 独立图标：开发态和打包态都统一走同一套任务栏/窗口图标资源。
       from: "build/icon_windows.png",
@@ -681,41 +632,6 @@ export default {
   win: {
     target: ["nsis"],
     artifactName: buildDesktopArtifactName("win"),
-  },
-  linux: {
-    target: resolveLinuxTargets(process.env),
-    artifactName: buildDesktopArtifactName("linux"),
-    // desktop 包名是 scoped package（@zcode/desktop），electron-builder 默认会把
-    // Linux executable/Icon 推成 @zcodedesktop。部分桌面环境无法按这个 icon name 命中
-    // hicolor 图标，最终回退成系统齿轮。这里固定成稳定的小写名称，让 Icon=nekcode
-    // 与 /usr/share/icons/hicolor/*/apps/nekcode.png 保持一致。
-    executableName: desktopProductIdentity.linuxExecutableName,
-    category: "Development",
-    maintainer: "MoyaMryia <MryiaMoya@outlook.com>",
-  },
-  deb: {
-    // 生产版与 Preview 必须是两个 dpkg package；只改可执行名仍会让安装器把另一版本当成升级替换。
-    packageName: desktopProductIdentity.linuxPackageName,
-  },
-  pacman: {
-    // 与 deb/rpm 保持相同的 flavor 隔离，避免 Preview/Production 被 pacman 当作同一包覆盖。
-    packageName: desktopProductIdentity.linuxPackageName,
-    // 显式列出 Arch 官方仓库可解析的 Electron 运行时依赖，替换 electron-builder
-    // 陈旧默认集合，避免安装阶段因已移除包名直接失败。
-    depends: PACMAN_RUNTIME_DEPENDENCIES,
-    // Electron Builder 默认把 pacman target 命名为 .pacman；Arch 原生包的标准扩展名是 .pkg.tar.zst。
-    artifactName: buildDesktopArtifactName("linux", "pkg.tar.zst"),
-  },
-  rpm: {
-    // 与 deb 同一约束：生产版与 Preview 必须是两个独立 rpm 包，否则 dnf 会把另一 flavor 当成升级替换。
-    // rpm 面向 RHEL 8+（glibc 2.28）分发；整包 glibc 下限由 node-pty prebuild 与 bfs/ugrep 抬到 2.28，
-    // Electron 41 主二进制只引用到 2.25，不会更高。fpm 产 rpm 需要构建机提供 rpmbuild 与 xz。
-    packageName: desktopProductIdentity.linuxPackageName,
-    // electron-builder 的 rpm 默认 Requires（gtk3/nss/libXtst 等）不包含 Electron ELF 实际
-    // DT_NEEDED 的 mesa-libgbm 与 alsa-lib；rockylinux:8 最小化容器实测装完后启动报
-    // libgbm.so.1 缺失。这里用 fpm 追加 -d（在默认 Requires 之后累积），不能用 depends——
-    // depends 会整组替换默认 Requires 集。
-    fpm: ["-d", "mesa-libgbm", "-d", "alsa-lib"],
   },
   dmg: {
     // 当前安装包携带的运行时资源（尤其 agent node_modules）体积已超过默认 DMG 估算值。

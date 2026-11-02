@@ -4,9 +4,9 @@
   <img src="packages/desktop/build/icon_windows.png" alt="nekcode" width="128" height="128" />
 </div>
 
-nekcode 是终端编程助手 **nek** 的桌面图形界面，支持 Windows / macOS / Linux。
+nekcode 是终端编程助手 **nek** 的桌面图形界面，桌面端支持 Windows / macOS；Linux 主机通过 Remote SSH 连接使用。
 
-nekcode is the desktop GUI for the terminal coding agent `nek` on Windows, macOS and Linux. The Electron main
+nekcode is the desktop GUI for the terminal coding agent `nek` on Windows and macOS (Linux hosts via Remote SSH). The Electron main
 process drives `nek --mode rpc`; the renderer is React + Vite. It is a modified fork of
 [ZCodium](https://github.com/axiom-desu/ZCodium) (Apache-2.0) — see [NOTICE.md](NOTICE.md) and
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
@@ -130,14 +130,14 @@ pnpm dist:win
 # 仓库标准入口：构建 → electron-builder → 运行时依赖校验 → 体积审计
 pnpm bundle:desktop -- --os win --arch x64
 pnpm bundle:desktop -- --os mac --arch arm64
-pnpm bundle:desktop -- linux arm64
 
 # 已有 out/ 时跳过重复构建
 pnpm bundle:desktop -- --os win --arch x64 --skip-prepare --skip-build
 ```
 
 产物写在 `packages/desktop/dist/`：Windows 是 NSIS 安装包 `nekcode-<version>-win-<arch>.exe`，macOS 是 `dmg` +
-`zip`，Linux 是 `AppImage` / `deb` / `rpm` / `pkg.tar.zst`，同时生成 electron-updater 需要的 `latest*.yml`。
+`zip`，同时生成 electron-updater 需要的 `latest*.yml`。不提供 Linux 桌面包：Linux 只作为 Remote SSH 的远程主机，
+远程端运行时由 `pnpm prepare:remote-assets` 单独产出并随桌面包分发。
 
 只生成未打包目录（本地冒烟，不签名、不发布）：
 
@@ -161,10 +161,10 @@ Windows 本地打包提示：electron-builder 解压 `winCodeSign`（内含 `rce
 
 ## 发布与自动更新
 
-- 推送 `v*` 标签触发 `.github/workflows/desktop.yml`：先跑检查，再打包三平台（Windows NSIS、macOS dmg/zip、
-  Linux AppImage/deb/rpm/pacman，各含 x64 与 arm64），最后创建一个**草稿** Release，由维护者审核后手动发布。
-- Release 资产包含安装包、`SHA256SUMS` 与 electron-updater 元数据 `latest.yml` / `latest-linux.yml` /
-  `latest-linux-arm64.yml` / `latest-mac.yml`。同一平台的 x64 与 arm64 安装包会被合并进同一份元数据，Preview 身份
+- 推送 `v*` 标签触发 `.github/workflows/desktop.yml`：先跑检查，再打包 Windows NSIS 与 macOS dmg/zip（各含 x64 与
+  arm64），最后创建一个**草稿** Release，由维护者审核后手动发布。
+- Release 资产包含安装包、`SHA256SUMS` 与 electron-updater 元数据 `latest.yml` / `latest-mac.yml`。同一平台的
+  x64 与 arm64 安装包会被合并进同一份元数据，Preview 身份
   另有 `latest-preview*.yml`，两个身份不会互相覆盖。
 - 客户端实际请求的通道名由 electron-updater 按当前版本与 Release tag 的 prerelease 段推导，取不到时回退到
   `latest*.yml`；因此 Preview 版目前也通过 `latest*.yml` 更新，`latest-preview*.yml` 是为独立通道预留的产物。

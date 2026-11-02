@@ -133,13 +133,13 @@ test("checks job runs the three gate ratchets exactly, without bypass wrappers",
   assert.doesNotMatch(allRuns, /^\s*pnpm (?:lint|fmt:check)\s*$/m);
 });
 
-test("dual-product matrix expands four Exp jobs on PR/main and twelve jobs on dispatch/tag", async () => {
+test("dual-product matrix expands two jobs on PR/main and eight jobs on dispatch/tag", async () => {
   const jobs = await loadJobs();
   const desktop = jobs.build;
   const matrix = desktop.strategy.matrix;
   assert.deepEqual(
     matrix.target.map(({ platform, arch }) => `${platform}-${arch}`),
-    ["linux-x64", "linux-arm64", "win-x64", "win-arm64"],
+    ["win-x64", "win-arm64"],
   );
   assert.equal(
     matrix.flavor,
@@ -166,14 +166,14 @@ test("dual-product matrix expands four Exp jobs on PR/main and twelve jobs on di
   assert.equal(mac.env?.ZCODE_PREVIEW_IDENTITY, desktop.env.ZCODE_PREVIEW_IDENTITY);
 });
 
-test("actual event expressions expand to four daily or twelve dual-product jobs", async () => {
+test("actual event expressions expand to two daily or eight dual-product jobs", async () => {
   const jobs = await loadJobs();
   for (const [event, refType, expected] of [
-    ["pull_request", "branch", 4],
-    ["push", "branch", 4],
-    ["workflow_dispatch", "branch", 12],
-    ["workflow_dispatch", "tag", 12],
-    ["push", "tag", 12],
+    ["pull_request", "branch", 2],
+    ["push", "branch", 2],
+    ["workflow_dispatch", "branch", 8],
+    ["workflow_dispatch", "tag", 8],
+    ["push", "tag", 8],
   ]) {
     const context = {
       github: { event_name: event, ref_type: refType },
@@ -197,8 +197,8 @@ test("actual event expressions expand to four daily or twelve dual-product jobs"
     }
     assert.equal(combinations.length, expected, `${event}/${refType}`);
     assert.equal(new Set(combinations).size, expected);
-    if (expected === 4) assert.ok(combinations.every((item) => item.startsWith("production/")));
-    else assert.equal(combinations.filter((item) => item.startsWith("preview/")).length, 6);
+    if (expected === 2) assert.ok(combinations.every((item) => item.startsWith("production/")));
+    else assert.equal(combinations.filter((item) => item.startsWith("preview/")).length, 4);
   }
 });
 
@@ -206,7 +206,7 @@ test("release downloads every flavor/platform/arch artifact into per-job directo
   const jobs = await loadJobs();
   const release = jobs.release;
   const downloads = uses(release, "actions/download-artifact");
-  // 12 个 artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载，
+  // 8 个 artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载，
   // 否则后一个架构的更新元数据会静默覆盖前一个。
   assert.equal(downloads.length, 1);
   assert.equal(downloads[0].with?.pattern, "desktop-*");
@@ -234,20 +234,11 @@ test("packaging jobs collect the platform update metadata required by electron-u
     assert.equal(upload.with?.path, "dist/release-assets/*");
     assert.equal(upload.with?.["if-no-files-found"], "error");
   }
-  // 三平台的 update metadata 名字由发布脚本统一派生：latest.yml / latest-linux*.yml / latest-mac.yml，
+  // update metadata 名字由发布脚本统一派生：latest.yml / latest-mac.yml（不发布 Linux 桌面包），
   // Preview 走 latest-preview* 通道，两个身份不会互相覆盖。
   assert.deepEqual(
     releaseUpdateInfoNames([desktopProductIdentities.production, desktopProductIdentities.preview]),
-    [
-      "latest-linux-arm64.yml",
-      "latest-linux.yml",
-      "latest-mac.yml",
-      "latest-preview-linux-arm64.yml",
-      "latest-preview-linux.yml",
-      "latest-preview-mac.yml",
-      "latest-preview.yml",
-      "latest.yml",
-    ],
+    ["latest-mac.yml", "latest-preview-mac.yml", "latest-preview.yml", "latest.yml"],
   );
 });
 
