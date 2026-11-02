@@ -26,7 +26,6 @@ const version = "3.14.0";
 // ZCODE_ENV / ZCODE_PREVIEW_IDENTITY——CI 设了 production，本机裸跑会解析成 Preview。
 const identity = desktopProductIdentities.production;
 const allNames = [
-  ...artifactNames("linux", version, undefined, identity),
   ...artifactNames("win", version, undefined, identity),
   ...artifactNames("mac", version, undefined, identity),
 ];
@@ -49,8 +48,6 @@ async function writeUpdateInfo(directory, names, flavors = [identity]) {
     const groups = [
       ["win", "x64", artifactNames("win", version, undefined, flavor)],
       ["mac", "x64", artifactNames("mac", version, undefined, flavor)],
-      ["linux", "x64", artifactNames("linux", version, "x64", flavor)],
-      ["linux", "arm64", artifactNames("linux", version, "arm64", flavor)],
     ];
     for (const [platform, arch, candidates] of groups) {
       const urls = candidates.filter((name) => available.has(name));
@@ -91,6 +88,8 @@ test("baseline tag validation remains compatible and rolling tags match exactly"
     assert.throws(() => validateTag(`v${invalid}`, invalid));
   }
   assert.throws(() => artifactNames("sunos", version));
+  // 不发布 Linux 桌面包：Linux 只作为 SSH 远程主机。
+  assert.throws(() => artifactNames("linux", version), /Unsupported platform/);
 });
 
 test("rolling app version is stable for the same checked-out commit", () => {
@@ -102,28 +101,28 @@ test("rolling app version is stable for the same checked-out commit", () => {
 // 匹配，否则 tag 一发就按基线名找不到产物。这里钉住 artifactNames 对 prerelease 串可用。
 test("artifact names accept the rolling prerelease build version", () => {
   const rolling = "3.14.4-20261009.258";
-  // linux x64 的 AppImage 产物名用 x86_64（builder-util 的 getArtifactArchName 特例）。
-  assert.ok(
-    artifactNames("linux", rolling, "x64", identity)[0].includes(`nekcode-${rolling}-linux-x86_64`),
-  );
+  assert.equal(artifactNames("win", rolling, "x64", identity)[0], `nekcode-${rolling}-win-x64.exe`);
   assert.notEqual(
-    artifactNames("linux", rolling, "x64", identity)[0],
-    artifactNames("linux", "3.14.4", "x64", identity)[0],
+    artifactNames("win", rolling, "x64", identity)[0],
+    artifactNames("win", "3.14.4", "x64", identity)[0],
   );
 });
 
 test("collect copies the platform installers with their update metadata and nothing else", async (t) => {
   const source = await fixture(t);
   const output = await fixture(t, []);
-  await collectArtifacts(source, output, "linux", version, "x64", identity);
-  const linuxX64 = artifactNames("linux", version, "x64", identity);
-  assert.deepEqual((await readdir(output)).sort(), [...linuxX64, "latest-linux.yml"].sort());
-  assert.equal(await readFile(join(output, linuxX64[0]), "utf8"), `artifact: ${linuxX64[0]}`);
+  await collectArtifacts(source, output, "mac", version, "arm64", identity);
+  const macArm64 = artifactNames("mac", version, "arm64", identity);
+  assert.deepEqual((await readdir(output)).sort(), [...macArm64, "latest-mac.yml"].sort());
+  assert.equal(await readFile(join(output, macArm64[0]), "utf8"), `artifact: ${macArm64[0]}`);
   // 其他平台、其他架构及其更新元数据不得混入同一个 job 的产物集合。
   await assert.rejects(readFile(join(output, artifactNames("win", version, "x64", identity)[0])), {
     code: "ENOENT",
   });
-  await assert.rejects(readFile(join(output, sourceUpdateInfoName("linux", "arm64"))), {
+  await assert.rejects(readFile(join(output, artifactNames("mac", version, "x64", identity)[0])), {
+    code: "ENOENT",
+  });
+  await assert.rejects(readFile(join(output, sourceUpdateInfoName("win", "x64"))), {
     code: "ENOENT",
   });
 });
@@ -140,14 +139,14 @@ test("collect fails when electron-builder produced no update metadata", async (t
 test("collect selects the requested product identity", async (t) => {
   const preview = desktopProductIdentities.preview;
   const source = await fixture(t, [
-    ...artifactNames("linux", version, "x64", identity),
-    ...artifactNames("linux", version, "x64", preview),
+    ...artifactNames("win", version, "x64", identity),
+    ...artifactNames("win", version, "x64", preview),
   ]);
   const output = await fixture(t, []);
-  await collectArtifacts(source, output, "linux", version, "x64", preview);
+  await collectArtifacts(source, output, "win", version, "x64", preview);
   assert.deepEqual(
     (await readdir(output)).sort(),
-    [...artifactNames("linux", version, "x64", preview), "latest-linux.yml"].sort(),
+    [...artifactNames("win", version, "x64", preview), "latest.yml"].sort(),
   );
 });
 
@@ -218,31 +217,6 @@ test("macOS arm64 and x64 installers are collected per architecture", async (t) 
   );
 });
 
-test("Linux x64 and arm64 artifacts are collected independently", async (t) => {
-  // 修复依据：Linux arm64 与 x64 的产物名差异来自 builder-util 的 getArtifactArchName
-  // （AppImage/deb 用 arm64，rpm/pacman 用 aarch64），此前映射表只有 x64 一族，
-  // arm64 job 会因找不到预期文件名直接失败。
-  const source = await fixture(t);
-
-  const x64 = await fixture(t, []);
-  await collectArtifacts(source, x64, "linux", version, "x64", identity);
-  assert.deepEqual(
-    (await readdir(x64)).sort(),
-    [...artifactNames("linux", version, "x64", identity), "latest-linux.yml"].sort(),
-  );
-
-  const arm64 = await fixture(t, []);
-  await collectArtifacts(source, arm64, "linux", version, "arm64", identity);
-  assert.deepEqual(
-    (await readdir(arm64)).sort(),
-    [...artifactNames("linux", version, "arm64", identity), "latest-linux-arm64.yml"].sort(),
-  );
-
-  const both = await fixture(t, []);
-  await collectArtifacts(source, both, "linux", version, undefined, identity);
-  assert.equal((await readdir(both)).length, 10);
-});
-
 test("missing, empty, wrong-version and extra assets block release", async (t) => {
   const missing = await fixture(t, allNames.slice(0, -1));
   await assert.rejects(verifyReleaseAssets(missing, version, identity));
@@ -259,33 +233,29 @@ test("missing, empty, wrong-version and extra assets block release", async (t) =
   await assert.rejects(verifyReleaseAssets(wrongVersion, version, identity));
 });
 
-test("dual-product checksums cover exactly 28 installers from both identities", async (t) => {
+test("dual-product checksums cover exactly 12 installers from both identities", async (t) => {
   const preview = desktopProductIdentities.preview;
   const names = [
-    ...artifactNames("linux", version, undefined, identity),
     ...artifactNames("win", version, undefined, identity),
     ...artifactNames("mac", version, undefined, identity),
-    ...artifactNames("linux", version, undefined, preview),
     ...artifactNames("win", version, undefined, preview),
     ...artifactNames("mac", version, undefined, preview),
   ];
   const directory = await fixture(t, names, [identity, preview]);
   const paths = await verifyReleaseAssets(directory, version, [identity, preview]);
-  // 28 个安装包 + 8 份更新元数据（三平台 × 两身份，Windows/macOS 按架构合并）+ SHA256SUMS
-  assert.equal(paths.length, 37);
+  // 12 个安装包 + 4 份更新元数据（Windows/macOS × 两身份，两个架构合并）+ SHA256SUMS
+  assert.equal(paths.length, 17);
   assert.equal(
     (await readFile(join(directory, "SHA256SUMS"), "utf8")).trim().split("\n").length,
-    28,
+    12,
   );
 });
 
 test("dual-product verification rejects empty, duplicate, missing, empty, wrong-version, and extra inputs", async (t) => {
   const preview = desktopProductIdentities.preview;
   const names = [
-    ...artifactNames("linux", version, undefined, identity),
     ...artifactNames("win", version, undefined, identity),
     ...artifactNames("mac", version, undefined, identity),
-    ...artifactNames("linux", version, undefined, preview),
     ...artifactNames("win", version, undefined, preview),
     ...artifactNames("mac", version, undefined, preview),
   ];
@@ -311,7 +281,7 @@ test("dual-product verification rejects empty, duplicate, missing, empty, wrong-
   await assert.rejects(verifyReleaseAssets(extra, version, [identity, preview]), /Unexpected/);
 });
 
-test("checksums cover exactly the fourteen validated installers and can be regenerated", async (t) => {
+test("checksums cover exactly the six validated installers and can be regenerated", async (t) => {
   const directory = await fixture(t);
   const paths = await verifyReleaseAssets(directory, version, identity);
   const expected = allNames
@@ -322,36 +292,24 @@ test("checksums cover exactly the fourteen validated installers and can be regen
     })
     .join("");
   assert.equal(await readFile(join(directory, "SHA256SUMS"), "utf8"), expected);
-  assert.equal(paths.length, 19);
+  assert.equal(paths.length, 9);
   await verifyReleaseAssets(directory, version, identity);
 });
 
 test("update metadata filenames follow electron-updater channel rules", () => {
-  // electron-updater 的 Provider#getChannelFilePrefix：Windows 无平台后缀，
-  // Linux 追加 -linux（非 x64 再加 -<arch>），macOS 追加 -mac。
+  // electron-updater 的 Provider#getChannelFilePrefix：Windows 无平台后缀，macOS 追加 -mac。
   assert.equal(updateInfoChannelName("win", "production", "x64"), "latest.yml");
   assert.equal(updateInfoChannelName("win", "production", "arm64"), "latest.yml");
   assert.equal(updateInfoChannelName("win", "preview", "x64"), "latest-preview.yml");
-  assert.equal(updateInfoChannelName("linux", "production", "x64"), "latest-linux.yml");
-  assert.equal(updateInfoChannelName("linux", "production", "arm64"), "latest-linux-arm64.yml");
-  assert.equal(
-    updateInfoChannelName("linux", "preview", "arm64"),
-    "latest-preview-linux-arm64.yml",
-  );
+  assert.throws(() => updateInfoChannelName("linux", "production", "x64"), /Unsupported platform/);
   assert.equal(updateInfoChannelName("mac", "production", "arm64"), "latest-mac.yml");
   assert.equal(updateInfoChannelName("mac", "preview", "x64"), "latest-preview-mac.yml");
   // electron-builder 写盘用的是 latest 通道名，与生产身份的 canonical 名同源。
   assert.equal(sourceUpdateInfoName("win", "arm64"), "latest.yml");
-  assert.equal(sourceUpdateInfoName("linux", "arm64"), "latest-linux-arm64.yml");
   assert.throws(() => updateInfoChannelName("freebsd", "production", "x64"));
   assert.throws(() => updateInfoChannelName("win", "production", "riscv64"));
-  assert.deepEqual(releaseUpdateInfoNames([identity]), [
-    "latest-linux-arm64.yml",
-    "latest-linux.yml",
-    "latest-mac.yml",
-    "latest.yml",
-  ]);
-  assert.equal(releaseUpdateInfoNames([identity, desktopProductIdentities.preview]).length, 8);
+  assert.deepEqual(releaseUpdateInfoNames([identity]), ["latest-mac.yml", "latest.yml"]);
+  assert.equal(releaseUpdateInfoNames([identity, desktopProductIdentities.preview]).length, 4);
 });
 
 test("merging per-architecture metadata keeps both installers and rejects mismatches", () => {
@@ -411,7 +369,7 @@ async function artifactTree(t, flavors) {
   const root = await mkdtemp(join(tmpdir(), "nekcode-artifacts-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const flavor of flavors) {
-    for (const platform of ["linux", "win", "mac"]) {
+    for (const platform of ["win", "mac"]) {
       for (const arch of ["x64", "arm64"]) {
         const directory = join(root, `desktop-${flavor.flavor}-${platform}-${arch}`);
         await mkdir(directory, { recursive: true });
@@ -442,7 +400,7 @@ test("assemble flattens installers and merges per-architecture update metadata",
   });
   assert.deepEqual(written, releaseUpdateInfoNames([identity, preview]));
   const entries = (await readdir(destination)).sort();
-  assert.equal(entries.length, 28 + 8);
+  assert.equal(entries.length, 12 + 4);
 
   const win = (await readUpdateInfo(join(destination, "latest.yml"))).document;
   assert.equal(win.version, version);
@@ -461,16 +419,9 @@ test("assemble flattens installers and merges per-architecture update metadata",
       artifactNames("win", version, "x64", preview)[0],
     ].sort(),
   );
-  // Linux 的两份元数据保持按架构分离：arm64 走 latest-linux-arm64.yml。
-  assert.deepEqual(
-    (await readUpdateInfo(join(destination, "latest-linux-arm64.yml"))).document.files.map(
-      (file) => file.url,
-    ),
-    artifactNames("linux", version, "arm64", identity),
-  );
   // 组装结果必须能通过发布校验，并且只包含安装包 + 元数据 + SHA256SUMS。
   const files = await verifyReleaseAssets(destination, version, [identity, preview]);
-  assert.equal(files.length, 37);
+  assert.equal(files.length, 17);
 });
 
 test("assemble refuses metadata that points at another platform's installer", async (t) => {
@@ -479,7 +430,7 @@ test("assemble refuses metadata that points at another platform's installer", as
   t.after(() => rm(destination, { recursive: true, force: true }));
   await writeFile(
     join(artifactsRoot, "desktop-production-win-x64", "latest.yml"),
-    updateInfoYaml([artifactNames("linux", version, "x64", identity)[0]]),
+    updateInfoYaml([artifactNames("mac", version, "x64", identity)[0]]),
   );
   await assert.rejects(
     assembleReleaseAssets({ artifactsRoot, destination, version, identities: [identity] }),
@@ -547,7 +498,7 @@ test("create a draft then upload assets; never publish it", async () => {
   assert.notEqual(notesIndex, -1);
   assert.equal(
     calls[1][notesIndex + 1],
-    "To be, or not to be, that is the question.\n\n生存还是毁灭，这是一个问题。\n\n— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》\n\nProducts: nekcode is the production desktop app; nekcode-preview is the preview-channel build and must not replace a production install.\n\nFeatures: nek CLI parity through the GUI RPC channel. Manual platform acceptance is not complete.\n\nmacOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.",
+    "To be, or not to be, that is the question.\n\n生存还是毁灭，这是一个问题。\n\n— William Shakespeare, Hamlet / 莎士比亚《哈姆雷特》\n\nProducts: nekcode is the production desktop app; nekcode-preview is the preview-channel build and must not replace a production install.\n\nFeatures: nek CLI parity through the GUI RPC channel. Manual platform acceptance is not complete.\n\nWindows x64/arm64 and macOS arm64/x64 (no Linux desktop build; Linux is supported as a remote SSH host). Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.",
   );
   assert.equal(calls[2][2], "upload");
   assert.ok(calls[2].includes("--clobber"));

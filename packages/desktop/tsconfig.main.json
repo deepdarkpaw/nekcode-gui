@@ -1,7 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "out/main",
+    // tsc 输出不能写进 tsup 的打包目录 out/main：构建后再跑类型检查会把未打包的逐文件产物装进安装包。
+    "outDir": ".cache/tsc/main",
     "rootDir": "src/main",
     "lib": ["es2025"]
   },

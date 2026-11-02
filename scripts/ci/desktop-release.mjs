@@ -39,32 +39,18 @@ const RELEASE_PRODUCT_SUMMARY = `Products: ${desktopProductIdentities.production
 const RELEASE_MESSAGE_BODY =
   `${RELEASE_PRODUCT_SUMMARY}\n\n` +
   "Features: nek CLI parity through the GUI RPC channel. Manual platform acceptance is not complete.\n\n" +
-  "macOS arm64/x64, Linux x64/arm64 and Windows x64/arm64. Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.";
+  "Windows x64/arm64 and macOS arm64/x64 (no Linux desktop build; Linux is supported as a remote SSH host). Unsigned builds; review and test each platform before publishing. Verify downloads with SHA256SUMS.";
 // electron-builder 按发行格式改写 ${arch}，必须匹配实际产物而非统一猜测 x64。
 // macOS 同时发 arm64 与 x64（Intel），两者各自在原生 runner 上构建（macos-15 /
 // macos-15-intel）：交叉架构打包会混入错误架构的原生预编译产物
 // （node-pty prebuild、bundled 工具链）。dmg 面向人工安装，zip 面向自动化分发。
-// Linux arm64 与 x64 的产物名差异来自 builder-util 的 getArtifactArchName：
-// AppImage/deb 用 arm64，rpm 与 pacman 用 aarch64；已由本地 linux arm64 打包实测确认。
+// 不发布 Linux 桌面包：Linux 只作为 SSH 远程主机，远程运行时由 remote-assets 单独产出。
 const extensions = {
   mac: [
     { extension: "dmg", arch: "arm64" },
     { extension: "zip", arch: "arm64" },
     { extension: "dmg", arch: "x64" },
     { extension: "zip", arch: "x64" },
-  ],
-  linux: [
-    { extension: "AppImage", arch: "x86_64" },
-    { extension: "deb", arch: "amd64" },
-    { extension: "rpm", arch: "x86_64" },
-    { extension: "pkg.tar.zst", arch: "x64" },
-    { extension: "AppImage", arch: "arm64" },
-    { extension: "deb", arch: "arm64" },
-    { extension: "rpm", arch: "aarch64" },
-    // pacman 的 arm64 名是 aarch64 而不是 arm64：builder-util 的 getArtifactArchName
-    // 按 target 名（pacman）而非文件扩展名判定，x64 不在其特例表里所以保持 x64，
-    // arm64 命中 pacman/rpm/flatpak 一律 aarch64。已由 linux arm64 构建实测确认。
-    { extension: "pkg.tar.zst", arch: "aarch64" },
   ],
   win: [
     // Windows 同时发 x64 与 arm64：electron-builder 可在 x64 runner 上交叉构建 arm64。
@@ -92,8 +78,7 @@ export function validateTag(tag, version, expectedRollingVersion) {
     throw new Error(`Expected tag v${expectedVersion}, received ${tag}`);
 }
 
-// 同一架构在不同产物格式里的写法不同（deb=amd64、AppImage/rpm=x86_64、exe=x64），
-// 按架构族过滤时必须归一，否则 "x64" 匹配不到 Linux 的 deb/AppImage。
+// 架构族别名：按架构过滤产物时，把 electron-builder 可能使用的同义写法归到同一族。
 const ARCH_ALIASES = {
   x64: ["x64", "amd64", "x86_64"],
   arm64: ["arm64", "aarch64"],
@@ -129,11 +114,10 @@ function assertNonEmptyUpdateInfo(file) {
 }
 
 function matchesPlatformUpdateInfo(name, platform) {
-  // electron-builder 只会写 latest 通道名：Windows 是 latest.yml，macOS 是 latest-mac.yml，
-  // Linux 按架构写成 latest-linux.yml / latest-linux-<arch>.yml。
+  // electron-builder 只会写 latest 通道名：Windows 是 latest.yml，macOS 是 latest-mac.yml。
   if (platform === "win") return name === "latest.yml";
   if (platform === "mac") return name === "latest-mac.yml";
-  return /^latest-linux(?:-[\w.-]+)?\.yml$/.test(name);
+  throw new Error(`Unsupported platform: ${platform}`);
 }
 
 /**
@@ -225,7 +209,7 @@ export async function assembleReleaseAssets({
           if (!allowedUrls.has(url))
             throw new Error(`Update info of ${artifactName} references unknown artifact: ${url}`);
         }
-        const key = `${identity.flavor}/${platform}/${platform === "linux" ? arch : "all"}`;
+        const key = `${identity.flavor}/${platform}`;
         const bucket = documents.get(key) ?? {
           flavor: identity.flavor,
           platform,
@@ -395,7 +379,7 @@ async function main() {
     await publishDraft({ tag, repo: process.env.GITHUB_REPOSITORY, files });
   } else {
     throw new Error(
-      "Usage: desktop-release.mjs check-version | collect <linux|win|mac> | assemble | publish",
+      "Usage: desktop-release.mjs check-version | collect <win|mac> | assemble | publish",
     );
   }
 }

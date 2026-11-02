@@ -1,6 +1,6 @@
 {
   "name": "zcode",
-  "version": "3.15.1",
+  "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -20,6 +20,7 @@
     "clean": "node scripts/clean.mjs",
     "typecheck": "tsc -b packages/rpc packages/shared packages/services packages/client packages/server packages/zcode-server-cli packages/ui packages/desktop/tsconfig.host.json",
     "bundle:desktop": "pnpm --filter @zcode/desktop run bundle --",
+    "dist:win": "node scripts/dist-win.mjs",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "knip": "knip",

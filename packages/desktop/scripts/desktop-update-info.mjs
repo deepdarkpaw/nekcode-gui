@@ -20,10 +20,10 @@ async function loadYaml() {
 }
 
 /**
- * 平台后缀：Windows 历史上的通道文件名不带平台后缀，Linux 为 `-linux`
- * （非 x64 再追加 `-<arch>`），macOS 为 `-mac`。
+ * 平台后缀：Windows 的通道文件名不带平台后缀，macOS 为 `-mac`。
+ * 不发布 Linux 桌面包（Linux 只作为 SSH 远程主机），因此没有 `-linux` 通道。
  */
-const UPDATE_INFO_PLATFORM_SUFFIX = { win: "", linux: "-linux", mac: "-mac" };
+const UPDATE_INFO_PLATFORM_SUFFIX = { win: "", mac: "-mac" };
 export const RELEASE_ARCHES = ["x64", "arm64"];
 
 function asString(value) {
@@ -42,8 +42,7 @@ export function updateInfoChannelName(platform, flavor, arch) {
     throw new Error(`Unsupported platform: ${platform}`);
   if (!RELEASE_ARCHES.includes(arch)) throw new Error(`Unsupported release arch: ${arch}`);
   const channel = flavor === "preview" ? "latest-preview" : "latest";
-  const archSuffix = platform === "linux" && arch !== "x64" ? `-${arch}` : "";
-  return `${channel}${UPDATE_INFO_PLATFORM_SUFFIX[platform]}${archSuffix}.yml`;
+  return `${channel}${UPDATE_INFO_PLATFORM_SUFFIX[platform]}.yml`;
 }
 
 /** electron-builder 在打包输出目录里写的更新元数据文件名（固定 latest 通道）。 */
@@ -51,7 +50,7 @@ export function sourceUpdateInfoName(platform, arch) {
   return updateInfoChannelName(platform, "production", arch);
 }
 
-/** 一次发布涉及的全部更新元数据文件名（三平台 × 各身份，Windows/macOS 按架构合并）。 */
+/** 一次发布涉及的全部更新元数据文件名（Windows/macOS × 各身份，两个架构合并成一份）。 */
 export function releaseUpdateInfoNames(identities) {
   const names = new Set();
   for (const identity of identities)
