@@ -214,8 +214,8 @@ export async function assembleReleaseAssets({
 
   const written = [];
   for (const { flavor, platform, arch, documents: bucket } of documents.values()) {
-    // x64 元数据在前：合并后 path/sha512 兼容字段指向主下载产物，files[] 顺序稳定。
-    bucket.sort((left, right) => left.file.localeCompare(right.file));
+    // 文档按 RELEASE_ARCHES 顺序（x64 在前）推入，不再排序：合并后 path/sha512 兼容字段
+    // 指向 x64 主下载产物。按来源路径字母序排会把 `…-arm64` 排到 `…-x64` 前面。
     const name = updateInfoChannelName(platform, flavor, arch);
     await writeFile(join(destination, name), await stringifyUpdateInfo(mergeUpdateInfo(bucket)));
     written.push(name);

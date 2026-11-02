@@ -403,13 +403,16 @@ test("assemble flattens installers and merges per-architecture update metadata",
 
   const win = (await readUpdateInfo(join(destination, "latest.yml"))).document;
   assert.equal(win.version, version);
+  // x64 在前：兼容字段 path/sha512 指向 x64 主下载产物（不是按目录名字母序排在前面的 arm64）。
+  const winX64 = artifactNames("win", version, "x64", identity)[0];
   assert.deepEqual(
-    win.files.map((file) => file.url).sort(),
-    [
-      artifactNames("win", version, "arm64", identity)[0],
-      artifactNames("win", version, "x64", identity)[0],
-    ].sort(),
+    win.files.map((file) => file.url),
+    [winX64, artifactNames("win", version, "arm64", identity)[0]],
   );
+  assert.equal(win.path, winX64);
+  assert.equal(win.sha512, win.files[0].sha512);
+  const mac = (await readUpdateInfo(join(destination, "latest-mac.yml"))).document;
+  assert.match(mac.path, /-mac-x64\.(?:dmg|zip)$/);
   const previewWin = (await readUpdateInfo(join(destination, "latest-preview.yml"))).document;
   assert.deepEqual(
     previewWin.files.map((file) => file.url).sort(),
