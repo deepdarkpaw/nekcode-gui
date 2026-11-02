@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { posix, win32 } from "node:path";
 import { NEK_GUI_PROTOCOL_VERSION } from "@zcode/shared/nek-protocol";
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 
@@ -135,9 +135,15 @@ async function findExisting(deps: NekLocatorDeps, path: string): Promise<string 
   return (await deps.statFile(path)) ? path : null;
 }
 
+/** 路径语义（分隔符、PATH 分隔符）跟随 `deps.platform`，不取决于运行定位器的宿主。 */
+function platformPath(platform: NodeJS.Platform): typeof posix {
+  return platform === "win32" ? win32 : posix;
+}
+
 /** PATH 里的候选启动器。 */
 async function findOnPath(deps: NekLocatorDeps): Promise<string | null> {
   const names = deps.platform === "win32" ? WINDOWS_LAUNCHER_NAMES : POSIX_LAUNCHER_NAMES;
+  const { delimiter, join } = platformPath(deps.platform);
   const pathValue = deps.env.PATH ?? deps.env.Path ?? "";
   for (const dir of pathValue.split(delimiter)) {
     if (!dir) continue;
@@ -151,6 +157,7 @@ async function findOnPath(deps: NekLocatorDeps): Promise<string | null> {
 
 /** 各平台的默认安装位置。 */
 function defaultInstallCandidates(deps: NekLocatorDeps): string[] {
+  const { join } = platformPath(deps.platform);
   if (deps.platform === "win32") {
     const localAppData = deps.env.LOCALAPPDATA ?? join(deps.homedir, "AppData", "Local");
     return [join(localAppData, "nekcode", "bin", "nek.cmd")];

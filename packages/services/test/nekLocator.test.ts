@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import test from "node:test";
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 import {
@@ -94,8 +94,8 @@ test("finds nek on PATH (Windows tries .cmd first)", async () => {
 
 test("puts the meaningful stderr line into the failure message", async () => {
   const deps = createDeps({
-    env: { PATH: join("/usr", "bin") },
-    files: [join("/usr", "bin", "nek")],
+    env: { PATH: posix.join("/usr", "bin") },
+    files: [posix.join("/usr", "bin", "nek")],
     exitCode: 1,
     stderr: [
       "(node:33060) ExperimentalWarning: SQLite is an experimental feature",
@@ -147,13 +147,13 @@ test("falls back to %LOCALAPPDATA%\\nekcode\\bin\\nek.cmd on Windows", async () 
 });
 
 test("falls back to ~/.local/bin/nek on POSIX", async () => {
-  const launcher = join("/home/u", ".local", "bin", "nek");
-  const deps = createDeps({ env: { PATH: join("/usr", "bin") }, files: [launcher] });
+  const launcher = posix.join("/home/u", ".local", "bin", "nek");
+  const deps = createDeps({ env: { PATH: posix.join("/usr", "bin") }, files: [launcher] });
   assert.equal((await new NekLocator(deps).locate()).launcherPath, launcher);
 });
 
 test("reports not_found when nothing is installed", async () => {
-  const deps = createDeps({ env: { PATH: join("/usr", "bin") } });
+  const deps = createDeps({ env: { PATH: posix.join("/usr", "bin") } });
   const locator = new NekLocator(deps);
   await assert.rejects(locator.locate(), (error: unknown) => {
     assert.ok(error instanceof NekLocatorError);
@@ -163,15 +163,15 @@ test("reports not_found when nothing is installed", async () => {
 });
 
 test("a configured path wins and a missing configured path is not_found", async () => {
-  const custom = join("/opt", "custom", "nek");
+  const custom = posix.join("/opt", "custom", "nek");
   const present = createDeps({ files: [custom] });
   assert.equal(
     (await new NekLocator(present, { configuredPath: custom }).locate()).launcherPath,
     custom,
   );
 
-  const missingLauncher = join("/nope", "nek");
-  const missing = createDeps({ files: [join("/usr", "bin", "nek")] });
+  const missingLauncher = posix.join("/nope", "nek");
+  const missing = createDeps({ files: [posix.join("/usr", "bin", "nek")] });
   await assert.rejects(
     new NekLocator(missing, { configuredPath: missingLauncher }).locate(),
     (error: unknown) => {
@@ -185,8 +185,8 @@ test("a configured path wins and a missing configured path is not_found", async 
 
 test("rejects an incompatible protocolVersion with both versions", async () => {
   const deps = createDeps({
-    env: { PATH: join("/usr", "bin") },
-    files: [join("/usr", "bin", "nek")],
+    env: { PATH: posix.join("/usr", "bin") },
+    files: [posix.join("/usr", "bin", "nek")],
     payload: guiInfo({ protocolVersion: 99 }),
   });
   await assert.rejects(new NekLocator(deps).locate(), (error: unknown) => {
@@ -201,8 +201,8 @@ test("rejects an incompatible protocolVersion with both versions", async () => {
 
 test("classifies a failing gui-info run as failed with a stderr summary", async () => {
   const deps = createDeps({
-    env: { PATH: join("/usr", "bin") },
-    files: [join("/usr", "bin", "nek")],
+    env: { PATH: posix.join("/usr", "bin") },
+    files: [posix.join("/usr", "bin", "nek")],
     exitCode: 3,
     stderr: "Error: cannot find module\n  at x\n",
   });
@@ -215,8 +215,8 @@ test("classifies a failing gui-info run as failed with a stderr summary", async 
 });
 
 test("caches by launcher mtime and re-runs after the binary changes", async () => {
-  const launcher = join("/usr", "bin", "nek");
-  const deps = createDeps({ env: { PATH: join("/usr", "bin") }, files: [launcher] });
+  const launcher = posix.join("/usr", "bin", "nek");
+  const deps = createDeps({ env: { PATH: posix.join("/usr", "bin") }, files: [launcher] });
   const locator = new NekLocator(deps);
   await locator.locate();
   assert.equal(deps.runs.length, 1);
@@ -239,7 +239,7 @@ test("parseNekGuiInfo tolerates installer noise and rejects broken payloads", ()
 });
 
 test("toLocatorCommand leaves non-shim launchers untouched", () => {
-  const launcher = join("/usr", "bin", "nek");
+  const launcher = posix.join("/usr", "bin", "nek");
   assert.deepEqual(toLocatorCommand(launcher, ["gui-info", "--json"], "linux"), {
     file: launcher,
     args: ["gui-info", "--json"],
@@ -251,8 +251,8 @@ test("toLocatorCommand leaves non-shim launchers untouched", () => {
     windowsVerbatimArguments: false,
   });
   // 非 win32 平台即使是 .cmd 也不套 cmd.exe（跨平台测试替身仍然按平台判定）。
-  assert.deepEqual(toLocatorCommand(join("/opt", "nek.cmd"), ["gui-info"], "linux"), {
-    file: join("/opt", "nek.cmd"),
+  assert.deepEqual(toLocatorCommand(posix.join("/opt", "nek.cmd"), ["gui-info"], "linux"), {
+    file: posix.join("/opt", "nek.cmd"),
     args: ["gui-info"],
     windowsVerbatimArguments: false,
   });
