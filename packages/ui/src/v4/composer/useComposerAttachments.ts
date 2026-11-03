@@ -90,6 +90,11 @@ interface ComposerAttachmentsApi {
   restoreSessionOwnedAttachments: (attachments: readonly AttachmentRef[]) => boolean;
   /** 只返回已 ready ref；任一附件未就绪时返回 null 作 submit 二次门禁。 */
   prepareForSend: () => Promise<AttachmentRef[] | null>;
+  /**
+   * 当前已有引用的附件（实时读 store，引用稳定、只随 scope 变化）。草稿快照必须用它：
+   * 渲染闭包里的旧列表会让卸载 / 依赖变化时的 flush 把已经发出的图片写回草稿。
+   */
+  getAttachmentRefs: () => AttachmentRef[];
   /** sendText accepted 后才移交远端暂存内容，发送失败时仍由草稿持有。 */
   adoptSentAttachments: (attachmentIds: readonly string[]) => Promise<void>;
   setAttachmentError: (message: string | null) => void;
@@ -967,6 +972,14 @@ export function useComposerAttachments(
     [commitScope, scopeKey],
   );
 
+  const getAttachmentRefs = useCallback(
+    (): AttachmentRef[] =>
+      readComposerAttachmentScope(scopeKey).flatMap((item) =>
+        item.attachmentRef ? [item.attachmentRef] : [],
+      ),
+    [scopeKey],
+  );
+
   const prepareForSend = useCallback(async (): Promise<AttachmentRef[] | null> => {
     const current = readComposerAttachmentScope(scopeKey);
     if (current.some((item) => item.uploadStatus !== "ready" || !item.attachmentRef)) {
@@ -1020,6 +1033,7 @@ export function useComposerAttachments(
       clearAttachments,
       restoreSessionOwnedAttachments,
       prepareForSend,
+      getAttachmentRefs,
       adoptSentAttachments,
       setAttachmentError,
     }),
@@ -1030,6 +1044,7 @@ export function useComposerAttachments(
       attachments,
       composerDragKind,
       clearAttachments,
+      getAttachmentRefs,
       restoreSessionOwnedAttachments,
       handleAttachmentInputChange,
       handleDragLeaveComposer,

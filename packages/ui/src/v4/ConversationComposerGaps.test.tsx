@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ComponentProps, PropsWithChildren } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useCallback, useState, type ComponentProps, type PropsWithChildren } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { AttachmentRef, ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import {
+  updateComposerAttachmentScope,
+  useComposerAttachmentUploadStore,
+} from "@/store/composerAttachmentUploadStore.js";
+import type { V4ComposerDraft } from "./composer/composerDraftStore.js";
 import type { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
@@ -112,7 +117,11 @@ function wrapper({ children }: PropsWithChildren) {
     </ZCodeIntlProvider>
   );
 }
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // 附件 store 是模块级单例；测试之间不能留下别的 scope 的附件。
+  useComposerAttachmentUploadStore.setState({ scopes: {} });
+});
 
 it("restores the fork's returned text into the composer without sending it", async () => {
   const onSendText = vi.fn(async () => "sent" as const);
@@ -140,6 +149,112 @@ it("restores the fork's returned text into the composer without sending it", asy
     ),
   );
   expect(onSendText).not.toHaveBeenCalled();
+});
+
+const pasted: AttachmentRef = {
+  ref: "/staging/pasted-image.png",
+  fileName: "pasted-image.png",
+  mime: "image/png",
+  bytes: 68,
+};
+
+/** 输入框里的附件 chip 来自附件上传 store（编辑器外壳是替身，不渲染附件行）。 */
+function pastedChips(): number {
+  return Object.values(useComposerAttachmentUploadStore.getState().scopes)
+    .flat()
+    .filter((item) => item.attachmentRef?.ref === pasted.ref).length;
+}
+
+/**
+ * 有状态的 Draft owner：合并语义与 SessionPane 相同（useDraftConfigControl.updateComposerContent）。
+ * 初始草稿模拟自动保存已经写入的图片引用（用户加图后又打了字）。
+ */
+function renderWithDraftOwner(
+  workspacePath: string,
+  onSendText: ComponentProps<typeof ConversationComposer>["onSendText"],
+) {
+  const owner: { draft?: V4ComposerDraft } = {};
+  // 生产中这些回调引用稳定；每次渲染新建会让 scope 恢复 effect 反复重放草稿。
+  const replaceComposerDraft = vi.fn();
+  const attachmentPut = vi.fn();
+  const onStop = vi.fn();
+  const onSelect = vi.fn();
+  function DraftOwner() {
+    const [draft, setDraft] = useState<V4ComposerDraft>({
+      text: "describe it",
+      attachments: [pasted],
+      updatedAt: 1,
+    });
+    owner.draft = draft;
+    const updateComposerContent = useCallback(
+      (content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention" | "attachments">) =>
+        setDraft((current) => ({
+          ...current,
+          editorStateJson: undefined,
+          mention: undefined,
+          ...content,
+        })),
+      [],
+    );
+    return (
+      <ConversationComposer
+        snapshot={snapshot}
+        sessionId="child"
+        workspacePath={workspacePath}
+        composerDraft={draft}
+        updateComposerContent={updateComposerContent}
+        replaceComposerDraft={replaceComposerDraft}
+        attachmentPut={attachmentPut}
+        onSendText={onSendText}
+        onStop={onStop}
+        onSelectModel={onSelect}
+        onSelectThought={onSelect}
+        onSwitchMode={onSelect}
+        autoFocusEnabled={false}
+      />
+    );
+  }
+  render(<DraftOwner />, { wrapper });
+  return owner;
+}
+
+it("does not bring a sent image back from the autosaved draft after the send succeeds", async () => {
+  const onSendText = vi.fn(
+    async (_text: string, _options?: { attachments?: AttachmentRef[] }) => "sent" as const,
+  );
+  const owner = renderWithDraftOwner("/project-sent-attachment", onSendText);
+  await waitFor(() => expect(pastedChips()).toBe(1));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" }));
+  });
+  await waitFor(() => expect(onSendText).toHaveBeenCalledTimes(1));
+  expect(onSendText.mock.calls[0]?.[1]).toMatchObject({ attachments: [pasted] });
+  // 发送后清空附件不能触发草稿重放；草稿里也不能再留着已经发出的图片。
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(owner.draft?.attachments).toBeUndefined();
+  expect(pastedChips()).toBe(0);
+});
+
+it("drops a removed image from the autosaved draft", async () => {
+  const owner = renderWithDraftOwner(
+    "/project-removed-attachment",
+    vi.fn(async () => "sent" as const),
+  );
+  await waitFor(() => expect(pastedChips()).toBe(1));
+  // 与 chip 的移除按钮相同的效果：附件从输入框的附件 store 里消失。
+  act(() => {
+    for (const scopeKey of Object.keys(useComposerAttachmentUploadStore.getState().scopes)) {
+      updateComposerAttachmentScope(scopeKey, (items) =>
+        items.filter((item) => item.attachmentRef?.ref !== pasted.ref),
+      );
+    }
+  });
+  // 不再打字：移除本身就要落盘，否则切走再切回会把删掉的图片恢复出来。
+  await waitFor(() => expect(owner.draft?.attachments).toBeUndefined(), { timeout: 2_000 });
+  expect(owner.draft?.text).toBe("describe it");
+  expect(pastedChips()).toBe(0);
 });
 
 it("makes the locked composer visibly read-only and blocks even a stale editor submit", async () => {

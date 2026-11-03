@@ -280,7 +280,7 @@ export function useDraftConfigControl(params: {
   }, [appFollowupMode]);
 
   const updateComposerContent = useCallback(
-    (content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention">) => {
+    (content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention" | "attachments">) => {
       updateComposerDraft((current) => ({
         ...current,
         editorStateJson: undefined,

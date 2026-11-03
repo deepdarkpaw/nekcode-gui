@@ -335,7 +335,7 @@ interface ConversationComposerProps {
   /** SessionPane 注入的完整 Draft owner；生产路径不再由编辑器直接覆盖持久记录。 */
   composerDraft: V4ComposerDraft;
   updateComposerContent: (
-    content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention">,
+    content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention" | "attachments">,
   ) => void;
   replaceComposerDraft: (draft: Omit<V4ComposerDraft, "updatedAt">) => void;
   /** 当前 Composer 是否能构造完整 Submission；空模型或空 Reasoning 时为 false。 */
@@ -721,15 +721,16 @@ function ConversationComposerImpl({
   const draftPersistTimerRef = useRef<number | null>(null);
   const suppressDraftPersistRef = useRef(false);
 
+  const getAttachmentRefs = attachmentsApi.getAttachmentRefs;
   const snapshotDraftOfEditor = useCallback((): {
     text: string;
     editorStateJson?: string;
     attachments?: readonly AttachmentRef[];
   } => {
     const currentText = textRef.current;
-    const attachments = attachmentsApi.attachments.flatMap((item) =>
-      item.attachmentRef ? [item.attachmentRef] : [],
-    );
+    // 附件与正文一样实时读取：若闭包捕获渲染时的附件列表，这个回调会随每次附件变化换引用，
+    // 依赖它的“卸载时落盘”清理就会用旧列表把刚发出的图片写回草稿，随后被当作草稿附件恢复。
+    const attachments = getAttachmentRefs();
     let editorStateJson: string | undefined;
     try {
       const editorState = inputApiRef.current?.getEditorState();
@@ -740,9 +741,10 @@ function ConversationComposerImpl({
     return {
       text: currentText,
       ...(editorStateJson ? { editorStateJson } : {}),
-      ...(attachments.length > 0 ? { attachments } : {}),
+      // 显式写出 undefined：草稿合并是 `{ ...current, ...content }`，省略键会保留已移除的附件。
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
-  }, [attachmentsApi.attachments]);
+  }, [getAttachmentRefs]);
 
   const persistDraftNow = useCallback(
     (scopeId: string) => {
@@ -1045,6 +1047,22 @@ function ConversationComposerImpl({
     };
   }, [persistDraftNow]);
 
+  // 附件引用增删（上传就绪、移除、发送后清空）与正文一样防抖落盘：草稿是 scope 恢复附件的依据，
+  // 等到下次打字才更新的话，已移除的图片会在草稿恢复时回到输入框。
+  const attachmentRefsKey = useMemo(
+    () =>
+      attachmentsApi.attachments
+        .flatMap((item) => (item.attachmentRef ? [item.attachmentRef.ref] : []))
+        .join("\u0000"),
+    [attachmentsApi.attachments],
+  );
+  const persistedAttachmentRefsKeyRef = useRef(attachmentRefsKey);
+  useEffect(() => {
+    if (persistedAttachmentRefsKeyRef.current === attachmentRefsKey) return;
+    persistedAttachmentRefsKeyRef.current = attachmentRefsKey;
+    scheduleDraftPersist();
+  }, [attachmentRefsKey, scheduleDraftPersist]);
+
   // ── prompt history（per-workspace localStorage，↑/↓ 导航由 PromptHistoryPlugin 消费）──
   const [promptHistory, setPromptHistory] = useState<readonly string[]>(() =>
     readPromptHistoryEntries(workspacePath),
@@ -1162,8 +1180,10 @@ function ConversationComposerImpl({
         // 首发 promotion 会在 onSendText 返回前切换 scope 或重建 Composer。
         // 若仍允许旧 scope effect 落盘，新 Composer 会把已经发送的正文当草稿恢复。
         // 提交前先占用并隐藏该草稿；失败路径再恢复，避免用等待时间掩盖竞态。
+        // 附件引用也是草稿内容（自动保存会写入）：只清正文会让发送成功后 scope effect
+        // 把已经发出的图片当作草稿附件恢复回输入框，下一条消息还会再发一次。
         suppressDraftPersistRef.current = true;
-        updateComposerContent({ text: "" });
+        updateComposerContent({ text: "", attachments: undefined });
         draftSubmissionClaimed = true;
       };
       const restoreSubmittedDraft = () => {
