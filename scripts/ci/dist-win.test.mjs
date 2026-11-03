@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { distWin } from "../dist-win.mjs";
+import { parseReleaseArgs } from "../release.mjs";
 import {
   resolveDesktopArtifactSuffix,
   resolveDesktopProductIdentity,
@@ -94,7 +95,8 @@ test("GitHub publishing defaults to the public repository and preserves trimmed 
 
 test("root command and NSIS defaults implement the documented production installation", () => {
   const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
-  assert.equal(pkg.version, "0.1.0");
+  // 根版本由 `pnpm release` 维护，每次发版都会变；这里只要求它是发布脚本接受的 x.y.z。
+  assert.equal(parseReleaseArgs([pkg.version]).version, pkg.version);
   assert.equal(pkg.scripts["dist:win"], "node scripts/dist-win.mjs");
   const config = readFileSync(new URL("packages/desktop/electron-builder.config.js", root), "utf8");
   for (const field of [
