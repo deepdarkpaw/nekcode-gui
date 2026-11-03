@@ -6,15 +6,14 @@ import type { KeyboardEvent } from "react";
 import { PlusIcon } from "lucide-react";
 import { create } from "zustand";
 import type { NekProviderView, NekTestProviderResult } from "@zcode/shared/nek-protocol";
-import { NEK_ENDPOINT_APIS } from "@zcode/shared/nek-protocol";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { isImeComposing } from "@/lib/imeComposition.js";
 import { NekProviderLogo } from "../../components/NekProviderLogo.js";
+import { providerApiLabel } from "./providerApi.js";
 
 const MAX_TEST_RESULTS = 64;
-const API_SHORT_IDS: ReadonlySet<string> = new Set(NEK_ENDPOINT_APIS);
 
 interface TestResultStore {
   results: ReadonlyMap<string, NekTestProviderResult & { modelId: string }>;
@@ -100,6 +99,7 @@ export function ProviderList({
       >
         {providers.map((provider) => {
           const selected = provider.id === selectedId;
+          const apiLabel = providerApiLabel(provider, "short", (id) => intl.formatMessage({ id }));
           return (
             <button
               key={provider.id}
@@ -123,12 +123,12 @@ export function ProviderList({
                   {provider.name ?? provider.id}
                 </span>
                 <span className="flex items-center gap-1.5 text-ui-xs text-foreground-subtle">
-                  <span className="truncate">
-                    {API_SHORT_IDS.has(provider.api)
-                      ? intl.formatMessage({ id: `settings.nek.provider.apiShort.${provider.api}` })
-                      : provider.api}
-                  </span>
-                  <span aria-hidden="true">·</span>
+                  {apiLabel ? (
+                    <>
+                      <span className="truncate">{apiLabel}</span>
+                      <span aria-hidden="true">·</span>
+                    </>
+                  ) : null}
                   <span>
                     {intl.formatMessage(
                       { id: "settings.nek.provider.modelCount" },

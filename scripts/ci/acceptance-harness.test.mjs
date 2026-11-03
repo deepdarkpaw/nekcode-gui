@@ -6,7 +6,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { defaultExecutable, removeSandbox, stopApp } from "../acceptance/lib/app.mjs";
 import {
+  MOCK_CLI_PROMPT,
+  MOCK_CLI_REPLY,
   MOCK_FIRST_PROMPT,
+  MOCK_IMAGE_FOLLOWUP_PROMPT,
+  MOCK_IMAGE_FOLLOWUP_REPLY,
+  MOCK_IMAGE_PROMPT,
+  MOCK_IMAGE_REPLY,
   MOCK_LONG_PROMPT,
   MOCK_OTHER_ANSWER,
   MOCK_PLAN_TITLE,
@@ -90,6 +96,44 @@ test("mock records stream abort before cleanup, not ordinary successful completi
     assert.equal(mock.requests[1].turn, "slow");
     assert.equal(mock.requests[1].aborted, true);
     assert.equal(mock.requests[0].aborted, false);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("mock answers the CLI, pasted-image and follow-up turns and records whether an image arrived", async () => {
+  const mock = await startMockLlm();
+  const send = async (messages) => {
+    const response = await fetch(`${mock.baseUrl}/chat/completions`, {
+      method: "POST",
+      body: body(messages),
+    });
+    assert.equal(response.status, 200);
+    return await response.text();
+  };
+  const reply = (text) => new RegExp(text.replaceAll(".", "\\."), "u");
+  const image = { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } };
+  const imageTurn = user([{ type: "text", text: MOCK_IMAGE_PROMPT }, image]);
+  try {
+    assert.match(await send([user(MOCK_CLI_PROMPT)]), reply(MOCK_CLI_REPLY));
+    assert.match(await send([imageTurn]), reply(MOCK_IMAGE_REPLY));
+    await send([user([{ type: "text", text: MOCK_IMAGE_PROMPT }])]);
+    // 追问只看最新用户回合：历史里已经发过的图片不算，重新带上的图片才算。
+    assert.match(
+      await send([imageTurn, user(MOCK_IMAGE_FOLLOWUP_PROMPT)]),
+      reply(MOCK_IMAGE_FOLLOWUP_REPLY),
+    );
+    await send([imageTurn, user([{ type: "text", text: MOCK_IMAGE_FOLLOWUP_PROMPT }, image])]);
+    assert.deepEqual(
+      mock.requests.map(({ turn, hasImage }) => ({ turn, hasImage })),
+      [
+        { turn: "cli", hasImage: false },
+        { turn: "image", hasImage: true },
+        { turn: "image", hasImage: false },
+        { turn: "imageFollowup", hasImage: false },
+        { turn: "imageFollowup", hasImage: true },
+      ],
+    );
   } finally {
     await mock.close();
   }

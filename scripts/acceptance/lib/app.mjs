@@ -69,15 +69,8 @@ export async function writeNekShim(sandbox, nodePath, cliPath) {
   });
 }
 
-/** 启动应用；stdout/stderr 写进 sandbox/app.log。extraArgs 仅使用产品已有启动参数。 */
-export function launchApp({
-  executable,
-  sandbox,
-  cdpPort,
-  extraEnv = {},
-  withNekShim,
-  extraArgs = [],
-}) {
+/** 应用与 nek CLI 共用的隔离环境：HOME、known folder 与 nek agentDir 都指向沙箱。 */
+function sandboxEnv(sandbox, withNekShim = false) {
   const pathValue = process.env.PATH ?? process.env.Path ?? "";
   const env = {
     ...process.env,
@@ -90,9 +83,60 @@ export function launchApp({
     XDG_DATA_HOME: join(sandbox.home, ".local", "share"),
     XDG_CACHE_HOME: join(sandbox.home, ".cache"),
     PATH: withNekShim ? `${sandbox.bin}${delimiter}${pathValue}` : pathValue,
-    ...extraEnv,
   };
   delete env.Path;
+  return env;
+}
+
+/** CLI 输出只保留末尾这么多字符，用于断言与错误信息。 */
+const CLI_OUTPUT_LIMIT = 64 * 1024;
+
+/**
+ * 在沙箱项目里用 print 模式跑一次 nek CLI，模拟用户在终端里用 nek；返回 stdout。
+ * mock 与本进程共用事件循环，必须异步等待（spawnSync 会让 mock 无法响应）；
+ * print 模式在 stdin 不是终端时会读到 EOF 才执行，所以 stdin 必须是 ignore。
+ */
+export async function runNekCli(sandbox, cliPath, prompt, timeoutMs = 60_000) {
+  const child = spawn(process.execPath, [cliPath, "-p", prompt], {
+    cwd: sandbox.project,
+    env: sandboxEnv(sandbox),
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  const output = { stdout: "", stderr: "" };
+  const keep = (key) => (part) => {
+    output[key] = (output[key] + part).slice(-CLI_OUTPUT_LIMIT);
+  };
+  child.stdout.on("data", keep("stdout"));
+  child.stderr.on("data", keep("stderr"));
+  const status = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`nek CLI did not finish within ${timeoutMs}ms: ${output.stderr.trim()}`));
+    }, timeoutMs);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      resolve(code);
+    });
+  });
+  if (status !== 0) throw new Error(`nek CLI exited with ${status}: ${output.stderr.trim()}`);
+  return output.stdout;
+}
+
+/** 启动应用；stdout/stderr 写进 sandbox/app.log。extraArgs 仅使用产品已有启动参数。 */
+export function launchApp({
+  executable,
+  sandbox,
+  cdpPort,
+  extraEnv = {},
+  withNekShim,
+  extraArgs = [],
+}) {
+  const env = { ...sandboxEnv(sandbox, withNekShim), ...extraEnv };
   const child = spawn(
     executable,
     [`--remote-debugging-port=${cdpPort}`, `--user-data-dir=${sandbox.userData}`, ...extraArgs],

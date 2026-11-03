@@ -16,6 +16,8 @@ export interface NekAgentServiceAdapterOptions extends NekAgentServiceOptions {
   /** GUI 元数据索引；未注入时使用有界内存索引。 */
   sessionIndexSyncer?: import("../index/nekSessionIndexSyncer.js").NekSessionIndexSyncer;
   maxV4Subscriptions?: number;
+  /** 粘贴图片的上传暂存根目录；缺省为 GUI 数据目录下的 `tmp/nek-attachments`。 */
+  attachmentStagingDir?: string;
 }
 
 export interface NekWorkspaceTarget {

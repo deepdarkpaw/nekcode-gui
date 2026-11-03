@@ -5,7 +5,6 @@
 import { useState } from "react";
 import { DownloadCloudIcon, EllipsisIcon, PencilIcon, PlusIcon, ZapIcon } from "lucide-react";
 import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
-import { NEK_ENDPOINT_APIS } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -28,13 +27,8 @@ import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
 import { NekProviderLogo } from "../../components/NekProviderLogo.js";
 import { NekEmptyState } from "../../components/DocumentStatus.js";
 import { ModelTable } from "./ModelTable.js";
+import { providerApiLabel } from "./providerApi.js";
 import { testResultKey, useProviderTestResults } from "./ProviderList.js";
-
-export function apiLabelId(api: string): string | null {
-  return (NEK_ENDPOINT_APIS as readonly string[]).includes(api)
-    ? `settings.nek.provider.api.${api}`
-    : null;
-}
 
 function KeySummary({ provider }: { provider: NekProviderView }) {
   const { intl } = useZCodeIntl();
@@ -147,7 +141,7 @@ export function ProviderDetail({
   onReorder: (ids: string[]) => void;
 }) {
   const { intl } = useZCodeIntl();
-  const labelId = apiLabelId(provider.api);
+  const apiLabel = providerApiLabel(provider, "full", (id) => intl.formatMessage({ id }));
   return (
     <section
       aria-labelledby="nek-provider-detail-title"
@@ -167,8 +161,12 @@ export function ProviderDetail({
           </h3>
           <p className="flex flex-wrap items-center gap-x-2 text-ui-sm text-foreground-subtle">
             <span className="font-mono">{provider.id}</span>
-            <span aria-hidden="true">·</span>
-            <span>{labelId ? intl.formatMessage({ id: labelId }) : provider.api}</span>
+            {apiLabel ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{apiLabel}</span>
+              </>
+            ) : null}
             {provider.overridesBuiltin ? (
               <span className="rounded-sm bg-tag px-1 text-ui-xs">
                 {intl.formatMessage({ id: "settings.nek.provider.overridesBuiltin" })}

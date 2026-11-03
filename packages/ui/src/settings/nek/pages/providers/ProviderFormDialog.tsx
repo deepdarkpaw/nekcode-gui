@@ -26,6 +26,7 @@ import { Field, invalidProps } from "../../components/Field.js";
 import { KeyValueEditor, Segmented } from "../../components/inputs.js";
 import { NekFormDialog } from "../../components/NekFormDialog.js";
 import {
+  draftEndpointApi,
   emptyProviderDraft,
   isProviderDraftDirty,
   providerDraftFromView,
@@ -35,6 +36,9 @@ import {
   withName,
   type ProviderDraft,
 } from "./providerDraft.js";
+
+/** 分段控件里“不在服务商上设置端点”的取值（Radix 单选把空串当成未选中，不能直接用 ""）。 */
+const API_UNSET = "per-model" as const;
 
 function BaseUrlPreview({
   api,
@@ -245,14 +249,20 @@ export function ProviderFormDialog({
               />
             </Field>
             <Field label={t("settings.nek.provider.field.api")}>
-              <Segmented
+              <Segmented<NekEndpointApi | typeof API_UNSET>
                 ariaLabel={t("settings.nek.provider.field.api")}
-                value={draft.api}
-                options={NEK_ENDPOINT_APIS.map((api) => ({
-                  value: api,
-                  label: t(`settings.nek.provider.api.${api}`),
-                }))}
-                onChange={(api) => update({ api })}
+                value={draft.api || API_UNSET}
+                options={[
+                  // 原本没在服务商上设置端点（每个模型自带 api）时保留“不设置”，保存不会凭空写入。
+                  ...(initial.api === ""
+                    ? [{ value: API_UNSET, label: t("settings.nek.provider.api.unset") }]
+                    : []),
+                  ...NEK_ENDPOINT_APIS.map((api) => ({
+                    value: api,
+                    label: t(`settings.nek.provider.api.${api}`),
+                  })),
+                ]}
+                onChange={(api) => update({ api: api === API_UNSET ? "" : api })}
               />
             </Field>
             <Field
@@ -266,13 +276,13 @@ export function ProviderFormDialog({
                 id={ids.baseUrl}
                 required
                 value={draft.baseUrl}
-                placeholder={BASE_URL_PLACEHOLDERS[draft.api]}
+                placeholder={BASE_URL_PLACEHOLDERS[draftEndpointApi(draft)]}
                 className="font-mono"
                 {...invalidProps(ids.baseUrl, show("baseUrl", draft.baseUrl !== ""))}
                 onChange={(event) => update({ baseUrl: event.target.value })}
               />
               <BaseUrlPreview
-                api={draft.api}
+                api={draftEndpointApi(draft)}
                 value={draft.baseUrl}
                 onFix={(baseUrl) => update({ baseUrl })}
               />
@@ -328,7 +338,7 @@ export function ProviderFormDialog({
                     onCheckedChange={(authHeader) => update({ authHeader })}
                   />
                 </label>
-                {draft.api === "openai-completions" ? (
+                {draftEndpointApi(draft) === "openai-completions" ? (
                   <Field
                     label={t("settings.nek.provider.field.thinkingFormat")}
                     hint={t("settings.nek.provider.field.thinkingFormatHint")}

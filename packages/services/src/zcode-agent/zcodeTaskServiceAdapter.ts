@@ -135,6 +135,7 @@ import type {
   ZCodeTaskIndexSyncer,
   ZCodeTaskIndexTerminalEvent,
 } from "./zcodeTaskIndexSyncer.js";
+import { createWorkspaceSessionImporter } from "./workspaceSessionImporter.js";
 import { readModelTrajectory } from "./modelTrajectory.js";
 import { errorAttributionSchema, type CommandPayloadMap } from "@zcode/shared/zcode-protocol-v4";
 import {
@@ -267,6 +268,12 @@ export function createZCodeTaskServiceAdapter(
   }));
   const taskIndexRepo = options.taskIndexRepo ?? new TaskIndexRepo();
   const taskIndexSyncer = options.taskIndexSyncer;
+  const sessionImporter = createWorkspaceSessionImporter({
+    agentService: options.zcodeAgentService,
+    taskIndexRepo,
+    onRowsInserted: (target) =>
+      taskIndexSyncer.emitWorkspaceTaskListChanged(target, undefined, "task_created"),
+  });
 
   // 之前 adapter 自带 notifySyncerSession 时把 syncer 视为可选；现在 syncer 是构造必填项，
   // 简化为直接调用，避免每个 callsite 都做空判断。
@@ -2243,6 +2250,14 @@ export function createZCodeTaskServiceAdapter(
         workspaceIdentity: meta.workspaceIdentity,
       });
       return meta;
+    },
+
+    async importAgentSessions(params): Promise<{ inserted: number }> {
+      const result = await sessionImporter.importWorkspaceSessions({
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+      return { inserted: result.status === "imported" ? result.inserted : 0 };
     },
 
     async listTasks(params): Promise<ZCodeTaskMeta[]> {

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IServiceAccessor } from "@zcode/services";
 import type { ZCodeWorkspaceEvent } from "@zcode/shared";
 import { logger } from "@/logger.js";
+import { useAgentSessionImport } from "@/hooks/useAgentSessionImport.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeSessionStore, selectWorkspaceZCodeState } from "@/store/zcodeSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
@@ -373,6 +374,17 @@ export function useWorkspaceTaskLists(params: {
   }, [baseServices, queryConfigs, serviceResolverState]);
   const endpointShardsRef = useRef(endpointShards);
   endpointShardsRef.current = endpointShards;
+  const sessionImportShards = useMemo(
+    () =>
+      endpointShards.map((shard) => ({
+        shardKey: shard.shardKey,
+        service: shard.services.zcodeTaskService,
+        scopes: shard.configs.map((config) => config.scope),
+      })),
+    [endpointShards],
+  );
+  // tasks-index 只收录 GUI 观察到的会话；CLI 建的会话由这里导入，新增后 host 广播 task_created。
+  useAgentSessionImport(sessionImportShards, activeWorkspaceKey);
   const workspaceEventSubscriptionSignature = useMemo(
     () => buildWorkspaceEventSubscriptionSignature(endpointShards),
     [endpointShards],

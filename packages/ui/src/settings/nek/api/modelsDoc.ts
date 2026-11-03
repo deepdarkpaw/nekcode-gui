@@ -44,6 +44,8 @@ function providerViewFromWrite(
   const { apiKey, ...rest } = write;
   return {
     ...rest,
+    // 与 host 读取视图一致：没在服务商上设置端点时为空串。
+    api: rest.api ?? "",
     apiKey: apiKeyViewFromWrite(apiKey, previous?.apiKey),
     overridesBuiltin: previous?.overridesBuiltin ?? false,
   };

@@ -6,7 +6,6 @@
  */
 import type {
   NekAgentPresetEntry,
-  NekConfigDiagnostic,
   NekConfigRevision,
   NekConfigTarget,
   NekModelConfig,
@@ -28,6 +27,7 @@ import {
   validateProviderValue,
 } from "./modelsDocument.js";
 import type { NekJsoncEdit, NekModelsSnapshot } from "./modelsDocument.js";
+import { modelsDiagnostics } from "./modelsDiagnostics.js";
 import { planReferenceRewrites, scanProviderReferences } from "./modelsReferences.js";
 import { modelsPath, settingsPath } from "./paths.js";
 import { listAgentPresets, writeAgentPreset } from "./presetsDocument.js";
@@ -92,28 +92,6 @@ export interface NekModelsGroup {
     modelIds: string[],
     options: { revision: string },
   ) => Promise<NekConfigRevision>;
-}
-
-/** models.json 的结构性问题（nek 启动时也会报，GUI 提前显示）。 */
-function modelsDiagnostics(snapshot: NekModelsSnapshot): NekConfigDiagnostic[] {
-  const diagnostics: NekConfigDiagnostic[] = [];
-  for (const [id, provider] of Object.entries(snapshot.providers)) {
-    if (typeof provider.api !== "string" || provider.api === "") {
-      diagnostics.push({
-        file: snapshot.path,
-        severity: "warning",
-        message: `provider "${id}" has no "api"; nek falls back to the built-in default`,
-      });
-    }
-    if (typeof provider.baseUrl !== "string" || provider.baseUrl === "") {
-      diagnostics.push({
-        file: snapshot.path,
-        severity: "warning",
-        message: `provider "${id}" has no "baseUrl"`,
-      });
-    }
-  }
-  return diagnostics;
 }
 
 function requireProvider(snapshot: NekModelsSnapshot, providerId: string): Record<string, unknown> {

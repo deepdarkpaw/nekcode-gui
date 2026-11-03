@@ -3138,6 +3138,8 @@ const zhCN: Record<string, string> = {
   "settings.nek.provider.apiShort.openai-responses": "Responses",
   "settings.nek.provider.apiShort.anthropic-messages": "Anthropic",
   "settings.nek.provider.apiShort.google-generative-ai": "Gemini",
+  "settings.nek.provider.api.perModel": "按模型设置",
+  "settings.nek.provider.api.unset": "不设置（按模型）",
   "settings.nek.provider.form.addTitle": "添加服务商",
   "settings.nek.provider.form.editTitle": "编辑服务商",
   "settings.nek.provider.form.description":

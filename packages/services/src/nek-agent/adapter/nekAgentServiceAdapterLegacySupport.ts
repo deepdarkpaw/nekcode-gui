@@ -3,14 +3,18 @@ import type { HelloMessage, V4ConversationRowsRangeResult } from "@zcode/shared/
 import { V4_WIRE_PROTOCOL_VERSION } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionSummary } from "@zcode/shared/nek-protocol";
 import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
+import { ZCodeAgentRuntimeUnavailableError } from "../../zcode-agent/runtimeUnavailableError.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 import type { NekSessionResult } from "../service/types.js";
 import type { NekAgentServiceAdapterApi, NekWorkspaceTarget } from "./types.js";
+import type { NekAttachmentStaging } from "./nekAttachmentStaging.js";
 import { workspaceKey } from "./frameHelpers.js";
 
 export interface NekAgentServiceAdapterLegacyTarget extends NekAgentServiceAdapterApi {
   readonly service: NekAgentService;
   readonly logger?: { warn: (...args: unknown[]) => void };
+  /** 粘贴图片的 v4 上传事务暂存。 */
+  readonly attachments: NekAttachmentStaging;
   resolveSessionKey(target: NekWorkspaceTarget, sessionId?: string): string | undefined;
 }
 
@@ -144,6 +148,27 @@ export async function bindingSnapshot(
   return legacySnapshotFromResult(input, {
     ...session,
     conversation: target.service.conversationSnapshot(binding.sessionKey),
+  });
+}
+
+/**
+ * `existing-only` 读快照（task index 等被动观察者）：只读 GUI 已打开的会话，绝不为了读快照
+ * 恢复会话进程。会话没被打开（例如仍归终端里的 CLI 所有）时报 runtime-unavailable。
+ */
+export function existingBindingSnapshot(
+  target: NekAgentServiceAdapterLegacyTarget,
+  input: Parameters<IZCodeAgentService["readSession"]>[0],
+): LegacySnapshot {
+  const sessionKey = target.resolveSessionKey(input, input.sessionId);
+  const session = sessionKey ? target.service.getSession(sessionKey) : undefined;
+  if (!sessionKey || !session) {
+    throw new ZCodeAgentRuntimeUnavailableError(
+      `nek session ${input.sessionId} is not open in ${input.workspacePath}`,
+    );
+  }
+  return legacySnapshotFromResult(input, {
+    ...session,
+    conversation: target.service.conversationSnapshot(sessionKey),
   });
 }
 

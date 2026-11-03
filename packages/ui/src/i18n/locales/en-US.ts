@@ -3309,6 +3309,8 @@ const enUS: Record<string, string> = {
   "settings.nek.provider.apiShort.openai-responses": "Responses",
   "settings.nek.provider.apiShort.anthropic-messages": "Anthropic",
   "settings.nek.provider.apiShort.google-generative-ai": "Gemini",
+  "settings.nek.provider.api.perModel": "Per model",
+  "settings.nek.provider.api.unset": "Not set (per model)",
   "settings.nek.provider.form.addTitle": "Add provider",
   "settings.nek.provider.form.editTitle": "Edit provider",
   "settings.nek.provider.form.description":

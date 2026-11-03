@@ -1467,21 +1467,27 @@ export class TaskIndexRepo {
    * 远端 workspace 的 V4 会话路径可能晚于会话创建才建立 sessions-index
    * 订阅。首次 snapshot 必须能补齐全新的 tasks-index.sqlite，但不能用摘要默认值
    * 覆盖已有的 pin/archive/unread/手动标题，也不能与随后到达的完整 snapshot 竞态回写。
+   *
+   * `inserted` 告诉调用方这次是否新增了行：侧栏以 task 行为持久集合，新增行必须广播，
+   * 否则已读过空集合的列表不会重拉。
    */
-  async seedTaskMetaIfMissing(meta: ZCodeTaskMeta): Promise<ZCodeTaskMeta> {
+  async seedTaskMetaIfMissing(
+    meta: ZCodeTaskMeta,
+  ): Promise<{ meta: ZCodeTaskMeta; inserted: boolean }> {
     await this.ensureReady();
     return this.enqueueWrite(meta, () => {
       const existing = this.getTaskRow(meta);
       if (existing) {
-        return rowToMeta(existing);
+        return { meta: rowToMeta(existing), inserted: false };
       }
-      return this.writeRecord({
+      const written = this.writeRecord({
         meta,
         pinned: false,
         archived: false,
         deleted: false,
         titleOverridden: meta.titleOverridden ?? false,
       });
+      return { meta: written, inserted: true };
     });
   }
 

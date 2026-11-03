@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { Event } from "@zcode/rpc";
 import type {
   NekAgentMessage,
@@ -14,6 +15,8 @@ import type {
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
 } from "@zcode/shared/zcode-protocol-v4";
+import { getZCodeDataRootDir } from "../../paths.js";
+import { NekAttachmentStaging } from "./nekAttachmentStaging.js";
 import { NekSessionBindings } from "./nekSessionBindings.js";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
@@ -126,6 +129,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly compactNekSession: NekAgentStatusMethods["compactNekSession"];
   readonly service: NekAgentService;
   readonly logger: NekAgentServiceAdapterOptions["logger"];
+  readonly attachments: NekAttachmentStaging;
   private readonly topics: NekAgentServiceTopics;
   private readonly interactions: NekAgentInteractionChannel;
   private readonly status: NekAgentStatusChannel;
@@ -136,6 +140,11 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   constructor(options: NekAgentServiceAdapterOptions) {
     this.service = new NekAgentService(options);
     this.logger = options.logger;
+    this.attachments = new NekAttachmentStaging({
+      rootDir:
+        options.attachmentStagingDir ?? join(getZCodeDataRootDir(), "tmp", "nek-attachments"),
+      ...(options.logger ? { logger: options.logger } : {}),
+    });
     this.bindings = new NekSessionBindings({
       getSession: (key) => this.service.getSession(key),
       listSessions: (target) => this.listNekSessions(target),
@@ -356,6 +365,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.interactions.dispose();
     this.status.dispose();
     await this.topics.dispose();
+    await this.attachments.dispose();
     await this.service.dispose();
   }
 

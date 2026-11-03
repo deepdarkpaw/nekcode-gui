@@ -6,13 +6,21 @@
  * 2. `ls` 之后：`ask_question`（两问：单选 / 其他输入）；
  * 3. 回答之后：`switch_mode`（切到 plan）；
  * 4. 批准之后：最终回复；
- * 5. 用户发 “Run a long task.” 时慢速流式输出，供“运行中停止”验收。
+ * 5. 用户发 “Run a long task.” 时慢速流式输出，供“运行中停止”验收；
+ * 6. 用户发 “Say hello from the CLI.” 时一句话结束，供 nek CLI 预先建会话（GUI 与 CLI 共享会话验收）。
  * 只用于验收，不访问任何真实模型 API。
  */
 import { createServer } from "node:http";
 
 export const MOCK_FINAL_TEXT = "The workspace listing is complete.";
 export const MOCK_LONG_PROMPT = "Run a long task.";
+export const MOCK_CLI_PROMPT = "Say hello from the CLI.";
+export const MOCK_CLI_REPLY = "Hello from the CLI.";
+export const MOCK_IMAGE_PROMPT = "Describe the pasted image.";
+export const MOCK_IMAGE_REPLY = "The pasted image arrived.";
+/** 图片发出后的纯文字追问：已发送的图片不能被草稿恢复后再带一次。 */
+export const MOCK_IMAGE_FOLLOWUP_PROMPT = "Anything else to add?";
+export const MOCK_IMAGE_FOLLOWUP_REPLY = "Nothing else to add.";
 export const MOCK_FIRST_PROMPT = "List the files in this workspace.";
 export const MOCK_QUESTION_TEXT = "Which database should we use?";
 export const MOCK_QUESTION_ANSWER_OPTION = "Redis";
@@ -138,9 +146,21 @@ export function pickMockTurn(body) {
   if (text.includes("Implement the plan.") && text.includes(MOCK_PLAN_TITLE)) return "todos";
   if (text.includes(MOCK_LONG_PROMPT)) return "slow";
   if (text.includes(MOCK_FIRST_PROMPT)) return "first";
+  if (text.includes(MOCK_CLI_PROMPT)) return "cli";
+  if (text.includes(MOCK_IMAGE_PROMPT)) return "image";
+  if (text.includes(MOCK_IMAGE_FOLLOWUP_PROMPT)) return "imageFollowup";
   throw new Error(
     `mock received an unrecognized conversation turn (last tool: ${toolCallId ?? "none"}; user: ${text.slice(0, 300)})`,
   );
+}
+
+/** 最新用户回合是否带图片（OpenAI 兼容格式的 `image_url` 片段）；只记布尔值，不保存图片。 */
+function latestUserTurnHasImage(body) {
+  const { messages } = JSON.parse(body);
+  const user = messages.findLast(
+    (message) => message?.role === "user" && !isReminderOnly(message.content),
+  );
+  return Array.isArray(user?.content) && user.content.some((part) => part?.type === "image_url");
 }
 
 /**
@@ -210,14 +230,17 @@ export async function startMockLlm(options = {}) {
         return;
       }
       let turn;
+      let hasImage;
       try {
-        turn = pickMockTurn(Buffer.concat(body).toString("utf8"));
+        const text = Buffer.concat(body).toString("utf8");
+        turn = pickMockTurn(text);
+        hasImage = latestUserTurnHasImage(text);
       } catch (error) {
         requests.push({ url: request.url, turn: "invalid", error: error.message, aborted: false });
         response.writeHead(400).end(error.message);
         return;
       }
-      record = { url: request.url, turn, aborted: false };
+      record = { url: request.url, turn, hasImage, aborted: false };
       requests.push(record);
       const write = (event) => {
         if (response.writableEnded || response.destroyed) return false;
@@ -265,7 +288,13 @@ export async function startMockLlm(options = {}) {
                       merge: true,
                       todos: PLAN_TODOS.map((todo) => ({ ...todo, status: "completed" })),
                     })
-                  : textTurn(MOCK_FINAL_TEXT);
+                  : turn === "cli"
+                    ? textTurn(MOCK_CLI_REPLY)
+                    : turn === "image"
+                      ? textTurn(MOCK_IMAGE_REPLY)
+                      : turn === "imageFollowup"
+                        ? textTurn(MOCK_IMAGE_FOLLOWUP_REPLY)
+                        : textTurn(MOCK_FINAL_TEXT);
       for (const event of events) write(event);
       finish();
     });
@@ -295,7 +324,8 @@ export function mockNekConfig(baseUrl) {
             id: "mock-model",
             name: "Local Mock Model",
             reasoning: false,
-            input: ["text"],
+            // 粘贴图片验收要求默认模型声明支持图片输入，nek 才会把图片发给模型。
+            input: ["text", "image"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: 32768,
             maxTokens: 4096,

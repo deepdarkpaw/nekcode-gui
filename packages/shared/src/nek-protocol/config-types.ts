@@ -66,6 +66,10 @@ export interface NekModelConfig {
   id: string;
   /** 显示名称（别名）。 */
   name?: string;
+  /** 端点类型；缺省时用服务商的 `api`（同一服务商下可以混用不同端点）。 */
+  api?: NekEndpointApi | string;
+  /** 请求地址；缺省时用服务商的 `baseUrl`。 */
+  baseUrl?: string;
   contextWindow?: number;
   maxTokens?: number;
   input?: Array<"text" | "image">;
@@ -116,7 +120,9 @@ export interface NekModelsConfigView extends NekConfigRevision {
  * 写入服务商：`apiKey` 为 undefined 表示保持原值不变；`{ remove: true }` 明确删除。
  * 空字符串不是删除指令，会被拒绝为校验错误。
  */
-export interface NekProviderWrite extends Omit<NekProviderConfig, "apiKey"> {
+export interface NekProviderWrite extends Omit<NekProviderConfig, "apiKey" | "api"> {
+  /** 缺省 = 不在服务商上设置端点（每个模型自带 `api`）；已有的服务商级 `api` 会被移除。 */
+  api?: NekEndpointApi | string;
   apiKey?: string | { keep: true } | { remove: true };
 }
 

@@ -369,6 +369,16 @@ export interface IZCodeTaskService {
     mcpServers?: ZCodeAgentMcpServer[];
   }): Promise<ZCodeTaskMeta>;
 
+  /**
+   * 把 agent 会话目录里还没有 task 行的会话导入 tasks-index.sqlite（例如在终端里用 CLI
+   * 建的会话）。只读会话目录、不拉起会话进程；有新增时广播 task_created。同一 workspace
+   * 的并发调用合并，刚导入过的在最小间隔内直接返回 inserted=0。
+   */
+  importAgentSessions(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<{ inserted: number }>;
+
   /** 列出 workspace 下所有已持久化的 task */
   listTasks(params: {
     workspacePath: string;

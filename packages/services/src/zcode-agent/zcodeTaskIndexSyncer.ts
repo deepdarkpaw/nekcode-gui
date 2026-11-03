@@ -47,6 +47,7 @@ import type {
 } from "./zcodeAgent.js";
 import { ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "./zcodeAgent.js";
 import { formatTaskMetaModelSelectionFromSnapshot } from "./zcodeConfigOptions.js";
+import { seedMissingTaskRows, taskMetaFromSessionSummary } from "./taskIndexRowSeeding.js";
 
 const logger = createServiceLogger("zcode-task-index-syncer");
 
@@ -54,7 +55,6 @@ const logger = createServiceLogger("zcode-task-index-syncer");
 const TASK_INDEX_SUBSCRIBER_SCOPE = "task-index";
 const MAX_PENDING_TOPIC_FRAMES = 1_024;
 const MAX_PENDING_TOPIC_BYTES = 32 * 1024 * 1024;
-const INITIAL_BASELINE_SEED_BATCH_SIZE = 64;
 const PROVIDER_NOT_READY_RETRY_MS = 5_000;
 const TOPIC_SUBSCRIBE_WARN_INTERVAL_MS = 60_000;
 
@@ -102,7 +102,7 @@ export interface ZCodeTaskIndexSyncer {
   /**
    * 兼容入口（旧 shadow 订阅 API 形状）：session 维度的激活信号统一收敛为
    * workspace 级 v4 订阅。options.includeSnapshot 在 v4 摄入下无对应语义（初始
-   * sessions-index snapshot 只静默补缺失行，不回放终态/广播），保留参数只为不动调用面。
+   * sessions-index snapshot 只补缺失行，不回放终态），保留参数只为不动调用面。
    */
   ensureSessionSubscription(
     target: ZCodeAgentSessionTarget,
@@ -197,42 +197,6 @@ function resolveTerminalUnreadSignal(
   return undefined;
 }
 
-function taskStatusFromSummaryPhase(phase: SessionPhase): ZCodeTaskMeta["status"] {
-  switch (phase) {
-    case "running":
-    case "prewarming":
-      return "running";
-    case "completedSuccess":
-    case "completedInterrupted":
-      return "completed";
-    case "error":
-      return "error";
-    default:
-      return undefined;
-  }
-}
-
-function buildBaselineMetaFromSummary(
-  target: ZCodeAgentWorkspaceTarget,
-  summary: SessionSummary,
-): ZCodeTaskMeta {
-  const status = taskStatusFromSummaryPhase(summary.phase);
-  return {
-    taskId: summary.sessionId,
-    traceId: generateTraceId(summary.sessionId),
-    title: summary.title,
-    ...(summary.titleSource === "custom" ? { titleOverridden: true } : {}),
-    workspacePath: target.workspacePath,
-    workspaceIdentity: target.workspaceIdentity,
-    createdAt: summary.createdAt,
-    updatedAt: summary.lastActivityAt,
-    mode: "agent",
-    provider: ZCODE_AGENT_PROVIDER,
-    ...(summary.parentSessionId ? { forkedFromTaskId: summary.parentSessionId } : {}),
-    ...(status ? { status } : {}),
-  };
-}
-
 interface WorkspaceIngestState {
   target: ZCodeAgentWorkspaceTarget;
   /** 当前已 attach 的 Agent runtime generation；null = dormant。 */
@@ -268,7 +232,7 @@ interface WorkspaceIngestState {
   configLastWarnAt: number | null;
   /** 会话摘要基线（terminal 迁移/标题变化的 diff 依据）。 */
   summaries: Map<string, SessionSummary>;
-  /** 首帧（snapshot）静默补缺失行，但不回放历史终态事件或列表广播。 */
+  /** 首帧（snapshot）补缺失行（有新增时广播一次 task_created），不回放历史终态事件。 */
   seeded: boolean;
   /** workspace 级 frame emitter 跨 runtime generation 保持稳定，只允许安装一组 listener。 */
   frameListenersInstalled: boolean;
@@ -505,6 +469,11 @@ export function createZCodeTaskIndexSyncer(
     options?: {
       moveGroupedTaskToTop?: boolean;
       unreadSignal?: ZCodeWorkspaceTaskListChanged["unreadSignal"];
+      /**
+       * 基线外新出现的会话摘要。它若没有 runtime（例如在终端里用 CLI 新建、仍归 CLI
+       * 所有），完整 snapshot 读不到，按摘要补行，侧栏照样能看到它。
+       */
+      externalSummary?: SessionSummary;
     },
   ): Promise<void> {
     try {
@@ -523,6 +492,10 @@ export function createZCodeTaskIndexSyncer(
         moveGroupedTaskToTop: options?.moveGroupedTaskToTop,
       });
     } catch (error) {
+      if (options?.externalSummary && isRuntimeUnavailableError(error)) {
+        await seedRowsFromSummaries(target, [options.externalSummary], "external-session");
+        return;
+      }
       logger.warn(
         undefined,
         `回源同步 task index 行失败 reason=${reason} taskId=${target.sessionId}`,
@@ -688,8 +661,10 @@ export function createZCodeTaskIndexSyncer(
       // v4 预热 session 从 draft 提升，或 online delta 首次出现新 session 时，
       // 不经过 zcodeSessionService.createSession。此处是最早且不依赖标题时序的新任务边界；
       // 立即回源写入 task 行与 grouped root 最小 sort_order，避免缺序节点落到末尾。
+      // 基线里从未出现过的会话也可能来自 agent 之外（CLI 新建），没有 runtime 时按摘要补行。
       void resyncTaskIndexRowFromAgent(target, "session.became-visible", {
         moveGroupedTaskToTop: true,
+        ...(previous === undefined ? { externalSummary: next } : {}),
       });
       return;
     }
@@ -697,6 +672,35 @@ export function createZCodeTaskIndexSyncer(
     if (title && (previous === undefined || previous.title !== next.title)) {
       applyTitleChange(target, title);
     }
+  }
+
+  /**
+   * 按摘要补齐缺失的 task 行（insert-if-missing），有新增时广播一次 task_created。
+   *
+   * 侧栏以 task 行为持久集合，它可能在补齐之前就读到了空集合（CLI 已有会话、GUI 首次打开
+   * 该项目）；全部写入提交后再广播，让列表与分组换代重读。没有新增行时不广播，避免每次
+   * 启动都整刷列表。返回新增行数。
+   */
+  async function seedRowsFromSummaries(
+    target: ZCodeAgentWorkspaceTarget,
+    summaries: readonly SessionSummary[],
+    source: "initial-snapshot" | "external-session",
+  ): Promise<number> {
+    const result = await seedMissingTaskRows(
+      taskIndexRepo,
+      summaries.map((summary) => taskMetaFromSessionSummary(target, summary)),
+    );
+    if (result.failed > 0) {
+      logger.warn(
+        undefined,
+        `按摘要补齐 task index 失败 source=${source} workspace=${resolveWorkspaceKey(target)} failed=${result.failed} total=${summaries.length}`,
+        result.firstError,
+      );
+    }
+    if (result.inserted > 0 && !disposed) {
+      emitWorkspaceTaskListChanged(target, undefined, "task_created");
+    }
+    return result.inserted;
   }
 
   async function seedMissingRowsFromInitialSnapshot(
@@ -707,33 +711,9 @@ export function createZCodeTaskIndexSyncer(
     if (candidates.length === 0) return;
     // 纯 V4 UI 不经过 zcodeSessionService.initializeWorkspace；若把首帧
     // 当成“已有 sqlite 存量”的静默基线，远端新库就会永远是 0 行。这里只做原子
-    // insert-if-missing，不广播、不回放历史终态，也不覆盖已有产品壳状态；后续打开/
+    // insert-if-missing，不回放历史终态，也不覆盖已有产品壳状态；后续打开/
     // 收口时再由完整 snapshot 补 model、正文搜索等权威字段。
-    // 防灾保护：历史会话可能很多，不能一次创建等量 Promise 挤占 host 事件循环。
-    // 固定小批次写入；失败只汇总一条生产日志，避免逐会话错误再次制造日志风暴。
-    let failedCount = 0;
-    let firstError: unknown;
-    for (let offset = 0; offset < candidates.length; offset += INITIAL_BASELINE_SEED_BATCH_SIZE) {
-      const batch = candidates.slice(offset, offset + INITIAL_BASELINE_SEED_BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map((summary) =>
-          taskIndexRepo.seedTaskMetaIfMissing(buildBaselineMetaFromSummary(state.target, summary)),
-        ),
-      );
-      for (const result of results) {
-        if (result.status === "rejected") {
-          failedCount += 1;
-          firstError ??= result.reason;
-        }
-      }
-    }
-    if (failedCount > 0) {
-      logger.warn(
-        undefined,
-        `首次 sessions-index 基线补齐 task index 失败 workspace=${resolveWorkspaceKey(state.target)} failed=${failedCount} total=${candidates.length}`,
-        firstError,
-      );
-    }
+    await seedRowsFromSummaries(state.target, candidates, "initial-snapshot");
   }
 
   function deliveryKindOf(event: unknown): TopicDeliveryKind {
@@ -1014,8 +994,8 @@ export function createZCodeTaskIndexSyncer(
         nextSummaries.set(summary.sessionId, summary);
       }
       if (!state.seeded) {
-        // 首帧 = 静默基线：不回放历史终态、不发列表广播；仅原子补齐缺失行，
-        // 防止远端/新安装的空 sqlite 因纯 V4 路径永远没有存量。
+        // 首帧 = 基线：不回放历史终态；原子补齐缺失行（例如 CLI 创建的会话），有新增时
+        // 广播一次 task_created，防止空 sqlite 或已读过空集合的侧栏一直显示“暂无任务”。
         state.summaries = nextSummaries;
         state.seeded = true;
         void seedMissingRowsFromInitialSnapshot(state, nextSummaries.values());

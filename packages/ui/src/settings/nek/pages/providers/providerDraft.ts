@@ -32,7 +32,13 @@ export interface ProviderDraft {
   id: string;
   /** 用户手动改过 ID 后不再跟随名称。 */
   idTouched: boolean;
-  api: NekEndpointApi;
+  /**
+   * 服务商级端点；`""` = 不在服务商上设置（每个模型自带 `api`，nek 按模型解析）。
+   * 只有原本就没设置的服务商才会出现 `""`，保存时不会凭空写入一个端点。
+   */
+  api: NekEndpointApi | "";
+  /** `api` 为空时预览请求地址、测试连接、拉取模型所用的端点（第一个模型的 `api`）。 */
+  fallbackApi: NekEndpointApi;
   baseUrl: string;
   apiKey: ApiKeyDraft;
   headers: KeyValueRow[];
@@ -45,8 +51,15 @@ export interface ProviderDraft {
 export type ProviderDraftField = "name" | "id" | "baseUrl" | "apiKey" | "headers" | "compatJson";
 export type ProviderDraftErrors = Partial<Record<ProviderDraftField, string>>;
 
-function isEndpointApi(value: string): value is NekEndpointApi {
-  return (NEK_ENDPOINT_APIS as readonly string[]).includes(value);
+function isEndpointApi(value: string | undefined): value is NekEndpointApi {
+  return (NEK_ENDPOINT_APIS as readonly (string | undefined)[]).includes(value);
+}
+
+/** 草稿实际使用的端点（预览、测试、拉取模型）。 */
+export function draftEndpointApi(
+  draft: Pick<ProviderDraft, "api" | "fallbackApi">,
+): NekEndpointApi {
+  return draft.api || draft.fallbackApi;
 }
 
 export function emptyProviderDraft(): ProviderDraft {
@@ -55,6 +68,7 @@ export function emptyProviderDraft(): ProviderDraft {
     id: "",
     idTouched: false,
     api: "openai-completions",
+    fallbackApi: "openai-completions",
     baseUrl: "",
     apiKey: { mode: "literal", value: "", keepExisting: false, remove: false },
     headers: [],
@@ -66,11 +80,13 @@ export function emptyProviderDraft(): ProviderDraft {
 
 export function providerDraftFromView(view: NekProviderView): ProviderDraft {
   const { thinkingFormat, ...compatRest } = view.compat ?? {};
+  const modelApi = view.models.map((model) => model.api).find(isEndpointApi);
   return {
     name: view.name ?? view.id,
     id: view.id,
     idTouched: true,
-    api: isEndpointApi(view.api) ? view.api : "openai-completions",
+    api: view.api === "" ? "" : isEndpointApi(view.api) ? view.api : "openai-completions",
+    fallbackApi: modelApi ?? "openai-completions",
     baseUrl: view.baseUrl,
     apiKey: apiKeyDraftFromView(view.apiKey),
     headers: rowsFromRecord(view.headers),
@@ -116,7 +132,7 @@ export function validateProviderDraft(
       errors.id = t(`settings.nek.provider.error.id.${idError}`);
     }
   }
-  const baseUrl = analyzeBaseUrl(draft.api, draft.baseUrl);
+  const baseUrl = analyzeBaseUrl(draftEndpointApi(draft), draft.baseUrl);
   if (baseUrl.kind === "empty") {
     errors.baseUrl = t("settings.nek.provider.error.baseUrlRequired");
   } else if (baseUrl.kind === "invalid") {
@@ -151,7 +167,8 @@ export function providerWriteFromDraft(
   const write: NekProviderWrite = {
     id: draft.id,
     name: draft.name.trim(),
-    api: draft.api,
+    // 空 = 不在服务商上设置端点：写入端不带 `api`，原本没有就继续没有。
+    api: draft.api || undefined,
     baseUrl: draft.baseUrl.trim(),
     apiKey: apiKeyWriteFromDraft(draft.apiKey),
     headers: recordFromRows(draft.headers),
@@ -168,7 +185,7 @@ export function providerWriteFromDraft(
 /** 测试连接 / 拉取模型用的草稿配置。 */
 export function requestDraftFromDraft(draft: ProviderDraft): NekProviderDraft {
   return {
-    api: draft.api,
+    api: draftEndpointApi(draft),
     baseUrl: draft.baseUrl.trim(),
     apiKey: apiKeyForDraftRequest(draft.apiKey),
     headers: recordFromRows(draft.headers),

@@ -117,6 +117,8 @@ export function harness(
     extraSessions?: NekSessionSummary[];
     /** 会话进程 `get_state` 报告的消息数（新建且未发送的会话为 0）。 */
     messageCount?: number;
+    /** 附件上传暂存目录（测试用临时目录，不能落到真实数据目录）。 */
+    attachmentStagingDir?: string;
   } = {},
 ) {
   let failEntries = options.failEntries ?? false;
@@ -148,11 +150,14 @@ export function harness(
         defaultProjectTrust: "always",
         resources: [],
       };
+    // workspace-config 目录（task index 摄入也会订阅）读模型列表。
+    if (command.type === "get_available_models") return { models: [] };
     return {};
   });
   const sessions: ReturnType<typeof createProcess>[] = [];
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
+    ...(options.attachmentStagingDir ? { attachmentStagingDir: options.attachmentStagingDir } : {}),
     createControlProcess: () => control.process,
     createSessionProcess: (request) => {
       // 新建会话没有 sessionPath；恢复只能恢复这一个磁盘会话。
@@ -193,6 +198,8 @@ export function harness(
         if (command.type === "extension_call")
           return { result: { mode: "agent", todos: [], plans: [], subagents: [] } };
         if (command.type === "prompt") return { disposition: "started" };
+        if (command.type === "get_available_models") return { models: [] };
+        if (command.type === "get_commands") return { commands: [] };
         return {};
       });
       sessions.push(session);

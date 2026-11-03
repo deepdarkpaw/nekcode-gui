@@ -12,11 +12,12 @@ import {
   freePort,
   launchApp,
   removeSandbox,
+  runNekCli,
   stopApp,
   writeNekShim,
 } from "./lib/app.mjs";
 import { connectRenderer, screenshot, waitForPage } from "./lib/cdp.mjs";
-import { mockNekConfig, startMockLlm } from "./lib/mockLlm.mjs";
+import { MOCK_CLI_PROMPT, MOCK_CLI_REPLY, mockNekConfig, startMockLlm } from "./lib/mockLlm.mjs";
 import {
   assertNoRendererFailure,
   clickButton,
@@ -28,6 +29,7 @@ import { checkSettings } from "./lib/settings-check.mjs";
 import {
   checkFirstPrompt,
   checkInteractions,
+  checkPastedImage,
   checkRestoredSession,
   checkStatus,
   checkStop,
@@ -38,6 +40,10 @@ const { values } = parseArgs({
 });
 const sandbox = await createSandbox("e2e");
 const mock = await startMockLlm();
+const nekCli = join(
+  process.env.NEK_RPC_WORKTREE ?? "G:/coding/nekcode-gui/.worktree/nek-rpc",
+  "packages/coding-agent/dist/bundle/cli.js",
+);
 const matrix = [];
 const problems = [];
 let session;
@@ -114,14 +120,7 @@ try {
   ]) {
     await writeFile(join(sandbox.agentDir, file), `${JSON.stringify(content, null, 2)}\n`);
   }
-  await writeNekShim(
-    sandbox,
-    process.execPath,
-    join(
-      process.env.NEK_RPC_WORKTREE ?? "G:/coding/nekcode-gui/.worktree/nek-rpc",
-      "packages/coding-agent/dist/bundle/cli.js",
-    ),
-  );
+  await writeNekShim(sandbox, process.execPath, nekCli);
   await launchAndConnect();
   await step("01-onboarding-nek-ready", async () => {
     await waitForText(session, "已安装 nek", "nek detection", 60_000);
@@ -176,6 +175,23 @@ try {
     "08-structured-interactions",
   );
   await step("10-stop-running", () => checkStop(session, mock), "09-session-resume");
+  await step(
+    "11-cli-session-sidebar",
+    async () => {
+      // 用户在终端里用 nek 建了会话再切回 GUI：窗口获得焦点后侧栏要列出它，不用重启。
+      const output = await runNekCli(sandbox, nekCli, MOCK_CLI_PROMPT);
+      if (!output.includes(MOCK_CLI_REPLY)) throw new Error(`nek CLI answered: ${output.trim()}`);
+      await waitForPage(
+        session,
+        `(window.dispatchEvent(new Event("focus")),
+          document.body.innerText.includes(${JSON.stringify(MOCK_CLI_PROMPT)}))`,
+        "CLI session listed in the sidebar",
+        45_000,
+      );
+    },
+    "09-session-resume",
+  );
+  await step("12-pasted-image", () => checkPastedImage(session, mock), "10-stop-running");
 } catch (error) {
   matrix.push({ name: "harness", status: "fail", error: String(error) });
 } finally {

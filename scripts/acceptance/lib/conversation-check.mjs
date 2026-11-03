@@ -13,6 +13,10 @@ import {
 import {
   MOCK_FINAL_TEXT,
   MOCK_FIRST_PROMPT,
+  MOCK_IMAGE_FOLLOWUP_PROMPT,
+  MOCK_IMAGE_FOLLOWUP_REPLY,
+  MOCK_IMAGE_PROMPT,
+  MOCK_IMAGE_REPLY,
   MOCK_LONG_PROMPT,
   MOCK_OTHER_ANSWER,
   MOCK_QUESTION_ANSWER_OPTION,
@@ -25,6 +29,12 @@ const STOP = '[data-testid="v4-stop"]';
 const TRUST = '[data-testid="nek-extension-confirm-card"]';
 const SEND_READY = `document.querySelector('${SEND}')?.disabled === false`;
 const TRUST_VISIBLE = `Boolean(document.querySelector('${TRUST}'))`;
+const UPLOAD_CHIP = "[data-upload-status]";
+/** 发送后再观察一段时间：草稿恢复发生在 scope effect 的下一帧之后。 */
+const SENT_ATTACHMENT_SETTLE_MS = 1_500;
+/** 1×1 PNG：截图粘贴没有本地路径，只能走分片上传。 */
+const PASTED_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 /** 首发可能先预热会话并询问信任，也可能发送后询问；两种顺序均须真实回答一次。 */
 export async function checkFirstPrompt(session, sandbox) {
@@ -137,6 +147,59 @@ export async function checkRestoredSession(session) {
   if (taskTitles.length !== 1) {
     throw new Error(`sidebar should list only the used session: ${JSON.stringify(taskTitles)}`);
   }
+}
+
+/** 粘贴的截图（没有本地路径）分片上传到 host，上传完成后连同文字发出，模型要收到图片。 */
+export async function checkPastedImage(session, mock) {
+  await evaluate(
+    session,
+    `(() => {
+    const input = document.querySelector('${COMPOSER}');
+    if (!(input instanceof HTMLElement)) throw new Error('composer not found');
+    input.focus();
+    const bytes = Uint8Array.from(atob(${JSON.stringify(PASTED_PNG_BASE64)}), (char) => char.charCodeAt(0));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], 'pasted-image.png', { type: 'image/png' }));
+    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+  })()`,
+  );
+  const settled = '[data-upload-status="ready"], [data-upload-status="failed"]';
+  await waitForSelector(session, settled, "pasted image upload settled", 60_000);
+  const failure = await evaluate(
+    session,
+    `(() => {
+    const failed = document.querySelector('[data-upload-status="failed"]');
+    if (!failed) return null;
+    return failed.querySelector('[role="alert"]')?.getAttribute('aria-label') || 'upload failed';
+  })()`,
+  );
+  if (failure !== null) throw new Error(`pasted image upload failed: ${failure}`);
+  await fillInput(session, COMPOSER, MOCK_IMAGE_PROMPT);
+  await waitForPage(session, SEND_READY, "send enabled with the pasted image", 60_000);
+  await clickAt(session, SEND);
+  await waitForText(session, MOCK_IMAGE_REPLY, "reply to the pasted image", 90_000);
+  if (!mock.requests.some((request) => request.turn === "image" && request.hasImage)) {
+    throw new Error("the model request did not include the pasted image");
+  }
+  // 发出的图片必须离开输入框，且不能稍后被草稿恢复回来（否则下一条消息会把它再发一次）。
+  await waitForSelector(
+    session,
+    UPLOAD_CHIP,
+    "sent image cleared from the composer",
+    30_000,
+    false,
+  );
+  await new Promise((resolve) => setTimeout(resolve, SENT_ATTACHMENT_SETTLE_MS));
+  if (await evaluate(session, `document.querySelector('${UPLOAD_CHIP}') !== null`)) {
+    throw new Error("the sent image came back into the composer");
+  }
+  await fillInput(session, COMPOSER, MOCK_IMAGE_FOLLOWUP_PROMPT);
+  await waitForPage(session, SEND_READY, "send enabled for the follow-up", 60_000);
+  await clickAt(session, SEND);
+  await waitForText(session, MOCK_IMAGE_FOLLOWUP_REPLY, "reply to the follow-up", 90_000);
+  const followup = mock.requests.findLast((request) => request.turn === "imageFollowup");
+  if (!followup) throw new Error("the follow-up message did not reach the model");
+  if (followup.hasImage) throw new Error("the follow-up message sent the already-sent image again");
 }
 
 export async function checkStop(session, mock) {

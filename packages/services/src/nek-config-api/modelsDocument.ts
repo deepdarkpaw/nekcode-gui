@@ -84,6 +84,8 @@ const PROVIDER_KNOWN_KEYS = new Set([
 const MODEL_KNOWN_KEYS = new Set([
   "id",
   "name",
+  "api",
+  "baseUrl",
   "contextWindow",
   "maxTokens",
   "input",
@@ -178,6 +180,8 @@ export function providerWriteToValue(
     // `id` 是键名（不是字段），`extra` 摊平到末尾，`overridesBuiltin` 是读取视图的派生标记。
     if (key === "id" || key === "apiKey" || key === "extra" || key === "overridesBuiltin") continue;
     if (entry === undefined) continue;
+    // 读取视图用空串表示“没在服务商上设置端点”；原样送回时同样表示不设置，不写空值。
+    if (key === "api" && entry === "") continue;
     if (key === "models" && Array.isArray(entry)) {
       value.models = entry
         .filter(isPlainObject)

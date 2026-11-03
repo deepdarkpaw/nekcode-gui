@@ -74,6 +74,7 @@ export function saveProvider(
         : apiKey;
   const next: NekProviderConfig = {
     ...clone(rest),
+    api: rest.api ?? "",
     ...(resolvedKey ? { apiKey: resolvedKey } : {}),
   };
   machine.models.value = existing
