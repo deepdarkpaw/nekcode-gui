@@ -6,6 +6,8 @@ import { test, vi } from "vitest";
 import type { NekRemoteHost } from "@zcode/shared/nek-protocol";
 import type { IRemoteBackend, RemoteNekCheckResult } from "@zcode/server/remote";
 
+const openedExternal = vi.hoisted(() => [] as string[]);
+
 vi.mock("electron", () => ({
   app: { getPath: () => "/tmp/nek-app" },
   clipboard: { writeText: () => undefined },
@@ -15,10 +17,15 @@ vi.mock("electron", () => ({
     encryptString: (value: string) => Buffer.from(value, "utf8"),
     decryptString: (value: Buffer) => value.toString("utf8"),
   },
-  shell: { openPath: async () => "", openExternal: async () => undefined },
+  shell: {
+    openPath: async () => "",
+    openExternal: async (url: string) => {
+      openedExternal.push(url);
+    },
+  },
 }));
 import { NekRemoteConfigConnectionRegistry } from "./desktopMainIpcNekConfig.js";
-import { NekSettingsHostService } from "./desktopMainIpcNekHost.js";
+import { NekSettingsHostService, trustedHttpUrl } from "./desktopMainIpcNekHost.js";
 import {
   createRemoteCredentialSafeStorage,
   type SafeStorageLike,
@@ -110,6 +117,50 @@ test("saved SSH credentials use safeStorage and are restored only at connection 
       username: "alice",
       password: "never-on-disk",
     });
+  } finally {
+    service.dispose();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("trustedHttpUrl accepts only HTTP(S) links", () => {
+  assert.equal(
+    trustedHttpUrl("https://github.com/login/device"),
+    "https://github.com/login/device",
+  );
+  assert.equal(
+    trustedHttpUrl("http://localhost:1455/auth/callback?code=x"),
+    "http://localhost:1455/auth/callback?code=x",
+  );
+  for (const rejected of [
+    "file:///C:/Windows/System32/calc.exe",
+    "javascript:alert(1)",
+    "ms-settings:privacy",
+    "vscode://open",
+    "not a url",
+    "",
+  ]) {
+    assert.equal(trustedHttpUrl(rejected), undefined, rejected);
+  }
+});
+
+test("login links open in the browser only when they are HTTP(S)", async () => {
+  const directory = await fs.mkdtemp(join(tmpdir(), "nek-host-open-"));
+  const service = new NekSettingsHostService({
+    credentialStore: createRemoteCredentialSafeStorage({
+      directory,
+      safeStorage: fakeSafeStorage(),
+    }),
+    hostsPath: join(directory, "hosts.json"),
+  });
+  openedExternal.length = 0;
+  try {
+    await service.openExternal("https://auth.example.com/authorize?state=1");
+    await assert.rejects(
+      service.openExternal("file:///C:/Windows/System32/calc.exe"),
+      /non-HTTP\(S\) link/u,
+    );
+    assert.deepEqual(openedExternal, ["https://auth.example.com/authorize?state=1"]);
   } finally {
     service.dispose();
     await fs.rm(directory, { recursive: true, force: true });

@@ -119,8 +119,7 @@ export type NekAgentServiceEvent =
    * 用 phase 推断恢复会让观察者永久休眠。
    */
   | { type: "process_attached"; session: NekSession }
-  | { type: "process_exit"; session: NekSession; exit: NekRpcProcessExit }
-  | { type: "resume_notice"; session: NekSession; message: "正在继续上次中断的回合" };
+  | { type: "process_exit"; session: NekSession; exit: NekRpcProcessExit };
 
 export interface NekConversationListener {
   (frame: ConversationTopicFrame): void;

@@ -40,6 +40,11 @@ export abstract class NekAgentSessionResumeBase extends NekAgentServiceRuntimeBa
     }
   }
 
+  /**
+   * 打开磁盘会话。nek 0.4.1 起 `--mode rpc` 打开会话时先中止上次进程遗留的回合
+   * （已流出的回答记为 aborted、未完成的工具不重跑、排队输入丢弃），所以恢复后
+   * 会话是空闲的，要用户发新消息才开始新回合；phase 只按 `get_state` 的事实设置。
+   */
   private async resumeSessionOnce(input: {
     sessionPath: string;
     cwd?: string;
@@ -82,14 +87,6 @@ export abstract class NekAgentSessionResumeBase extends NekAgentServiceRuntimeBa
         extensionUi: this.extensionUiFor({ workspacePath: record.cwd, sessionKey: record.key }),
       });
       this.assertAlive();
-      if (record.state?.isStreaming) {
-        this.emit({
-          type: "resume_notice",
-          session: this.publicSession(record),
-          message: "正在继续上次中断的回合",
-        });
-        this.setPhase(record, "running");
-      }
       return this.result(record);
     } catch (error) {
       this.detachProcess(record);

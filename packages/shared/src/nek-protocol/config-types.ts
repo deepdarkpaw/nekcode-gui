@@ -459,6 +459,7 @@ export interface INekSettingsHostApi {
   removeFingerprint(connectionId: string, fingerprint: string): Promise<void>;
   onHostsChanged(listener: () => void): () => void;
   openPath(target: NekConfigTarget, path: string): Promise<void>;
+  /** 用系统浏览器打开登录链接；只接受 HTTP(S)，其他协议（含本地文件）报错拒绝。 */
   openExternal(url: string): Promise<void>;
   copyText(text: string): Promise<void>;
   getAppInfo(): Promise<NekAppInfo>;

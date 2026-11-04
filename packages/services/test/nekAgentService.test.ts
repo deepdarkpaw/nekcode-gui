@@ -414,6 +414,37 @@ test("enters error on an unexpected exit and can restart", async () => {
   await harness.service.dispose();
 });
 
+test("reopening after a crash mid-turn stays idle, as nek discards the interrupted run", async () => {
+  const harness = serviceHarness();
+  const phases: string[] = [];
+  const detach = harness.service.onEvent((event: NekAgentServiceEvent) => {
+    if (event.type === "state") phases.push(event.state);
+  });
+  try {
+    const created = await harness.service.createSession({ cwd: "/workspace" });
+    await harness.service.sendPrompt({ sessionKey: created.sessionKey, message: "long task" });
+    harness.sessions[0]!.emit({ type: "agent_start" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(harness.service.getSession(created.sessionKey)?.phase, "running");
+    harness.sessions[0]!.exit({ code: null, signal: "SIGKILL" });
+    harness.control.setSnapshotLocked(false);
+    phases.length = 0;
+
+    // nek ≥0.4.1 先中止上次留下的回合再应答 get_state：新进程报告 isStreaming=false。
+    const reopened = await harness.service.restartSession(created.sessionKey);
+    assert.equal(reopened.phase, "idle");
+    assert.equal(harness.sessions.length, 2);
+    assert.ok(!phases.includes("running"), `unexpected phases: ${phases.join(",")}`);
+    assert.ok(
+      !harness.sessions[1]!.commands.some((command) => command.type === "prompt"),
+      "重开不重发上次的请求",
+    );
+  } finally {
+    detach();
+    await harness.service.dispose();
+  }
+});
+
 test("SR-4: restart rechecks the external lock instead of forcing a writable process", async () => {
   const holder = {
     pid: 4242,

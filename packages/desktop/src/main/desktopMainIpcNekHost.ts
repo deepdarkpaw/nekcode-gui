@@ -59,6 +59,16 @@ function asErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * 与 nek 登录对话框同一规则（`trustedHttpUrl`）：链接来自服务端，只打开 HTTP(S)，
+ * 绝不启动本地文件或自定义协议处理器。
+ */
+export function trustedHttpUrl(value: string): string | undefined {
+  if (!URL.canParse(value)) return undefined;
+  const url = new URL(value);
+  return url.protocol === "https:" || url.protocol === "http:" ? url.href : undefined;
+}
+
 async function readJson<T>(path: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as T;
@@ -245,7 +255,9 @@ export class NekSettingsHostService implements INekSettingsHostApi {
   }
 
   async openExternal(url: string): Promise<void> {
-    await shell.openExternal(url);
+    const target = trustedHttpUrl(url);
+    if (!target) throw new Error(`refusing to open a non-HTTP(S) link: ${url}`);
+    await shell.openExternal(target);
   }
 
   async copyText(text: string): Promise<void> {
