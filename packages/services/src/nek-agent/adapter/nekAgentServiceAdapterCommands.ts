@@ -77,28 +77,30 @@ export async function sendConversationCommand(
     case "sendText": {
       await applySelection(context.service, binding.sessionKey, payload);
       const images = await toNekImages(payload.attachments);
-      const requestedDelivery = readString(payload, "requestedDelivery");
+      const delivery = await prepareDelivery(context.service, binding.sessionKey, payload);
       const result = await context.service.sendPrompt({
         sessionKey: binding.sessionKey,
         message: readString(payload, "text") ?? "",
         ...(images ? { images } : {}),
-        ...(requestedDelivery === "queue" ? { streamingBehavior: "follow_up" as const } : {}),
+        streamingBehavior: delivery,
       });
       return acceptedCommand(envelope, revision, {
         type: "inputAccepted",
-        delivery: result.disposition === "started" ? "startNow" : "queue",
+        delivery: acceptedDelivery(result.disposition, delivery),
         inputId: envelope.commandId,
       });
     }
     case "sendGoalCommand": {
       await applySelection(context.service, binding.sessionKey, payload);
+      const delivery = await prepareDelivery(context.service, binding.sessionKey, payload);
       const result = await context.service.sendPrompt({
         sessionKey: binding.sessionKey,
         message: readString(payload, "text") ?? "",
+        streamingBehavior: delivery,
       });
       return acceptedCommand(envelope, revision, {
         type: "inputAccepted",
-        delivery: result.disposition === "started" ? "startNow" : "queue",
+        delivery: acceptedDelivery(result.disposition, delivery),
         inputId: envelope.commandId,
       });
     }
@@ -191,6 +193,39 @@ function modelSelectionOf(model: Record<string, unknown>): {
     throw new Error(`invalid model selection: provider=${providerId ?? ""} model=${modelId ?? ""}`);
   }
   return { provider: providerId, modelId };
+}
+
+type StreamingBehavior = "steer" | "follow_up";
+
+function isBusy(service: NekAgentService, sessionKey: string): boolean {
+  const phase = service.getSession(sessionKey)?.phase;
+  return phase === "running" || phase === "waiting_input";
+}
+
+/**
+ * v4 `requestedDelivery` → nek 运行中的投递方式，与 CLI 一致：
+ * - 缺省 / `guide`：Enter，`steer`（当前工具调用结束后插入）；
+ * - `queue`：Alt+Enter，`follow_up`（本轮结束后再发）；
+ * - `startNow`：先中止当前轮，再作为新 prompt 发出。
+ * 空闲时 `sendPrompt` 忽略该值，直接发 `prompt`。
+ */
+async function prepareDelivery(
+  service: NekAgentService,
+  sessionKey: string,
+  payload: Record<string, unknown>,
+): Promise<StreamingBehavior> {
+  const requested = readString(payload, "requestedDelivery");
+  if (requested === "queue") return "follow_up";
+  if (requested === "startNow" && isBusy(service, sessionKey)) await service.abort(sessionKey);
+  return "steer";
+}
+
+function acceptedDelivery(
+  disposition: string,
+  behavior: StreamingBehavior,
+): "startNow" | "queue" | "guide" {
+  if (disposition === "started") return "startNow";
+  return behavior === "steer" ? "guide" : "queue";
 }
 
 async function applySelection(
