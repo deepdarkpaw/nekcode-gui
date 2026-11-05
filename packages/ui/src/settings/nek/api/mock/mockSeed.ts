@@ -16,7 +16,6 @@ export const MOCK_PROJECT_CWD = "/home/me/projects/nekcode-gui";
 
 export const MOCK_DEFAULT_SETTINGS: NekSettingsView = {
   defaultThinkingLevel: "medium",
-  defaultTools: ["read", "bash", "edit", "write", "grep", "find", "ls", "ast_grep", "web_search"],
   compaction: {
     enabled: true,
     reserveTokens: 16384,

@@ -190,6 +190,10 @@ describe("ToolsPage v2", () => {
     const row = powershell.closest("label");
     expect(row).not.toBeNull();
     expect(row!.textContent).toContain("默认关闭");
+    // 默认工具集来自工具清单的 defaultActive：未设置 defaultTools 时默认工具应为勾选
+    const read = screen.getByText("read").closest("label")!;
+    expect(within(read).getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
+    expect(within(row!).getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
     // 旧硬编码列表里的 todo_write 不再出现
     expect(screen.queryByText("todo_write")).toBeNull();
     await act(async () => {

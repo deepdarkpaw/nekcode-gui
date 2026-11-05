@@ -33,8 +33,13 @@ import { DocumentGate, NekEmptyState } from "../components/DocumentStatus.js";
 import { NekPageFrame } from "../components/NekPageFrame.js";
 import { SecretSettingField } from "../components/SecretSettingField.js";
 
-function useToolsWriter(settings: NekSettingsDocument, knownTools: readonly string[]) {
-  const defaults = settings.data?.defaults.defaultTools ?? [];
+/**
+ * 默认工具集取自 host 返回的工具清单（`defaultActive`），即 nek 的 `DEFAULT_ACTIVE_TOOL_NAMES`；
+ * settings 的 defaults 里没有 `defaultTools`，不能用它当基准。
+ */
+function useToolsWriter(settings: NekSettingsDocument, tools: readonly NekBuiltinTool[]) {
+  const knownTools = tools.map((tool) => tool.name);
+  const defaults = tools.filter((tool) => tool.defaultActive).map((tool) => tool.name);
   const enabled = resolveEnabledTools(settings.data?.values.defaultTools, defaults);
   const write = (next: ReadonlySet<string>) =>
     settings.patch({ defaultTools: buildDefaultToolsSetting(next, defaults, knownTools) });
@@ -55,8 +60,7 @@ function BuiltinTools({
   tools: readonly NekBuiltinTool[];
 }) {
   const { intl } = useZCodeIntl();
-  const known = tools.map((tool) => tool.name);
-  const { enabled, setTool } = useToolsWriter(settings, known);
+  const { enabled, setTool } = useToolsWriter(settings, tools);
   const save = useAsyncAction((name: string, on: boolean) => setTool(name, on));
   const setting = settings.data?.values.defaultTools;
   return (
@@ -149,10 +153,7 @@ function WebSearchSection({
   const { intl } = useZCodeIntl();
   const api = useNekConfigApi();
   const { target } = useNekTarget();
-  const { enabled, setTool } = useToolsWriter(
-    settings,
-    tools.map((tool) => tool.name),
-  );
+  const { enabled, setTool } = useToolsWriter(settings, tools);
   const [result, setResult] = useState<string | null>(null);
   const web = settings.data?.values.webSearch ?? {};
   const defaults = settings.data?.defaults.webSearch ?? {};
