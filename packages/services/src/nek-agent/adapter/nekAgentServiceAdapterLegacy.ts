@@ -5,9 +5,6 @@ import type {
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
   V4AttachmentPreviewSourceResult,
-  V4AttachmentReadResult,
-  V4ConversationAttachmentReadResult,
-  V4ConversationAttachmentStatResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { toNekImages } from "./attachmentImages.js";
 import type { NekPlanSummary } from "@zcode/shared/nek-protocol";
@@ -33,6 +30,7 @@ import { readTrustedZCodeAgentV4Connection } from "../../zcode-agent/zcodeAgentC
 import { workspaceKey } from "./frameHelpers.js";
 import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
 import { isListedNekSession } from "./nekSessionListing.js";
+import { createNekUserImageAttachmentMethods } from "./nekUserImageAttachments.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
   if (typeof value !== "object" || value === null) return false;
@@ -326,11 +324,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
     },
     attachmentPreviewSourceV4: () =>
       unsupported<V4AttachmentPreviewSourceResult>("attachmentPreviewSourceV4"),
-    attachmentReadV4: () => unsupported<V4AttachmentReadResult>("attachmentReadV4"),
-    conversationAttachmentReadV4: () =>
-      unsupported<V4ConversationAttachmentReadResult>("conversationAttachmentReadV4"),
-    conversationAttachmentStatV4: () =>
-      unsupported<V4ConversationAttachmentStatResult>("conversationAttachmentStatV4"),
+    ...createNekUserImageAttachmentMethods(target),
     onDynamicDiagnostic: emptyEvent,
     onDynamicSessionActivity: emptyEvent,
     onDynamicLocalTtftFacts: emptyEvent,

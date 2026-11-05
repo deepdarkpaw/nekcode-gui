@@ -24,6 +24,7 @@ import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentDetails } from "./nekLiveTools.js";
+import { projectNekUserImages } from "./nekUserImages.js";
 
 /**
  * 消息生命周期 → 行。
@@ -48,7 +49,8 @@ export function applyMessageStart(ctx: NekLiveContext, message: NekAgentMessage 
     const rowId = ctx.store.allocate(entityId);
     ctx.store.add(
       buildUserInputRow(rowIdentity(entityId, rowId, currentTurnId(ctx), timestamp), {
-        text: contentText(message.content as string | Array<{ type: string }>),
+        text: contentText(message.content),
+        attachments: projectNekUserImages(ctx.store.sessionId, message),
       }),
     );
     return;

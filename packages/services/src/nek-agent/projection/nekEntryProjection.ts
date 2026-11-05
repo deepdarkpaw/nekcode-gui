@@ -27,6 +27,7 @@ import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProject
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
+import { projectNekUserImages } from "./nekUserImages.js";
 
 export type { NekProjectedSnapshot, NekSnapshotInput } from "./nekEntryShared.js";
 export { orderActiveBranch } from "./nekEntryShared.js";
@@ -158,7 +159,8 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
             buildUserInputRow(
               identity(`entry:${entry.id}:user`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
               {
-                text: contentText(message.content as string | Array<{ type: string }>),
+                text: contentText(message.content),
+                attachments: projectNekUserImages(input.sessionId, message),
               },
             ),
           );

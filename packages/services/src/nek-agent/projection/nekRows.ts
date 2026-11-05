@@ -223,15 +223,21 @@ export function buildTurnHeaderRow(
   };
 }
 
-/** 用户输入。images 无法变成 v4 attachment ref，见报告里的已知缺口。 */
+/** 用户输入：图片只携带稳定附件元数据，字节由会话的 nek entries 按需读取。 */
 export function buildUserInputRow(
   identity: NekRowIdentity,
-  args: { text: string; origin?: UserInputRow["origin"]; guided?: boolean },
+  args: {
+    text: string;
+    attachments?: UserInputRow["attachments"];
+    origin?: UserInputRow["origin"];
+    guided?: boolean;
+  },
 ): UserInputRow {
   return {
     ...rowBase(identity),
     kind: "userInput",
     text: args.text,
+    ...(args.attachments?.length ? { attachments: args.attachments } : {}),
     origin: args.origin ?? "realUser",
     ...(identity.entityId.startsWith("entry:") ? { actions: { canFork: true as const } } : {}),
     ...(args.guided ? { guided: true as const } : {}),

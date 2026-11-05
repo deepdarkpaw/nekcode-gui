@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type {
   NekExtensionUiResponse,
   NekInteractionFrame,
+  NekImageContent,
+  NekSessionEntry,
   NekSessionSummary,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
@@ -10,6 +12,7 @@ import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
 import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
 import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
+import { findNekUserImage, parseNekUserImageRef } from "../projection/nekUserImages.js";
 
 import {
   type NekAgentServiceOptions,
@@ -284,6 +287,40 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     const record = this.requireRecord(sessionKey);
     if (!record.projector) throw new Error(`conversation is not loaded for ${sessionKey}`);
     return record.projector.snapshot();
+  }
+
+  /** 不缓存图片：只读会话复用已有快照，可写会话逐页向 nek 解析，离开一页即释放。 */
+  async readUserImage(sessionKey: string, ref: string): Promise<NekImageContent> {
+    const locator = parseNekUserImageRef(ref);
+    const record = this.requireRecord(sessionKey);
+    return await this.withSession(sessionKey, async () => {
+      if (record.readonly) {
+        if (!record.snapshot) throw new Error("nek read-only session snapshot is not loaded");
+        const image = findNekUserImage(
+          record.sessionId,
+          ref,
+          locator,
+          record.snapshot.entries as NekSessionEntry[],
+        );
+        if (image) return image;
+        throw new Error("Unknown nek image attachment ref in session");
+      }
+      let beforeEntryId: string | undefined;
+      for (;;) {
+        const page = await this.requireProcess(record).client.call({
+          type: "get_entries",
+          limit: 1,
+          ...(beforeEntryId ? { beforeEntryId } : {}),
+        });
+        const image = findNekUserImage(record.sessionId, ref, locator, page.entries);
+        if (image) return image;
+        if (!page.hasMore) throw new Error("Unknown nek image attachment ref in session");
+        const next = page.entries[0]?.id;
+        if (!next || next === beforeEntryId)
+          throw new Error("nek image lookup page did not advance");
+        beforeEntryId = next;
+      }
+    });
   }
 
   async dispose(): Promise<void> {

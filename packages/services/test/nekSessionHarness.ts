@@ -185,7 +185,17 @@ export function harness(
             failEntries = false;
             throw new Error("entries load failed");
           }
-          return { entries, leafId: snapshot.leafId };
+          const end =
+            command.beforeEntryId === undefined
+              ? entries.length
+              : entries.findIndex((item) => item.id === command.beforeEntryId);
+          if (end < 0) throw new Error(`Entry not found: ${command.beforeEntryId}`);
+          const start = command.limit === undefined ? 0 : Math.max(0, end - command.limit);
+          return {
+            entries: entries.slice(start, end),
+            leafId: snapshot.leafId,
+            hasMore: start > 0,
+          };
         }
         if (command.type === "get_session_stats")
           return {
