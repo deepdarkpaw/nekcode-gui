@@ -6,7 +6,7 @@ import type {
   V4ConversationSubscribeResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentService } from "../service/nekAgentService.js";
-import { makeSubscriptionId, makeWireFrame, workspaceKey } from "./frameHelpers.js";
+import { makeSubscriptionId, makeTopicWireFrames, workspaceKey } from "./frameHelpers.js";
 import type {
   NekConversationResyncParams,
   NekConversationSubscribeParams,
@@ -61,11 +61,22 @@ export class NekConversationSubscriptions {
       detach: () => {},
     };
     let firstFrame: ConversationTopicFrame | undefined;
+    let initialError: unknown;
     subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
       const deliveryKind = firstFrame ? "online" : "initial";
       firstFrame ??= frame;
-      this.emit(subscription, { ...frame, topic }, deliveryKind);
+      try {
+        this.emit(subscription, { ...frame, topic }, deliveryKind);
+      } catch (error) {
+        // 投影器隔离 listener 异常；首帧编码失败必须转成订阅失败，不能成功 ACK 后等超时。
+        if (deliveryKind !== "initial") throw error;
+        initialError = error;
+      }
     });
+    if (initialError !== undefined) {
+      subscription.detach();
+      throw initialError;
+    }
     this.subscriptions.set(subscription.id, subscription);
     const logEpoch =
       firstFrame?.payload.kind === "snapshot" ? firstFrame.payload.snapshot.logEpoch : "nek-1";
@@ -114,9 +125,15 @@ export class NekConversationSubscriptions {
     deliveryKind: "initial" | "online" | "recovery",
   ): void {
     subscription.ordinal += 1;
-    this.emitter(subscription.workspaceKey).fire(
-      makeWireFrame(frame, subscription.id, subscription.ordinal, deliveryKind),
-    );
+    const emitter = this.emitter(subscription.workspaceKey);
+    for (const wire of makeTopicWireFrames(
+      frame,
+      subscription.id,
+      subscription.ordinal,
+      deliveryKind,
+    )) {
+      emitter.fire(wire);
+    }
   }
 
   private emitter(workspace: string): Emitter<ConversationTopicWireCandidate> {

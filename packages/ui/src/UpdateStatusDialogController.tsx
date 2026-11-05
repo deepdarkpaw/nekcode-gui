@@ -149,9 +149,8 @@ export function UpdateStatusDialogController({
       return;
     }
 
-    // 如果 electron-updater 命中本地已下载缓存，main 侧会直接广播
-    // update-downloaded。renderer 不能在 IPC ACK 前后乐观切到“下载中”，否则会闪过
-    // 一帧无意义的 0%/下载态；这里只锁按钮，真实阶段完全跟随 main 的状态广播。
+    // main 接纳下载命令后立即广播下载态，缓存命中时随后直接完成。
+    // renderer 只锁住重复提交，下载阶段和进度始终跟随 main 的状态广播。
     setUpdateActionInFlight("download");
     try {
       await platform.downloadUpdate();

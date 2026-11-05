@@ -5,11 +5,10 @@ import type {
   SessionsIndexTopicFrame,
   WorkspaceConfigTopicFrame,
 } from "@zcode/shared/zcode-protocol-v4";
-import { V4_WIRE_PROTOCOL_VERSION } from "@zcode/shared/zcode-protocol-v4";
-import type {
-  ConversationTopicWireCandidate,
-  SessionsIndexTopicWireCandidate,
-  WorkspaceConfigTopicWireCandidate,
+import {
+  encodeTopicWireFrames,
+  measureTopicNotificationEnvelopeBytes,
+  type TopicWireFrame,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekWorkspaceTarget, NekSessionCommandEnvelope } from "./types.js";
 
@@ -26,58 +25,26 @@ export function makeSubscriptionId(topic: string): string {
   return `nek:${topic}:${randomUUID()}`;
 }
 
-export function makeWireFrame(
-  frame: ConversationTopicFrame,
+/** 按接收端相同的 envelope 预算分片；一个逻辑帧的所有物理片共享序号。 */
+export function makeTopicWireFrames<
+  F extends ConversationTopicFrame | SessionsIndexTopicFrame | WorkspaceConfigTopicFrame,
+>(
+  frame: F,
   subscriptionId: string,
   ordinal: number,
   deliveryKind: "initial" | "online" | "recovery",
-): ConversationTopicWireCandidate {
-  return {
-    wireVersion: V4_WIRE_PROTOCOL_VERSION,
-    kind: "complete",
-    deliveryKind,
-    logicalFrameId: `${subscriptionId}:${frame.toSeq}:${ordinal}`,
-    logicalFrameOrdinal: ordinal,
-    topic: frame.topic,
-    subscriptionId,
-    frame: { ...frame, subscriptionId },
-  };
-}
-
-export function makeSessionsIndexWireFrame(
-  frame: SessionsIndexTopicFrame,
-  subscriptionId: string,
-  ordinal: number,
-  deliveryKind: "initial" | "online" | "recovery",
-): SessionsIndexTopicWireCandidate {
-  return {
-    wireVersion: V4_WIRE_PROTOCOL_VERSION,
-    kind: "complete",
-    deliveryKind,
-    logicalFrameId: `${subscriptionId}:${frame.toSeq}:${ordinal}`,
-    logicalFrameOrdinal: ordinal,
-    topic: frame.topic,
-    subscriptionId,
-    frame: { ...frame, subscriptionId },
-  };
-}
-
-export function makeWorkspaceConfigWireFrame(
-  frame: WorkspaceConfigTopicFrame,
-  subscriptionId: string,
-  ordinal: number,
-  deliveryKind: "initial" | "online" | "recovery",
-): WorkspaceConfigTopicWireCandidate {
-  return {
-    wireVersion: V4_WIRE_PROTOCOL_VERSION,
-    kind: "complete",
-    deliveryKind,
-    logicalFrameId: `${subscriptionId}:${frame.toSeq}:${ordinal}`,
-    logicalFrameOrdinal: ordinal,
-    topic: frame.topic,
-    subscriptionId,
-    frame: { ...frame, subscriptionId },
-  };
+): TopicWireFrame<F>[] {
+  return encodeTopicWireFrames(
+    { ...frame, subscriptionId },
+    {
+      deliveryKind,
+      logicalFrameId: `${subscriptionId}:${frame.toSeq}:${ordinal}`,
+      logicalFrameOrdinal: ordinal,
+      topic: frame.topic,
+      subscriptionId,
+      measurePhysicalFrameBytes: (wire) => measureTopicNotificationEnvelopeBytes(wire).maxBytes,
+    },
+  );
 }
 
 export function acceptedCommand(

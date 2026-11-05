@@ -1316,17 +1316,18 @@ function downloadAvailableUpdate(reason = "renderer") {
   downloadingUpdateVersion = menuState.version;
   downloadingUpdateReleaseNotes = menuState.releaseNotes ?? availableUpdateReleaseNotes;
   downloadingUpdateChannel = menuState.channel ?? availableUpdateChannel;
-  // electron-updater 如果命中本地已下载缓存，会在 downloadUpdate() 内直接触发
-  // update-downloaded。这里不能先广播 0% 下载态，否则用户会先看到“下载中”，
-  // 再跳到“已下载”；真实下载态改由第一条 download-progress 事件驱动。
+  const cancellationToken = new CancellationToken();
+  downloadCancellationToken = cancellationToken;
+  // 下载准备（缓存校验、连接、差分元数据）不一定产生进度事件。
+  // 接纳命令后立即广播可取消的下载态；字节数只使用后续真实进度。
+  clearAvailableUpdateState();
+  setAutoUpdaterMenuState(buildDownloadProgressState("0"));
   notifyForceAutoUpdate({
     kind: "downloading",
     version: downloadingUpdateVersion,
     progress: "0",
   });
 
-  const cancellationToken = new CancellationToken();
-  downloadCancellationToken = cancellationToken;
   void resolveAutoUpdater()
     .downloadUpdate(cancellationToken)
     .catch((error) => {

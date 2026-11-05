@@ -9,6 +9,7 @@ import type {
   NekRpcCommand,
   NekSessionSnapshot,
   NekSessionSummary,
+  NekSessionEntry,
 } from "@zcode/shared/nek-protocol";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 import { NekRpcClient, type NekRpcProcessExit } from "../src/nek-agent/nekRpcClient.js";
@@ -113,6 +114,8 @@ export function harness(
   options: {
     lockedBy?: NekSessionSnapshot["lockedBy"];
     failEntries?: boolean;
+    /** CLI 历史条目；控制进程快照与会话进程读取同一份事实。 */
+    entries?: NekSessionEntry[];
     /** 目录里额外的会话摘要（例如没有消息的草稿会话）。 */
     extraSessions?: NekSessionSummary[];
     /** 会话进程 `get_state` 报告的消息数（新建且未发送的会话为 0）。 */
@@ -125,12 +128,13 @@ export function harness(
   let snapshotFailure: Error | undefined;
   let release: (() => void) | undefined;
   let barrier: Promise<void> | undefined;
+  const entries = options.entries ?? [entry];
   const snapshot: NekSessionSnapshot = {
     session: { ...summary, locked: !!options.lockedBy },
     lockedBy: options.lockedBy,
-    entries: [entry],
-    messages: [entry.message],
-    leafId: entry.id,
+    entries,
+    messages: entries.flatMap((item) => (item.type === "message" ? [item.message] : [])),
+    leafId: entries.at(-1)?.id ?? null,
   };
   const control = createProcess(async (command) => {
     if (command.type === "list_sessions")
@@ -181,7 +185,7 @@ export function harness(
             failEntries = false;
             throw new Error("entries load failed");
           }
-          return { entries: [entry], leafId: entry.id };
+          return { entries, leafId: snapshot.leafId };
         }
         if (command.type === "get_session_stats")
           return {

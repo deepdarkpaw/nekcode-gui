@@ -18,7 +18,7 @@ import type { NekSessionIndexItem } from "../index/types.js";
 import { isListedNekSession } from "./nekSessionListing.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 import { isNekState, type NekAgentServiceEvent } from "../service/types.js";
-import { makeSessionsIndexWireFrame, makeWorkspaceConfigWireFrame } from "./frameHelpers.js";
+import { makeSubscriptionId, makeTopicWireFrames, workspaceKey } from "./frameHelpers.js";
 import type {
   NekConversationResyncParams,
   NekConversationUnsubscribeParams,
@@ -26,7 +26,6 @@ import type {
   NekWorkspaceConfigSubscribeParams,
   NekWorkspaceTarget,
 } from "./types.js";
-import { makeSubscriptionId, workspaceKey } from "./frameHelpers.js";
 
 interface IndexSubscription {
   id: string;
@@ -341,9 +340,15 @@ export class NekAgentServiceTopics {
       payload: { kind: "snapshot", snapshot },
     };
     subscription.ordinal += 1;
-    this.indexEmitter(subscription.workspaceKey).fire(
-      makeSessionsIndexWireFrame(frame, subscription.id, subscription.ordinal, deliveryKind),
-    );
+    const emitter = this.indexEmitter(subscription.workspaceKey);
+    for (const wire of makeTopicWireFrames(
+      frame,
+      subscription.id,
+      subscription.ordinal,
+      deliveryKind,
+    )) {
+      emitter.fire(wire);
+    }
   }
 
   private pushConfig(
@@ -362,9 +367,15 @@ export class NekAgentServiceTopics {
       payload: { kind: "snapshot", snapshot },
     };
     subscription.ordinal += 1;
-    this.configEmitter(subscription.workspaceKey).fire(
-      makeWorkspaceConfigWireFrame(frame, subscription.id, subscription.ordinal, deliveryKind),
-    );
+    const emitter = this.configEmitter(subscription.workspaceKey);
+    for (const wire of makeTopicWireFrames(
+      frame,
+      subscription.id,
+      subscription.ordinal,
+      deliveryKind,
+    )) {
+      emitter.fire(wire);
+    }
   }
 
   private indexSubscriptionsHas(workspaceId: string): boolean {
