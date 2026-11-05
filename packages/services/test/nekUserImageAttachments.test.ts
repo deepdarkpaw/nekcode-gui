@@ -88,11 +88,12 @@ test("attachmentReadV4 resolves persisted images on demand and returns unaligned
       );
       assert.equal(result.nextOffset, offset + limit < bytes.length ? offset + limit : null);
     }
-    assert.ok(
+    assert.equal(
       h.sessions[0]!.commands.filter(
-        (command) => command.type === "get_entries" && command.limit === 1,
-      ).length >= 7,
-      "each read re-resolves; no retained image cache",
+        (command) => command.type === "get_entries" && command.limit === 8,
+      ).length,
+      1,
+      "chunked reads of one image resolve it once, then hit the bounded cache",
     );
   } finally {
     await h.adapter.dispose();
@@ -142,7 +143,7 @@ test("image lookup pages through nek entries without keeping the session's base6
   const entries: NekSessionEntry[] = [
     image,
     ...Array.from(
-      { length: 3 },
+      { length: 17 },
       (_, index): NekSessionEntry => ({
         type: "custom",
         id: `later-${index}`,
@@ -157,11 +158,11 @@ test("image lookup pages through nek entries without keeping the session's base6
     const input = await projectedImage(h);
     await h.adapter.attachmentReadV4({ ...input, offset: 0, limit: 2 });
     const pages = h.sessions[0]!.commands.filter(
-      (command) => command.type === "get_entries" && command.limit === 1,
+      (command) => command.type === "get_entries" && command.limit === 8,
     );
     assert.deepEqual(
       pages.map((command) => command.type === "get_entries" && command.beforeEntryId),
-      [undefined, "later-2", "later-1", "later-0"],
+      [undefined, "later-9", "later-1"],
     );
   } finally {
     await h.adapter.dispose();
