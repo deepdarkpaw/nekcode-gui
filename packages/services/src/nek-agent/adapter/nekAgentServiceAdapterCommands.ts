@@ -154,12 +154,11 @@ async function createFromCommand(
   const firstInput = asRecord(payload.firstInput);
   const config = asRecord(payload.config);
   const model = asRecord(firstInput?.modelSelection ?? config?.modelSelection);
+  const thinking = selectionThinking(model, config);
   const result = await context.createSession({
     workspacePath: target.workspacePath,
     ...(model ? { model: modelSelectionOf(model) } : {}),
-    ...(readString(config ?? {}, "thought")
-      ? { thinking: thoughtLevel(readString(config ?? {}, "thought")) }
-      : {}),
+    ...(thinking !== undefined ? { thinking } : {}),
     ...(readString(config ?? {}, "mode") ? { mode: mode(readString(config ?? {}, "mode")) } : {}),
   });
   if (firstInput) {
@@ -234,9 +233,12 @@ async function applySelection(
   payload: Record<string, unknown>,
 ): Promise<void> {
   const model = asRecord(payload.modelSelection);
+  const thinking = selectionThinking(model, payload);
   if (model) {
     await service.setModel({ sessionKey, ...modelSelectionOf(model) });
   }
+  // set_model 会按模型支持等级夹取旧值，必须在它之后应用本次输入框的明确选择。
+  if (thinking !== undefined) await service.setThinkingLevel({ sessionKey, level: thinking });
   if (readString(payload, "mode")) await setModeFromPayload(service, sessionKey, payload);
 }
 
@@ -257,6 +259,17 @@ async function setThoughtFromPayload(
     sessionKey,
     level: thoughtLevel(readString(payload, "thought")),
   });
+}
+
+/** canonical Selection 优先于旧 thought 字段；缺省不覆盖 nek 自己的设置。 */
+function selectionThinking(
+  model: Record<string, unknown> | undefined,
+  payload: Record<string, unknown> | undefined,
+): NekThinkingLevel | undefined {
+  const options = asRecord(model?.options);
+  const requested = options?.reasoningLevel ?? payload?.thought;
+  if (requested === undefined) return undefined;
+  return thoughtLevel(typeof requested === "string" ? requested : undefined);
 }
 
 function mode(value: string | undefined): NekMode {

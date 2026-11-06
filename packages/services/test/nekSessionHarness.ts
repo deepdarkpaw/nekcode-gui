@@ -10,6 +10,7 @@ import type {
   NekSessionSnapshot,
   NekSessionSummary,
   NekSessionEntry,
+  NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 import { NekRpcClient, type NekRpcProcessExit } from "../src/nek-agent/nekRpcClient.js";
@@ -122,6 +123,9 @@ export function harness(
     messageCount?: number;
     /** 附件上传暂存目录（测试用临时目录，不能落到真实数据目录）。 */
     attachmentStagingDir?: string;
+    subagents?: NekSubagentRecord[];
+    childSnapshots?: NekSessionSnapshot[];
+    subagentMessages?: unknown[];
   } = {},
 ) {
   let failEntries = options.failEntries ?? false;
@@ -143,6 +147,10 @@ export function harness(
     if (command.type === "delete_session" && sessions.some((session) => !session.isDisposed()))
       throw new Error(`Session is locked by a live process: ${command.sessionPath}`);
     if (command.type === "read_session_snapshot") {
+      const child = options.childSnapshots?.find(
+        (item) => item.session.path === command.sessionPath,
+      );
+      if (child) return child;
       await barrier;
       if (snapshotFailure) throw snapshotFailure;
       return snapshot;
@@ -209,8 +217,13 @@ export function harness(
             tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
             cost: 0,
           };
-        if (command.type === "extension_call")
-          return { result: { mode: "agent", todos: [], plans: [], subagents: [] } };
+        if (command.type === "extension_call") {
+          if (command.method === "nek.get_subagent_transcript")
+            return { result: { messages: options.subagentMessages ?? [] } };
+          return {
+            result: { mode: "agent", todos: [], plans: [], subagents: options.subagents ?? [] },
+          };
+        }
         if (command.type === "prompt") return { disposition: "started" };
         if (command.type === "get_available_models") return { models: [] };
         if (command.type === "get_commands") return { commands: [] };

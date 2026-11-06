@@ -9,7 +9,6 @@ function sources(
 ): NekPaneStatusCallbackSources {
   return {
     stopSubagent: vi.fn(async () => undefined),
-    fetchTranscript: vi.fn(async () => ({ messages: [] })),
     focusSubagent: vi.fn(),
     openPlan: vi.fn(),
     jumpToTodo: vi.fn(),
@@ -28,9 +27,6 @@ describe("createNekPaneStatusCallbacks", () => {
 
     await callbacks.onStopSubagent("subagent-1");
     expect(pane.stopSubagent).toHaveBeenCalledWith("subagent-1");
-
-    await expect(callbacks.fetchTranscript("subagent-1")).resolves.toEqual({ messages: [] });
-    expect(pane.fetchTranscript).toHaveBeenCalledWith("subagent-1");
 
     callbacks.onFocusSubagent("subagent-1");
     expect(pane.focusSubagent).toHaveBeenCalledWith("subagent-1");

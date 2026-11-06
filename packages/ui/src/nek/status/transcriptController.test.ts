@@ -1,109 +1,88 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useNekStatusStore } from "./store.js";
-import { intlWrapper } from "./controllerTestUtils.js";
-import {
-  resolveTranscriptKey,
-  useSubagentTranscriptController,
-} from "./useSubagentTranscriptController.js";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { useSubagentConversation, type SubagentConversation } from "./useSubagentConversation.js";
+import { NEK_STATUS_TRANSCRIPT_REFRESH_MS } from "./types.js";
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  useNekStatusStore.getState().reset();
-});
+const running: SubagentConversation = { rows: [], totalCount: 0, status: "running" };
+const completed: SubagentConversation = { ...running, status: "completed" };
+beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
 
-describe("subagent transcript controller", () => {
-  it("TR-1/TR-4: loads immediately and retains only the last 500 messages", async () => {
-    const fetchTranscript = vi
-      .fn()
-      .mockResolvedValue({ messages: Array.from({ length: 505 }, (_, i) => i) });
-    const { result } = renderHook(
+it("S2: refreshes running preview single-flight, then stops at completion", async () => {
+  let finish!: (value: SubagentConversation) => void;
+  const load = vi
+    .fn()
+    .mockImplementationOnce(
       () =>
-        useSubagentTranscriptController({
-          sessionKey: "s",
-          id: "a",
-          fetchTranscript,
-          onBack: vi.fn(),
+        new Promise((resolve) => {
+          finish = resolve;
         }),
-      { wrapper: intlWrapper },
-    );
-    await act(async () => await Promise.resolve());
-    expect(fetchTranscript).toHaveBeenCalledWith("a");
-    expect(result.current.view.state.status).toBe("loaded");
-    if (result.current.view.state.status !== "loaded") throw new Error("expected loaded");
-    expect(result.current.view.state.messages).toHaveLength(500);
-    expect(result.current.view.state.truncatedCount).toBe(5);
+    )
+    .mockResolvedValue(completed);
+  const { result } = renderHook(() => useSubagentConversation(load, true));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10 * NEK_STATUS_TRANSCRIPT_REFRESH_MS);
   });
+  expect(load).toHaveBeenCalledTimes(1);
+  await act(async () => finish(running));
+  expect(result.current.data).toEqual(running);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(NEK_STATUS_TRANSCRIPT_REFRESH_MS);
+  });
+  expect(result.current.data).toEqual(completed);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10 * NEK_STATUS_TRANSCRIPT_REFRESH_MS);
+  });
+  expect(load).toHaveBeenCalledTimes(2);
+});
 
-  it("TR-2/TR-3: refreshes running records every three seconds and preserves old content on failure", async () => {
-    useNekStatusStore.getState().consumeEvent(
-      "s",
-      {
-        type: "nek.subagent",
-        payload: {
-          id: "a",
-          description: "a",
-          type: "worker",
-          background: false,
-          status: "running",
-          startedAt: 0,
-        },
-      },
-      0,
-    );
-    const fetchTranscript = vi
-      .fn()
-      .mockResolvedValueOnce({ messages: ["first"] })
-      .mockRejectedValueOnce(new Error("refresh failed"));
-    const { result } = renderHook(
-      () =>
-        useSubagentTranscriptController({
-          sessionKey: "s",
-          id: "a",
-          fetchTranscript,
-          onBack: vi.fn(),
-        }),
-      { wrapper: intlWrapper },
-    );
-    await act(async () => await Promise.resolve());
-    expect(result.current.view.state.status).toBe("loaded");
-    await act(async () => {
-      vi.advanceTimersByTime(3000);
-      await Promise.resolve();
-    });
-    expect(result.current.view.refreshing).toBe(false);
-    expect(result.current.view.refreshError).toBe("refresh failed");
-    if (result.current.view.state.status !== "loaded") throw new Error("expected loaded");
-    expect(result.current.view.state.messages).toEqual(["first"]);
+it("S2: late old-child results cannot overwrite the selected child; hidden panes do not poll", async () => {
+  let finish!: (value: SubagentConversation) => void;
+  const old = vi.fn(
+    () =>
+      new Promise<SubagentConversation>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const next = vi.fn(async () => completed);
+  const { result, rerender, unmount } = renderHook(
+    ({ load, active }) => useSubagentConversation(load, active),
+    { initialProps: { load: old, active: true } },
+  );
+  rerender({ load: next, active: true });
+  await act(async () => {
+    await Promise.resolve();
   });
+  await act(async () => finish(running));
+  expect(result.current.data).toEqual(completed);
+  rerender({ load: next, active: false });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+  expect(next).toHaveBeenCalledTimes(1);
+  unmount();
+});
 
-  it("TR-5: resolves Esc and Alt+Left, but never during IME composition", () => {
-    expect(resolveTranscriptKey({ key: "Escape" })).toBe("back");
-    expect(resolveTranscriptKey({ key: "ArrowLeft", altKey: true })).toBe("back");
-    expect(resolveTranscriptKey({ key: "Escape", isComposing: true })).toBeNull();
-    expect(resolveTranscriptKey({ key: "ArrowLeft", altKey: true, keyCode: 229 })).toBeNull();
+it("S2: refresh failures preserve rendered content, show an error and allow explicit retry", async () => {
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce(running)
+    .mockRejectedValueOnce(new Error("read failed"))
+    .mockResolvedValueOnce(completed);
+  const { result } = renderHook(() => useSubagentConversation(load, true));
+  await act(async () => {
+    await Promise.resolve();
   });
-
-  it("TR-6: ignores a late response after unmount", async () => {
-    let resolve!: (value: { messages: unknown[] }) => void;
-    const fetchTranscript = vi.fn().mockImplementation(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
-    const onBack = vi.fn();
-    const { result, unmount } = renderHook(
-      () => useSubagentTranscriptController({ sessionKey: "s", id: "a", fetchTranscript, onBack }),
-      { wrapper: intlWrapper },
-    );
-    unmount();
-    await act(async () => resolve({ messages: ["late"] }));
-    expect(result.current.view.state.status).toBe("loading");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(NEK_STATUS_TRANSCRIPT_REFRESH_MS);
   });
+  expect(result.current.data).toEqual(running);
+  expect(result.current.error).toBe("read failed");
+  await act(async () => result.current.retry());
+  expect(result.current.data).toEqual(completed);
+  expect(result.current.error).toBeUndefined();
 });

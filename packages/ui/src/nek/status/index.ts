@@ -14,8 +14,6 @@ export type {
 export { createNekPaneStatusCallbacks } from "./paneStatusCallbacks.js";
 export { NekSubagentCardView } from "./NekSubagentCardView.js";
 export type { NekSubagentCardViewProps } from "./NekSubagentCardView.js";
-export { NekSubagentTranscriptView } from "./NekSubagentTranscriptView.js";
-export type { NekSubagentTranscriptViewProps } from "./NekSubagentTranscriptView.js";
 export { NekTodoPanelView } from "./NekTodoPanelView.js";
 export type { NekTodoPanelViewProps } from "./NekTodoPanelView.js";
 export { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";

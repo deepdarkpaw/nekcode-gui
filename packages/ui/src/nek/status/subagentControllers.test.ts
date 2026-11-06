@@ -58,7 +58,7 @@ describe("subagent controllers", () => {
     });
     rerender();
     expect(result.current.view.statusId).toBe("nek.status.subagent.completed");
-    expect(result.current.view.body).toEqual({ text: "done" });
+    expect(result.current.view.body).toBeUndefined();
   });
 
   it("SA-1: renders errored and aborted body semantics", () => {

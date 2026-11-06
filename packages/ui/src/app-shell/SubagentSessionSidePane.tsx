@@ -7,7 +7,7 @@ import type {
   SubagentSessionSidePaneTab,
 } from "@/lib/workspaceSidePane.js";
 import type { PaneWorkspaceScope } from "@/v4/paneLayoutStore.js";
-import { SessionPane } from "@/v4/SessionPane.js";
+import { NekSubagentConversation } from "@/nek/status/NekSubagentConversation.js";
 import { V4PaneConversationProvider } from "@/v4/V4ConversationContext.js";
 
 export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
@@ -16,8 +16,6 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
   onOpenBrowserUrl,
   onOpenCodeViewer,
   onOpenFileLink,
-  onOpenSubagentSession,
-  onOpenBackgroundBash,
 }: {
   tab: SubagentSessionSidePaneTab;
   focused: boolean;
@@ -38,21 +36,12 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
 
   return (
     <V4PaneConversationProvider scope={scope}>
-      <SessionPane
-        paneId={tab.id}
-        sessionId={tab.childSessionId}
-        rootSessionId={tab.rootSessionId}
-        readOnly
-        allowWorkspaceFileRewind
+      <NekSubagentConversation
+        tab={tab}
         focused={focused}
-        workspacePath={tab.workspacePath}
-        workspaceIdentity={tab.workspaceIdentity}
-        remoteSessionId={tab.remoteSessionId}
         onOpenBrowserUrl={onOpenBrowserUrl}
         onOpenCodeViewer={onOpenCodeViewer}
         onOpenFileLink={onOpenFileLink}
-        onOpenSubagentSession={onOpenSubagentSession}
-        onOpenBackgroundBash={onOpenBackgroundBash}
       />
     </V4PaneConversationProvider>
   );

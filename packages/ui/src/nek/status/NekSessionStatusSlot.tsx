@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
 import { NekRetryBannerView } from "./NekRetryBannerView.js";
@@ -6,7 +6,6 @@ import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
 import { NekSubagentCardView } from "./NekSubagentCardView.js";
-import { NekSubagentTranscriptView } from "./NekSubagentTranscriptView.js";
 import { useNekStatusActions } from "@/nek/statusFeed/statusActions.js";
 import { useNekStatusStore } from "./store.js";
 
@@ -17,7 +16,6 @@ import { useNekStatusStore } from "./store.js";
  */
 export interface NekSessionStatusCallbacks {
   onStopSubagent: (id: string) => Promise<void>;
-  fetchTranscript: (id: string) => Promise<{ messages: unknown[] }>;
   onFocusSubagent: (id: string) => void;
   onOpenPlan: (path: string) => Promise<void> | void;
   onJumpToTodo: (id: string) => void;
@@ -40,7 +38,6 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
   // 只依赖 agent 服务的动作由 status feed 直接提供（定义见 statusFeed/statusActions.ts）；
   // 没有登记（feed 还没见过这个会话）时不渲染需要 RPC 的视图，避免用空实现假装成功。
   const statusActions = useNekStatusActions(sessionKey);
-  const [transcriptId, setTranscriptId] = useState<string | null>(null);
   const subagentIds = useNekStatusStore(
     (state) => state.sessions[sessionKey]?.subagents.order ?? [],
   );
@@ -75,24 +72,15 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
         onJumpToTodo={callbacks.onJumpToTodo}
         canJumpToTodo={callbacks.canJumpToTodo}
       />
-      {transcriptId ? (
-        <NekSubagentTranscriptView
+      {subagentIds.map((id) => (
+        <NekSubagentCardView
+          key={id}
           sessionKey={sessionKey}
-          id={transcriptId}
-          fetchTranscript={callbacks.fetchTranscript}
-          onBack={() => setTranscriptId(null)}
+          id={id}
+          onStop={callbacks.onStopSubagent}
+          onOpenTranscript={callbacks.onFocusSubagent}
         />
-      ) : (
-        subagentIds.map((id) => (
-          <NekSubagentCardView
-            key={id}
-            sessionKey={sessionKey}
-            id={id}
-            onStop={callbacks.onStopSubagent}
-            onOpenTranscript={setTranscriptId}
-          />
-        ))
-      )}
+      ))}
       <NekQueueBarView
         sessionKey={sessionKey}
         clearQueue={statusActions.clearQueue}

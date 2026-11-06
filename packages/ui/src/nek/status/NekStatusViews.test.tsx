@@ -12,7 +12,6 @@ import { NekQueueBarView } from "./NekQueueBarView.js";
 import { NekRetryBannerView } from "./NekRetryBannerView.js";
 import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
 import { NekSubagentCardView } from "./NekSubagentCardView.js";
-import { NekSubagentTranscriptView } from "./NekSubagentTranscriptView.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
 
@@ -77,7 +76,8 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("nek status views", () => {
-  it("SA: renders a card, collapses by default, and opens its body", () => {
+  it("S1: completed card opens the side preview, never duplicates raw final text", () => {
+    const openPreview = vi.fn();
     useNekStatusStore
       .getState()
       .consumeEvent("s", { type: "nek.subagent", payload: record("a", "completed") });
@@ -86,15 +86,14 @@ describe("nek status views", () => {
         sessionKey="s"
         id="a"
         onStop={vi.fn(async () => undefined)}
-        onOpenTranscript={vi.fn()}
+        onOpenTranscript={openPreview}
       />,
     );
-    const card = document.querySelector('[data-status-view="subagent-card"]');
-    expect(card?.getAttribute("data-state")).toBe("closed");
     expect(screen.getByText("子代理 a")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /子代理 a/ }));
-    expect(card?.getAttribute("data-state")).toBe("open");
-    expect(screen.getByText("已完成正文")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "在右侧预览 子代理 a" }));
+    expect(openPreview).toHaveBeenCalledWith("a");
+    expect(screen.queryByText("已完成正文")).toBeNull();
+    expect(screen.queryByText("查看完整消息")).toBeNull();
   });
 
   it("SA: renders disabled reason while stop is pending", async () => {
@@ -224,23 +223,5 @@ describe("nek status views", () => {
     fireEvent.click(screen.getByText("42% · 84k/200k"));
     expect(screen.getByText("Input:")).toBeTruthy();
     expect(screen.getByText("Cache Read:")).toBeTruthy();
-  });
-
-  it("TR: shows loading state and retries an initial failure", async () => {
-    const fetchTranscript = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("加载失败"))
-      .mockResolvedValueOnce({ messages: ["消息一"] });
-    renderView(
-      <NekSubagentTranscriptView
-        sessionKey="s"
-        id="a"
-        fetchTranscript={fetchTranscript}
-        onBack={vi.fn()}
-      />,
-    );
-    await waitFor(() => expect(screen.getByText("加载失败")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "加载失败，重试" }));
-    await waitFor(() => expect(screen.getByText("消息一")).toBeTruthy());
   });
 });

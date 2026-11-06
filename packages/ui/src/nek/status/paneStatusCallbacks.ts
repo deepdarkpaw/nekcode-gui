@@ -13,8 +13,6 @@ import type { NekSessionStatusCallbacks } from "./NekSessionStatusSlot.js";
 export interface NekPaneStatusCallbackSources {
   /** 子代理停止（`stopSubagent`），来自 `useNekSubagentFeed`。 */
   stopSubagent: (id: string) => Promise<void>;
-  /** 子代理记录（`getSubagentTranscript`），来自 `useNekSubagentFeed`。 */
-  fetchTranscript: (id: string) => Promise<{ messages: unknown[] }>;
   /** 定位到对话里的子代理（打开对应子会话）。 */
   focusSubagent: (id: string) => void;
   /** 打开计划文件（复用文件链接通道）。 */
@@ -36,7 +34,6 @@ export function createNekPaneStatusCallbacks(
 ): NekSessionStatusCallbacks {
   return {
     onStopSubagent: async (id) => await sources.stopSubagent(id),
-    fetchTranscript: async (id) => await sources.fetchTranscript(id),
     onFocusSubagent: sources.focusSubagent,
     onOpenPlan: sources.openPlan,
     onJumpToTodo: sources.jumpToTodo,

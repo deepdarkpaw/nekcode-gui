@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { Emitter } from "@zcode/rpc";
 import type {
   NekAgentTypeInfo,
@@ -10,7 +10,6 @@ import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { useSubagentCardController } from "@/nek/status/useSubagentCardController.js";
-import { useSubagentTranscriptController } from "@/nek/status/useSubagentTranscriptController.js";
 import { useNekStatusStore } from "@/nek/status/store.js";
 import {
   NekAgentFeedProvider,
@@ -150,38 +149,13 @@ describe("useNekSubagentFeed", () => {
       .mockRejectedValueOnce(new Error("nek session session-1 is not open"))
       .mockResolvedValue({ messages: ["first", "second"] });
 
-    const { result } = renderHook(
-      () => {
-        const bindings = useNekSubagentFeed("session-1");
-        const transcript = useSubagentTranscriptController({
-          sessionKey: "session-1",
-          id: "child-1",
-          fetchTranscript: bindings.fetchTranscript,
-          onBack: vi.fn(),
-        });
-        return { bindings, transcript };
-      },
-      { wrapper: feedWrapper(service) },
-    );
-
-    await waitFor(() =>
-      expect(result.current.transcript.view.state).toEqual({
-        status: "error",
-        message: "nek session session-1 is not open",
-      }),
-    );
-    expect(result.current.transcript.actions.retry.visible).toBe(true);
-
-    await act(async () => {
-      await result.current.transcript.actions.retry.run();
+    const { result } = renderHook(() => useNekSubagentFeed("session-1"), {
+      wrapper: feedWrapper(service),
     });
-    await waitFor(() =>
-      expect(result.current.transcript.view.state).toEqual({
-        status: "loaded",
-        messages: ["first", "second"],
-        truncatedCount: 0,
-      }),
-    );
+    await expect(result.current.fetchTranscript("child-1")).rejects.toThrow("is not open");
+    await expect(result.current.fetchTranscript("child-1")).resolves.toEqual({
+      messages: ["first", "second"],
+    });
     expect(service.getSubagentTranscript).toHaveBeenCalledTimes(2);
     expect(service.getSubagentTranscript).toHaveBeenCalledWith({
       ...sessionTarget,

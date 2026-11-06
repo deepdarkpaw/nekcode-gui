@@ -49,6 +49,7 @@ import type {
   ConversationTopicWireCandidate,
   ConversationTelemetryFact,
   ConversationRowTarget,
+  ConversationRow,
   HelloMessage,
   SessionsIndexTopicWireCandidate,
   V4AttachmentBeginResult,
@@ -479,6 +480,12 @@ export interface IZCodeAgentService {
   getSubagentTranscript(
     params: ZCodeAgentSubagentTranscriptParams,
   ): Promise<{ messages: unknown[] }>;
+  /** 父会话授权的只读子代理预览；不得以 child id 恢复/启动普通会话。 */
+  getSubagentConversation(params: ZCodeAgentSubagentTranscriptParams): Promise<{
+    rows: ConversationRow[];
+    totalCount: number;
+    status: NekSubagentRecord["status"];
+  }>;
   listAgentTypes(params: ZCodeAgentSessionTarget): Promise<{ types: NekAgentTypeInfo[] }>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;

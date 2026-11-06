@@ -31,6 +31,7 @@ import { workspaceKey } from "./frameHelpers.js";
 import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
 import { isListedNekSession } from "./nekSessionListing.js";
 import { createNekUserImageAttachmentMethods } from "./nekUserImageAttachments.js";
+import { createNekSubagentConversationReader } from "./nekSubagentConversation.js";
 
 function isPlanWithMarkdown(value: unknown): value is NekPlanSummary & { markdown: string } {
   if (typeof value !== "object" || value === null) return false;
@@ -67,7 +68,10 @@ function planRow(
   };
 }
 
-export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarget): LegacyMethods {
+export function createNekLegacyMethods(
+  target: NekAgentServiceAdapterLegacyTarget,
+  maxPreviewRows?: number,
+): LegacyMethods {
   // 被动事件与 identity 查询共用同一份代际记忆。
   const runtimeLifecycle = createNekAgentRuntimeLifecycle(target.service);
   const methods: LegacyMethods = {
@@ -111,6 +115,7 @@ export function createNekLegacyMethods(target: NekAgentServiceAdapterLegacyTarge
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       return await target.service.stopSubagent({ sessionKey, id: input.id });
     },
+    getSubagentConversation: createNekSubagentConversationReader(target, maxPreviewRows),
     async getSubagentTranscript(input) {
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       return await target.service.getSubagentTranscript({ sessionKey, id: input.id });

@@ -64,6 +64,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly listSessionSubagents: IZCodeAgentService["listSessionSubagents"];
   declare readonly stopSubagent: IZCodeAgentService["stopSubagent"];
   declare readonly getSubagentTranscript: IZCodeAgentService["getSubagentTranscript"];
+  declare readonly getSubagentConversation: IZCodeAgentService["getSubagentConversation"];
   declare readonly listAgentTypes: IZCodeAgentService["listAgentTypes"];
   declare readonly getTaskTokenUsage: IZCodeAgentService["getTaskTokenUsage"];
   declare readonly readSession: IZCodeAgentService["readSession"];
@@ -168,7 +169,11 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.interactions = new NekAgentInteractionChannel(this.service);
     const statusFeed = createNekAgentStatusFeed(this, options.logger);
     this.status = statusFeed.channel;
-    Object.assign(this, statusFeed.methods, createNekLegacyMethods(this));
+    Object.assign(
+      this,
+      statusFeed.methods,
+      createNekLegacyMethods(this, options.runtimeConfig?.events.eventBufferEntries),
+    );
   }
 
   async initialize(

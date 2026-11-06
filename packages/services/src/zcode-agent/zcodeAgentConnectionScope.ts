@@ -741,6 +741,10 @@ export function createZCodeAgentConnectionScope(
       assertOpen();
       return base.stopSubagent(params);
     },
+    async getSubagentConversation(params) {
+      assertOpen();
+      return base.getSubagentConversation(params);
+    },
     async getSubagentTranscript(params) {
       assertOpen();
       return base.getSubagentTranscript(params);

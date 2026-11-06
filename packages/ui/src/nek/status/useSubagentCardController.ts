@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAsyncAction } from "@/hooks/useAsyncAction.js";
 import { useNowTicker } from "@/hooks/useNowTicker.js";
-import { useFoldState } from "@/lib/foldState.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useNekStatusStore } from "./store.js";
 import { formatDuration, subagentElapsedMs, subagentMetaParts } from "./format.js";
@@ -29,7 +28,6 @@ export interface SubagentCardView {
   elapsed: string;
   activity?: string;
   body?: { text?: string; message?: StatusMessage };
-  fold: { id: string; open: boolean; onOpenChange: (open: boolean) => void };
 }
 
 export interface SubagentCardController {
@@ -67,11 +65,6 @@ export function useSubagentCardController({
   const record = useNekStatusStore((state) => state.sessions[sessionKey]?.subagents.byId[id]);
   const markStopRequested = useNekStatusStore((state) => state.markStopRequested);
   const clearStopRequested = useNekStatusStore((state) => state.clearStopRequested);
-  const [open, setOpen] = useFoldState(
-    `subagent:${id}`,
-    "toolOutput",
-    record?.status === "errored",
-  );
   const [timeoutError, setTimeoutError] = useState<string | undefined>();
   const active = record?.status === "running";
   const now = useNowTicker(active);
@@ -143,22 +136,17 @@ export function useSubagentCardController({
         metaParts: [],
         elapsedMs: 0,
         elapsed: formatDuration(0),
-        fold: { id: `subagent:${id}`, open: false, onOpenChange: setOpen },
       };
     }
     const status = statusView(record);
     const body =
-      record.status === "completed"
-        ? record.finalText
-          ? { text: record.finalText }
+      record.status === "errored"
+        ? record.error
+          ? { text: record.error }
           : undefined
-        : record.status === "errored"
-          ? record.error
-            ? { text: record.error }
-            : undefined
-          : record.status === "aborted"
-            ? { message: { id: "nek.status.subagent.abortedBody" } }
-            : undefined;
+        : record.status === "aborted"
+          ? { message: { id: "nek.status.subagent.abortedBody" } }
+          : undefined;
     return {
       visible: true,
       title: record.description,
@@ -172,9 +160,8 @@ export function useSubagentCardController({
       elapsed: formatDuration(elapsedMs),
       ...(record.status === "running" && record.activity ? { activity: record.activity } : {}),
       ...(body ? { body } : {}),
-      fold: { id: `subagent:${id}`, open, onOpenChange: setOpen },
     };
-  }, [elapsedMs, id, open, record, setOpen]);
+  }, [elapsedMs, record]);
 
   return { view, actions: { stop, openTranscript }, onKeyDown: () => undefined };
 }

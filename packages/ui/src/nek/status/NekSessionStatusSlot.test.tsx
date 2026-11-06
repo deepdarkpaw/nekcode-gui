@@ -42,7 +42,6 @@ function record(id: string, status: NekSubagentRecord["status"] = "running"): Ne
 function callbacks(overrides: Partial<NekSessionStatusCallbacks> = {}): NekSessionStatusCallbacks {
   return {
     onStopSubagent: vi.fn(async () => undefined),
-    fetchTranscript: vi.fn(async () => ({ messages: [] })),
     onFocusSubagent: vi.fn(),
     onOpenPlan: vi.fn(),
     onJumpToTodo: vi.fn(),
@@ -102,9 +101,8 @@ describe("Nek session status slot wiring", () => {
     expect(rendered.container.querySelector('[data-status-view="session-status-slot"]')).toBeNull();
   });
 
-  it("slot: pane callbacks stop subagents, open transcripts, and focus running subagents", async () => {
+  it("S1: card and running bar open the same side preview without raw transcript UI", async () => {
     const stopSubagent = vi.fn(async () => undefined);
-    const fetchTranscript = vi.fn(async () => ({ messages: ["子代理输出"] }));
     const focusSubagent = vi.fn();
     act(() => {
       useNekStatusStore.getState().consumeEvent("s", {
@@ -118,7 +116,6 @@ describe("Nek session status slot wiring", () => {
         sessionKey="s"
         callbacks={callbacks({
           onStopSubagent: stopSubagent,
-          fetchTranscript,
           onFocusSubagent: focusSubagent,
         })}
       />,
@@ -133,16 +130,10 @@ describe("Nek session status slot wiring", () => {
     });
     expect(stopSubagent).toHaveBeenCalledWith("a");
 
-    fireEvent.click(cardScope.getByRole("button", { name: /子代理 a/ }));
-    await act(async () => {
-      fireEvent.click(cardScope.getByRole("button", { name: "查看完整消息" }));
-    });
-    await waitFor(() => expect(fetchTranscript).toHaveBeenCalledWith("a"));
-    await waitFor(() => expect(screen.getByText("子代理输出")).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "返回" }));
-    });
+    fireEvent.click(cardScope.getByRole("button", { name: "在右侧预览 子代理 a" }));
+    await waitFor(() => expect(focusSubagent).toHaveBeenCalledWith("a"));
+    expect(screen.queryByRole("button", { name: "查看完整消息" })).toBeNull();
+    expect(document.querySelector('[data-status-view="subagent-transcript"]')).toBeNull();
     const bar = document.querySelector<HTMLElement>('[data-status-view="running-subagents-bar"]');
     if (!bar) throw new Error("expected the running subagents bar");
     const focusButton = within(bar).getAllByRole("button")[0];

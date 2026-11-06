@@ -1537,7 +1537,6 @@ export function SessionPane({
     if (nekStatusCallbacks) return nekStatusCallbacks;
     return createNekPaneStatusCallbacks({
       stopSubagent: subagentFeed.onStop,
-      fetchTranscript: subagentFeed.fetchTranscript,
       focusSubagent: handleFocusNekSubagent,
       openPlan: handleOpenNekPlan,
       jumpToTodo: handleJumpToNekTodo,
