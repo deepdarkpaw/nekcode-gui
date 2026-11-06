@@ -47,6 +47,14 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
 
   let turn: TurnContext = { turnId: "turn-0", entityId: "turn-0", startedAt: 0 };
   let turnOpen = false;
+  let lastActivityAt: number | undefined;
+  let lastStopReason: string | undefined;
+  const completedState = () =>
+    lastStopReason === "aborted"
+      ? "completedInterrupted"
+      : lastStopReason === "error"
+        ? "failed"
+        : "completedSuccess";
   let title = input.title ?? "";
   let mode = input.nekState?.mode ?? "agent";
   let provider = input.state?.model?.provider ?? "";
@@ -69,12 +77,14 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
     return push(
       buildTurnHeaderRow(identity(turn.entityId, rowId, turn.turnId, turn.startedAt), {
         state,
-        ...(state === "running" ? {} : { endedAt: turn.startedAt }),
+        ...(state === "running" ? {} : { endedAt: lastActivityAt }),
       }),
     );
   };
   const startTurn = (message: NekAgentMessage) => {
-    if (turnOpen) pushTurnHeader("completedSuccess");
+    if (turnOpen) pushTurnHeader(completedState());
+    lastActivityAt = undefined;
+    lastStopReason = undefined;
     const timestamp = toEpochMs(message.timestamp as number | undefined);
     const entityId = `turn:${timestamp}:${turn.turnId}`;
     turn = { turnId: entityId, entityId, startedAt: timestamp };
@@ -169,6 +179,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         if (message.role === "assistant") {
           if (!turnOpen) startTurn(message);
           const assistant = message as NekAssistantMessage;
+          lastStopReason = assistant.stopReason;
           const responseId = `resp:${assistant.timestamp}`;
           for (const block of assistantThinkingBlocks(assistant)) {
             if (
@@ -318,8 +329,20 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         // usage 计入统计，context_edit 只影响模型上下文，label 没有 v4 对应物。
         break;
     }
+    // Durable history can copy the request-start timestamp into the persisted assistant entry.
+    // That is not a completion time. Never report that interval as the entire turn's duration.
+    if (turnOpen && entry.type === "message" && entry.message.role !== "user") {
+      const timestamp = toEpochMs(entry.timestamp);
+      if (entry.message.role === "assistant" && timestamp <= entry.message.timestamp) {
+        lastActivityAt = undefined;
+      } else if (timestamp >= turn.startedAt) {
+        lastActivityAt = Math.max(lastActivityAt ?? 0, timestamp);
+      }
+    }
   }
-  if (turnOpen) pushTurnHeader("completedSuccess");
+  if (turnOpen) {
+    pushTurnHeader(input.state?.isStreaming === true ? "running" : completedState());
+  }
 
   const usage = summarizeUsage(branch, {
     contextWindow: input.stats?.contextUsage?.contextWindow ?? input.state?.model?.contextWindow,

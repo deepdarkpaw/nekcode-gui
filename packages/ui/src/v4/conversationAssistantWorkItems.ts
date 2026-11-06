@@ -12,8 +12,10 @@ import {
 } from "@/v4/conversationRowContext.js";
 import type { AssistantWorkRow } from "@/v4/conversationTurnRenderUnits.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
+import { buildReasoningGroup } from "@/v4/conversationReasoningGroup.js";
 
 export type ConversationAssistantWorkRenderItem =
+  | ReturnType<typeof buildReasoningGroup>
   | {
       kind: "row";
       key: string;
@@ -56,6 +58,7 @@ interface ConversationAssistantWorkRenderOptions {
   enableExploreGrouping?: boolean;
   enableTerminalGrouping?: boolean;
   enableChangesGrouping?: boolean;
+  hideSuccessfulFileWrites?: boolean;
 }
 
 const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
@@ -276,6 +279,13 @@ export function buildAssistantWorkRenderItems(
   // 隐藏 reasoning 也有相同问题。先统一剔除暂不可见行，再做配对、分组和尾部判断。
   const visibleRows = rows.filter((row) => {
     if (
+      options?.hideSuccessfulFileWrites &&
+      isChangesToolCallRow(row) &&
+      row.status === "success"
+    ) {
+      return false;
+    }
+    if (
       row.kind === "reasoning" &&
       !isConversationReasoningRowVisible(row.rowId, reasoningVisibility)
     ) {
@@ -311,6 +321,28 @@ export function buildAssistantWorkRenderItems(
         index += 1;
         continue;
       }
+    }
+
+    if (row.kind === "reasoning" && row.state !== "interrupted") {
+      const groupRows = [row];
+      index += 1;
+      while (index < preparedRows.length) {
+        const next = preparedRows[index];
+        if (
+          next?.kind !== "reasoning" ||
+          next.state === "interrupted" ||
+          next.turnId !== row.turnId
+        )
+          break;
+        groupRows.push(next);
+        index += 1;
+      }
+      items.push(
+        groupRows.length === 1
+          ? { kind: "row", key: `row:${row.rowId}`, row }
+          : buildReasoningGroup(groupRows),
+      );
+      continue;
     }
 
     const isExploreRow = isExploreToolCallRow(row);

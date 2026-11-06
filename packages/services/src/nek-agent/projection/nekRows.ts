@@ -200,6 +200,7 @@ export function buildTurnHeaderRow(
     origin?: TurnHeaderRow["origin"];
     state?: TurnHeaderRow["state"];
     executionKind?: "agent" | "controlOnly";
+    endedAt?: number;
   },
 ): TurnHeaderRow {
   const origin = args.origin ?? "userInput";
@@ -211,7 +212,7 @@ export function buildTurnHeaderRow(
     executionKind: args.executionKind ?? "agent",
     state,
     startedAt: identity.createdAt,
-    ...(state === "running" ? {} : { endedAt: identity.createdAt }),
+    ...(state === "running" || args.endedAt === undefined ? {} : { endedAt: args.endedAt }),
   };
 }
 

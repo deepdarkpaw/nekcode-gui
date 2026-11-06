@@ -111,13 +111,26 @@ export function applyMessageUpdate(
       );
       return;
     }
+    case "thinking_start":
+      textRow("thinking", update.contentIndex);
+      return;
     case "thinking_delta":
       ctx.store.appendStream(textRow("thinking", update.contentIndex), "text", update.delta);
       return;
     case "thinking_end": {
+      const observedStart = ctx.streamRows.has(`${responseKey}:thinking:${update.contentIndex}`);
       const rowId = textRow("thinking", update.contentIndex);
       ctx.store.update(rowId, (row) =>
-        row.kind === "reasoning" ? { ...row, text: update.content } : row,
+        row.kind === "reasoning"
+          ? {
+              ...row,
+              text: update.content,
+              state: "complete",
+              durationMs:
+                row.durationMs ??
+                (observedStart ? Math.max(0, createdAt - row.createdAt) : undefined),
+            }
+          : row,
       );
       return;
     }
@@ -225,12 +238,22 @@ function applyAssistantMessage(
     const entityId = `${responseKey}:thinking:${block.index}`;
     const rowId = ctx.store.allocate(entityId);
     ctx.streamRows.set(entityId, rowId);
+    const previous = ctx.store.getRow(rowId);
+    const reasoning = previous?.kind === "reasoning" ? previous : undefined;
     ctx.store.add(
-      buildReasoningRow(rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt), {
-        text: block.text,
-        state: textState,
-        assistantResponseId: responseKey,
-      }),
+      buildReasoningRow(
+        rowIdentity(entityId, rowId, currentTurnId(ctx), reasoning?.createdAt ?? createdAt),
+        {
+          text: block.text,
+          state: textState,
+          assistantResponseId: responseKey,
+          durationMs:
+            reasoning?.durationMs ??
+            (!streaming && reasoning?.state === "streaming"
+              ? Math.max(0, ctx.now() - reasoning.createdAt)
+              : undefined),
+        },
+      ),
     );
   }
   for (const block of assistantTextBlocks(assistant)) {

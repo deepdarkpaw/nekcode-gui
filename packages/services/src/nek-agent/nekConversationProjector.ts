@@ -13,6 +13,7 @@ import type {
 import type { NekBashResult } from "@zcode/shared/nek-protocol";
 import type { NekSnapshotInput } from "./projection/nekEntryProjection.js";
 import { projectEntries } from "./projection/nekEntryProjection.js";
+import { preserveObservedTiming } from "./projection/nekObservedTiming.js";
 import {
   buildControlState,
   planFromNekState,
@@ -157,6 +158,7 @@ export class NekConversationProjector {
       // 把旧 rowId 带入新快照，导致 resume 后同一会话出现不同 rowId。
       existing: undefined,
     });
+    projected.rows = preserveObservedTiming(projected.rows, this.store.window);
     this.store.replaceRows(projected.rows, projected.byEntity, projected.nextRowId);
     this.extensionErrors.project(this.store, projected.rows.at(-1)?.turnId ?? "turn-0");
     this.store.state = {

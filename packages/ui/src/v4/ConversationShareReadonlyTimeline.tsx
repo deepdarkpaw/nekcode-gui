@@ -700,7 +700,7 @@ function ReadonlyAssistantWorkItems({
   return (
     <div className="flex flex-col gap-4" data-conversation-share-work-items>
       {items.map((item) => {
-        if (item.kind === "row") {
+        if (item.kind === "row" || item.kind === "reasoningGroup") {
           return renderReadonlyRow(
             item.row,
             theme,

@@ -1830,6 +1830,7 @@ export function SessionPane({
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
+      showWorktreeReview: true,
       onNavigateToRow: handleNavigateToRow,
       onOpenBrowserUrl,
             onOpenCodeViewer,

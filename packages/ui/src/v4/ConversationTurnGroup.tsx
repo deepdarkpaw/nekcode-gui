@@ -217,6 +217,7 @@ function ConversationAssistantWorkItems({
         },
         {
           stageTailIsRunning,
+          hideSuccessfulFileWrites: context.showWorktreeReview,
           enableExploreGrouping:
             context.toolGroupingExploreEnabled ?? ENABLE_EXPLORE_TOOL_CALL_GROUPING,
           enableTerminalGrouping:
@@ -226,6 +227,7 @@ function ConversationAssistantWorkItems({
         },
       ),
     [
+      context.showWorktreeReview,
       context.toolGroupingChangesEnabled,
       context.toolGroupingExploreEnabled,
       context.toolGroupingTerminalEnabled,
@@ -247,14 +249,21 @@ function ConversationAssistantWorkItems({
   const content = (
     <div className="flex flex-col gap-4">
       {items.map((item) =>
-        item.kind === "row" ? (
-          <ConversationTurnRow
-            key={item.key}
-            row={item.row}
-            context={context}
-            hideAssistantActions={item.row.kind === "assistantText"}
-            assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
-          />
+        item.kind === "row" || item.kind === "reasoningGroup" ? (
+          <div key={item.key} data-reasoning-group={item.kind === "reasoningGroup" || undefined}>
+            {item.kind === "reasoningGroup"
+              ? item.rows
+                  .slice(1)
+                  .map((row) => <span key={row.rowId} data-row-id={row.rowId} className="block" />)
+              : null}
+            <ConversationTurnRow
+              key={item.row.rowId}
+              row={item.row}
+              context={context}
+              hideAssistantActions={item.row.kind === "assistantText"}
+              assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
+            />
+          </div>
         ) : item.kind === "agentToolCall" ? (
           <ConversationAgentToolCallRow key={item.key} item={item} context={context} />
         ) : item.kind === "exploreGroup" ? (

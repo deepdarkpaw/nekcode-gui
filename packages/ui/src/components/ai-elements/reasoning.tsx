@@ -333,16 +333,8 @@ export const ReasoningTrigger = memo(
           {intl.formatMessage({ id: "chat.reasoning.thinking" })}
         </span>
       ) : duration === undefined ? (
-        <span className="inline-flex items-center gap-2">
-          {/* 完成态“思考”单独使用 semibold，比同列工具类型标签更粗。
-              统一为 medium，保持对话时间线的视觉层级一致。 */}
-          <span className="font-medium text-foreground-subtlest">
-            {intl.formatMessage({ id: "chat.reasoning.thought" })}
-          </span>
-          <span className="font-normal text-foreground-subtlest">·</span>
-          <span className="font-normal text-foreground-subtlest">
-            {intl.formatMessage({ id: "chat.reasoning.durationFewSeconds" })}
-          </span>
+        <span className="font-medium text-foreground-subtlest">
+          {intl.formatMessage({ id: "chat.reasoning.thought" })}
         </span>
       ) : (
         <span className="inline-flex items-center gap-2">

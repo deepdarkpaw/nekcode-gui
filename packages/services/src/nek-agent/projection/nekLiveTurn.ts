@@ -46,9 +46,21 @@ export function createNekLiveContext(
   store: NekProjectionStore,
   now: () => number = Date.now,
 ): NekLiveContext {
+  const header = store.window.findLast((row) => row.kind === "turnHeader");
   return {
     store,
     now,
+    ...(header?.kind === "turnHeader" && header.entityId && header.state === "running"
+      ? {
+          turn: {
+            entityId: header.entityId,
+            turnId: header.turnId,
+            startedAt: header.startedAt,
+            headerRowId: header.rowId,
+            open: true,
+          },
+        }
+      : {}),
     streamRows: new Map(),
     toolRows: new Map(),
     toolDetails: new Map(),
