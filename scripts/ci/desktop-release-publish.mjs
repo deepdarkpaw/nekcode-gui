@@ -44,7 +44,9 @@ export function releaseNotes({ productName, version, platforms }) {
     "",
     "### 说明",
     "- 需要 nek 0.4.0 或更新版本，首次启动的引导可以直接安装。",
-    `- 已安装的 ${productName} 会自动检查这里的新版本。`,
+    version.includes("-beta.")
+      ? "- 这是 Beta 预发布，请从本页手动下载安装；不会替换稳定版的 Latest。"
+      : `- 已安装的 ${productName} 会自动检查这里的新版本。`,
     `- 安装包没有代码签名：${hints}。`,
     "- 下载后可以用 `SHA256SUMS` 校验文件。",
   ].join("\n");
@@ -80,5 +82,11 @@ export async function publishRelease({ tag, repo, files, title, notes, run = exe
     ]);
   }
   await gh(["release", "upload", tag, ...files, "--clobber"]);
-  await gh(["release", "edit", tag, "--draft=false", ...(prerelease ? [] : ["--latest"])]);
+  await gh([
+    "release",
+    "edit",
+    tag,
+    "--draft=false",
+    ...(prerelease ? ["--prerelease", "--latest=false"] : ["--latest"]),
+  ]);
 }

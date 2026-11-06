@@ -25,12 +25,14 @@ import { fileURLToPath } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const workspaceDir = resolve(scriptDir, "..");
 
-const UPSTREAM_BASELINE_PATTERN = /^\d+\.\d+\.\d+$/;
+/** 共享发布语法；CI 安装依赖前也要能验证版本。 */
+export const RELEASE_VERSION_PATTERN =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-beta\.([1-9]\d*))?$/;
 const NUMERIC_PATTERN = /^\d+$/;
 
 /** 滚动版本串：`<nekcode 基线>-<YYYYMMDD>.<commitCount>`。 */
 export function formatRollingAppVersion(baseline, buildDate, commitCount) {
-  return `${baseline}-${buildDate}.${commitCount}`;
+  return `${baseline}${baseline.includes("-") ? "." : "-"}${buildDate}.${commitCount}`;
 }
 
 /** 正式版 tag 名：`v<基线>`。 */
@@ -64,9 +66,10 @@ function normalizeVersion(version) {
 function resolveUpstreamBaseline() {
   const rootPackageJson = JSON.parse(readFileSync(resolve(workspaceDir, "package.json"), "utf-8"));
   const normalized = normalizeVersion(rootPackageJson.version);
-  // electron-updater 的 AppUpdater 构造函数同步解析 app.getVersion()，非法 semver 直接抛
-  // ERR_UPDATER_INVALID_VERSION。基线不是 x.y.z 时退到 0.0.0，保证版本串永远 semver 合法。
-  return UPSTREAM_BASELINE_PATTERN.test(normalized) ? normalized : "0.0.0";
+  // 错误版本必须阻断构建，不能静默变成 0.0.0；beta 与稳定版共用同一语法。
+  if (!RELEASE_VERSION_PATTERN.test(normalized))
+    throw new Error(`Invalid release baseline: ${normalized}`);
+  return normalized;
 }
 
 function resolveUtcBuildDate(now = new Date()) {

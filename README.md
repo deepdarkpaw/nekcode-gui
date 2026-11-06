@@ -32,7 +32,8 @@ pnpm dist:win     # 打 Windows 安装包，输出到 packages/desktop/dist/
 ## 发布新版本
 
 ```bash
-pnpm release 0.2.0
+pnpm release 0.2.0         # 稳定版
+pnpm release 0.2.0-beta.1  # Beta 预发布，不替换稳定版 Latest
 ```
 
 更新版本号、打 `v0.2.0` tag 并推送；GitHub Actions 构建各平台安装包后自动发布 Release。

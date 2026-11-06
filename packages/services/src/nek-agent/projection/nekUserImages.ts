@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { NekImageContent, NekSessionEntry, NekUserMessage } from "@zcode/shared/nek-protocol";
 import type { UserInputRow } from "@zcode/shared/zcode-protocol-v4";
 
-export interface NekUserImageLocator {
+interface NekUserImageLocator {
   timestamp: number;
   blockIndex: number;
 }

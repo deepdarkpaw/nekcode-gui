@@ -77,6 +77,15 @@ test("prerelease tags are published as prereleases, never as latest", async () =
   assert.ok(calls[1].includes("--prerelease"));
   assert.ok(calls[3].includes("--draft=false"));
   assert.ok(!calls[3].includes("--latest"));
+  assert.ok(calls[3].includes("--latest=false"));
+  assert.ok(calls[3].includes("--prerelease"));
+  const notes = releaseNotes({
+    productName: "nekcode",
+    version: "0.2.0-beta.1",
+    platforms: ["win", "mac"],
+  });
+  assert.match(notes, /Beta 预发布/);
+  assert.doesNotMatch(notes, /会自动检查/);
 });
 
 test("a draft left by a failed run is reused; a published release is never overwritten", async () => {

@@ -18,10 +18,10 @@ describe("collectBuildMetadata", () => {
     const metadata = collectBuildMetadata();
     // 发版 tag 上的构建（正式版）版本串等于基线，其他检出是滚动串。
     if (metadata.appVersion !== metadata.upstreamBaseline) {
-      expect(metadata.appVersion).toMatch(/^\d+\.\d+\.\d+-\d{8}\.\d+$/);
+      expect(metadata.appVersion).toMatch(/^\d+\.\d+\.\d+(?:-beta\.\d+\.|-)\d{8}\.\d+$/);
     }
     expect(semver.valid(metadata.appVersion)).toBe(metadata.appVersion);
-    expect(metadata.upstreamBaseline).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(metadata.upstreamBaseline).toMatch(/^\d+\.\d+\.\d+(?:-beta\.[1-9]\d*)?$/);
   });
 
   // 日期段取 commit 的 committer date：同一 commit 在任意时间、任意 CI job 派生结果一致。

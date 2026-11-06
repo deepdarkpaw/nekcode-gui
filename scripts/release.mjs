@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 发布新版本：`pnpm release <x.y.z> [--no-push]`
+ * 发布稳定版或 beta：`pnpm release <x.y.z[-beta.N]> [--no-push]`
  *
- * 1. 校验：版本是 x.y.z 且不低于当前版本；位于 main、工作区干净、与 origin/main 同步；tag 不存在。
+ * 1. 校验：版本是 x.y.z 或 x.y.z-beta.N，且不低于当前版本；main 干净且与 origin/main 同步；tag 不存在。
  * 2. 版本有变化时改根 package.json 并重生成三方声明（根包版本写在清单里），提交 `chore(release): v<x>`；
  *    与当前版本相同（例如首个版本）时不提交，直接给 HEAD 打 tag。
  * 3. 打 annotated tag `v<x>`，默认把 main 与 tag 原子推送到 origin。
@@ -13,12 +13,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { releaseTagName } from "./rolling-app-version.mjs";
+import { RELEASE_VERSION_PATTERN, releaseTagName } from "./rolling-app-version.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const packageJsonPath = resolve(root, "package.json");
 const RELEASE_BRANCH = "main";
-const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/;
+const VERSION_PATTERN = RELEASE_VERSION_PATTERN;
 const RELEASE_FILES = ["package.json", "THIRD-PARTY-NOTICES.md", "third-party/inventory.json"];
 
 /** 解析命令行：版本号必填，`--no-push` 只在本地提交与打 tag。 */
@@ -27,22 +27,27 @@ export function parseReleaseArgs(argv) {
   const positional = argv.filter((arg) => !arg.startsWith("--"));
   const unknown = argv.filter((arg) => arg.startsWith("--") && arg !== "--no-push");
   if (unknown.length > 0) throw new Error(`Unknown option: ${unknown.join(" ")}`);
-  if (positional.length !== 1) throw new Error("Usage: pnpm release <x.y.z> [--no-push]");
+  if (positional.length !== 1) throw new Error("Usage: pnpm release <x.y.z[-beta.N]> [--no-push]");
   const version = positional[0].replace(/^v/, "");
   if (!VERSION_PATTERN.test(version))
-    throw new Error(`Version must be x.y.z, got ${positional[0]}`);
+    throw new Error(`Version must be x.y.z or x.y.z-beta.N, got ${positional[0]}`);
   return { version, push };
 }
 
-/** 比较两个 x.y.z 版本：负数表示 a 更旧。 */
+/** 比较稳定版/beta 版本：负数表示 a 更旧；符合限定版本语法下的 semver 顺序。 */
 export function compareVersions(a, b) {
-  const left = a.match(VERSION_PATTERN)?.slice(1).map(Number);
-  const right = b.match(VERSION_PATTERN)?.slice(1).map(Number);
+  const left = a.match(VERSION_PATTERN);
+  const right = b.match(VERSION_PATTERN);
   if (!left || !right) throw new Error(`Cannot compare versions ${a} and ${b}`);
-  for (let index = 0; index < 3; index++) {
-    if (left[index] !== right[index]) return left[index] - right[index];
+  for (let index = 1; index <= 3; index++) {
+    const order = BigInt(left[index]) - BigInt(right[index]);
+    if (order !== 0n) return order > 0n ? 1 : -1;
   }
-  return 0;
+  // 同一基线：beta.2 < beta.10 < 稳定版，不按字典序比较。
+  if (left[4] === right[4]) return 0;
+  if (left[4] === undefined) return 1;
+  if (right[4] === undefined) return -1;
+  return BigInt(left[4]) > BigInt(right[4]) ? 1 : -1;
 }
 
 /** 决定是否需要提交版本号变更；不允许发布比当前更旧的版本。 */

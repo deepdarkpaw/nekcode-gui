@@ -16,6 +16,19 @@ describe("resolveAppVersion", () => {
     });
   });
 
+  it("beta tag preserves exact version and untagged beta builds remain valid semver", () => {
+    const baseline = "0.1.5-beta.1";
+    expect(resolveAppVersion({ ...facts, baseline, headTags: [`v${baseline}`] })).toEqual({
+      appVersion: baseline,
+      isRelease: true,
+    });
+    const rolling = resolveAppVersion({ ...facts, baseline, headTags: [] }).appVersion;
+    expect(rolling).toBe("0.1.5-beta.1.20261102.400");
+    expect(semver.valid(rolling)).toBe(rolling);
+    expect(semver.gt("0.1.5-beta.2", rolling)).toBe(true);
+    expect(semver.gt("0.1.5", rolling)).toBe(true);
+  });
+
   it("没有发版 tag 或 tag 与基线不符时是滚动串", () => {
     for (const headTags of [[], ["v0.2.0"], ["nightly"], ["0.1.0"]]) {
       expect(resolveAppVersion({ ...facts, headTags })).toEqual({
@@ -59,9 +72,9 @@ describe("collectRollingAppVersion", () => {
     const { appVersion, upstreamBaseline, isRelease } = collectRollingAppVersion();
     // 发版 tag 上的 CI 构建是正式版（等于基线），其他检出是滚动串。
     if (isRelease) expect(appVersion).toBe(upstreamBaseline);
-    else expect(appVersion).toMatch(/^\d+\.\d+\.\d+-\d{8}\.\d+$/);
+    else expect(appVersion).toMatch(/^\d+\.\d+\.\d+(?:-beta\.\d+\.|-)\d{8}\.\d+$/);
     expect(semver.valid(appVersion)).toBe(appVersion);
-    expect(upstreamBaseline).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(upstreamBaseline).toMatch(/^\d+\.\d+\.\d+(?:-beta\.[1-9]\d*)?$/);
   });
 
   // 日期段取 commit committer date：同一 commit 在任意时间、任意 CI job 派生结果一致。
