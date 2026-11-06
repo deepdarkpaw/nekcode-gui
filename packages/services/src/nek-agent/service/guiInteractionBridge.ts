@@ -2,8 +2,8 @@
  * 把 nek 进程里的扩展 UI 请求转成渲染层要回答的交互事件。
  *
  * nek 的 dialog/structured 请求是**阻塞**的：进程在 `extension_ui_response` 到来前一直
- * `await`。所以这里只在有渲染层订阅时把请求交出去；没人订阅（或超时）立即按取消收口，
- * 绝不让 nek 侧留下一个永远等不到答案的对话框（`docs/rpc-extension-ui.md`）。
+ * `await`。请求在 host 有界保留到回答、显式撤销或超时；临时切走工作区不是用户拒绝。
+ * 渲染层重连后从这里重放仍未回答的请求，超时上限不因重连延长。
  *
  * 请求按「工作区 + 会话」打标：新建会话前的项目信任确认还没有会话，只有工作区。
  */
@@ -34,6 +34,7 @@ interface NekGuiInteractionBridgeOptions {
 
 interface PendingInteraction {
   scope: NekInteractionScope;
+  request: NekExtensionUiRequest;
   timer: unknown;
   /** 取消（超时、撤消、无人订阅）时回给 nek 的值。 */
   fallback: unknown;
@@ -102,10 +103,17 @@ export class NekGuiInteractionBridge {
     return this.subscribers.size > 0;
   }
 
-  /** 渲染层订阅交互帧；返回 detach。没有订阅者时 nek 的 dialog 会立刻按取消收口。 */
+  /** 渲染层订阅交互帧；返回 detach。退订不结算审批，pendingFrames 负责重放。 */
   onFrame(listener: (frame: NekInteractionFrame) => void): () => void {
     this.subscribers.add(listener);
     return () => this.subscribers.delete(listener);
+  }
+
+  /** 重连/返回工作区只重放仍在等待的请求，不复制 pending 所有权或延长超时。 */
+  pendingFrames(workspacePath: string): NekInteractionFrame[] {
+    return [...this.pending.values()]
+      .filter((entry) => entry.scope.workspacePath === workspacePath)
+      .map(({ scope, request }) => ({ kind: "request", scope, request }));
   }
 
   /** 渲染层的回答；未知 id（已取消或已结算）返回 `false`，不静默成功。 */
@@ -185,7 +193,7 @@ export class NekGuiInteractionBridge {
         this.options.logger?.warn(`interaction ${id} ${reason}; answering cancelled`);
         this.cancel(scope, id);
       };
-      const entry: PendingInteraction = { scope, timer: undefined, fallback, settle };
+      const entry: PendingInteraction = { scope, request, timer: undefined, fallback, settle };
       // 先登记再起定时器：注入的定时器实现可能是同步的，不能让它抢在登记之前。
       this.pending.set(id, entry);
       entry.timer = this.timers.setTimeout(
@@ -198,12 +206,8 @@ export class NekGuiInteractionBridge {
     return await answer;
   }
 
-  /** 没有订阅者、或并发已达上限时不允许登记，避免让 nek 等一个永远不会来的回答。 */
+  /** 并发已达上限时拒绝登记；没有订阅者的请求仍受原超时与相同容量限制。 */
   private canAsk(): boolean {
-    if (this.subscribers.size === 0) {
-      this.options.logger?.warn("no GUI interaction subscriber; answering cancelled");
-      return false;
-    }
     if (this.pending.size >= this.options.maxPending) {
       this.options.logger?.warn(
         `pending interactions reached the limit (${this.options.maxPending}); answering cancelled`,

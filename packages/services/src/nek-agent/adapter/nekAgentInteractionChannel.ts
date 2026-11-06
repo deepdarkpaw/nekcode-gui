@@ -1,84 +1,86 @@
 /**
- * nek 扩展 UI 交互的 renderer 通道。
- *
- * 服务层已经有一条双向交互桥（`NekGuiInteractionBridge`）：nek 进程的 dialog/structured
- * 请求在那里等回答。这里只负责把它挂到 `IZCodeAgentService` 的 dynamic event 面：
- * 渲染层按 workspace 订阅 `onDynamicNekInteractionFrame`，用 `respondNekInteraction` 回答。
- *
- * 订阅是懒的：没有渲染层订阅时不向服务登记，服务侧因此可以直接把请求按取消收口，
- * 不会让 nek 等一个永远不会来的回答。
+ * 工作区交互订阅：身份键定位订阅，真实路径定位 nek 事件。
+ * pending 的唯一所有者是 service 的交互桥；切换 pane/重连不代表拒绝，返回时重放未答请求。
  */
-import { Emitter, type Event } from "@zcode/rpc";
+import { Emitter, toDisposable, type Event } from "@zcode/rpc";
 import type { NekExtensionUiResponse, NekInteractionFrame } from "@zcode/shared/nek-protocol";
 import type { NekAgentService } from "../service/nekAgentService.js";
 import { workspaceKey } from "./frameHelpers.js";
 import type { NekWorkspaceTarget } from "./types.js";
 
+interface InteractionSubscription {
+  workspacePath: string;
+  emitter: Emitter<NekInteractionFrame>;
+  listeners: number;
+}
+
 export class NekAgentInteractionChannel {
-  private readonly emitters = new Map<string, Emitter<NekInteractionFrame>>();
-  private subscriberCount = 0;
+  private readonly entries = new Map<string, InteractionSubscription>();
   private detachService: (() => void) | undefined;
 
   constructor(private readonly service: NekAgentService) {}
 
   onDynamic(target: NekWorkspaceTarget): Event<NekInteractionFrame> {
-    return this.emitter(workspaceKey(target)).event;
+    return (listener) => {
+      const key = workspaceKey(target);
+      let entry = this.entries.get(key);
+      if (entry && entry.workspacePath !== target.workspacePath)
+        throw new Error("nek interaction workspace identity refers to a different path");
+      if (!entry) {
+        entry = { workspacePath: target.workspacePath, emitter: new Emitter(), listeners: 0 };
+        this.entries.set(key, entry);
+      }
+      entry.listeners += 1;
+      this.detachService ??= this.service.onInteractionEvent((frame) => this.publish(frame));
+      const disposable = entry.emitter.event(listener);
+      const lease = toDisposable(() => {
+        disposable.dispose();
+        if (this.entries.get(key) !== entry) return;
+        entry.listeners -= 1;
+        if (entry.listeners > 0) return;
+        entry.emitter.dispose();
+        this.entries.delete(key);
+        if (this.entries.size > 0) return;
+        this.detachService?.();
+        this.detachService = undefined;
+      });
+      try {
+        // 先挂监听再重放，只发给新订阅者；同步响应可立即从 host pending 集合删除。
+        for (const frame of this.service.pendingInteractions(target.workspacePath))
+          listener(this.mapSession(frame));
+      } catch (error) {
+        lease.dispose();
+        throw error;
+      }
+      return lease;
+    };
   }
 
   async respond(response: NekExtensionUiResponse): Promise<void> {
-    if (!this.service.respondInteraction(response)) {
+    if (!this.service.respondInteraction(response))
       throw new Error(`nek interaction ${response.id} is no longer pending`);
-    }
   }
 
   dispose(): void {
     this.detachService?.();
     this.detachService = undefined;
-    this.subscriberCount = 0;
-    for (const emitter of this.emitters.values()) emitter.dispose();
-    this.emitters.clear();
+    for (const entry of this.entries.values()) entry.emitter.dispose();
+    this.entries.clear();
   }
 
-  /** emitter 与 renderer 订阅一一对应：最后一个订阅者离开就连同服务订阅一起回收。 */
-  private emitter(workspace: string): Emitter<NekInteractionFrame> {
-    const existing = this.emitters.get(workspace);
-    if (existing) return existing;
-    const emitter = new Emitter<NekInteractionFrame>({
-      onWillAddFirstListener: () => this.attachService(),
-      onDidRemoveLastListener: () => {
-        this.service.cancelWorkspaceInteractions(workspace);
-        this.detachIfIdle();
-        this.emitters.delete(workspace);
-      },
-    });
-    this.emitters.set(workspace, emitter);
-    return emitter;
-  }
-
-  private attachService(): void {
-    this.subscriberCount += 1;
-    this.detachService ??= this.service.onInteractionEvent((event) => this.publish(event));
-  }
-
-  private detachIfIdle(): void {
-    this.subscriberCount = Math.max(0, this.subscriberCount - 1);
-    if (this.subscriberCount > 0) return;
-    this.detachService?.();
-    this.detachService = undefined;
-  }
-
-  private publish(frame: NekInteractionFrame): void {
+  private mapSession(frame: NekInteractionFrame): NekInteractionFrame {
     const sessionId =
       frame.scope.sessionId ??
       (frame.scope.sessionKey
         ? this.service.getSession(frame.scope.sessionKey)?.sessionId
         : undefined);
-    const mappedFrame: NekInteractionFrame = sessionId
-      ? { ...frame, scope: { ...frame.scope, sessionId } }
-      : frame;
-    const emitter = this.emitters.get(
-      workspaceKey({ workspacePath: mappedFrame.scope.workspacePath }),
-    );
-    emitter?.fire(mappedFrame);
+    return sessionId ? { ...frame, scope: { ...frame.scope, sessionId } } : frame;
+  }
+
+  private publish(frame: NekInteractionFrame): void {
+    const mapped = this.mapSession(frame);
+    for (const entry of this.entries.values()) {
+      if (entry.workspacePath === frame.scope.workspacePath) entry.emitter.fire(mapped);
+    }
   }
 }

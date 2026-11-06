@@ -14,7 +14,7 @@ import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentRecord } from "./nekLiveTools.js";
 import { applyCustomMessage } from "./nekLiveMessages.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
-import { withNekModelSelection } from "./nekProjectionSnapshot.js";
+import { withNekModelSelection, withNekMode } from "./nekProjectionSnapshot.js";
 
 /**
  * 时间线标记、扩展追加的条目、直接 bash 的结果与扩展状态。
@@ -251,7 +251,7 @@ export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEven
       todos?: Array<{ id: string; content: string; status: string }>;
     };
     if (typeof state.mode === "string")
-      ctx.store.state.config = { ...ctx.store.state.config, mode: state.mode };
+      ctx.store.state.config = withNekMode(ctx.store.state.config, state.mode);
     const items = (state.todos ?? [])
       .filter((todo) => todo.status !== "cancelled")
       .map((todo) => ({

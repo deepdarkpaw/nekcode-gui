@@ -46,6 +46,17 @@ function work(
 }
 
 describe("conversation status panel model", () => {
+  it("P4: nek plans appear in the plan directory, mode notices do not", () => {
+    const model = buildConversationStatusPanelModel({
+      workspacePath: "/repo",
+      sessionPlans: [
+        { ...plan(1, "success"), toolName: "nek.plan" },
+        { ...plan(2, "success", "User declined the mode switch."), toolName: "switch_mode" },
+      ],
+    });
+    expect(model.sessionPlans?.items).toHaveLength(1);
+    expect(model.sessionPlans?.items[0]?.markdown).toBe("# Plan");
+  });
   it("has no content when all retained sections are empty", () => {
     expect(buildConversationStatusPanelModel({})).toEqual({
       hasContent: false,

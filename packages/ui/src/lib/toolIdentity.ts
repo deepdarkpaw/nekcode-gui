@@ -198,6 +198,11 @@ function isPlanModeExitToken(value: string): boolean {
 }
 
 export function resolveToolCallIdentity(toolCall: ToolIdentityLike): ToolCallIdentity {
+  // nek 的模式切换不是计划文档；只有明确的计划预览行才复用 ZCode 计划卡。
+  if (toolCall.toolName === "switch_mode")
+    return { toolName: "switch_mode", family: "unknown", source: "toolName", isLegacy: false };
+  if (toolCall.toolName === "nek.plan")
+    return { toolName: "nek.plan", family: "switch-mode", source: "toolName", isLegacy: false };
   const rawNames = readRawToolNameCandidates(toolCall.raw);
   const normalizedKind = normalizeLegacyToken(toolCall.kind);
   const normalizedTitle = normalizeLegacyToken(toolCall.title);

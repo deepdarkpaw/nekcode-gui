@@ -51,6 +51,11 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   }
 
   /** 渲染层回答交互请求；未知 id（已取消或已结算）返回 `false`。 */
+  /** 当前工作区仍待处理的审批，供交互订阅重放。 */
+  pendingInteractions(workspacePath: string): NekInteractionFrame[] {
+    return this.interactions.pendingFrames(workspacePath);
+  }
+
   respondInteraction(response: NekExtensionUiResponse): boolean {
     this.assertAlive();
     return this.interactions.respond(response);

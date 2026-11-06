@@ -155,11 +155,12 @@ async function createFromCommand(
   const config = asRecord(payload.config);
   const model = asRecord(firstInput?.modelSelection ?? config?.modelSelection);
   const thinking = selectionThinking(model, config);
+  const requestedMode = submissionMode(firstInput) ?? submissionMode(config);
   const result = await context.createSession({
     workspacePath: target.workspacePath,
     ...(model ? { model: modelSelectionOf(model) } : {}),
     ...(thinking !== undefined ? { thinking } : {}),
-    ...(readString(config ?? {}, "mode") ? { mode: mode(readString(config ?? {}, "mode")) } : {}),
+    ...(requestedMode !== undefined ? { mode: mode(requestedMode) } : {}),
   });
   if (firstInput) {
     const images = await toNekImages(firstInput.attachments);
@@ -239,7 +240,8 @@ async function applySelection(
   }
   // set_model 会按模型支持等级夹取旧值，必须在它之后应用本次输入框的明确选择。
   if (thinking !== undefined) await service.setThinkingLevel({ sessionKey, level: thinking });
-  if (readString(payload, "mode")) await setModeFromPayload(service, sessionKey, payload);
+  const requestedMode = submissionMode(payload);
+  if (requestedMode !== undefined) await service.setMode({ sessionKey, mode: requestedMode });
 }
 
 async function setModeFromPayload(
@@ -270,6 +272,13 @@ function selectionThinking(
   const requested = options?.reasoningLevel ?? payload?.thought;
   if (requested === undefined) return undefined;
   return thoughtLevel(typeof requested === "string" ? requested : undefined);
+}
+
+/** v4 用 agent + planEnabled 表达 Plan；nek 只有 agent/plan 两档，必须在接纳边界转换。 */
+function submissionMode(payload: Record<string, unknown> | undefined): NekMode | undefined {
+  if (typeof payload?.planEnabled === "boolean") return payload.planEnabled ? "plan" : "agent";
+  const requested = readString(payload ?? {}, "mode");
+  return requested === undefined ? undefined : mode(requested);
 }
 
 function mode(value: string | undefined): NekMode {

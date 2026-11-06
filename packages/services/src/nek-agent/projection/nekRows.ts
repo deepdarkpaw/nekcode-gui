@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
 import type {
-  ArtifactRow,
   AssistantTextRow,
   ReasoningRow,
   SubagentRow,
@@ -163,30 +161,24 @@ export function isPlanPreviewDetails(value: unknown): value is NekPlanPreviewDet
   );
 }
 
-/** 计划 Markdown → artifact 行（`artifactType: "md"`，sha256 由内容算出）。 */
-export function buildPlanArtifactRow(
+/** 复用 ZCode 计划卡/侧栏的数据契约；不能只投影成没有正文和打开动作的普通附件。 */
+export function buildPlanPreviewRow(
   identity: NekRowIdentity,
   details: NekPlanPreviewDetails,
-): ArtifactRow {
-  const markdown = details.markdown;
-  const digest = createHash("sha256").update(markdown, "utf8").digest("hex");
-  return {
-    rowId: identity.rowId,
-    turnId: identity.turnId,
-    entityId: identity.entityId,
-    createdAt: identity.createdAt,
-    createdAtSeq: identity.rowId,
-    kind: "artifact",
-    artifactVersionId: `${details.plan.path}#r${details.plan.revision}`,
-    logicalArtifactKey: details.plan.path,
-    displayName: details.plan.name,
-    artifactType: "md",
-    mimeType: "text/markdown",
-    sizeBytes: Buffer.byteLength(markdown, "utf8"),
-    sha256: digest,
-    ref: details.plan.path,
-    state: "current",
+): ToolCallRow {
+  const input = {
+    plan: details.markdown,
+    planFilePath: details.plan.path,
+    revision: details.plan.revision,
   };
+  return buildToolCallRow(identity, {
+    toolCallId: `${details.plan.path}#r${details.plan.revision}`,
+    toolName: "nek.plan",
+    status: "success",
+    input,
+    inputText: JSON.stringify(input),
+    output: { text: details.markdown },
+  });
 }
 
 // ============================================================================

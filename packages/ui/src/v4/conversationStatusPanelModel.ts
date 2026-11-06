@@ -97,7 +97,7 @@ function buildSessionPlansModel(
   const items = rows
     .filter(
       (row) =>
-        row.toolName === "ExitPlanMode" &&
+        (row.toolName === "ExitPlanMode" || row.toolName === "nek.plan") &&
         (row.status === "success" || row.status === "error" || row.status === "cancelled"),
     )
     .toSorted((left, right) => right.rowId - left.rowId)

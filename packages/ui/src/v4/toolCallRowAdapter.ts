@@ -36,7 +36,7 @@ function resolveToolInputPreview(row: ToolCallRow): ResolvedToolInputPreview {
   if (row.input !== undefined) {
     return {
       input: row.input,
-      inputPreviewComplete: true,
+      inputPreviewComplete: row.status !== "inputStreaming",
       ...(row.inputText.length > 0 ? { streamingRawInputLength: row.inputText.length } : {}),
     };
   }

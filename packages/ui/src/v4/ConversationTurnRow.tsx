@@ -88,7 +88,8 @@ export function resolveAssistantCopyText(unit: ConversationTurnRenderUnit): stri
       : [unit.latestAssistantTextRow.text];
   const includedSegments = new Set(segments);
   for (const row of unit.assistantWorkRows) {
-    if (row.kind !== "toolCall" || row.toolName !== "ExitPlanMode") continue;
+    if (row.kind !== "toolCall" || (row.toolName !== "ExitPlanMode" && row.toolName !== "nek.plan"))
+      continue;
     const markdown = extractPlanToolCallContent(toolCallRowToLegacyNode(row).toolCall, "").markdown;
     if (!markdown || includedSegments.has(markdown)) continue;
     // 产品边界：assistant 复制代表本轮完整可见回答。计划正文来自原位结构化 tool row，

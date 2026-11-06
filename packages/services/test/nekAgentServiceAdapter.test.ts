@@ -650,7 +650,7 @@ test("bounds the conversation plan list with the GUI runtime config", async () =
     const result = await adapter.conversationPlansV4({ ...target, sessionId: created.sessionId });
     assert.deepEqual(
       result.plans.map((plan) => plan.toolCallId),
-      ["/workspace/.nek/plans/3.plan.md", "/workspace/.nek/plans/2.plan.md"],
+      ["/workspace/.nek/plans/3.plan.md#r3", "/workspace/.nek/plans/2.plan.md#r2"],
     );
     assert.equal(
       session.commands.filter(

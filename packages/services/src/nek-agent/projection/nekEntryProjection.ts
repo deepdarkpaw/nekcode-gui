@@ -11,7 +11,7 @@ import {
   assistantThinkingBlocks,
   assistantToolCalls,
   buildAssistantTextRow,
-  buildPlanArtifactRow,
+  buildPlanPreviewRow,
   buildReasoningRow,
   buildTimelineMarkerRow,
   buildToolCallRow,
@@ -349,7 +349,7 @@ function projectCustomMessage(
   if (entry.customType === "nek.plan_preview" && isPlanPreviewDetails(entry.details)) {
     const entityId = `entry:${entry.timestamp}:plan:${entry.details.plan.revision}`;
     const rowId = allocator.resolve(entityId);
-    return buildPlanArtifactRow(
+    return buildPlanPreviewRow(
       identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)),
       entry.details,
     );

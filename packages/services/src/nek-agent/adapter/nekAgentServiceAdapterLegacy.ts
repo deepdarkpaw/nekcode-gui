@@ -10,6 +10,7 @@ import { toNekImages } from "./attachmentImages.js";
 import type { NekPlanSummary } from "@zcode/shared/nek-protocol";
 import type { NekSessionCommandEnvelope } from "./types.js";
 import { isNekState } from "../service/types.js";
+import { buildPlanPreviewRow } from "../projection/nekRows.js";
 import {
   bindingSnapshot,
   existingBindingSnapshot,
@@ -52,20 +53,10 @@ function planRow(
   rowId: number,
   createdAt: number,
 ): ToolCallRow {
-  return {
-    rowId,
-    turnId: `nek-plan:${plan.path}`,
-    entityId: `nek-plan:${plan.path}`,
-    kind: "toolCall",
-    toolCallId: plan.path,
-    toolName: "nek.plan",
-    status: "success",
-    inputText: JSON.stringify(plan),
-    input: plan,
-    output: { text: plan.markdown },
-    createdAt,
-    createdAtSeq: rowId,
-  };
+  return buildPlanPreviewRow(
+    { rowId, turnId: `nek-plan:${plan.path}`, entityId: `nek-plan:${plan.path}`, createdAt },
+    { plan, markdown: plan.markdown },
+  );
 }
 
 export function createNekLegacyMethods(

@@ -173,7 +173,7 @@ test("projects entries into v4 rows and emits a full snapshot first", () => {
     "toolCall",
     "timelineMarker",
     "timelineMarker",
-    "artifact",
+    "toolCall",
   ]);
   const [header, user, reasoning, text, tool, modelChange, compact, plan] = snapshot.rows.window;
   assert.equal(header?.kind === "turnHeader" && header.state, "completedSuccess");
@@ -194,7 +194,8 @@ test("projects entries into v4 rows and emits a full snapshot first", () => {
   assert.equal(tool?.kind === "toolCall" && tool.inputText.includes("/workspace/src"), true);
   assert.equal(modelChange?.kind === "timelineMarker" && modelChange.marker.type, "modelChange");
   assert.equal(compact?.kind === "timelineMarker" && compact.marker.type, "compact");
-  assert.equal(plan?.kind === "artifact" && plan.displayName, "Plan A");
+  assert.equal(plan?.kind === "toolCall" && plan.toolName, "nek.plan");
+  assert.ok(plan?.kind === "toolCall" && plan.output?.text);
   // 行身份稳定：entryId + 内容块序号 / toolCallId。
   assert.equal(text?.entityId, "entry:e2:text:1");
   assert.equal(tool?.entityId, "tool:call_1");

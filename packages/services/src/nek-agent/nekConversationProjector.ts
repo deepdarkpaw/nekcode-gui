@@ -13,7 +13,11 @@ import type {
 import type { NekBashResult } from "@zcode/shared/nek-protocol";
 import type { NekSnapshotInput } from "./projection/nekEntryProjection.js";
 import { projectEntries } from "./projection/nekEntryProjection.js";
-import { buildControlState, planFromNekState } from "./projection/nekProjectionSnapshot.js";
+import {
+  buildControlState,
+  planFromNekState,
+  withNekMode,
+} from "./projection/nekProjectionSnapshot.js";
 import { NekProjectionStore } from "./projection/nekProjectionStore.js";
 import { NekExtensionErrors } from "./projection/nekExtensionErrors.js";
 import type { NekLiveContext } from "./projection/nekLiveProjection.js";
@@ -158,7 +162,14 @@ export class NekConversationProjector {
     this.store.state = {
       ...this.store.state,
       title: projected.title || this.store.state.title,
-      config: projected.config,
+      config: withNekMode(
+        {
+          ...projected.config,
+          mode: this.store.state.config.mode,
+          planTransition: this.store.state.config.planTransition,
+        },
+        projected.config.mode,
+      ),
       usage: projected.usage,
       plan: projected.plan ?? this.store.state.plan,
       control: buildControlState(input.state, this.store.state.control.phase),
@@ -200,7 +211,7 @@ export class NekConversationProjector {
 
   /** `extension_event: nek.state` 的完整快照。 */
   applyNekState(state: NekState): void {
-    this.store.state.config = { ...this.store.state.config, mode: state.mode };
+    this.store.state.config = withNekMode(this.store.state.config, state.mode);
     this.store.state.plan = planFromNekState(state) ?? this.store.state.plan;
     this.scheduleFlush();
   }

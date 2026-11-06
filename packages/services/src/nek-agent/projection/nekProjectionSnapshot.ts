@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   ActionAvailability,
   ConversationSnapshot,
@@ -127,6 +128,19 @@ export function withNekModelSelection(config: SessionConfigState): SessionConfig
   };
 }
 
+/** 仅模式真实变化产生一次转换标记，普通状态刷新不覆盖用户正在编辑的下一次选择。 */
+export function withNekMode(config: SessionConfigState, mode: string): SessionConfigState {
+  const planEnabled = mode === "plan";
+  return {
+    ...config,
+    mode,
+    planEnabled,
+    ...(config.mode !== mode
+      ? { planTransition: { toolCallId: `nek-mode:${randomUUID()}`, planEnabled } }
+      : {}),
+  };
+}
+
 export function buildConfigState(
   state: NekRpcSessionState | undefined,
   provider: string,
@@ -143,6 +157,7 @@ export function buildConfigState(
     // 回合中的输入在 nek 里一律排队（steering 才是 guide），所以这里固定 queue。
     followupMode: "queue",
     mode,
+    planEnabled: mode === "plan",
   });
 }
 

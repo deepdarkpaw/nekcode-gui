@@ -11,7 +11,7 @@ import {
   assistantThinkingBlocks,
   assistantToolCalls,
   buildAssistantTextRow,
-  buildPlanArtifactRow,
+  buildPlanPreviewRow,
   buildReasoningRow,
   buildToolCallRow,
   buildUserInputRow,
@@ -25,6 +25,7 @@ import { currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentDetails } from "./nekLiveTools.js";
 import { projectNekUserImages } from "./nekUserImages.js";
+import { appendToolArgument } from "./nekToolInput.js";
 
 /**
  * 消息生命周期 → 行。
@@ -97,6 +98,9 @@ export function applyMessageUpdate(
   };
 
   switch (update.type) {
+    case "start":
+      if (update.message) applyAssistantMessage(ctx, update.message, true);
+      return;
     case "text_delta":
       ctx.store.appendStream(textRow("text", update.contentIndex), "text", update.delta);
       return;
@@ -138,7 +142,23 @@ export function applyMessageUpdate(
     case "toolcall_delta": {
       const known = ctx.streamRows.get(`${responseKey}:tool:${update.contentIndex}`);
       if (known === undefined) return;
-      ctx.store.appendStream(known, "inputText", update.delta);
+      if (update.arguments !== undefined || update.argumentPath !== undefined) {
+        ctx.store.update(known, (row) =>
+          row.kind === "toolCall"
+            ? {
+                ...row,
+                input:
+                  update.arguments !== undefined
+                    ? update.arguments
+                    : appendToolArgument(row.input, update.argumentPath!, update.delta),
+                // 参数字段已结构化累积；不要再保留一份错误/重复的 JSON 拼接缓冲。
+                inputText: "",
+              }
+            : row,
+        );
+      } else {
+        ctx.store.appendStream(known, "inputText", update.delta);
+      }
       return;
     }
     case "toolcall_end": {
@@ -168,7 +188,7 @@ export function applyMessageUpdate(
 export function applyMessageEnd(ctx: NekLiveContext, message: NekAgentMessage | undefined): void {
   if (!message) return;
   if (message.role === "assistant") {
-    applyAssistantMessageEnd(ctx, message as NekAssistantMessage);
+    applyAssistantMessage(ctx, message as NekAssistantMessage, false);
     return;
   }
   if (message.role === "toolResult") {
@@ -184,12 +204,20 @@ export function applyMessageEnd(ctx: NekLiveContext, message: NekAgentMessage | 
   }
 }
 
-function applyAssistantMessageEnd(ctx: NekLiveContext, assistant: NekAssistantMessage): void {
+function applyAssistantMessage(
+  ctx: NekLiveContext,
+  assistant: NekAssistantMessage,
+  streaming: boolean,
+): void {
   const responseKey = ctx.assistantResponseKey ?? `resp:${assistant.timestamp}`;
   const createdAt = toEpochMs(assistant.timestamp);
   const model = `${assistant.provider}/${assistant.model}`;
   if (ctx.turn) ctx.turn.lastStopReason = assistant.stopReason;
-  const textState = assistant.stopReason === "aborted" ? "interrupted" : "complete";
+  const textState = streaming
+    ? "streaming"
+    : assistant.stopReason === "aborted"
+      ? "interrupted"
+      : "complete";
 
   for (const block of assistantThinkingBlocks(assistant)) {
     if (isRedactedThinking({ type: "thinking", thinking: block.text, redacted: block.redacted }))
@@ -200,7 +228,7 @@ function applyAssistantMessageEnd(ctx: NekLiveContext, assistant: NekAssistantMe
     ctx.store.add(
       buildReasoningRow(rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt), {
         text: block.text,
-        state: assistant.stopReason === "aborted" ? "interrupted" : "complete",
+        state: textState,
         assistantResponseId: responseKey,
       }),
     );
@@ -222,6 +250,7 @@ function applyAssistantMessageEnd(ctx: NekLiveContext, assistant: NekAssistantMe
     const entityId = `tool:${call.toolCall.id}`;
     const rowId = ctx.store.allocate(entityId);
     ctx.toolRows.set(call.toolCall.id, rowId);
+    ctx.streamRows.set(`${responseKey}:tool:${call.index}`, rowId);
     const existing = ctx.store.getRow(rowId);
     ctx.store.add(
       buildToolCallRow(rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt), {
@@ -237,7 +266,7 @@ function applyAssistantMessageEnd(ctx: NekLiveContext, assistant: NekAssistantMe
     );
   }
   // 该 response 的流式累积到此为止：丢弃 key，下一次 message_start 重新建立。
-  ctx.assistantResponseKey = undefined;
+  ctx.assistantResponseKey = streaming ? responseKey : undefined;
 }
 
 function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessage): void {
@@ -275,7 +304,7 @@ function applyCustomMessage(ctx: NekLiveContext, message: NekCustomMessage): voi
     const entityId = `plan:${message.details.plan.path}#r${message.details.plan.revision}`;
     const rowId = ctx.store.allocate(entityId);
     ctx.store.add(
-      buildPlanArtifactRow(
+      buildPlanPreviewRow(
         rowIdentity(entityId, rowId, currentTurnId(ctx), timestamp),
         message.details,
       ),

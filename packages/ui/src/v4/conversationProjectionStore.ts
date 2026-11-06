@@ -166,7 +166,7 @@ function shouldInvalidatePlanDirectory(frame: ConversationTopicFrame): boolean {
     const row = delta.row;
     return (
       row.kind === "toolCall" &&
-      row.toolName === "ExitPlanMode" &&
+      (row.toolName === "ExitPlanMode" || row.toolName === "nek.plan") &&
       TERMINAL_PLAN_STATUSES.has(row.status)
     );
   });

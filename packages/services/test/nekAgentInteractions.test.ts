@@ -26,6 +26,7 @@ const guiInfo = {
 interface FakeProcess {
   process: NekRpcProcess;
   commands: NekRpcCommand[];
+  responses: unknown[];
   /** 模拟 nek 主动发出的 stdout 事件（extension_ui_request / extension_ui_cancel）。 */
   emit(record: unknown): void;
 }
@@ -42,6 +43,7 @@ function fakeProcess(
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   const commands: NekRpcCommand[] = [];
+  const responses: unknown[] = [];
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let input = "";
   stdin.on("data", (chunk: Buffer) => {
@@ -53,7 +55,10 @@ function fakeProcess(
       input = input.slice(index + 1);
       if (!line) continue;
       const command = JSON.parse(line) as NekRpcCommand & { id?: string };
-      if (command.type === "extension_ui_response") continue;
+      if (command.type === "extension_ui_response") {
+        responses.push(command);
+        continue;
+      }
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
@@ -112,6 +117,7 @@ function fakeProcess(
   };
   return {
     commands,
+    responses,
     emit: (record) => stdout.write(`${JSON.stringify(record)}\n`),
     process: {
       client,
@@ -240,7 +246,7 @@ test("an unanswered interaction is cancelled on timeout instead of hanging nek",
   }
 });
 
-test("renderer unsubscribing its last workspace listener answers the pending request as cancelled", async () => {
+test("P2: leaving and returning to a workspace preserves and replays pending approval", async () => {
   const control = fakeProcess("control");
   const sessions: FakeProcess[] = [];
   const service = new NekAgentService({
@@ -269,15 +275,67 @@ test("renderer unsubscribing its last workspace listener answers the pending req
       "one remaining subscriber must keep the request pending",
     );
 
-    // renderer 全部退订：桥必须立刻以 cancelled 应答 nek，而不是等它超时。
+    // 离开界面不是拒绝；返回后重放同一 request，直到用户真正作出决定。
     second.dispose();
-    await assert.rejects(pending, /project trust denied for \/workspace/u);
+    assert.equal(service.pendingInteractions("/workspace").length, 1);
+    const replay: NekInteractionFrame[] = [];
+    const returned = channel.onDynamic({ workspacePath: "/workspace" })((frame) =>
+      replay.push(frame),
+    );
+    assert.equal(replay.length, 1);
+    const request = replay[0];
+    if (request?.kind !== "request") throw new Error("expected replayed approval");
+    await channel.respond({
+      type: "extension_ui_response",
+      id: request.request.id,
+      confirmed: true,
+    });
+    assert.equal((await pending).readonly, false);
+    assert.equal(service.pendingInteractions("/workspace").length, 0);
+    returned.dispose();
     assert.deepEqual(
       control.commands.map((command) => command.type),
-      ["get_project_trust"],
-      "a cancelled trust prompt must not record a trust decision",
+      ["get_project_trust", "set_project_trust"],
     );
   } finally {
+    channel.dispose();
+    await service.dispose();
+  }
+});
+
+test("P2/P3: structured mode and plan approvals survive identity-scoped reconnects", async () => {
+  const { service, sessions } = harness({ askProjectTrust: () => true });
+  const channel = new NekAgentInteractionChannel(service);
+  const target = { workspacePath: "/workspace", workspaceIdentity: "local-workspace" };
+  const other: NekInteractionFrame[] = [];
+  const unrelated = channel.onDynamic({ workspacePath: "/other" })((frame) => other.push(frame));
+  try {
+    const created = await service.createSession({ cwd: target.workspacePath });
+    const session = sessions[0]!;
+    for (const kind of ["nek.switch_mode", "nek.plan_review"]) {
+      const id = `approval-${kind}`;
+      const frames: NekInteractionFrame[] = [];
+      const listener = channel.onDynamic(target)((frame) => frames.push(frame));
+      session.emit({ type: "extension_ui_request", id, method: "structured", kind, payload: {} });
+      await waitFor(() => frames.length === 1, "identity-scoped approval");
+      assert.equal(frames[0]?.scope.sessionId, created.sessionId);
+      listener.dispose();
+      assert.equal(session.responses.length, kind === "nek.switch_mode" ? 0 : 1);
+      const replay: NekInteractionFrame[] = [];
+      const returned = channel.onDynamic(target)((frame) => replay.push(frame));
+      assert.equal(replay.length, 1);
+      const result = kind === "nek.switch_mode" ? { approved: true } : { action: "implement" };
+      await channel.respond({ type: "extension_ui_response", id, result });
+      await waitFor(
+        () => session.responses.length === (kind === "nek.switch_mode" ? 1 : 2),
+        "nek approval response",
+      );
+      assert.deepEqual(session.responses.at(-1), { type: "extension_ui_response", id, result });
+      returned.dispose();
+    }
+    assert.equal(other.length, 0);
+  } finally {
+    unrelated.dispose();
     channel.dispose();
     await service.dispose();
   }

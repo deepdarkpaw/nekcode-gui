@@ -11,5 +11,6 @@ export function applyComposerPlanTransition(
     ...draft,
     lastPlanTransitionId: transition.toolCallId,
     planEnabled: transition.planEnabled,
+    mode: transition.planEnabled ? "plan" : "agent",
   };
 }

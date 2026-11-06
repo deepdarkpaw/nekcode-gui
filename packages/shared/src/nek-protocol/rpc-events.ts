@@ -21,11 +21,11 @@ import type { NekAuthEventRecord, NekExtensionEvent, NekStructuredUiRequest } fr
 // ============================================================================
 
 /**
- * 线上形状是 SDK 事件的增量投影：去掉 `partial`（以及 `message_update` 顶层的累积 `message`），
- * 因此客户端必须自己按 `contentIndex` 累积，并在 `*_end` 时用权威内容替换。
+ * 普通增量去掉 `partial` 与顶层累积 `message`；start 的显式替换快照保留 message。
+ * toolcall_delta 区分 raw JSON、arguments 替换、argumentPath 字段追加，不能混为字符串拼接。
  */
 export type NekAssistantMessageEvent =
-  | { type: "start" }
+  | { type: "start"; message?: NekAssistantMessage }
   | { type: "text_start"; contentIndex: number }
   | { type: "text_delta"; contentIndex: number; delta: string }
   | { type: "text_end"; contentIndex: number; content: string }
@@ -33,7 +33,15 @@ export type NekAssistantMessageEvent =
   | { type: "thinking_delta"; contentIndex: number; delta: string }
   | { type: "thinking_end"; contentIndex: number; content: string }
   | { type: "toolcall_start"; contentIndex: number; id: string; toolName: string }
-  | { type: "toolcall_delta"; contentIndex: number; delta: string }
+  | {
+      type: "toolcall_delta";
+      contentIndex: number;
+      delta: string;
+      /** Durable 参数块替换；此时 delta 不是可追加的 JSON 片段。 */
+      arguments?: NekToolCall["arguments"];
+      /** Durable 参数字段追加；路径相对 arguments 根。 */
+      argumentPath?: readonly (string | number)[];
+    }
   | { type: "toolcall_end"; contentIndex: number; toolCall: NekToolCall }
   | {
       type: "done";
