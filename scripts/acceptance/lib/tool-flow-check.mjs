@@ -100,19 +100,20 @@ export async function checkFileSummary(session) {
 
 export async function checkFileFlow(session, sandbox, mock) {
   await send(session, MOCK_FILE_PROMPT);
-  await waitForSelector(session, GROUP, "streaming changes group");
-  await clickAt(session, `${GROUP} [aria-expanded="false"]`);
+  // 单个文件写入不再套「更改」容器（只有相邻 ≥2 次写操作才合并），
+  // 因此这里直接盯写入工具行：路径必须在执行前就完整可见，而不是停在盘符前缀。
+  await waitForSelector(session, '[data-tool-name="write"]', "streaming write row");
   const path = `${sandbox.project.replaceAll("\\", "/")}/${MOCK_FILE_NAME}`;
-  await waitForPage(
-    session,
-    `document.querySelector('[data-change-file]')?.getAttribute('data-change-file') === ${JSON.stringify(path)}`,
-    "complete path before tool execution",
-  );
   await waitForText(session, MOCK_FILE_NAME, "streaming filename rendered before execution");
   await waitForPage(
     session,
-    `document.querySelector('${GROUP}').getAnimations({ subtree: true }).every((animation) => animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity)`,
-    "streaming group expanded",
+    `(() => {
+    const row = document.querySelector('[data-tool-name="write"]');
+    if (!row) return false;
+    const titles = [...row.querySelectorAll('[title]')].map((node) => node.getAttribute('title') ?? '');
+    return [...titles, row.innerText].some((text) => text.includes(${JSON.stringify(path)}) || text.includes(${JSON.stringify(MOCK_FILE_NAME)}));
+  })()`,
+    "complete path before tool execution",
   );
   await screenshot(session, join(sandbox.screenshots, "streaming-full-path.png"));
   mock.releaseFileStream();
