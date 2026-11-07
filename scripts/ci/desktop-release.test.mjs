@@ -11,11 +11,13 @@ import {
   mergeUpdateInfo,
   readUpdateInfo,
   releaseUpdateInfoNames,
+  resolveReleasePlatforms,
   sourceUpdateInfoName,
   updateInfoChannelName,
   validateTag,
   verifyReleaseAssets,
 } from "./desktop-release.mjs";
+import { releaseNotes } from "./desktop-release-publish.mjs";
 import { desktopProductIdentities } from "../../packages/desktop/scripts/desktop-product-identity.mjs";
 import { collectRollingAppVersion } from "../rolling-app-version.mjs";
 
@@ -424,6 +426,44 @@ test("assemble flattens installers and merges per-architecture update metadata",
   // 组装结果必须能通过发布校验，并且只包含安装包 + 元数据 + SHA256SUMS。
   const files = await verifyReleaseAssets(destination, version, [identity, preview]);
   assert.equal(files.length, 17);
+});
+
+test("assemble publishes a Windows-only release when macOS artifacts are absent", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "nekcode-artifacts-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const arch of ["x64", "arm64"]) {
+    const directory = join(root, `desktop-${identity.flavor}-win-${arch}`);
+    await mkdir(directory, { recursive: true });
+    const names = artifactNames("win", version, arch, identity);
+    for (const name of names) await writeFile(join(directory, name), `artifact: ${name}`);
+    await writeFile(join(directory, sourceUpdateInfoName("win", arch)), updateInfoYaml(names));
+  }
+  const destination = await mkdtemp(join(tmpdir(), "nekcode-release-"));
+  t.after(() => rm(destination, { recursive: true, force: true }));
+
+  const written = await assembleReleaseAssets({
+    artifactsRoot: root,
+    destination,
+    version,
+    identities: [identity],
+  });
+  // 没有 mac 产物时只合并 Windows 的更新元数据，不能凭空写一份 latest-mac.yml。
+  assert.deepEqual(written, ["latest.yml"]);
+  const files = await verifyReleaseAssets(destination, version, [identity]);
+  assert.equal(files.length, 1 + 3);
+  assert.deepEqual(resolveReleasePlatforms(destination, version, [identity]), ["win"]);
+  assert.throws(
+    () => releaseNotes({ productName: "nekcode", version, platforms: ["linux"] }),
+    /Unsupported release platform/,
+  );
+  assert.doesNotMatch(
+    releaseNotes({
+      productName: "nekcode",
+      version,
+      platforms: resolveReleasePlatforms(destination, version, [identity]),
+    }),
+    /macOS|dmg/,
+  );
 });
 
 test("assemble refuses metadata that points at another platform's installer", async (t) => {

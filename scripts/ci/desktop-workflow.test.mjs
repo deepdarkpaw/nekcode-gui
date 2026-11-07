@@ -16,6 +16,10 @@ async function loadJobs() {
   return document.jobs;
 }
 
+async function loadWorkflow() {
+  return parse(await readFile(workflowPath, "utf8"));
+}
+
 const uses = (job, prefix) =>
   job.steps.filter((step) => String(step.uses ?? "").startsWith(prefix));
 
@@ -157,22 +161,24 @@ test("build matrix ships only the nekcode product for Windows x64/arm64 and macO
     ["arm64", "x64"],
   );
   assert.match(String(mac.if), /workflow_dispatch/);
-  assert.match(String(mac.if), /github\.event_name == 'push'.*github\.ref_type == 'tag'/);
+  assert.match(String(mac.if), /inputs\.build_macos/);
   assert.equal(mac.strategy.matrix.flavor, undefined);
   assert.equal(mac.env?.ZCODE_PREVIEW_IDENTITY, "0");
 });
 
-test("actual event expressions expand to two daily Windows jobs or four release jobs", async () => {
+test("actual event expressions expand to two Windows jobs, macOS only on opt-in dispatch", async () => {
   const jobs = await loadJobs();
-  for (const [event, refType, expected] of [
-    ["pull_request", "branch", 2],
-    ["push", "branch", 2],
-    ["workflow_dispatch", "branch", 4],
-    ["workflow_dispatch", "tag", 4],
-    ["push", "tag", 4],
+  for (const [event, refType, buildMacos, expected] of [
+    ["pull_request", "branch", false, 2],
+    ["push", "branch", false, 2],
+    ["push", "tag", false, 2],
+    ["workflow_dispatch", "branch", false, 2],
+    ["workflow_dispatch", "branch", true, 4],
+    ["workflow_dispatch", "tag", true, 4],
   ]) {
     const context = {
       github: { event_name: event, ref_type: refType },
+      inputs: { build_macos: buildMacos },
       needs: { "remote-assets": { result: "success" } },
       cancelled: () => false,
     };
@@ -190,10 +196,10 @@ test("actual event expressions expand to two daily Windows jobs or four release 
     }
     assert.equal(combinations.length, expected, `${event}/${refType}`);
     assert.equal(new Set(combinations).size, expected);
-    // 日常构建只打 Windows；macOS（10 倍计费）只在发版 tag 与手动触发时打包。
+    // 默认只打 Windows；macOS（10 倍计费）只在手动触发且显式勾选时打包。
     assert.equal(
       combinations.some((item) => item.startsWith("mac/")),
-      expected === 4,
+      buildMacos,
     );
   }
 });
@@ -297,8 +303,22 @@ test("signing runs only when certificate secrets exist and says so when it canno
 test("release still requires checks success before publishing", async () => {
   const jobs = await loadJobs();
   const release = jobs.release;
-  // 默认 needs 语义要求全部 needs success；checks 在列表内即发布 guard。
+  // needs 仍列出全部打包 job；macOS 默认跳过，所以 if 条件显式允许 build-macos 为 skipped。
   assert.deepEqual(release.needs, ["checks", "build", "build-macos"]);
-  assert.equal(release.if, "github.event_name == 'push' && github.ref_type == 'tag'");
+  assert.match(release.if, /github\.event_name == 'push'/);
+  assert.match(release.if, /github\.ref_type == 'tag'/);
+  assert.match(release.if, /needs\.checks\.result == 'success'/);
+  assert.match(release.if, /needs\.build\.result == 'success'/);
+  assert.match(release.if, /needs\.build-macos\.result == 'skipped'/);
   assert.equal(release["continue-on-error"], undefined);
+});
+
+test("macOS packaging is opt-in so a Windows-only release does not pay for it", async () => {
+  const jobs = await loadJobs();
+  // 默认（tag push / main push / PR）都不跑 macOS：只有手动触发并勾选 build_macos 才打包。
+  assert.doesNotMatch(jobs["build-macos"].if, /github\.ref_type == 'tag'/);
+  assert.match(jobs["build-macos"].if, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(jobs["build-macos"].if, /inputs\.build_macos/);
+  const workflow = await loadWorkflow();
+  assert.equal(workflow.on.workflow_dispatch.inputs.build_macos.default, false);
 });

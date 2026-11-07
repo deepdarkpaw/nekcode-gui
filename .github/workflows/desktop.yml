@@ -6,6 +6,11 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      build_macos:
+        description: 同时打包 macOS（默认只发 Windows：macOS runner 按 10 倍费率计分钟）
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -251,9 +256,9 @@ jobs:
 
   build-macos:
     name: Build (mac ${{ matrix.target.arch }})
-    # macOS runner 按 10 倍费率计分钟，只在发版 tag 与手动触发时打包；
-    # 日常 push/PR 的打包回归由 win 矩阵与 checks 覆盖。
-    if: ${{ !cancelled() && needs.remote-assets.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')) }}
+    # macOS runner 按 10 倍费率计分钟，默认不打包（发布只需 Windows）。
+    # 需要 mac 产物时用 workflow_dispatch 勾选 build_macos。
+    if: ${{ !cancelled() && needs.remote-assets.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.build_macos }}
     needs: remote-assets
     strategy:
       fail-fast: false
@@ -351,7 +356,8 @@ jobs:
 
   release:
     name: Release
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    # macOS 打包默认跳过；release 仍要等它（needs），但允许 skipped。
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.build.result == 'success' && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') }}
     needs: [checks, build, build-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 15

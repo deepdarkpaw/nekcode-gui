@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
 import { copyFile, lstat, mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -110,6 +111,11 @@ function matchesPlatformUpdateInfo(name, platform) {
   throw new Error(`Unsupported platform: ${platform}`);
 }
 
+/** 通道文件按平台后缀区分（`latest-preview-mac.yml` 也是 macOS），据此筛掉未构建平台。 */
+function updateInfoPlatformOf(name) {
+  return name.endsWith("-mac.yml") ? "mac" : "win";
+}
+
 /**
  * 把 electron-builder 写进 dist 的更新元数据一起收进发布产物。
  *
@@ -183,6 +189,9 @@ export async function assembleReleaseAssets({
       for (const arch of RELEASE_ARCHES) {
         const artifactName = `desktop-${identity.flavor}-${platform}-${arch}`;
         const source = join(artifactsRoot, artifactName);
+        // 平台是可选的：默认只发 Windows（macOS runner 10 倍费率），mac 只在手动触发时打包。
+        // 缺整个平台目录时跳过，缺半个（目录在但安装包不全）仍然报错。
+        if (!existsSync(source)) continue;
         const installers = artifactNames(platform, version, arch, identity);
         for (const name of installers) {
           const file = join(source, name);
@@ -211,6 +220,9 @@ export async function assembleReleaseAssets({
       }
     }
   }
+  if (documents.size === 0) {
+    throw new Error(`No package artifacts found (artifact directory is empty): ${artifactsRoot}`);
+  }
 
   const written = [];
   for (const { flavor, platform, arch, documents: bucket } of documents.values()) {
@@ -221,6 +233,21 @@ export async function assembleReleaseAssets({
     written.push(name);
   }
   return written.sort();
+}
+
+/**
+ * 目录里实际存在的发布平台。
+ *
+ * 发布只包含构建过的平台：手工触发且不打包 macOS 时没有 mac 安装包，此时发布说明与
+ * 资产校验都必须只认 Windows，而不是坚持要求一份不存在的 macOS 产物。
+ */
+export function resolveReleasePlatforms(directory, version, identities = RELEASE_IDENTITIES) {
+  const available = new Set(readdirSync(directory));
+  return Object.keys(extensions).filter((platform) =>
+    identities.some((identity) =>
+      artifactNames(platform, version, undefined, identity).some((name) => available.has(name)),
+    ),
+  );
 }
 
 export async function verifyReleaseAssets(
@@ -235,24 +262,29 @@ export async function verifyReleaseAssets(
   if (new Set(identityKeys).size !== identityKeys.length) {
     throw new Error("Duplicate release identity");
   }
+  // 只校验本目录真实包含的平台：默认发版不打包 macOS 时不该要求 mac 资产。
+  const platforms = resolveReleasePlatforms(directory, version, identities);
+  if (platforms.length === 0) throw new Error("Release must contain at least one platform");
   const names = identities
     .flatMap((item) =>
-      Object.keys(extensions).flatMap((platform) =>
-        artifactNames(platform, version, undefined, item),
-      ),
+      platforms.flatMap((platform) => artifactNames(platform, version, undefined, item)),
     )
     .sort();
   if (new Set(names).size !== names.length) throw new Error("Duplicate release asset filenames");
+  // 未构建平台的更新元数据不存在是正常的，但出现了也必须是合法通道名。
   const updateInfoNames = releaseUpdateInfoNames(identities);
+  const requiredUpdateInfoNames = updateInfoNames.filter((name) =>
+    platforms.includes(updateInfoPlatformOf(name)),
+  );
   const allowed = new Set([...names, ...updateInfoNames, "SHA256SUMS"]);
   for (const name of await readdir(directory)) {
     if (!allowed.has(name)) throw new Error(`Unexpected release asset: ${name}`);
   }
   const files = names.map((name) => join(directory, name));
   for (const file of files) await assertInstaller(file);
-  const updateInfoFiles = updateInfoNames.map((name) => join(directory, name));
+  const updateInfoFiles = requiredUpdateInfoNames.map((name) => join(directory, name));
   const knownArtifacts = new Set(names);
-  for (const name of updateInfoNames) {
+  for (const name of requiredUpdateInfoNames) {
     const file = join(directory, name);
     await assertNonEmptyUpdateInfo(file);
     const { document } = await readUpdateInfo(file);
@@ -333,7 +365,8 @@ async function main() {
       notes: releaseNotes({
         productName,
         version: rollingVersion,
-        platforms: Object.keys(extensions),
+        // 发布说明只描述本次真正上传的平台（默认只有 Windows）。
+        platforms: resolveReleasePlatforms(artifacts, rollingVersion, RELEASE_IDENTITIES),
       }),
     });
   } else {
