@@ -313,6 +313,41 @@ test("release still requires checks success before publishing", async () => {
   assert.equal(release["continue-on-error"], undefined);
 });
 
+test("release condition allows skipped macOS but never bypasses failed or cancelled required jobs", async () => {
+  const { release } = await loadJobs();
+  const expression = release.if
+    .replace(/^\$\{\{\s*|\s*\}\}$/g, "")
+    .replace(/needs\.([\w-]+)/g, (_, id) => `needs[${JSON.stringify(id)}]`);
+  const evaluate = (results = {}, event = "push", ref = "tag", cancelled = false) =>
+    runInNewContext(
+      expression,
+      {
+        github: { event_name: event, ref_type: ref },
+        needs: Object.fromEntries(
+          Object.entries({
+            checks: "success",
+            build: "success",
+            "build-macos": "skipped",
+            ...results,
+          }).map(([id, result]) => [id, { result }]),
+        ),
+        cancelled: () => cancelled,
+      },
+      { timeout: 1000 },
+    );
+  assert.equal(evaluate(), true);
+  assert.equal(evaluate({ "build-macos": "success" }), true);
+  for (const result of ["failure", "cancelled", "skipped"]) {
+    assert.equal(evaluate({ checks: result }), false);
+    assert.equal(evaluate({ build: result }), false);
+  }
+  assert.equal(evaluate({ "build-macos": "failure" }), false);
+  assert.equal(evaluate({ "build-macos": "cancelled" }), false);
+  assert.equal(evaluate({}, "push", "branch"), false);
+  assert.equal(evaluate({}, "workflow_dispatch"), false);
+  assert.equal(evaluate({}, "push", "tag", true), false);
+});
+
 test("macOS packaging is opt-in so a Windows-only release does not pay for it", async () => {
   const jobs = await loadJobs();
   // 默认（tag push / main push / PR）都不跑 macOS：只有手动触发并勾选 build_macos 才打包。

@@ -11,7 +11,6 @@ import {
   mergeUpdateInfo,
   readUpdateInfo,
   releaseUpdateInfoNames,
-  resolveReleasePlatforms,
   sourceUpdateInfoName,
   updateInfoChannelName,
   validateTag,
@@ -446,12 +445,12 @@ test("assemble publishes a Windows-only release when macOS artifacts are absent"
     destination,
     version,
     identities: [identity],
+    platforms: ["win"],
   });
   // 没有 mac 产物时只合并 Windows 的更新元数据，不能凭空写一份 latest-mac.yml。
   assert.deepEqual(written, ["latest.yml"]);
-  const files = await verifyReleaseAssets(destination, version, [identity]);
-  assert.equal(files.length, 1 + 3);
-  assert.deepEqual(resolveReleasePlatforms(destination, version, [identity]), ["win"]);
+  const files = await verifyReleaseAssets(destination, version, [identity], ["win"]);
+  assert.equal(files.length, 4);
   assert.throws(
     () => releaseNotes({ productName: "nekcode", version, platforms: ["linux"] }),
     /Unsupported release platform/,
@@ -460,10 +459,37 @@ test("assemble publishes a Windows-only release when macOS artifacts are absent"
     releaseNotes({
       productName: "nekcode",
       version,
-      platforms: resolveReleasePlatforms(destination, version, [identity]),
+      platforms: ["win"],
     }),
     /macOS|dmg/,
   );
+});
+
+test("Windows assembly rejects a missing architecture directory instead of skipping it", async (t) => {
+  const artifactsRoot = await artifactTree(t, [identity]);
+  await rm(join(artifactsRoot, "desktop-production-win-arm64"), { recursive: true });
+  const destination = await fixture(t, []);
+  await assert.rejects(
+    assembleReleaseAssets({ artifactsRoot, destination, version, platforms: ["win"] }),
+    { code: "ENOENT" },
+  );
+});
+
+test("Windows verification rejects missing Windows and stray macOS metadata", async (t) => {
+  const macOnly = await fixture(t, artifactNames("mac", version, undefined, identity));
+  await assert.rejects(verifyReleaseAssets(macOnly, version, identity, ["win"]));
+  const winOnly = await fixture(t, artifactNames("win", version, undefined, identity));
+  await writeFile(join(winOnly, "latest-mac.yml"), "stale metadata");
+  await assert.rejects(verifyReleaseAssets(winOnly, version, identity, ["win"]), /Unexpected/);
+});
+
+test("Windows update metadata must cover both architectures", async (t) => {
+  const directory = await fixture(t, artifactNames("win", version, undefined, identity));
+  await writeFile(
+    join(directory, "latest.yml"),
+    updateInfoYaml(artifactNames("win", version, "x64", identity)),
+  );
+  await assert.rejects(verifyReleaseAssets(directory, version, identity, ["win"]), /incomplete/i);
 });
 
 test("assemble refuses metadata that points at another platform's installer", async (t) => {

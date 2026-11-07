@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
 import { copyFile, lstat, mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -31,6 +30,8 @@ export {
 
 // 发布只包含正式产品 nekcode；preview 身份仅用于本地开发构建（它不接收自动更新）。
 const RELEASE_IDENTITIES = [desktopProductIdentities.production];
+// 发布目标由策略决定，不能按下载到了哪些文件反推（漏包必须失败）。
+const RELEASE_PLATFORMS = ["win"];
 // electron-builder 按发行格式改写 ${arch}，必须匹配实际产物而非统一猜测 x64。
 // macOS 同时发 arm64 与 x64（Intel），两者各自在原生 runner 上构建（macos-15 /
 // macos-15-intel）：交叉架构打包会混入错误架构的原生预编译产物
@@ -176,7 +177,9 @@ export async function assembleReleaseAssets({
   destination,
   version,
   identities = RELEASE_IDENTITIES,
+  platforms = Object.keys(extensions),
 }) {
+  validateReleasePlatforms(platforms);
   if (!Array.isArray(identities) || identities.length === 0)
     throw new Error("Release identities must not be empty");
   await mkdir(destination, { recursive: true });
@@ -185,13 +188,10 @@ export async function assembleReleaseAssets({
 
   const documents = new Map();
   for (const identity of identities) {
-    for (const platform of Object.keys(extensions)) {
+    for (const platform of platforms) {
       for (const arch of RELEASE_ARCHES) {
         const artifactName = `desktop-${identity.flavor}-${platform}-${arch}`;
         const source = join(artifactsRoot, artifactName);
-        // 平台是可选的：默认只发 Windows（macOS runner 10 倍费率），mac 只在手动触发时打包。
-        // 缺整个平台目录时跳过，缺半个（目录在但安装包不全）仍然报错。
-        if (!existsSync(source)) continue;
         const installers = artifactNames(platform, version, arch, identity);
         for (const name of installers) {
           const file = join(source, name);
@@ -200,7 +200,7 @@ export async function assembleReleaseAssets({
         }
         const updateInfo = await readUpdateInfo(join(source, sourceUpdateInfoName(platform, arch)));
         // 更新元数据只描述本 job 产出的安装包：出现别的平台/架构的文件名说明打包与收集错位。
-        const allowedUrls = new Set(artifactNames(platform, version, undefined, identity));
+        const allowedUrls = new Set(installers);
         for (const entry of Array.isArray(updateInfo.document.files)
           ? updateInfo.document.files
           : []) {
@@ -235,26 +235,25 @@ export async function assembleReleaseAssets({
   return written.sort();
 }
 
-/**
- * 目录里实际存在的发布平台。
- *
- * 发布只包含构建过的平台：手工触发且不打包 macOS 时没有 mac 安装包，此时发布说明与
- * 资产校验都必须只认 Windows，而不是坚持要求一份不存在的 macOS 产物。
- */
-export function resolveReleasePlatforms(directory, version, identities = RELEASE_IDENTITIES) {
-  const available = new Set(readdirSync(directory));
-  return Object.keys(extensions).filter((platform) =>
-    identities.some((identity) =>
-      artifactNames(platform, version, undefined, identity).some((name) => available.has(name)),
-    ),
-  );
+/** 校验显式的平台集合，拒绝空列表、重复值及未知平台。 */
+function validateReleasePlatforms(platforms) {
+  if (
+    !Array.isArray(platforms) ||
+    platforms.length === 0 ||
+    new Set(platforms).size !== platforms.length ||
+    platforms.some((platform) => !Object.hasOwn(extensions, platform))
+  ) {
+    throw new Error("Invalid release platforms");
+  }
 }
 
 export async function verifyReleaseAssets(
   directory,
   version,
   identity = resolveDesktopProductIdentity(),
+  platforms = Object.keys(extensions),
 ) {
+  validateReleasePlatforms(platforms);
   const identities = Array.isArray(identity) ? identity : [identity];
   if (identities.length === 0) throw new Error("Release identities must not be empty");
   const identityKeys = identities.map((item) => item?.flavor);
@@ -262,29 +261,33 @@ export async function verifyReleaseAssets(
   if (new Set(identityKeys).size !== identityKeys.length) {
     throw new Error("Duplicate release identity");
   }
-  // 只校验本目录真实包含的平台：默认发版不打包 macOS 时不该要求 mac 资产。
-  const platforms = resolveReleasePlatforms(directory, version, identities);
-  if (platforms.length === 0) throw new Error("Release must contain at least one platform");
   const names = identities
     .flatMap((item) =>
       platforms.flatMap((platform) => artifactNames(platform, version, undefined, item)),
     )
     .sort();
   if (new Set(names).size !== names.length) throw new Error("Duplicate release asset filenames");
-  // 未构建平台的更新元数据不存在是正常的，但出现了也必须是合法通道名。
-  const updateInfoNames = releaseUpdateInfoNames(identities);
-  const requiredUpdateInfoNames = updateInfoNames.filter((name) =>
+  const requiredUpdateInfoNames = releaseUpdateInfoNames(identities).filter((name) =>
     platforms.includes(updateInfoPlatformOf(name)),
   );
-  const allowed = new Set([...names, ...updateInfoNames, "SHA256SUMS"]);
+  const allowed = new Set([...names, ...requiredUpdateInfoNames, "SHA256SUMS"]);
   for (const name of await readdir(directory)) {
     if (!allowed.has(name)) throw new Error(`Unexpected release asset: ${name}`);
   }
   const files = names.map((name) => join(directory, name));
   for (const file of files) await assertInstaller(file);
   const updateInfoFiles = requiredUpdateInfoNames.map((name) => join(directory, name));
-  const knownArtifacts = new Set(names);
+  const artifactsByChannel = new Map(
+    identities.flatMap((item) =>
+      platforms.map((platform) => [
+        updateInfoChannelName(platform, item.flavor, "x64"),
+        new Set(artifactNames(platform, version, undefined, item)),
+      ]),
+    ),
+  );
   for (const name of requiredUpdateInfoNames) {
+    const knownArtifacts = artifactsByChannel.get(name);
+    const described = new Set();
     const file = join(directory, name);
     await assertNonEmptyUpdateInfo(file);
     const { document } = await readUpdateInfo(file);
@@ -294,7 +297,12 @@ export async function verifyReleaseAssets(
       const url = asUpdateInfoString(entry?.url);
       if (!knownArtifacts.has(url))
         throw new Error(`Update metadata ${name} references unknown artifact: ${url}`);
+      if (described.has(url))
+        throw new Error(`Duplicate artifact in update metadata ${name}: ${url}`);
+      described.add(url);
     }
+    if (described.size !== knownArtifacts.size)
+      throw new Error(`Incomplete update metadata: ${name}`);
   }
   const sums = [];
   for (const [index, file] of files.entries()) {
@@ -345,6 +353,7 @@ async function main() {
       artifactsRoot: join(root, "dist", "artifacts"),
       destination: artifacts,
       version: buildVersion,
+      platforms: RELEASE_PLATFORMS,
     });
     console.log(`Assembled update metadata: ${written.join(", ")}`);
   } else if (command === "publish") {
@@ -355,7 +364,12 @@ async function main() {
     const rollingVersion = collectRollingAppVersion().appVersion;
     validateTag(tag, version, rollingVersion);
     // tag 与产物必须来自当前被打标 commit 的滚动派生值；不读 build-meta 缓存，避免陈旧值让错误 tag/产物蒙混通过。
-    const files = await verifyReleaseAssets(artifacts, rollingVersion, RELEASE_IDENTITIES);
+    const files = await verifyReleaseAssets(
+      artifacts,
+      rollingVersion,
+      RELEASE_IDENTITIES,
+      RELEASE_PLATFORMS,
+    );
     const { productName } = desktopProductIdentities.production;
     await publishRelease({
       tag,
@@ -365,8 +379,7 @@ async function main() {
       notes: releaseNotes({
         productName,
         version: rollingVersion,
-        // 发布说明只描述本次真正上传的平台（默认只有 Windows）。
-        platforms: resolveReleasePlatforms(artifacts, rollingVersion, RELEASE_IDENTITIES),
+        platforms: RELEASE_PLATFORMS,
       }),
     });
   } else {
