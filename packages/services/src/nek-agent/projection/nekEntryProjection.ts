@@ -26,11 +26,21 @@ import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProjectionSnapshot.js";
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
+import { planSubagentRows, type SubagentRowAnchor } from "./nekSubagentRecords.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 import { projectNekUserImages } from "./nekUserImages.js";
 
 export type { NekProjectedSnapshot, NekSnapshotInput } from "./nekEntryShared.js";
 export { orderActiveBranch } from "./nekEntryShared.js";
+
+/** entries → 行的输入；`isSessionRunning` 只在冷恢复时需要显式给出。 */
+interface NekProjectionInput extends NekSnapshotInput {
+  /**
+   * 父会话此刻是否仍在流式运行。缺省按 `state.isStreaming` 判定（拿不到 state 即 false）：
+   * 磁盘里残留的 `"running"` 子代理记录不能在没有活进程时继续显示为运行中。
+   */
+  isSessionRunning?: boolean;
+}
 
 /**
  * entries → 行的投影（快照路径）。
@@ -39,12 +49,15 @@ export { orderActiveBranch } from "./nekEntryShared.js";
  * 自定义状态，是唯一能完整还原时间线的来源；`messages` 只在 entries 缺失时兜底。
  */
 
-export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
+export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot {
   const allocator = new RowAllocator(input.existing);
   const branch = orderActiveBranch(input.entries, input.leafId);
   const rows: ConversationRow[] = [];
   const rowIndexById = new Map<number, number>();
   const toolRows = new Map<string, number>();
+  // 子代理行身份 = `subagent:<record.id>`；锚点只在首次出现时确定。
+  let subagentAnchors: ReadonlyMap<string, SubagentRowAnchor> = new Map();
+  const sessionRunning = input.isSessionRunning ?? input.state?.isStreaming === true;
 
   let turn: TurnContext = { turnId: "turn-0", entityId: "turn-0", startedAt: 0 };
   let turnOpen = false;
@@ -256,6 +269,17 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
               },
             ),
           );
+          // 子代理 details 是重开 GUI 后唯一还在的事实（registry 是纯内存表）：
+          // 首次出现建行，后续 `await` / `stop_subagent` 原地更新同一行。
+          const subagents = planSubagentRows(
+            subagentAnchors,
+            result,
+            turn.turnId,
+            sessionRunning,
+            (entityId) => allocator.resolve(entityId),
+          );
+          subagentAnchors = subagents.anchors;
+          for (const row of subagents.rows) push(row);
           break;
         }
         if (message.role === "bashExecution") {

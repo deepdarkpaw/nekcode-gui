@@ -5,10 +5,12 @@ import type {
   ConversationRow,
   PlanItem,
   QueueItem,
+  RunningSubagentSummary,
   SessionActionAvailability,
   SessionConfigState,
   SessionControl,
   SessionUsageState,
+  SubagentProjectionState,
 } from "@zcode/shared/zcode-protocol-v4";
 import type {
   NekAssistantMessage,
@@ -279,6 +281,7 @@ export function buildConversationSnapshot(args: {
     pendingInteractions: [],
     pendingCommands: [],
     backgroundWorks: [],
+    subagents: buildSubagentProjection(args.rows, args.revision),
     goal: null,
     plan: args.plan,
     workspaceHookAdmission: null,
@@ -286,7 +289,13 @@ export function buildConversationSnapshot(args: {
   };
 }
 
-/** 子代理工具 → subagent 行。`parentToolCallId` 由调用方给出（`subagent` 工具调用 id）。 */
+/**
+ * 子代理工具 → subagent 行。`parentToolCallId` 由调用方给出（`subagent` 工具调用 id）。
+ *
+ * `childSessionId` 恒为 nek 的 `record.id`：它同时是 registry 的内存键和落盘会话文件名，
+ * 右侧预览（`getSubagentConversation`）与侧栏 tab 同步都以它为准；内存子代理没有
+ * `sessionFile` 也照样能取到 transcript，所以不拿它当"能否下钻"的判据。
+ */
 export function subagentRowFromRecord(
   entityId: string,
   rowId: number,
@@ -318,10 +327,45 @@ export function subagentRowFromRecord(
     status,
     summaryText: text,
     ...(parentToolCallId ? { parentToolCallId } : {}),
-    ...(record.sessionFile ? { childSessionId: record.id } : {}),
+    childSessionId: record.id,
     startedAt: record.startedAt,
     ...(record.endedAt === undefined ? {} : { endedAt: record.endedAt }),
   });
+}
+
+/**
+ * 从 subagent 行派生 v4 `subagents` 投影（`subagentProjectionStateSchema`）：
+ * `running` 只列真正在跑的 child，`endedTotal` 只数终态行，`childSessionIds` 是侧栏
+ * subagent tab 的存活白名单。
+ *
+ * 没有任何 subagent 行时返回 `undefined`：不接受"投影为空"和"这个会话没有子代理"两种
+ * 事实混为一谈（schema 允许缺省，缺省即不上报）。
+ */
+function buildSubagentProjection(
+  rows: readonly ConversationRow[],
+  revision: number,
+): SubagentProjectionState | undefined {
+  const childSessionIds: string[] = [];
+  const running: RunningSubagentSummary[] = [];
+  let endedTotal = 0;
+  for (const row of rows) {
+    if (row.kind !== "subagent") continue;
+    if (row.status === "running") {
+      if (row.childSessionId) {
+        running.push({
+          childSessionId: row.childSessionId,
+          subagentType: row.subagentType,
+          title: row.summaryText,
+          status: "running",
+          ...(row.parentToolCallId === undefined ? {} : { toolCallId: row.parentToolCallId }),
+          ...(row.startedAt === undefined ? {} : { startedAt: row.startedAt }),
+        });
+      }
+    } else endedTotal += 1;
+    if (row.childSessionId) childSessionIds.push(row.childSessionId);
+  }
+  if (childSessionIds.length === 0 && endedTotal === 0) return undefined;
+  return { revision, childSessionIds, running, endedTotal };
 }
 
 /** `nek.get_state` 返回的计划摘要 → artifact 行（Plan 列表下钻用，不参与对话主体）。 */

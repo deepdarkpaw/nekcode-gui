@@ -50,10 +50,11 @@ export function NekSubagentCardView(props: NekSubagentCardViewProps) {
             { id: "nek.status.subagent.stopNamed" },
             { description: view.title },
           )}
-          variant="destructive"
-          size="xs"
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 px-1.5 text-ui-base text-foreground"
         >
-          <Square aria-hidden="true" />
+          <Square aria-hidden="true" className="size-3 fill-current" />
         </StatusActionButton>
       </div>
       <p className="mt-1 truncate text-ui-sm text-foreground-subtle">

@@ -101,14 +101,16 @@ describe("Nek session status slot wiring", () => {
     expect(rendered.container.querySelector('[data-status-view="session-status-slot"]')).toBeNull();
   });
 
-  it("S1: card and running bar open the same side preview without raw transcript UI", async () => {
+  it("S1: five subagents collapse into one compact section instead of stacked cards", () => {
     const stopSubagent = vi.fn(async () => undefined);
     const focusSubagent = vi.fn();
     act(() => {
-      useNekStatusStore.getState().consumeEvent("s", {
-        type: "nek.subagent",
-        payload: record("a", "running"),
-      });
+      for (const [index, id] of ["a", "b", "c", "d", "e"].entries()) {
+        useNekStatusStore.getState().consumeEvent("s", {
+          type: "nek.subagent",
+          payload: { ...record(id, index === 0 ? "running" : "completed"), startedAt: index },
+        });
+      }
     });
     setNekStatusActions("s", statusActions());
     renderView(
@@ -121,25 +123,68 @@ describe("Nek session status slot wiring", () => {
       />,
     );
 
-    // 卡片与运行中条的停止按钮同名，按容器区分：卡片上的停止只停这一条。
-    const card = document.querySelector<HTMLElement>('[data-status-view="subagent-card"]');
-    if (!card) throw new Error("expected a subagent card");
-    const cardScope = within(card);
-    await act(async () => {
-      fireEvent.click(cardScope.getByRole("button", { name: "停止 子代理 a" }));
-    });
-    expect(stopSubagent).toHaveBeenCalledWith("a");
+    // 5 个子代理只占一个折叠区：不再有逐个子代理的大卡片，也没有第二条运行中横栏。
+    const sections = document.querySelectorAll<HTMLElement>(
+      '[data-status-view="subagent-status-section"]',
+    );
+    expect(sections).toHaveLength(1);
+    const section = sections[0];
+    if (!section) throw new Error("expected the subagent status section");
+    expect(document.querySelector('[data-status-view="subagent-card"]')).toBeNull();
+    expect(document.querySelector('[data-status-view="running-subagents-bar"]')).toBeNull();
+    expect(section.dataset.subagentCount).toBe("5");
 
-    fireEvent.click(cardScope.getByRole("button", { name: "在右侧预览 子代理 a" }));
-    await waitFor(() => expect(focusSubagent).toHaveBeenCalledWith("a"));
+    // 收起态：头部一行摘要（最长耗时 + 运行数），列表里没有任何子代理行。
+    const summary = within(section);
+    expect(summary.getByText("子代理")).toBeTruthy();
+    expect(summary.getByText(/1\s*运行中/u)).toBeTruthy();
+    expect(document.querySelectorAll('[data-status-view="subagent-row"]')).toHaveLength(0);
+
+    fireEvent.click(summary.getByRole("button", { name: "子代理" }));
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-status-view="subagent-row"]'),
+    );
+    expect(rows).toHaveLength(5);
+    expect(rows.map((row) => row.dataset.subagentId)).toEqual(["a", "b", "c", "d", "e"]);
+    // 展开态内容固定在 max-h-48 的滚动容器内，5 个、20 个都不会撑爆状态槽。
+    const list = rows[0]?.parentElement;
+    expect(list?.className).toContain("max-h-48");
+    expect(list?.className).toContain("overflow-y-auto");
+
+    const first = rows[0];
+    if (!first) throw new Error("expected a subagent row");
+    fireEvent.click(within(first).getByRole("button", { name: "在右侧预览 子代理 a" }));
+    expect(focusSubagent).toHaveBeenCalledWith("a");
     expect(screen.queryByRole("button", { name: "查看完整消息" })).toBeNull();
     expect(document.querySelector('[data-status-view="subagent-transcript"]')).toBeNull();
-    const bar = document.querySelector<HTMLElement>('[data-status-view="running-subagents-bar"]');
-    if (!bar) throw new Error("expected the running subagents bar");
-    const focusButton = within(bar).getAllByRole("button")[0];
-    if (!focusButton) throw new Error("expected a focus button");
-    fireEvent.click(focusButton);
-    expect(focusSubagent).toHaveBeenCalledWith("a");
+
+    // 只有运行中的行带停止按钮，且停止只停这一条。
+    expect(within(first).getByRole("button", { name: "停止 子代理 a" })).toBeTruthy();
+    const completed = rows[1];
+    if (!completed) throw new Error("expected a completed subagent row");
+    expect(within(completed).queryByRole("button", { name: "停止 子代理 b" })).toBeNull();
+    fireEvent.click(within(first).getByRole("button", { name: "停止 子代理 a" }));
+    expect(stopSubagent).toHaveBeenCalledWith("a");
+  });
+
+  it("S2: an all-finished section shows the ended count instead of a running summary", () => {
+    act(() => {
+      for (const id of ["a", "b"]) {
+        useNekStatusStore
+          .getState()
+          .consumeEvent("s", { type: "nek.subagent", payload: record(id, "completed") }, 2_000);
+      }
+    });
+    setNekStatusActions("s", statusActions());
+    renderView(<NekSessionStatusSlot sessionKey="s" callbacks={callbacks()} />);
+    const section = document.querySelector<HTMLElement>(
+      '[data-status-view="subagent-status-section"]',
+    );
+    if (!section) throw new Error("expected the subagent status section");
+    expect(section.querySelector("[data-subagent-ended-count]")?.textContent).toBe("2");
+    // 全部结束就没有"全部停止"，也不渲染任何行（保持一行紧凑高度）。
+    expect(within(section).queryByRole("button", { name: "全部停止" })).toBeNull();
+    expect(document.querySelectorAll('[data-status-view="subagent-row"]')).toHaveLength(0);
   });
 
   it("slot: todo open-plan and queue retrieve use the pane callbacks and the feed actions", async () => {

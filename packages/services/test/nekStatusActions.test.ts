@@ -299,6 +299,9 @@ test("routes status actions to nek RPCs and returns bounded queue contents", asy
         "get_state",
         "get_session_stats",
         "extension_call",
+        // 状态快照一并读取 entries：nek 的 subagent registry 只在内存里，
+        // 重开会话后历史子代理只能从 toolResult details 复原。
+        "get_entries",
       ],
     );
     assert.deepEqual(

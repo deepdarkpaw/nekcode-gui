@@ -73,7 +73,11 @@ export function StatusActionButton({
             void action.run();
           }}
         >
-          {action.pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : children}
+          {action.pending ? (
+            <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
+          ) : (
+            children
+          )}
           <span>{label}</span>
         </Button>
       </ActionTooltip>

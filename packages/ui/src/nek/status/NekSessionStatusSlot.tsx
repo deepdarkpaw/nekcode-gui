@@ -2,10 +2,9 @@ import { useEffect } from "react";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
 import { NekRetryBannerView } from "./NekRetryBannerView.js";
-import { NekRunningSubagentsBarView } from "./NekRunningSubagentsBarView.js";
+import { NekSubagentStatusSection } from "./NekSubagentStatusSection.js";
 import { NekTodoPanelView } from "./NekTodoPanelView.js";
 import { NekUsageIndicatorView } from "./NekUsageIndicatorView.js";
-import { NekSubagentCardView } from "./NekSubagentCardView.js";
 import { useNekStatusActions } from "@/nek/statusFeed/statusActions.js";
 import { useNekStatusStore } from "./store.js";
 
@@ -38,9 +37,6 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
   // 只依赖 agent 服务的动作由 status feed 直接提供（定义见 statusFeed/statusActions.ts）；
   // 没有登记（feed 还没见过这个会话）时不渲染需要 RPC 的视图，避免用空实现假装成功。
   const statusActions = useNekStatusActions(sessionKey);
-  const subagentIds = useNekStatusStore(
-    (state) => state.sessions[sessionKey]?.subagents.order ?? [],
-  );
   const active = useNekStatusStore((state) => {
     const status = state.sessions[sessionKey];
     if (!status) return false;
@@ -72,15 +68,11 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
         onJumpToTodo={callbacks.onJumpToTodo}
         canJumpToTodo={callbacks.canJumpToTodo}
       />
-      {subagentIds.map((id) => (
-        <NekSubagentCardView
-          key={id}
-          sessionKey={sessionKey}
-          id={id}
-          onStop={callbacks.onStopSubagent}
-          onOpenTranscript={callbacks.onFocusSubagent}
-        />
-      ))}
+      <NekSubagentStatusSection
+        sessionKey={sessionKey}
+        onStop={callbacks.onStopSubagent}
+        onOpenTranscript={callbacks.onFocusSubagent}
+      />
       <NekQueueBarView
         sessionKey={sessionKey}
         clearQueue={statusActions.clearQueue}
@@ -88,11 +80,6 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
         getComposerText={callbacks.getComposerText}
         setComposerText={callbacks.setComposerText}
         focusComposerAtEnd={callbacks.focusComposerAtEnd}
-      />
-      <NekRunningSubagentsBarView
-        sessionKey={sessionKey}
-        onStop={callbacks.onStopSubagent}
-        onFocusSubagent={callbacks.onFocusSubagent}
       />
       <NekUsageIndicatorView sessionKey={sessionKey} onCompact={statusActions.compact} />
     </div>
