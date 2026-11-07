@@ -69,4 +69,13 @@ describe("queue logic", () => {
     expect(resolveQueueEditKey({ key: "Escape", keyCode: 229 })).toBeNull();
     expect(resolveQueueEditKey({ key: "Tab" })).toBeNull();
   });
+
+  it("QB-K4: Shift+Enter and IME composition insert newlines instead of submitting", () => {
+    expect(resolveQueueEditKey({ key: "Enter", shiftKey: true })).toBeNull();
+    expect(resolveQueueEditKey({ key: "Enter", nativeEvent: { isComposing: true } })).toBeNull();
+    expect(resolveQueueEditKey({ key: "Enter", nativeEvent: { keyCode: 229 } })).toBeNull();
+    expect(resolveQueueEditKey({ key: "Enter", ctrlKey: true })).toBeNull();
+    expect(resolveQueueEditKey({ key: "Enter", metaKey: true })).toBeNull();
+    expect(resolveQueueEditKey({ key: "Enter", shiftKey: false })).toBe("submit");
+  });
 });

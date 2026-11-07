@@ -38,17 +38,17 @@ export function NekCompactionBannerView(props: NekCompactionBannerViewProps) {
         action={actions.cancelCompaction}
         actionId="cancelCompaction"
         label={cancelLabel}
-        variant="warning"
-        size="xs"
+        variant="ghost"
+        size="sm"
       />
       <StatusActionButton
         action={actions.dismiss}
         actionId="dismiss"
         label={dismissLabel}
         variant="ghost"
-        size="xs"
+        size="sm"
       >
-        <X aria-hidden="true" />
+        <X aria-hidden="true" className="size-4 shrink-0" />
       </StatusActionButton>
     </section>
   );

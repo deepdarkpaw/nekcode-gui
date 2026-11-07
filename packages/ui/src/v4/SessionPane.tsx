@@ -3954,7 +3954,12 @@ export function SessionPane({
           admission={snapshot.workspaceHookAdmission}
         />
       ) : null}
-      {sessionId && snapshot ? (
+      {/*
+        nek 会话的待发送队列由输入框上方的 `NekSessionStatusSlot` 唯一承载（它接通了 nek 真实的
+        clear_queue / requeue RPC）。同时渲染 v4 面板会让同一条 follow-up 出现两次，且 v4 面板的
+        删除/编辑命令在 nek 下没有对应实现。因此只有 pane 没有状态槽回调时才保留 v4 面板。
+      */}
+      {sessionId && snapshot && !nekStatusCallbacksForPane ? (
         <ConversationQueuePanel
           key="conversation-queue"
           queue={pendingGuideProjection?.visibleQueue ?? snapshot.queue}

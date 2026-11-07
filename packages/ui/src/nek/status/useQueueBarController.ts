@@ -38,13 +38,20 @@ export interface QueueBarItem {
   delete: StatusActionHandle;
 }
 
+/** 正在编辑的队列项：目标 + 草稿 + 行内校验错误。 */
+export interface QueueBarEditing {
+  target: QueueTarget;
+  draft: string;
+  validationError?: StatusMessage;
+}
+
 const EMPTY_QUEUE: QueueContents = { steering: [], followUp: [] };
 
 export interface QueueBarController {
   view: {
     visible: boolean;
     items: QueueBarItem[];
-    editing: { target: QueueTarget; draft: string; validationError?: StatusMessage } | null;
+    editing: QueueBarEditing | null;
   };
   actions: {
     retrieveAll: StatusActionHandle;
@@ -73,11 +80,7 @@ export function useQueueBarController({
   const showUndo = useUndoToast();
   const { intl } = useZCodeIntl();
   const queue = useNekStatusStore((state) => state.sessions[sessionKey]?.queue ?? EMPTY_QUEUE);
-  const [editing, setEditing] = useState<{
-    target: QueueTarget;
-    draft: string;
-    validationError?: StatusMessage;
-  } | null>(null);
+  const [editing, setEditing] = useState<QueueBarEditing | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const activeOperationRef = useRef<QueueTarget | null>(null);
   const operationAction = useAsyncAction(
@@ -166,6 +169,11 @@ export function useQueueBarController({
         setEditing({ ...editing, draft, validationError: { id: "nek.status.queue.emptyText" } });
         return;
       }
+      // 失焦提交很常见（点到别处）；内容没变就不必 clear_queue + requeue 走一往返。
+      if (draft === editing.target.text) {
+        setEditing(null);
+        return;
+      }
       activeOperationRef.current = editing.target;
       await operationAction.run({
         target: editing.target,
@@ -251,7 +259,16 @@ export function useQueueBarController({
   const onKeyDown = useCallback(
     (event: Parameters<StatusKeyDown>[0]) => {
       if (!editing) return;
-      const command = resolveQueueEditKey(event);
+      const command = resolveQueueEditKey({
+        key: event.key,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        keyCode: event.keyCode,
+        nativeEvent: event.nativeEvent,
+      });
+      // Shift+Enter / IME 组字返回 null：放行给文本框插入换行，绝不提交。
       if (!command) return;
       event.preventDefault();
       if (command === "submit") void commitEdit();

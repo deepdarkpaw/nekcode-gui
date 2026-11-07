@@ -160,12 +160,54 @@ describe("nek status views", () => {
     expect(onOpenPlan).toHaveBeenCalledWith("plan.md");
   });
 
-  it("QB: renders queue labels, retrieves all, and opens inline edit", async () => {
+  it("TD-icons: uses 14px status icons and strikes through completed items", () => {
+    useNekStatusStore.getState().consumeEvent("s", {
+      type: "nek.state",
+      payload: {
+        mode: "agent",
+        todos: [
+          { id: "todo-done", content: "已完成的事项", status: "completed" },
+          { id: "todo-run", content: "正在做的事项", status: "in_progress" },
+          { id: "todo-wait", content: "还没开始的事项", status: "pending" },
+          { id: "todo-drop", content: "取消的事项", status: "cancelled" },
+        ],
+        plans: [],
+        subagents: [],
+      },
+    });
+    renderView(
+      <NekTodoPanelView
+        sessionKey="s"
+        onOpenPlan={vi.fn()}
+        onJumpToTodo={vi.fn()}
+        canJumpToTodo={() => false}
+      />,
+    );
+    // 每个状态图标都必须显式带 size-3.5；漏写 size-* 时 Lucide 会退回 24px 巨型图标。
+    const icons = Array.from(document.querySelectorAll('[data-status-view="todo-panel"] ul svg'));
+    expect(icons).toHaveLength(4);
+    for (const icon of icons) {
+      expect(icon.getAttribute("class") ?? "").toContain("size-3.5");
+    }
+    const completedText = Array.from(
+      document.querySelector('[data-todo-status="completed"]')?.querySelectorAll("span") ?? [],
+    ).find((span) => span.textContent === "已完成的事项");
+    expect(completedText?.className).toContain("line-through");
+    expect(completedText?.className).toContain("text-foreground-subtlest");
+    const runningText = Array.from(
+      document.querySelector('[data-todo-status="in_progress"]')?.querySelectorAll("span") ?? [],
+    ).find((span) => span.textContent === "正在做的事项");
+    expect(runningText?.className).not.toContain("line-through");
+  });
+
+  it("QB: renders the queue title count, multiline text, and the edit entry", async () => {
     const setComposerText = vi.fn();
-    const clearQueue = vi.fn(async () => ({ steering: ["urgent"], followUp: ["later"] }));
-    useNekStatusStore
-      .getState()
-      .consumeEvent("s", { type: "queue_update", steering: ["urgent"], followUp: ["later"] });
+    const clearQueue = vi.fn(async () => ({ steering: ["第一行\n第二行"], followUp: ["later"] }));
+    useNekStatusStore.getState().consumeEvent("s", {
+      type: "queue_update",
+      steering: ["第一行\n第二行"],
+      followUp: ["later"],
+    });
     renderView(
       <NekQueueBarView
         sessionKey="s"
@@ -176,15 +218,91 @@ describe("nek status views", () => {
         focusComposerAtEnd={vi.fn()}
       />,
     );
+    // 标题必须是队列计数，而不是清空按钮的文案。
+    const title = document.querySelector('[data-status-view="queue-bar"] header > span');
+    expect(title?.textContent).toBe("待发送消息（2）");
+    expect(title?.textContent).not.toBe("清空队列");
     expect(screen.getByText("插队")).toBeTruthy();
     expect(screen.getByText("排队")).toBeTruthy();
+    // 多行排队消息完整显示，右侧按钮不会和正文重叠（正文是独立的 min-w-0 flex-1 列）。
+    const steeringRow = document.querySelector('[data-queue-item="steering:0"]');
+    expect(steeringRow?.textContent).toContain("第一行\n第二行");
     fireEvent.click(screen.getByRole("button", { name: "全部取回到输入框" }));
     await waitFor(() => expect(clearQueue).toHaveBeenCalled());
+    expect(setComposerText).toHaveBeenCalledWith("第一行\n第二行\n\nlater\n\ndraft");
+  });
+
+  it("QB-edit: multiline textarea keeps Shift+Enter newlines and commits on Enter", async () => {
+    const clearQueue = vi.fn(async () => ({ steering: ["第一行\n第二行"], followUp: [] }));
+    const requeue = vi.fn(async () => undefined);
+    useNekStatusStore.getState().consumeEvent("s", {
+      type: "queue_update",
+      steering: ["第一行\n第二行"],
+      followUp: [],
+    });
+    renderView(
+      <NekQueueBarView
+        sessionKey="s"
+        clearQueue={clearQueue}
+        requeue={requeue}
+        getComposerText={() => ""}
+        setComposerText={vi.fn()}
+        focusComposerAtEnd={vi.fn()}
+      />,
+    );
     fireEvent.click(
       document.querySelector('[data-status-action="edit:steering:0"]') as HTMLElement,
     );
-    expect(screen.getByDisplayValue("urgent")).toBeTruthy();
-    expect(setComposerText).toHaveBeenCalledWith("urgent\n\nlater\n\ndraft");
+    const textarea = document.querySelector(
+      '[data-status-view="queue-bar"] textarea',
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).toBeTruthy();
+    expect(textarea?.value).toBe("第一行\n第二行");
+    // Shift+Enter 是换行，绝不能提交或取消。
+    fireEvent.keyDown(textarea as HTMLTextAreaElement, { key: "Enter", shiftKey: true });
+    expect(requeue).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-status-view="queue-bar"] textarea')).toBeTruthy();
+    fireEvent.change(textarea as HTMLTextAreaElement, {
+      target: { value: "改后第一行\n改后第二行" },
+    });
+    fireEvent.keyDown(textarea as HTMLTextAreaElement, { key: "Enter" });
+    await waitFor(() =>
+      expect(requeue).toHaveBeenCalledWith({
+        steering: ["改后第一行\n改后第二行"],
+        followUp: [],
+      }),
+    );
+  });
+
+  it("QB-edit: Escape cancels editing without touching the queue", async () => {
+    const clearQueue = vi.fn(async () => ({ steering: ["原始"], followUp: [] }));
+    const requeue = vi.fn(async () => undefined);
+    useNekStatusStore
+      .getState()
+      .consumeEvent("s", { type: "queue_update", steering: ["原始"], followUp: [] });
+    renderView(
+      <NekQueueBarView
+        sessionKey="s"
+        clearQueue={clearQueue}
+        requeue={requeue}
+        getComposerText={() => ""}
+        setComposerText={vi.fn()}
+        focusComposerAtEnd={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      document.querySelector('[data-status-action="edit:steering:0"]') as HTMLElement,
+    );
+    const textarea = document.querySelector(
+      '[data-status-view="queue-bar"] textarea',
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "改到一半" } });
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    await waitFor(() =>
+      expect(document.querySelector('[data-status-view="queue-bar"] textarea')).toBeNull(),
+    );
+    expect(requeue).not.toHaveBeenCalled();
+    expect(clearQueue).not.toHaveBeenCalled();
   });
 
   it("RT and CP: show visible banners and error detail fold", () => {
