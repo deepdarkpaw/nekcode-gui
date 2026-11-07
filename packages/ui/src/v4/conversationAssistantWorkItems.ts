@@ -1,4 +1,4 @@
-import type { SubagentRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ReasoningRow, SubagentRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import {
   isExecuteToolCall,
   isExploreToolCall,
@@ -14,40 +14,21 @@ import type { AssistantWorkRow } from "@/v4/conversationTurnRenderUnits.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
 import { buildReasoningGroup } from "@/v4/conversationReasoningGroup.js";
 
+/** Explore/Execute/Changes 共享的阶段容器形状（kind 由各成员收窄）。 */
+interface ToolGroupRenderItem {
+  key: string;
+  rowId: number;
+  rows: ToolCallRow[];
+  node: TaskChatToolCallTreeNode;
+}
+
 export type ConversationAssistantWorkRenderItem =
   | ReturnType<typeof buildReasoningGroup>
-  | {
-      kind: "row";
-      key: string;
-      row: AssistantWorkRow;
-    }
-  | {
-      kind: "exploreGroup";
-      key: string;
-      rowId: number;
-      rows: ToolCallRow[];
-      node: TaskChatToolCallTreeNode;
-    }
-  | {
-      kind: "executeGroup";
-      key: string;
-      rowId: number;
-      rows: ToolCallRow[];
-      node: TaskChatToolCallTreeNode;
-    }
-  | {
-      kind: "changesGroup";
-      key: string;
-      rowId: number;
-      rows: ToolCallRow[];
-      node: TaskChatToolCallTreeNode;
-    }
-  | {
-      kind: "agentToolCall";
-      key: string;
-      row: ToolCallRow;
-      subagentRow: SubagentRow;
-    };
+  | { kind: "row"; key: string; row: AssistantWorkRow }
+  | { kind: "agentToolCall"; key: string; row: ToolCallRow; subagentRow: SubagentRow }
+  | (ToolGroupRenderItem & { kind: "exploreGroup" })
+  | (ToolGroupRenderItem & { kind: "executeGroup" })
+  | (ToolGroupRenderItem & { kind: "changesGroup" });
 
 export const ENABLE_EXPLORE_TOOL_CALL_GROUPING = true;
 export const ENABLE_TERMINAL_TOOL_CALL_GROUPING = true;
@@ -60,12 +41,33 @@ interface ConversationAssistantWorkRenderOptions {
   enableChangesGrouping?: boolean;
 }
 
+interface FileWorkStageOptions {
+  tailIsRunning: boolean;
+  enableExploreGrouping: boolean;
+  enableChangesGrouping: boolean;
+}
+
 const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
+
+// ConversationRowView 对这两类 marker 直接渲染 null；留在行序里只会在 flex gap-4 中
+// 撑出一个空位，并让相邻工作段被误判成已经结束。
+const NON_RENDERING_TIMELINE_MARKER_TYPES = new Set(["retryNotice", "checkpointRestored"]);
+
+const TOOL_PATH_INPUT_FIELDS = ["file_path", "path", "filePath"] as const;
 
 const isToolCallRow = (row: AssistantWorkRow): row is ToolCallRow => row.kind === "toolCall";
 
 const isAgentToolCallRow = (row: AssistantWorkRow): row is ToolCallRow =>
   isToolCallRow(row) && SUBAGENT_TOOL_NAMES.has(row.toolName);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const rowItem = (row: AssistantWorkRow): ConversationAssistantWorkRenderItem => ({
+  kind: "row",
+  key: `row:${row.rowId}`,
+  row,
+});
 
 function isExploreToolCallRow(row: AssistantWorkRow): boolean {
   if (!isToolCallRow(row)) {
@@ -98,6 +100,63 @@ function isChangesToolCallRow(row: AssistantWorkRow): row is ToolCallRow {
   );
 }
 
+/** 工具行作用的文件路径：终态 display 是权威事实，流式早期只有工具入参。 */
+function readToolPath(row: ToolCallRow): string | undefined {
+  const display = row.output?.display;
+  if (display?.kind === "file_diff") return display.filePath;
+  const input = row.input;
+  if (!isRecord(input)) return undefined;
+  return TOOL_PATH_INPUT_FIELDS.map((field) => input[field]).find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+}
+
+/** 同一文件的相对/绝对路径写法必须收敛到可比较形态。 */
+const normalizeComparePath = (path: string): string =>
+  path.trim().replaceAll("\\", "/").replace(/^\.\//, "");
+
+/**
+ * 同一文件内被修改文件的只读读取：绝对路径 `G:/repo/src/foo.ts` 与相对路径
+ * `src/foo.ts` 也要收敛到同一文件，否则读写在 Changes 里仍然裂成两条。
+ */
+function isSameFileReadRow(row: ToolCallRow, editedPaths: ReadonlySet<string>): boolean {
+  if (
+    resolveToolCallIdentity({ toolName: row.toolName, kind: row.toolName }).family !== "file-read"
+  )
+    return false;
+  const readPath = readToolPath(row);
+  if (!readPath) return false;
+  const normalized = normalizeComparePath(readPath);
+  return [...editedPaths].some(
+    (editedPath) =>
+      normalized === editedPath ||
+      editedPath.endsWith(`/${normalized}`) ||
+      normalized.endsWith(`/${editedPath}`),
+  );
+}
+
+function collectEditedPaths(toolRows: readonly ToolCallRow[]): Set<string> {
+  const paths: string[] = [];
+  for (const row of toolRows) {
+    const filePath = isChangesToolCallRow(row) ? readToolPath(row) : undefined;
+    if (filePath) paths.push(normalizeComparePath(filePath));
+  }
+  return new Set(paths);
+}
+
+/**
+ * 静默文件工作段候选：同一 turn 内的思考、只读探索与文件写入。
+ *
+ * 真实推理模型每次工具调用前都先发一条 reasoning，所以“原始下标连续”不再是合并前提；
+ * 真正需要切段的只有正文、可见 marker、子代理、终端命令与交互/控制工具，它们都不是
+ * 候选，天然构成硬边界（改文件 → 跑测试 → 再改文件必须分成前后两段）。
+ */
+function isFileWorkStageCandidate(row: AssistantWorkRow): boolean {
+  if (row.kind === "reasoning") return row.state !== "interrupted";
+  if (!isToolCallRow(row)) return false;
+  return isExploreToolCallRow(row) || isChangesToolCallRow(row);
+}
+
 function shouldDeferUnclassifiedShellToolCall(row: AssistantWorkRow): boolean {
   if (!isToolCallRow(row) || (row.status !== "inputStreaming" && row.status !== "running")) {
     return false;
@@ -120,50 +179,50 @@ function resolveGroupStageStatus(
   return rows.some((row) => row.status === "cancelled") ? "stopped" : "completed";
 }
 
-function buildExploreGroup(rows: ToolCallRow[], stageTailIsRunning: boolean) {
-  // 分组 builder 只会在连续同类工具达到两项后调用；空数组不是合法状态，
-  // 不再用伪造 identity 的兜底掩盖调用方错误。
-  const firstRow = rows[0]!;
-  const childToolCalls = rows.map(toolCallRowToLegacyNode);
+type ToolGroupKind = "exploreGroup" | "executeGroup";
 
-  return {
-    kind: "exploreGroup" as const,
-    // 旧 key/toolId 包含末尾 row 和数量，每新增一个 Explore 子工具都会重建组件，
-    // 并让 ToolLayout 用新的 toolId 读取不到用户刚保存的展开状态。聚合身份锚定首个子工具，
-    // 后续只更新 children，保证流式增长期间 React identity 和展开状态 identity 都稳定。
-    key: `explore:${firstRow.rowId}`,
-    rowId: firstRow.rowId,
-    rows,
-    node: {
-      toolCall: {
-        toolId: `explore:${firstRow.toolCallId}`,
-        toolName: "Explore",
-        kind: "Explore",
-        title: "Explore",
-        input: {},
-        status: resolveGroupStageStatus(rows, stageTailIsRunning),
-        startedAt: typeof firstRow.startedAt === "number" ? firstRow.startedAt : undefined,
-      },
-      childToolCalls,
-    },
-  };
+interface ToolGroupSpec<K extends ToolGroupKind> {
+  kind: K;
+  prefix: string;
+  toolName: string;
+  title: string;
 }
 
-function buildExecuteGroup(rows: ToolCallRow[], stageTailIsRunning: boolean) {
+const EXPLORE_GROUP: ToolGroupSpec<"exploreGroup"> = {
+  kind: "exploreGroup",
+  prefix: "explore",
+  toolName: "Explore",
+  title: "Explore",
+};
+
+const EXECUTE_GROUP: ToolGroupSpec<"executeGroup"> = {
+  kind: "executeGroup",
+  prefix: "execute",
+  toolName: "ExecuteGroup",
+  title: "Execute",
+};
+
+/** 分组 builder 只会在连续同类工具达到两项后调用；空数组不是合法状态。 */
+function buildToolGroup<K extends ToolGroupKind>(
+  rows: ToolCallRow[],
+  stageTailIsRunning: boolean,
+  group: ToolGroupSpec<K>,
+): ToolGroupRenderItem & { kind: K } {
   const firstRow = rows[0]!;
   return {
-    kind: "executeGroup" as const,
-    // 分组 identity 如果包含末项或数量，流式新增命令会重建父组件并丢失展开状态。
-    // 与 Explore 一样锚定首个真实 tool call，后续只更新 children。
-    key: `execute:${firstRow.rowId}`,
+    kind: group.kind,
+    // 旧 key/toolId 包含末尾 row 和数量，每新增一个子工具都会重建组件，
+    // 并让 ToolLayout 用新的 toolId 读取不到用户刚保存的展开状态。聚合身份锚定首个子工具，
+    // 后续只更新 children，保证流式增长期间 React identity 和展开状态 identity 都稳定。
+    key: `${group.prefix}:${firstRow.rowId}`,
     rowId: firstRow.rowId,
     rows,
     node: {
       toolCall: {
-        toolId: `execute:${firstRow.toolCallId}`,
-        toolName: "ExecuteGroup",
-        kind: "executeGroup",
-        title: "Execute",
+        toolId: `${group.prefix}:${firstRow.toolCallId}`,
+        toolName: group.toolName,
+        kind: group.kind,
+        title: group.title,
         input: {},
         status: resolveGroupStageStatus(rows, stageTailIsRunning),
         startedAt: typeof firstRow.startedAt === "number" ? firstRow.startedAt : undefined,
@@ -174,16 +233,17 @@ function buildExecuteGroup(rows: ToolCallRow[], stageTailIsRunning: boolean) {
 }
 
 function buildChangesGroup(rows: ToolCallRow[], stageTailIsRunning: boolean) {
-  const firstRow = rows[0]!;
+  // 组内可能先出现同文件的只读 read（读取 → 编辑 → 再读取）。identity 必须锚定第一条
+  // 真实写操作：否则 read 流式进入/离开会换掉 owner，用户刚展开的“更改”会被重建。
+  const firstWriteRow = rows.find(isChangesToolCallRow) ?? rows[0]!;
   return {
     kind: "changesGroup" as const,
-    // Changes 的展开状态必须在流式追加 Write/Edit 时保持稳定，因此身份锚定首个 tool。
-    key: `changes:${firstRow.rowId}`,
-    rowId: firstRow.rowId,
+    key: `changes:${firstWriteRow.rowId}`,
+    rowId: firstWriteRow.rowId,
     rows,
     node: {
       toolCall: {
-        toolId: `changes:${firstRow.toolCallId}`,
+        toolId: `changes:${firstWriteRow.toolCallId}`,
         toolName: "ChangesGroup",
         kind: "changesGroup",
         title: "Changes",
@@ -195,6 +255,54 @@ function buildChangesGroup(rows: ToolCallRow[], stageTailIsRunning: boolean) {
       childToolCalls: rows.map(toolCallRowToLegacyNode),
     },
   };
+}
+
+/**
+ * 静默文件工作段 → 展示项：思考 → 其它只读探索 → 文件修改。
+ *
+ * 文件修改项里并入读取了本段被修改文件的 read（保持原始先后），这样
+ * `read → reasoning → edit → read → edit` 只剩一个 Changes，而不是一串碎片行；
+ * 读取不是写操作，只进入文件明细，不参与任何写次数与增删统计。
+ */
+function buildFileWorkStageItems(
+  stageRows: readonly AssistantWorkRow[],
+  options: FileWorkStageOptions,
+): ConversationAssistantWorkRenderItem[] {
+  const items: ConversationAssistantWorkRenderItem[] = [];
+  const reasoningRows: ReasoningRow[] = [];
+  const toolRows: ToolCallRow[] = [];
+  for (const row of stageRows) {
+    if (row.kind === "reasoning") reasoningRows.push(row);
+    else if (isToolCallRow(row)) toolRows.push(row);
+  }
+
+  if (reasoningRows.length === 1) items.push(rowItem(reasoningRows[0]!));
+  else if (reasoningRows.length > 1) items.push(buildReasoningGroup(reasoningRows));
+
+  const editedPaths = collectEditedPaths(toolRows);
+  const changeRows: ToolCallRow[] = [];
+  const exploreRows: ToolCallRow[] = [];
+  for (const row of toolRows) {
+    const target =
+      isChangesToolCallRow(row) || isSameFileReadRow(row, editedPaths) ? changeRows : exploreRows;
+    target.push(row);
+  }
+
+  // 单个只读工具保留自身语义与渲染，只有出现第二个同类调用才成立 Explore 容器。
+  if (options.enableExploreGrouping && exploreRows.length > 1) {
+    items.push(
+      buildToolGroup(exploreRows, options.tailIsRunning && changeRows.length === 0, EXPLORE_GROUP),
+    );
+  } else {
+    for (const row of exploreRows) items.push(rowItem(row));
+  }
+
+  if (options.enableChangesGrouping && changeRows.length > 0) {
+    items.push(buildChangesGroup(changeRows, options.tailIsRunning));
+  } else {
+    for (const row of changeRows) items.push(rowItem(row));
+  }
+  return items;
 }
 
 /**
@@ -277,35 +385,28 @@ export function buildAssistantWorkRenderItems(
   const enableTerminalGrouping =
     options?.enableTerminalGrouping ?? ENABLE_TERMINAL_TOOL_CALL_GROUPING;
   const enableChangesGrouping = options?.enableChangesGrouping ?? ENABLE_CHANGES_TOOL_CALL_GROUPING;
-  // Explore 的阶段边界和尾部状态必须基于用户实际可见的行序。等待 command 的 Shell
-  // 若只在循环中跳过，仍会占据数组位置，导致前一个 Explore 被误判为已结束；
-  // 隐藏 reasoning 也有相同问题。先统一剔除暂不可见行，再做配对、分组和尾部判断。
-  const sourcePositions = new Map(rows.map((row, index) => [row.rowId, index]));
-  const visibleRows = rows.filter((row) => {
+  // 工作段的边界和尾部状态必须基于用户实际可见的行序。等待 command 的 Shell 若只在
+  // 循环中跳过，仍会占据数组位置，导致前一个 Explore 被误判为已结束；隐藏 reasoning
+  // 和无 UI 的 marker 也有相同问题。先统一剔除暂不可见行，再做配对、分组和尾部判断。
+  const preparedRows = rows.filter((row) => {
     if (
       row.kind === "reasoning" &&
       !isConversationReasoningRowVisible(row.rowId, reasoningVisibility)
     ) {
       return false;
     }
+    if (row.kind === "timelineMarker" && NON_RENDERING_TIMELINE_MARKER_TYPES.has(row.marker.type))
+      return false;
     return !shouldDeferUnclassifiedShellToolCall(row);
   });
-  const { subagentByAgentToolRowId, claimedSubagentRowIds } = pairSubagentRows(visibleRows);
-  const preparedRows = visibleRows;
+  const { subagentByAgentToolRowId, claimedSubagentRowIds } = pairSubagentRows(preparedRows);
+  const stageTailIsRunning = (cursor: number) =>
+    options?.stageTailIsRunning === true && cursor === preparedRows.length;
   let index = 0;
 
   while (index < preparedRows.length) {
-    const row = preparedRows[index];
-    if (!row) {
-      index += 1;
-      continue;
-    }
+    const row = preparedRows[index]!;
 
-    // 已配对进 Agent 块的 subagent 行：不再单独渲染。
-    if (row.kind === "subagent" && claimedSubagentRowIds.has(row.rowId)) {
-      index += 1;
-      continue;
-    }
     if (isToolCallRow(row)) {
       const pairedSubagent = subagentByAgentToolRowId.get(row.rowId);
       if (pairedSubagent) {
@@ -320,120 +421,51 @@ export function buildAssistantWorkRenderItems(
       }
     }
 
-    if (row.kind === "reasoning" && row.state !== "interrupted") {
-      const groupRows = [row];
+    // 已配对进 Agent 块的 subagent 行：不再单独渲染。
+    if (row.kind === "subagent" && claimedSubagentRowIds.has(row.rowId)) {
+      index += 1;
+      continue;
+    }
+
+    if (isFileWorkStageCandidate(row)) {
+      const stageRows: AssistantWorkRow[] = [row];
       index += 1;
       while (index < preparedRows.length) {
-        const next = preparedRows[index];
-        if (
-          next?.kind !== "reasoning" ||
-          next.state === "interrupted" ||
-          next.turnId !== row.turnId
-        )
-          break;
-        groupRows.push(next);
+        const nextRow = preparedRows[index]!;
+        if (nextRow.turnId !== row.turnId || !isFileWorkStageCandidate(nextRow)) break;
+        stageRows.push(nextRow);
         index += 1;
       }
       items.push(
-        groupRows.length === 1
-          ? { kind: "row", key: `row:${row.rowId}`, row }
-          : buildReasoningGroup(groupRows),
+        ...buildFileWorkStageItems(stageRows, {
+          tailIsRunning: stageTailIsRunning(index),
+          enableExploreGrouping,
+          enableChangesGrouping,
+        }),
       );
       continue;
     }
 
-    const isExploreRow = isToolCallRow(row) && isExploreToolCallRow(row);
-    if (!isExploreRow) {
-      if (enableChangesGrouping && isChangesToolCallRow(row)) {
-        const groupRows: ToolCallRow[] = [row];
-        index += 1;
-        while (index < preparedRows.length) {
-          const nextRow = preparedRows[index];
-          const previous = groupRows.at(-1)!;
-          if (
-            !nextRow ||
-            !isChangesToolCallRow(nextRow) ||
-            nextRow.turnId !== row.turnId ||
-            sourcePositions.get(nextRow.rowId) !== sourcePositions.get(previous.rowId)! + 1
-          )
-            break;
-          groupRows.push(nextRow);
-          index += 1;
-        }
-        // 从首个写工具建立稳定段身份，后续追加不更换展开状态的 owner。
-        items.push(
-          buildChangesGroup(
-            groupRows,
-            options?.stageTailIsRunning === true && index === preparedRows.length,
-          ),
-        );
-        continue;
-      }
-      if (enableTerminalGrouping && isExecuteToolCallRow(row)) {
-        const groupRows: ToolCallRow[] = [row];
-        index += 1;
-        while (index < preparedRows.length) {
-          const nextRow = preparedRows[index];
-          if (!nextRow || !isExecuteToolCallRow(nextRow)) {
-            break;
-          }
-          groupRows.push(nextRow);
-          index += 1;
-        }
-        // 单个工具保留自身语义和渲染，避免只包含一个子项的 Terminal 容器。
-        if (groupRows.length === 1) {
-          const singleRow = groupRows[0]!;
-          items.push({ kind: "row", key: `row:${singleRow.rowId}`, row: singleRow });
-          continue;
-        }
-        items.push(
-          buildExecuteGroup(
-            groupRows,
-            options?.stageTailIsRunning === true && index === preparedRows.length,
-          ),
-        );
-        continue;
-      }
-      items.push({
-        kind: "row",
-        key: `row:${row.rowId}`,
-        row,
-      });
+    if (enableTerminalGrouping && isExecuteToolCallRow(row)) {
+      const groupRows: ToolCallRow[] = [row];
       index += 1;
+      while (index < preparedRows.length) {
+        const nextRow = preparedRows[index]!;
+        if (!isExecuteToolCallRow(nextRow)) break;
+        groupRows.push(nextRow);
+        index += 1;
+      }
+      // 单个工具保留自身语义和渲染，避免只包含一个子项的 Terminal 容器。
+      items.push(
+        groupRows.length === 1
+          ? rowItem(row)
+          : buildToolGroup(groupRows, stageTailIsRunning(index), EXECUTE_GROUP),
+      );
       continue;
     }
 
-    if (!enableExploreGrouping) {
-      items.push({
-        kind: "row",
-        key: `row:${row.rowId}`,
-        row,
-      });
-      index += 1;
-      continue;
-    }
-
-    const groupRows: ToolCallRow[] = [row];
+    items.push(rowItem(row));
     index += 1;
-    while (index < preparedRows.length) {
-      const nextRow = preparedRows[index];
-      if (!nextRow || !isToolCallRow(nextRow) || !isExploreToolCallRow(nextRow)) {
-        break;
-      }
-      groupRows.push(nextRow);
-      index += 1;
-    }
-    // Explore 只有在出现第二个连续只读工具后才成立；首项必须立即按原工具展示。
-    if (groupRows.length === 1) {
-      items.push({ kind: "row", key: `row:${row.rowId}`, row });
-      continue;
-    }
-    items.push(
-      buildExploreGroup(
-        groupRows,
-        options?.stageTailIsRunning === true && index === preparedRows.length,
-      ),
-    );
   }
 
   return items;
