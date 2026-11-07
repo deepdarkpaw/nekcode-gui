@@ -258,6 +258,7 @@ function readToolCallBeforeAfterCandidate(
 
 export function buildFallbackRawToolCallFileSummary(
   source?: EditKindSource,
+  includeDetails = true,
 ): RawToolCallFileSummary[] {
   const path = readToolCallPathCandidate(source);
   if (!path) {
@@ -286,16 +287,18 @@ export function buildFallbackRawToolCallFileSummary(
         : "Edited";
   const content = readToolCallContentCandidate(source);
   const beforeAfter = readToolCallBeforeAfterCandidate(source);
-  const changeStat =
-    actionLabel === "Created" && content !== undefined
+  const changeStat = !includeDetails
+    ? undefined
+    : actionLabel === "Created" && content !== undefined
       ? computeLineChangeStat(null, content)
       : actionLabel === "Deleted" && content !== undefined
         ? computeLineChangeStat(content, "")
         : actionLabel === "Edited" && beforeAfter
           ? computeLineChangeStat(beforeAfter.oldText, beforeAfter.newText)
           : undefined;
-  const patch =
-    actionLabel === "Created" && content !== undefined
+  const patch = !includeDetails
+    ? undefined
+    : actionLabel === "Created" && content !== undefined
       ? buildUnifiedDiff("", content, getPathLeaf(path))
       : actionLabel === "Edited" && beforeAfter
         ? buildUnifiedDiff(beforeAfter.oldText, beforeAfter.newText, getPathLeaf(path))

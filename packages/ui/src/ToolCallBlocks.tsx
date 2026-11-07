@@ -157,19 +157,23 @@ function ToolCallBlockComponent({
   const identity = resolveToolCallIdentity(toolCall);
   const toolState = mapToolStatus(toolCall.status);
   const displayModel = useMemo(
-    () => buildToolDisplayModel(toolCall, workspacePath),
-    [toolCall, workspacePath],
+    () => buildToolDisplayModel(toolCall, workspacePath, identity.family !== "file-write"),
+    [toolCall, workspacePath, identity.family],
   );
   const rawFileSummaries = useMemo(
     () =>
-      readRawToolCallFileSummaries(toolCall.raw, {
-        toolName: toolCall.toolName,
-        kind: toolCall.kind,
-        title: toolCall.title,
-        input: toolCall.input,
-        output: toolCall.output,
-        raw: toolCall.raw,
-      }),
+      readRawToolCallFileSummaries(
+        toolCall.raw,
+        {
+          toolName: toolCall.toolName,
+          kind: toolCall.kind,
+          title: toolCall.title,
+          input: toolCall.input,
+          output: toolCall.output,
+          raw: toolCall.raw,
+        },
+        "summary",
+      ),
     [
       toolCall.input,
       toolCall.kind,

@@ -70,17 +70,8 @@ export interface GitFileChange {
   isConflicted: boolean;
 }
 
-export interface GitWorktreeReview {
-  isGitAvailable: boolean;
-  isRepository: boolean;
-  /** Current workspace relative to HEAD, not a historical turn or operation total. */
-  files: Array<Pick<GitFileChange, "path" | "workspaceRelativePath" | "added" | "removed">>;
-}
-
 export interface GitDiffRequest {
   path: string;
-  /** Compare HEAD directly to the working file, combining staged and unstaged changes. */
-  compareToHead?: boolean;
   staged?: boolean;
   sourceId?: GitChangeSourceId;
 }

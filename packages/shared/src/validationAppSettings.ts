@@ -416,7 +416,7 @@ const appSettingsObjectSchema = z.object({
   messageStreamShowTodos: z.boolean().default(false),
   toolGroupingExploreEnabled: z.boolean().default(true),
   toolGroupingTerminalEnabled: z.boolean().default(true),
-  toolGroupingChangesEnabled: z.boolean().default(false),
+  toolGroupingChangesEnabled: z.boolean().default(true),
   zcodeInteractionBehavior: zcodeInteractionBehaviorSchema.default("queue"),
   askUserQuestionAutoResolutionEnabled: z.boolean().default(true),
   providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema.default({}),

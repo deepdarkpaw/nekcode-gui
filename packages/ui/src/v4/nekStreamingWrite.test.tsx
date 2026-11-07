@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import * as diffPreview from "@/lib/toolDiffPreview.js";
 import type { NekAssistantMessage, NekAssistantMessageEvent } from "@zcode/shared/nek-protocol";
 import type { ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { NekConversationProjector } from "../../../services/src/nek-agent/nekConversationProjector.js";
@@ -27,7 +28,10 @@ const assistant = {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   },
 } as NekAssistantMessage;
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function setup() {
   const p = new NekConversationProjector({ sessionId: "s", schedule: () => () => undefined });
@@ -103,6 +107,22 @@ it("AQ-H1: history shows accepted selections and Other by question id, including
   expect(screen.queryByText("未提供回答")).toBeNull();
   ui.rerender(view(JSON.parse(JSON.stringify(row))));
   expect(screen.getByText("Beta，Gamma，custom answer")).toBeTruthy();
+  p.dispose();
+});
+
+it("PERF-D1: a collapsed edit generates no patch; details are materialized only on expansion", () => {
+  const spy = vi.spyOn(diffPreview, "buildUnifiedDiff");
+  const { p, emit, row } = setup();
+  emit({
+    type: "toolcall_delta",
+    contentIndex: 0,
+    delta: "",
+    arguments: { path: "G:/project/ARD.md", content: "one\ntwo\nthree" },
+  });
+  render(view(row()));
+  expect(spy).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("ARD.md"));
+  expect(spy).toHaveBeenCalled();
   p.dispose();
 });
 

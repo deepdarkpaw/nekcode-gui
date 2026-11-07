@@ -227,11 +227,6 @@ export function createGitService(options?: {
       return await repo.getDiff(params);
     },
 
-    async getWorktreeReview(params) {
-      repo.invalidate(params.workspacePath);
-      return await repo.getWorktreeReview(params.workspacePath);
-    },
-
     async getBranchComparison(params): Promise<GitBranchComparison> {
       const comparison = await repo.getBranchComparison(params.workspacePath);
       return {

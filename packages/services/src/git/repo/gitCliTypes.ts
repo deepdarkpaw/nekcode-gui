@@ -9,7 +9,6 @@ import type {
   GitPushResult,
   GitRepositorySummary,
   GitWorkspaceRepositoryInfo,
-  GitWorktreeReview,
 } from "@zcode/shared";
 
 export interface GitLineStat {
@@ -88,7 +87,6 @@ export interface GitCliRepo {
     startPoint?: string,
   ): Promise<GitBranchMutationResult>;
   getDiff(params: GitDiffQuery): Promise<GitDiffResult>;
-  getWorktreeReview(workspacePath: string): Promise<GitWorktreeReview>;
   getBranchComparison(workspacePath: string): Promise<GitBranchComparisonSnapshot>;
   stage(workspacePath: string, paths: string[]): Promise<void>;
   unstage(workspacePath: string, paths: string[]): Promise<void>;

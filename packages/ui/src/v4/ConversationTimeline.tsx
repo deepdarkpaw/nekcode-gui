@@ -33,7 +33,6 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { ConversationTurnGroup } from "@/v4/ConversationTurnGroup.js";
 import { ConversationPendingGuideList } from "@/v4/ConversationPendingGuideList.js";
-import { ConversationWorktreeReview } from "@/v4/ConversationWorktreeReview.js";
 import type { AssistantFeedbackHandler } from "@/v4/ConversationRowView.js";
 import { ConversationTurnNavigator } from "@/v4/ConversationTurnNavigator.js";
 import { syncConversationShareSelectionPanelLayout } from "@/v4/conversationShareSelectionPanelLayout.js";
@@ -1950,24 +1949,6 @@ function ConversationTimelineImpl({
                     onFeedbackChange={onFeedbackChange}
                     onEdit={onEdit}
                     shareSelection={shareSelection}
-                  />
-                </div>
-              ) : null}
-              {rowContext.showWorktreeReview &&
-              rows.length > 0 &&
-              (sessionPhase === "completedSuccess" ||
-                sessionPhase === "completedInterrupted" ||
-                sessionPhase === "error") ? (
-                <div
-                  className={cn(
-                    "relative mx-auto w-full shrink-0",
-                    contentWidthClassName,
-                    summaryPanelInlineOffsetClassName,
-                  )}
-                >
-                  <ConversationWorktreeReview
-                    context={rowContext}
-                    revision={`${sessionKey}:${rows.at(-1)?.rowId}:${sessionPhase}`}
                   />
                 </div>
               ) : null}

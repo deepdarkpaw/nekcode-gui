@@ -217,7 +217,6 @@ function ConversationAssistantWorkItems({
         },
         {
           stageTailIsRunning,
-          hideSuccessfulFileWrites: context.showWorktreeReview,
           enableExploreGrouping:
             context.toolGroupingExploreEnabled ?? ENABLE_EXPLORE_TOOL_CALL_GROUPING,
           enableTerminalGrouping:
@@ -227,7 +226,6 @@ function ConversationAssistantWorkItems({
         },
       ),
     [
-      context.showWorktreeReview,
       context.toolGroupingChangesEnabled,
       context.toolGroupingExploreEnabled,
       context.toolGroupingTerminalEnabled,

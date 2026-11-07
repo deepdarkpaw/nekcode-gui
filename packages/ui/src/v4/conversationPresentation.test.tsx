@@ -9,6 +9,8 @@ import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import { buildAssistantWorkRenderItems } from "./conversationAssistantWorkItems.js";
 import { buildConversationTurnRenderUnits } from "./conversationTurnRenderUnits.js";
 import { ConversationTurnGroup } from "./ConversationTurnGroup.js";
+import { buildFileChangeGroup } from "@/ToolCallBlocks/fileChangeGroup.js";
+import { toolCallRowToLegacyNode } from "./toolCallRowAdapter.js";
 
 const visibility = { messageStreamShowReasoning: true };
 const context = {
@@ -56,6 +58,90 @@ function view(rows: Parameters<typeof buildConversationTurnRenderUnits>[0]) {
   return <ConversationTurnGroup unit={unit} context={context} />;
 }
 afterEach(cleanup);
+
+function edit(
+  rowId: number,
+  status: ToolCallRow["status"] = "success",
+  path = "/project/PRD.md",
+): ToolCallRow {
+  return {
+    ...base(rowId),
+    kind: "toolCall",
+    toolCallId: `edit-${rowId}`,
+    toolName: "edit",
+    status,
+    inputText: "",
+    input: { file_path: path, old_string: "a", new_string: "b" },
+    output: {
+      text: "done",
+      display: {
+        kind: "file_diff",
+        filePath: path,
+        additions: 1,
+        deletions: 1,
+        structuredPatch: [],
+      },
+    },
+  };
+}
+
+it("CG1: same-file operation counts are accumulated once, excluding failed/cancelled/running calls", () => {
+  const rows = [edit(1), edit(2), edit(3, "error"), edit(4, "cancelled"), edit(5, "running")];
+  const group = buildFileChangeGroup(rows.map(toolCallRowToLegacyNode), "/project");
+  expect(group.files).toHaveLength(1);
+  expect(group.totals).toMatchObject({
+    completed: 2,
+    failed: 1,
+    cancelled: 1,
+    running: 1,
+    added: 2,
+    removed: 2,
+  });
+  expect(
+    buildFileChangeGroup([...rows, rows[0]!].map(toolCallRowToLegacyNode), "/project").totals,
+  ).toEqual(group.totals);
+});
+
+it("CG2: hidden reasoning, other tools, text and turn boundaries stop write grouping", () => {
+  for (const boundary of [
+    reasoning(2),
+    tool(2),
+    { ...base(2), kind: "assistantText" as const, text: "note", state: "complete" as const },
+  ]) {
+    const items = buildAssistantWorkRenderItems([edit(1), boundary, edit(3)], {
+      messageStreamShowReasoning: false,
+    });
+    expect(items.filter((item) => item.kind === "changesGroup")).toHaveLength(2);
+  }
+  expect(
+    buildAssistantWorkRenderItems([edit(1), { ...edit(2), turnId: "next" }], visibility),
+  ).toHaveLength(2);
+});
+
+it("CG3: dozens of edits show one collapsed file summary and retain expansion as calls arrive", () => {
+  const rows = Array.from({ length: 20 }, (_, i) => edit(i + 100));
+  const ui = render(view(rows), { wrapper });
+  expect(screen.getAllByText("PRD.md")).toHaveLength(1);
+  expect(screen.getByLabelText("+20")).toBeTruthy();
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(0);
+  fireEvent.click(screen.getByText("PRD.md"));
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+  ui.rerender(view([...rows, edit(120, "success", "/project/ARD.md")]));
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(2);
+  expect(screen.queryByText("工作区 Git 差异")).toBeNull();
+});
+
+it("CG4: write without a before-image does not invent a deletion count", () => {
+  const row = {
+    ...edit(1),
+    toolName: "write",
+    input: { path: "/project/PRD.md", content: "replacement" },
+    output: { text: "written" },
+  };
+  const group = buildFileChangeGroup([toolCallRowToLegacyNode(row)], "/project");
+  expect(group.totals).toMatchObject({ completed: 1, unknown: 1, added: 0, removed: 0 });
+  expect(group.files[0]?.summary?.changeStat).toBeUndefined();
+});
 
 it("merges consecutive thinking without losing text, known durations or row anchors", () => {
   const rows = [reasoning(1, 2000), reasoning(2, 3000), reasoning(3, 4000)];

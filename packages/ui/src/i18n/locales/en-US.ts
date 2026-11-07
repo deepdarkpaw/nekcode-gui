@@ -2581,17 +2581,14 @@ const enUS: Record<string, string> = {
   "chat.toolCall.execute.execute": "Execute",
   "chat.toolCall.executeGroup.label": "Terminal",
   "chat.toolCall.changesGroup.label": "Changes",
-  "git.diffReview.title": "Workspace Git diff",
-  "git.diffReview.files": "{count} files",
-  "git.diffReview.scope":
-    "Current workspace versus HEAD, combining staged and unstaged changes. Includes untracked files, excludes Git-ignored files, and is not limited to this task's edits.",
-  "git.diffReview.refresh": "Refresh Git diff / Retry",
-  "git.diffReview.clean": "No uncommitted file changes.",
-  "git.diffReview.notRepository":
-    "This workspace is not a Git repository; a combined diff is unavailable.",
-  "git.diffReview.gitUnavailable":
-    "Git was not found on the target machine; a combined diff is unavailable.",
-  "git.diffReview.more": "Show more files",
+  "chat.toolCall.changesGroup.receivingPath": "Receiving file path",
+  "chat.toolCall.changesGroup.completed": "{count} successful operations in total",
+  "chat.toolCall.changesGroup.failed": "{count} failed",
+  "chat.toolCall.changesGroup.cancelled": "{count} cancelled",
+  "chat.toolCall.changesGroup.running": "{count} in progress",
+  "chat.toolCall.changesGroup.unknownStats": "Some operations have no line statistics",
+  "chat.toolCall.changesGroup.scope":
+    "Cumulative additions and deletions from successful operations in this consecutive tool segment, not a final net diff. Expand a file to inspect its operations.",
   "chat.toolCall.changesGroup.file.one": "{count} file",
   "chat.toolCall.changesGroup.file.other": "{count} files",
   "chat.toolCall.changesGroup.tool.one": "{count} tool",

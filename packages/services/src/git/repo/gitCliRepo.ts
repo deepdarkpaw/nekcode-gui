@@ -59,8 +59,6 @@ import {
   type GitStatusSnapshot,
 } from "./gitCliTypes.js";
 
-import { readWorktreeReview, readWorktreeFileDiff } from "./worktreeReview.js";
-
 export type {
   GitBranchComparisonChange,
   GitBranchComparisonSnapshot,
@@ -1251,10 +1249,6 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
       });
     },
 
-    async getWorktreeReview(workspacePath) {
-      return await readWorktreeReview(commandProvider, await this.getStatus(workspacePath));
-    },
-
     async getDiff(params: GitDiffQuery): Promise<GitDiffResult> {
       const resolution = await this.resolveRepository(params.workspacePath);
       const absolutePath = isAbsolute(params.path)
@@ -1272,14 +1266,6 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
       }
 
       const repoRelativePath = await normalizeInputPath(resolution, params.path);
-      if (params.compareToHead) {
-        return await readWorktreeFileDiff(
-          commandProvider,
-          resolution,
-          repoRelativePath,
-          absolutePath,
-        );
-      }
       if (params.sourceId === "branch") {
         const status = await this.getStatus(params.workspacePath);
         const trackingBranchName = status.summary.trackingBranchName;

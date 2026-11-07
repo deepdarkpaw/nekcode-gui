@@ -51,14 +51,13 @@ export type ConversationAssistantWorkRenderItem =
 
 export const ENABLE_EXPLORE_TOOL_CALL_GROUPING = true;
 export const ENABLE_TERMINAL_TOOL_CALL_GROUPING = true;
-export const ENABLE_CHANGES_TOOL_CALL_GROUPING = false;
+export const ENABLE_CHANGES_TOOL_CALL_GROUPING = true;
 
 interface ConversationAssistantWorkRenderOptions {
   stageTailIsRunning?: boolean;
   enableExploreGrouping?: boolean;
   enableTerminalGrouping?: boolean;
   enableChangesGrouping?: boolean;
-  hideSuccessfulFileWrites?: boolean;
 }
 
 const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
@@ -68,7 +67,7 @@ const isToolCallRow = (row: AssistantWorkRow): row is ToolCallRow => row.kind ==
 const isAgentToolCallRow = (row: AssistantWorkRow): row is ToolCallRow =>
   isToolCallRow(row) && SUBAGENT_TOOL_NAMES.has(row.toolName);
 
-function isExploreToolCallRow(row: AssistantWorkRow): row is ToolCallRow {
+function isExploreToolCallRow(row: AssistantWorkRow): boolean {
   if (!isToolCallRow(row)) {
     return false;
   }
@@ -92,7 +91,9 @@ function isExecuteToolCallRow(row: AssistantWorkRow): row is ToolCallRow {
 
 function isChangesToolCallRow(row: AssistantWorkRow): row is ToolCallRow {
   if (!isToolCallRow(row)) return false;
-  return resolveToolCallIdentity(toolCallRowToLegacyNode(row).toolCall).family === "file-write";
+  return (
+    resolveToolCallIdentity({ toolName: row.toolName, kind: row.toolName }).family === "file-write"
+  );
 }
 
 function shouldDeferUnclassifiedShellToolCall(row: AssistantWorkRow): boolean {
@@ -277,14 +278,8 @@ export function buildAssistantWorkRenderItems(
   // Explore 的阶段边界和尾部状态必须基于用户实际可见的行序。等待 command 的 Shell
   // 若只在循环中跳过，仍会占据数组位置，导致前一个 Explore 被误判为已结束；
   // 隐藏 reasoning 也有相同问题。先统一剔除暂不可见行，再做配对、分组和尾部判断。
+  const sourcePositions = new Map(rows.map((row, index) => [row.rowId, index]));
   const visibleRows = rows.filter((row) => {
-    if (
-      options?.hideSuccessfulFileWrites &&
-      isChangesToolCallRow(row) &&
-      row.status === "success"
-    ) {
-      return false;
-    }
     if (
       row.kind === "reasoning" &&
       !isConversationReasoningRowVisible(row.rowId, reasoningVisibility)
@@ -345,23 +340,25 @@ export function buildAssistantWorkRenderItems(
       continue;
     }
 
-    const isExploreRow = isExploreToolCallRow(row);
+    const isExploreRow = isToolCallRow(row) && isExploreToolCallRow(row);
     if (!isExploreRow) {
       if (enableChangesGrouping && isChangesToolCallRow(row)) {
         const groupRows: ToolCallRow[] = [row];
         index += 1;
         while (index < preparedRows.length) {
           const nextRow = preparedRows[index];
-          if (!nextRow || !isChangesToolCallRow(nextRow)) break;
+          const previous = groupRows.at(-1)!;
+          if (
+            !nextRow ||
+            !isChangesToolCallRow(nextRow) ||
+            nextRow.turnId !== row.turnId ||
+            sourcePositions.get(nextRow.rowId) !== sourcePositions.get(previous.rowId)! + 1
+          )
+            break;
           groupRows.push(nextRow);
           index += 1;
         }
-        // 单个工具不需要额外的 UI 合成层；等第二个连续同类工具到达后再升级为父分组。
-        if (groupRows.length === 1) {
-          const singleRow = groupRows[0]!;
-          items.push({ kind: "row", key: `row:${singleRow.rowId}`, row: singleRow });
-          continue;
-        }
+        // 从首个写工具建立稳定段身份，后续追加不更换展开状态的 owner。
         items.push(
           buildChangesGroup(
             groupRows,
@@ -418,7 +415,7 @@ export function buildAssistantWorkRenderItems(
     index += 1;
     while (index < preparedRows.length) {
       const nextRow = preparedRows[index];
-      if (!nextRow || !isExploreToolCallRow(nextRow)) {
+      if (!nextRow || !isToolCallRow(nextRow) || !isExploreToolCallRow(nextRow)) {
         break;
       }
       groupRows.push(nextRow);

@@ -24,7 +24,6 @@ import type {
   GitRepositorySummary,
   GitWorkspaceRepositoryInfo,
   GitFileChange,
-  GitWorktreeReview,
   GitSwitchBranchRequest,
 } from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
@@ -40,7 +39,6 @@ export interface IGitService {
   getChanges(params: GitChangesRequest): Promise<GitFileChange[]>;
   getIgnoredPaths(params: GitIgnoredPathsRequest): Promise<string[]>;
   getDiff(params: GitDiffQuery): Promise<GitDiffResult>;
-  getWorktreeReview(params: GitRepositoryRequest): Promise<GitWorktreeReview>;
   getBranchComparison(params: GitRepositoryRequest): Promise<GitBranchComparison>;
   stagePaths(params: GitPathMutationRequest): Promise<void>;
   unstagePaths(params: GitPathMutationRequest): Promise<void>;

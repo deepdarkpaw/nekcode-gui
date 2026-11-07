@@ -4,12 +4,13 @@ import { useCallback, useMemo } from "react";
 import { ToolCallBody } from "@/ToolCallBlocks/ToolCallBody.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { getFileDisplayPath } from "@/lib/fileDisplay.js";
-import type { ToolInlinePreview } from "@/lib/toolDisplay.js";
+import { buildToolDisplayModel, type ToolInlinePreview } from "@/lib/toolDisplay.js";
 import { ToolLayout } from "../ToolLayout.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
 import { EditInlineDiffContent } from "@/ToolCallBlocks/renderers/EditInlineDiffContent.js";
 import {
   getEditKindLabelMessageId,
+  readRawToolCallFileSummaries,
   renderDiffCount,
   renderFilePath,
   renderJoinedFileChips,
@@ -99,9 +100,12 @@ export function EditToolCallBlock(context: ToolCallBlockRenderContext) {
         return;
       }
 
-      onOpenCodeViewer(buildEditCodeViewerSource(summary));
+      const full = readRawToolCallFileSummaries(toolCall.raw, toolCall).find(
+        (item) => item.path === summary.path,
+      );
+      if (full) onOpenCodeViewer(buildEditCodeViewerSource(full));
     },
-    [onOpenCodeViewer],
+    [onOpenCodeViewer, toolCall],
   );
 
   const primaryText = useMemo(
@@ -181,131 +185,130 @@ export function EditToolCallBlock(context: ToolCallBlockRenderContext) {
       ),
     [intl, primaryText, rawFileSummaries.length],
   );
-  const singleFileInlinePreview = buildEditInlinePreview(
-    rawFileSummaries.length === 1 ? (rawFileSummaries[0] ?? null) : null,
-  );
   const handleLoadFullToolCallFields = context.onLoadFullToolCallFields;
-  const renderContent = useCallback(
-    () =>
-      rawFileSummaries.length === 0 ? (
-        // Fallback for edit tools without raw file summaries (e.g., failed edits)
-        <>
-          <ToolCallBody
-            childToolList={null}
-            displayModel={context.displayModel}
-            toolCall={toolCall}
-            workspacePath={context.workspacePath}
-            theme={context.theme}
-            codePreviewSettings={context.codePreviewSettings}
-            onOpenCodeViewer={context.onOpenCodeViewer}
-            onOpenFileLink={context.onOpenFileLink}
-            onOpenBrowserUrl={context.onOpenBrowserUrl}
-          />
-          <ToolSnapshotFieldNotice
-            refs={toolCall.snapshotRefs ?? []}
-            onLoadFullToolCallFields={
-              handleLoadFullToolCallFields
-                ? () => handleLoadFullToolCallFields(toolCall.toolId)
-                : undefined
-            }
-          />
-        </>
-      ) : (
-        <>
-          {hasMultipleFiles ? (
-            <div className="ml-2 space-y-2 border-border border-l pl-3.5 border-border">
-              {/* 多文件 edit 的主体只展示一份总览，下面把每个文件拆成独立块，
+  const renderContent = useCallback(() => {
+    const fullSummaries = readRawToolCallFileSummaries(toolCall.raw, toolCall);
+    const singleFileInlinePreview = buildEditInlinePreview(
+      fullSummaries.length === 1 ? (fullSummaries[0] ?? null) : null,
+    );
+    const displayModel = buildToolDisplayModel(toolCall, context.workspacePath);
+    return fullSummaries.length === 0 ? (
+      // Fallback for edit tools without raw file summaries (e.g., failed edits)
+      <>
+        <ToolCallBody
+          childToolList={null}
+          displayModel={displayModel}
+          toolCall={toolCall}
+          workspacePath={context.workspacePath}
+          theme={context.theme}
+          codePreviewSettings={context.codePreviewSettings}
+          onOpenCodeViewer={context.onOpenCodeViewer}
+          onOpenFileLink={context.onOpenFileLink}
+          onOpenBrowserUrl={context.onOpenBrowserUrl}
+        />
+        <ToolSnapshotFieldNotice
+          refs={toolCall.snapshotRefs ?? []}
+          onLoadFullToolCallFields={
+            handleLoadFullToolCallFields
+              ? () => handleLoadFullToolCallFields(toolCall.toolId)
+              : undefined
+          }
+        />
+      </>
+    ) : (
+      <>
+        {hasMultipleFiles ? (
+          <div className="ml-2 space-y-2 border-border border-l pl-3.5 border-border">
+            {/* 多文件 edit 的主体只展示一份总览，下面把每个文件拆成独立块，
               这样既能保留总 diff 预览，也能满足“每个文件一个 edit block”的展示。 */}
-              {rawFileSummaries.map((summary, index) => (
-                <EditFileSummaryBlock
-                  key={`${summary.path}:${index}`}
-                  summary={summary}
-                  isRunning={isRunning}
-                  statusLabel={effectiveStatusLabel}
-                  errorText={errorText}
-                  toolId={`${toolCall.toolId}:${index}`}
-                  isFailed={isFailed}
-                  onOpenCodeViewer={context.onOpenCodeViewer}
-                  onOpenFileLink={context.onOpenFileLink}
-                  onOpenBrowserUrl={context.onOpenBrowserUrl}
-                  childToolList={null}
-                  displayModel={context.displayModel}
-                  toolCall={toolCall}
-                  workspacePath={context.workspacePath}
-                  theme={context.theme}
-                  codePreviewSettings={context.codePreviewSettings}
-                  animateDiffCountOnMount={context.animateDiffCountOnMount}
-                  showIcon={false}
-                  sourceLabel={context.sourceLabel}
-                />
-              ))}
-              <ToolSnapshotFieldNotice
-                refs={toolCall.snapshotRefs ?? []}
-                onLoadFullToolCallFields={
-                  handleLoadFullToolCallFields
-                    ? () => handleLoadFullToolCallFields(toolCall.toolId)
-                    : undefined
-                }
-              />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {singleFileInlinePreview?.type === "patch" ? (
-                // edit 的 diff 预览需要直接挂在 content 里，避免 ToolCallBody 再次接管 inlinePreview
-                // 后把单文件 patch 吃掉，导致展开后只剩输入/输出而看不到真正的变更内容。
-                <EditInlineDiffContent
-                  preview={singleFileInlinePreview.source}
-                  theme={context.theme}
-                  codePreviewSettings={context.codePreviewSettings}
-                />
-              ) : null}
-              <ToolCallBody
-                childToolList={context.childToolList}
-                displayModel={context.displayModel}
-                inlinePreviewOverride={
-                  singleFileInlinePreview?.type === "patch" ? { type: "none" } : undefined
-                }
+            {fullSummaries.map((summary, index) => (
+              <EditFileSummaryBlock
+                key={`${summary.path}:${index}`}
+                summary={summary}
+                isRunning={isRunning}
+                statusLabel={effectiveStatusLabel}
+                errorText={errorText}
+                toolId={`${toolCall.toolId}:${index}`}
+                isFailed={isFailed}
+                onOpenCodeViewer={context.onOpenCodeViewer}
+                onOpenFileLink={context.onOpenFileLink}
+                onOpenBrowserUrl={context.onOpenBrowserUrl}
+                childToolList={null}
+                displayModel={displayModel}
                 toolCall={toolCall}
                 workspacePath={context.workspacePath}
                 theme={context.theme}
                 codePreviewSettings={context.codePreviewSettings}
-                onOpenCodeViewer={context.onOpenCodeViewer}
-                onOpenFileLink={context.onOpenFileLink}
-                onOpenBrowserUrl={context.onOpenBrowserUrl}
+                animateDiffCountOnMount={context.animateDiffCountOnMount}
+                showIcon={false}
+                sourceLabel={context.sourceLabel}
               />
-              <ToolSnapshotFieldNotice
-                refs={toolCall.snapshotRefs ?? []}
-                onLoadFullToolCallFields={
-                  handleLoadFullToolCallFields
-                    ? () => handleLoadFullToolCallFields(toolCall.toolId)
-                    : undefined
-                }
+            ))}
+            <ToolSnapshotFieldNotice
+              refs={toolCall.snapshotRefs ?? []}
+              onLoadFullToolCallFields={
+                handleLoadFullToolCallFields
+                  ? () => handleLoadFullToolCallFields(toolCall.toolId)
+                  : undefined
+              }
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {singleFileInlinePreview?.type === "patch" ? (
+              // edit 的 diff 预览需要直接挂在 content 里，避免 ToolCallBody 再次接管 inlinePreview
+              // 后把单文件 patch 吃掉，导致展开后只剩输入/输出而看不到真正的变更内容。
+              <EditInlineDiffContent
+                preview={singleFileInlinePreview.source}
+                theme={context.theme}
+                codePreviewSettings={context.codePreviewSettings}
               />
-            </div>
-          )}
-        </>
-      ),
-    [
-      context.childToolList,
-      context.codePreviewSettings,
-      context.displayModel,
-      context.onOpenBrowserUrl,
-      context.onOpenCodeViewer,
-      context.onOpenFileLink,
-      context.sourceLabel,
-      context.theme,
-      context.workspacePath,
-      effectiveStatusLabel,
-      errorText,
-      handleLoadFullToolCallFields,
-      hasMultipleFiles,
-      isFailed,
-      isRunning,
-      rawFileSummaries,
-      singleFileInlinePreview,
-      toolCall,
-    ],
-  );
+            ) : null}
+            <ToolCallBody
+              childToolList={context.childToolList}
+              displayModel={displayModel}
+              inlinePreviewOverride={
+                singleFileInlinePreview?.type === "patch" ? { type: "none" } : undefined
+              }
+              toolCall={toolCall}
+              workspacePath={context.workspacePath}
+              theme={context.theme}
+              codePreviewSettings={context.codePreviewSettings}
+              onOpenCodeViewer={context.onOpenCodeViewer}
+              onOpenFileLink={context.onOpenFileLink}
+              onOpenBrowserUrl={context.onOpenBrowserUrl}
+            />
+            <ToolSnapshotFieldNotice
+              refs={toolCall.snapshotRefs ?? []}
+              onLoadFullToolCallFields={
+                handleLoadFullToolCallFields
+                  ? () => handleLoadFullToolCallFields(toolCall.toolId)
+                  : undefined
+              }
+            />
+          </div>
+        )}
+      </>
+    );
+  }, [
+    context.childToolList,
+    context.codePreviewSettings,
+    context.displayModel,
+    context.onOpenBrowserUrl,
+    context.onOpenCodeViewer,
+    context.onOpenFileLink,
+    context.sourceLabel,
+    context.theme,
+    context.workspacePath,
+    effectiveStatusLabel,
+    errorText,
+    handleLoadFullToolCallFields,
+    hasMultipleFiles,
+    isFailed,
+    isRunning,
+    rawFileSummaries,
+    toolCall,
+  ]);
 
   return (
     <>

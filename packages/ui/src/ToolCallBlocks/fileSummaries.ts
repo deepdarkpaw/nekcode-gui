@@ -63,7 +63,10 @@ function readDisplayStructuredPatch(display: Record<string, unknown>, fileLabel:
     : null;
 }
 
-function readDisplayFileDiffSummaries(...values: unknown[]): RawToolCallFileSummary[] {
+function readDisplayFileDiffSummaries(
+  includeDetails: boolean,
+  ...values: unknown[]
+): RawToolCallFileSummary[] {
   const summaries: RawToolCallFileSummary[] = [];
   const seenPaths = new Set<string>();
 
@@ -92,10 +95,11 @@ function readDisplayFileDiffSummaries(...values: unknown[]): RawToolCallFileSumm
           removed:
             typeof display.deletions === "number" ? Math.max(0, Math.round(display.deletions)) : 0,
         },
-        patch:
-          typeof display.patch === "string"
+        patch: includeDetails
+          ? typeof display.patch === "string"
             ? display.patch
-            : readDisplayStructuredPatch(display, getPathLeaf(path)),
+            : readDisplayStructuredPatch(display, getPathLeaf(path))
+          : undefined,
       });
     }
   }
@@ -106,7 +110,9 @@ function readDisplayFileDiffSummaries(...values: unknown[]): RawToolCallFileSumm
 export function readRawToolCallFileSummaries(
   raw: unknown,
   source?: EditKindSource,
+  mode: "summary" | "detail" = "detail",
 ): RawToolCallFileSummary[] {
+  const includeDetails = mode === "detail";
   if (source && !hasWritableToolSemantic(source)) {
     // renderer 分流会把“存在 rawFileSummaries”视为 edit 证据。
     // 如果非写类工具也从 raw.changes 抽摘要，就会把 search / explore / execute 误导到 edit/delete。
@@ -115,15 +121,21 @@ export function readRawToolCallFileSummaries(
   }
 
   if (!isPlainRecord(raw)) {
-    const displaySummaries = readDisplayFileDiffSummaries(source?.output);
+    const displaySummaries = readDisplayFileDiffSummaries(includeDetails, source?.output);
     return displaySummaries.length > 0
       ? displaySummaries
-      : buildFallbackRawToolCallFileSummary(source);
+      : buildFallbackRawToolCallFileSummary(source, includeDetails);
   }
 
   const rawInput = readRawToolCallInput(raw);
   const rawOutput = isPlainRecord(raw.rawOutput) ? raw.rawOutput : null;
-  const displaySummaries = readDisplayFileDiffSummaries(raw, rawInput, rawOutput, source?.output);
+  const displaySummaries = readDisplayFileDiffSummaries(
+    includeDetails,
+    raw,
+    rawInput,
+    rawOutput,
+    source?.output,
+  );
   if (displaySummaries.length > 0) {
     return displaySummaries;
   }
@@ -204,19 +216,21 @@ export function readRawToolCallFileSummaries(
         : undefined);
     const descriptor = resolveFileDisplayDescriptor(path);
     let changeStat: { added: number; removed: number } | undefined;
-    if (oldText !== undefined && newText !== undefined) {
-      changeStat = computeLineChangeStat(oldText, newText);
-    } else if (changeType === "add" && newText !== undefined) {
-      changeStat = computeLineChangeStat(null, newText);
-    } else if (changeType === "delete" && oldText !== undefined) {
-      changeStat = computeLineChangeStat(oldText, "");
+    if (includeDetails) {
+      if (oldText !== undefined && newText !== undefined) {
+        changeStat = computeLineChangeStat(oldText, newText);
+      } else if (changeType === "add" && newText !== undefined) {
+        changeStat = computeLineChangeStat(null, newText);
+      } else if (changeType === "delete" && oldText !== undefined) {
+        changeStat = computeLineChangeStat(oldText, "");
+      }
     }
-    const explicitPatch = normalizeSingleFilePatch(readUnifiedDiffField(change), getPathLeaf(path));
-    const patch =
-      explicitPatch ??
-      (oldText !== undefined || newText !== undefined
-        ? buildUnifiedDiff(oldText ?? "", newText ?? "", getPathLeaf(path))
-        : null);
+    const patch = includeDetails
+      ? (normalizeSingleFilePatch(readUnifiedDiffField(change), getPathLeaf(path)) ??
+        (oldText !== undefined || newText !== undefined
+          ? buildUnifiedDiff(oldText ?? "", newText ?? "", getPathLeaf(path))
+          : null))
+      : undefined;
 
     summaries.push({
       path,
@@ -230,5 +244,7 @@ export function readRawToolCallFileSummaries(
     });
   }
 
-  return summaries.length > 0 ? summaries : buildFallbackRawToolCallFileSummary(source);
+  return summaries.length > 0
+    ? summaries
+    : buildFallbackRawToolCallFileSummary(source, includeDetails);
 }

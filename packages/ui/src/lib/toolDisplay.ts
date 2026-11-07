@@ -268,9 +268,12 @@ const TOOL_DISPLAY_STRATEGIES: ToolDisplayStrategy[] = [
 export function buildToolDisplayModel(
   toolCall: ChatToolCall,
   workspacePath: string,
+  includePreview = true,
 ): ToolDisplayModel {
-  const preview = getToolCallCodePreview(toolCall, workspacePath);
-  const contentPreview = getToolCallCodeContentPreview(toolCall, workspacePath);
+  const preview = includePreview ? getToolCallCodePreview(toolCall, workspacePath) : null;
+  const contentPreview = includePreview
+    ? getToolCallCodeContentPreview(toolCall, workspacePath)
+    : null;
   const errorText = getToolCallErrorText(toolCall);
   const identity = resolveToolCallIdentity(toolCall);
   // 用户要看的 plan 来自 tool result，不是 tool input。
