@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import type { NekAssistantMessage, NekAssistantMessageEvent } from "@zcode/shared/nek-protocol";
 import type { ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
@@ -54,6 +54,57 @@ function view(row: ToolCallRow) {
     </ZCodeIntlProvider>
   );
 }
+
+it("AQ-H1: history shows accepted selections and Other by question id, including duplicate prompts", () => {
+  const p = new NekConversationProjector({ sessionId: "s", schedule: () => () => {} });
+  const questions = [
+    { id: "q1", prompt: "Choose", options: [{ id: "a", label: "Alpha" }] },
+    {
+      id: "q2",
+      prompt: "Choose",
+      allow_multiple: true,
+      options: [
+        { id: "b", label: "Beta" },
+        { id: "c", label: "Gamma" },
+      ],
+    },
+  ];
+  p.handleEvent({
+    type: "tool_execution_start",
+    toolCallId: "ask",
+    toolName: "ask_question",
+    args: { questions },
+  });
+  p.handleEvent({
+    type: "tool_execution_end",
+    toolCallId: "ask",
+    toolName: "ask_question",
+    isError: false,
+    result: {
+      content: [{ type: "text", text: "q1: Alpha\nq2: Beta, Gamma; other: custom answer" }],
+      details: {
+        answers: [
+          { questionId: "q1", optionIds: ["a"], labels: ["Alpha"] },
+          {
+            questionId: "q2",
+            optionIds: ["b", "c"],
+            labels: ["Beta", "Gamma"],
+            other: "custom answer",
+          },
+        ],
+      },
+    },
+  });
+  const row = p.rows.window.find((row) => row.kind === "toolCall") as ToolCallRow;
+  const ui = render(view(row));
+  fireEvent.click(screen.getByText("2 个问题"));
+  expect(screen.getByText("Alpha")).toBeTruthy();
+  expect(screen.getByText("Beta，Gamma，custom answer")).toBeTruthy();
+  expect(screen.queryByText("未提供回答")).toBeNull();
+  ui.rerender(view(JSON.parse(JSON.stringify(row))));
+  expect(screen.getByText("Beta，Gamma，custom answer")).toBeTruthy();
+  p.dispose();
+});
 
 it("W1/W2: durable field deltas grow filename, diff and line count before tool completion", () => {
   const { p, emit, row, summary } = setup();

@@ -89,7 +89,10 @@ export function applyToolExecutionUpdate(
   partialResult: unknown,
 ): void {
   const text = toolResultText(partialResult);
-  const output: ToolOutput = { text, display: toolResultDisplay(toolName, partialResult, text) };
+  const output: ToolOutput = {
+    text,
+    display: toolResultDisplay(toolName, partialResult, text, args),
+  };
   upsertToolRow(ctx, toolCallId, toolName, (row) => ({
     ...row,
     status: "running",

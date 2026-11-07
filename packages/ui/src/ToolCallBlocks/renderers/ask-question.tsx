@@ -23,13 +23,17 @@ export function AskQuestionToolCallBlock(context: ToolCallBlockRenderContext) {
   const answers = readAskUserQuestionAnswers(toolCall) ?? data.answers;
   const wasAutomaticallyContinued =
     !isRunning &&
+    toolCall.toolName !== "ask_question" &&
     toolCall.status !== "failed" &&
     answers !== undefined &&
     Object.keys(answers).length === 0;
   const noAnswerText = intl.formatMessage({
-    id: wasAutomaticallyContinued
-      ? "chat.askQuestion.autoContinued"
-      : "chat.askQuestion.noAnswerProvided",
+    id:
+      answers === undefined && !isRunning
+        ? "chat.askQuestion.answerUnavailable"
+        : wasAutomaticallyContinued
+          ? "chat.askQuestion.autoContinued"
+          : "chat.askQuestion.noAnswerProvided",
   });
   const questionCount = data.questions.length;
   const isFailed = toolCall.status === "failed";
@@ -42,7 +46,7 @@ export function AskQuestionToolCallBlock(context: ToolCallBlockRenderContext) {
               <p className="text-ui-base font-medium leading-5 text-foreground">
                 {question.question}
               </p>
-              <p className="text-ui-base leading-5 text-foreground-subtle">
+              <p className="whitespace-pre-wrap text-ui-base leading-5 text-foreground-subtle">
                 {getAskUserQuestionAnswerText(question, answers, noAnswerText)}
               </p>
             </div>

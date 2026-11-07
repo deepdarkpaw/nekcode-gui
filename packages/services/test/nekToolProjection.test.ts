@@ -141,6 +141,64 @@ for (const { toolName, input } of cases) {
   }
 }
 
+test("TP-4: selected answers survive live wire frames and persisted history", () => {
+  const input = { questions: [{ id: "q1", prompt: "Choose", options: [{ id: "a", label: "A" }] }] };
+  const { assistant, result, entries } = messages("ask_question", input);
+  const answers = [{ questionId: "q1", optionIds: ["a"], labels: ["A"], other: "extra\nline" }];
+  result.details = { answers, unrelated: "must not cross the display boundary" };
+  const p = new NekConversationProjector({ sessionId: "s", schedule: () => () => {} });
+  const frames: ConversationTopicFrame[] = [];
+  p.subscribe((frame) => frames.push(frame));
+  p.handleEvent({ type: "message_start", message: assistant });
+  p.handleEvent({ type: "message_end", message: assistant });
+  p.handleEvent({
+    type: "tool_execution_end",
+    toolCallId: "tool-1",
+    toolName: "ask_question",
+    result,
+    isError: false,
+  });
+  p.flushNow();
+  const expected = { kind: "question_answers", answers };
+  assert.deepEqual(tool(replay(frames)).output?.display, expected);
+  p.loadSnapshot({ entries, leafId: "entry-1" });
+  assert.deepEqual(tool(replay(frames)).output?.display, expected);
+  p.dispose();
+});
+
+test("TP-5: edit result uses the actual patch rather than one replace_all input occurrence", () => {
+  const { assistant, result, entries } = messages("edit", {
+    file_path: "G:/project/a.txt",
+    old_string: "a",
+    new_string: "b",
+    replace_all: true,
+  });
+  const patch = "--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,3 @@\n-a\n+b\n context\n-a\n+b\n";
+  result.details = { patch };
+  const p = new NekConversationProjector({ sessionId: "s", schedule: () => () => {} });
+  const frames: ConversationTopicFrame[] = [];
+  p.subscribe((frame) => frames.push(frame));
+  p.handleEvent({ type: "message_start", message: assistant });
+  p.handleEvent({ type: "message_end", message: assistant });
+  p.handleEvent({
+    type: "tool_execution_end",
+    toolCallId: "tool-1",
+    toolName: "edit",
+    result,
+    isError: false,
+  });
+  p.flushNow();
+  const display = tool(replay(frames)).output?.display;
+  assert.equal(display?.kind, "file_diff");
+  assert.ok(display?.kind === "file_diff");
+  assert.equal(display.additions, 2);
+  assert.equal(display.deletions, 2);
+  assert.equal(display.patch, patch);
+  p.loadSnapshot({ entries, leafId: "entry-1" });
+  assert.deepEqual(tool(replay(frames)).output?.display, display);
+  p.dispose();
+});
+
 test("TP-2: an execution result without a prior row is projected immediately", () => {
   const projector = new NekConversationProjector({ sessionId: "s", now: () => 100 });
   try {

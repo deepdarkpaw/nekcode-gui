@@ -2884,6 +2884,7 @@ const enUS: Record<string, string> = {
   "chat.askQuestion.asked": "Asked",
   "chat.askQuestion.questionsCount": "{count} questions",
   "chat.askQuestion.noAnswerProvided": "No answer provided",
+  "chat.askQuestion.answerUnavailable": "Answer record unavailable",
   "chat.askQuestion.autoContinued": "No answer; continued automatically",
   "mode.label.agent": "Agent",
   "mode.label.plan": "Plan",

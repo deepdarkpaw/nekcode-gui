@@ -2730,6 +2730,7 @@ const zhCN: Record<string, string> = {
   "chat.askQuestion.asked": "已询问",
   "chat.askQuestion.questionsCount": "{count} 个问题",
   "chat.askQuestion.noAnswerProvided": "未提供回答",
+  "chat.askQuestion.answerUnavailable": "回答记录不可用",
   "chat.askQuestion.autoContinued": "未回答，已自动继续",
   "mode.label.agent": "Agent",
   "mode.label.plan": "计划",

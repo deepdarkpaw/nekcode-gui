@@ -34,11 +34,27 @@ export const toolCallListModelsDisplaySchema = z
   .strict();
 export type ToolCallListModelsDisplay = z.infer<typeof toolCallListModelsDisplaySchema>;
 
+/** Accepted question results, shared by live and history projection. */
+export const questionAnswersDisplaySchema = z.object({
+  kind: z.literal("question_answers"),
+  answers: z.array(
+    z.object({
+      questionId: z.string(),
+      optionIds: z.array(z.string()),
+      labels: z.array(z.string()),
+      other: z.string().optional(),
+    }),
+  ),
+});
+
 // toolCall 终态 output 的结构化展示模型。
 const toolResultDisplaySchema = z.discriminatedUnion("kind", [
   bashOutputDisplaySchema,
+  questionAnswersDisplaySchema,
   z.object({
     kind: z.literal("file_diff"),
+    /** Original tool patch; do not regenerate it from a single input replacement. */
+    patch: z.string().optional(),
     filePath: z.string().min(1),
     additions: z.number().int().nonnegative(),
     deletions: z.number().int().nonnegative(),

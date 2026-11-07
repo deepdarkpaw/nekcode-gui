@@ -31,7 +31,7 @@ export function mergeToolResultRow(
     ...row,
     toolName: args.toolName,
     status: args.isError ? "error" : "success",
-    output: { text, display: toolResultDisplay(args.toolName, args.result, text) },
+    output: { text, display: toolResultDisplay(args.toolName, args.result, text, row.input) },
     error: args.isError ? { code: "tool_error", message: text.slice(0, 2000) } : undefined,
     endedAt: args.endedAt,
   };

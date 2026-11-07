@@ -17,6 +17,7 @@ import type {
   NekThinkingContent,
   NekToolCall,
 } from "@zcode/shared/nek-protocol";
+import { projectNekToolDetails } from "./nekToolDisplays.js";
 
 /**
  * nek 数据 → v4 行的纯构造函数。
@@ -113,13 +114,13 @@ function safeJson(value: unknown): string {
 }
 
 /**
- * 工具结果的展示载荷。只映射 v4 已有 display 的类别：
- * bash 输出 → `bash_output`；其余保持纯文本（`details` 原样进 `input`/`error`，不进 display）。
+ * 工具结果的展示载荷：只投影有类型约束的结果事实，正文保持原样。
  */
 export function toolResultDisplay(
   toolName: string,
   result: unknown,
   outputText: string,
+  input?: unknown,
 ): ToolOutput["display"] | undefined {
   if (result === undefined) return undefined;
   const details = (result as { details?: unknown }).details;
@@ -133,7 +134,7 @@ export function toolResultDisplay(
       ...(typeof outputPath === "string" && outputPath !== "" ? { outputPath } : {}),
     };
   }
-  return undefined;
+  return projectNekToolDetails(toolName, details, input);
 }
 
 /** 计划预览（`nek.plan_preview` custom message）→ artifact 行：产出的 Markdown 文档。 */

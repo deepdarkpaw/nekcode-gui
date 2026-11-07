@@ -1,3 +1,5 @@
+import { questionAnswersDisplaySchema } from "@zcode/shared/zcode-protocol-v4";
+
 type ZCodeUserQuestionAnswers = Record<string, unknown>;
 
 type AskUserQuestionType = "single" | "multiple";
@@ -230,6 +232,7 @@ function normalizeQuestion(value: unknown, index: number): AskUserQuestionItem |
         : undefined;
   const normalizedOptions = lastOptionIsCustomInput ? options.slice(0, -1) : options;
   const type =
+    value.allow_multiple === true ||
     value.multiple === true ||
     value.multiSelect === true ||
     value.type === "multiple" ||
@@ -279,6 +282,16 @@ export function readAskUserQuestionAnswers(value: {
   output?: unknown;
   raw?: unknown;
 }): ZCodeUserQuestionAnswers | undefined {
+  const display = isPlainRecord(value.raw) ? value.raw.display : undefined;
+  if (isPlainRecord(display) && display.kind === "question_answers") {
+    const result = questionAnswersDisplaySchema.parse(display);
+    return Object.fromEntries(
+      result.answers.map((answer) => [
+        answer.questionId,
+        [...answer.labels, ...(answer.other ? [answer.other] : [])],
+      ]),
+    );
+  }
   const nestedOutputAnswers = readNestedAskUserQuestionAnswers(value.output);
   if (nestedOutputAnswers) {
     return nestedOutputAnswers;
@@ -329,7 +342,7 @@ export function getAskUserQuestionAnswerText(
   answers: ZCodeUserQuestionAnswers | undefined,
   noAnswerText: string,
 ) {
-  const value = answers?.[question.question] ?? answers?.[question.id];
+  const value = answers?.[question.id] ?? answers?.[question.question];
   if (Array.isArray(value)) {
     const values = value.map((item) => String(item).trim()).filter((item) => item.length > 0);
     return values.length > 0 ? values.join("，") : noAnswerText;

@@ -16,6 +16,7 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
+    "@pierre/diffs": "^1.1.22",
     "@zcode/rpc": "workspace:*",
     "@zcode/shared": "workspace:*",
     "ignore": "^5.3.2",
@@ -31,7 +32,6 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@pierre/diffs": "^1.1.22",
     "@types/node": "^25.5.0",
     "@types/proper-lockfile": "4.1.4",
     "@types/yauzl": "^2.10.3",
