@@ -587,7 +587,7 @@ function renderReadonlyRow(
 
 type GroupedToolItem = Extract<
   ConversationAssistantWorkRenderItem,
-  { kind: "exploreGroup" | "executeGroup" | "changesGroup" }
+  { kind: "exploreGroup" | "executeGroup" | "changesGroup" | "readGroup" }
 >;
 
 function GroupedToolPresentation({
@@ -614,7 +614,9 @@ function GroupedToolPresentation({
       ? labels.explore
       : item.kind === "executeGroup"
         ? labels.execute
-        : labels.changes;
+        : item.kind === "readGroup"
+          ? intl.formatMessage({ id: "chat.toolCall.readGroup.label" })
+          : labels.changes;
   const groupIcon =
     item.kind === "executeGroup" ? (
       <SquareTerminalIcon className="size-4 shrink-0" aria-hidden="true" />

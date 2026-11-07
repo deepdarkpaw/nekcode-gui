@@ -2440,8 +2440,8 @@ const zhCN: Record<string, string> = {
   "chat.toolCall.changesGroup.cancelled": "{count} 次取消",
   "chat.toolCall.changesGroup.running": "{count} 项进行中",
   "chat.toolCall.changesGroup.unknownStats": "部分操作无增删统计",
-  "chat.toolCall.changesGroup.scope":
-    "连续工具段内成功操作的累计增删，不是最终净差异。展开文件可查看逐次操作。",
+  "chat.toolCall.readGroup.label": "读取",
+  "chat.toolCall.readGroup.count": "共 {count} 次",
   "chat.toolCall.changesGroup.file.one": "{count} 个文件",
   "chat.toolCall.changesGroup.file.other": "{count} 个文件",
   "chat.toolCall.changesGroup.tool.one": "{count} 个工具",

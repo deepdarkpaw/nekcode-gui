@@ -163,7 +163,10 @@ function ConversationToolGroupRow({
   item,
   context,
 }: {
-  item: Extract<ConversationAssistantWorkRenderItem, { kind: "executeGroup" | "changesGroup" }>;
+  item: Extract<
+    ConversationAssistantWorkRenderItem,
+    { kind: "executeGroup" | "changesGroup" | "readGroup" }
+  >;
   context: ConversationRowRenderContext;
 }) {
   return (

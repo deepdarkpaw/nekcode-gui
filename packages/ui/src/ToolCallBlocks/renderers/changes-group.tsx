@@ -128,12 +128,8 @@ export function ChangesGroupToolCallBlock(context: ToolCallBlockRenderContext) {
         expandedPrimaryText={countText}
         diffCount={context.isOfficeMode ? undefined : renderDiffCount(totals)}
         isRunning={totals.running > 0}
-        title={intl.formatMessage({ id: "chat.toolCall.changesGroup.scope" })}
         renderContent={() => (
           <div className="ml-2 space-y-2 border-l border-border pl-3.5">
-            <p className="text-ui-sm text-foreground-subtlest">
-              {intl.formatMessage({ id: "chat.toolCall.changesGroup.scope" })}
-            </p>
             {files.map((file) => (
               <ChangeFile key={file.key} file={file} context={context} />
             ))}

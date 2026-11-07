@@ -124,6 +124,15 @@ function marker(rowId: number, payload: TimelineMarkerPayload): TimelineMarkerRo
   return { ...base(rowId), kind: "timelineMarker", marker: payload };
 }
 
+function assistantTextRow(rowId: number) {
+  return {
+    ...base(rowId),
+    kind: "assistantText" as const,
+    text: "note",
+    state: "complete" as const,
+  };
+}
+
 it("CG1: same-file operation counts are accumulated once, excluding failed/cancelled/running calls", () => {
   const rows = [edit(1), edit(2), edit(3, "error"), edit(4, "cancelled"), edit(5, "running")];
   const group = buildFileChangeGroup(rows.map(toolCallRowToLegacyNode), "/project");
@@ -141,42 +150,33 @@ it("CG1: same-file operation counts are accumulated once, excluding failed/cance
   ).toEqual(group.totals);
 });
 
+/** 只统计「普通行」里承载的工具行，用来断言聚合没有把某条工具藏掉或重复展示。 */
+function toolCallItemIds(items: ReturnType<typeof buildAssistantWorkRenderItems>): string[] {
+  return items.flatMap((item) =>
+    item.kind === "row" && item.row.kind === "toolCall" ? [item.row.toolCallId] : [],
+  );
+}
+
 it("CG2: text, terminal, plan, interactive tools and turn boundaries still stop write grouping", () => {
   for (const boundary of [
-    { ...tool(2), toolName: "bash", input: { command: "pnpm test" } },
-    { ...tool(2), toolName: "create_plan" },
-    { ...tool(2), toolName: "update_plan" },
-    { ...tool(2), toolName: "ask_question" },
-    { ...base(2), kind: "assistantText" as const, text: "note", state: "complete" as const },
+    { ...tool(3), toolName: "bash", input: { command: "pnpm test" } },
+    { ...tool(3), toolName: "create_plan" },
+    { ...tool(3), toolName: "update_plan" },
+    { ...tool(3), toolName: "ask_question" },
+    { ...base(3), kind: "assistantText" as const, text: "note", state: "complete" as const },
   ]) {
-    const items = buildAssistantWorkRenderItems([edit(1), boundary, edit(3)], {
+    const items = buildAssistantWorkRenderItems([edit(1), edit(2), boundary, edit(4), edit(5)], {
       messageStreamShowReasoning: false,
     });
     expect(items.filter((item) => item.kind === "changesGroup")).toHaveLength(2);
   }
+  // 单条写操作不建「更改」容器，各自成行。
   expect(
     buildAssistantWorkRenderItems([edit(1), { ...edit(2), turnId: "next" }], visibility),
   ).toHaveLength(2);
 });
 
-it("CG2b: reasoning steps and markers without UI never split the same file's writes", () => {
-  const rows = [
-    reasoning(1),
-    edit(2, "success", "/project/PRD.md"),
-    reasoning(3),
-    edit(4, "success", "/project/PRD.md"),
-  ];
-  for (const messageStreamShowReasoning of [true, false]) {
-    const items = buildAssistantWorkRenderItems(rows, { messageStreamShowReasoning });
-    const groups = items.filter((item) => item.kind === "changesGroup");
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.key).toBe("changes:2");
-    const group = buildFileChangeGroup(groups[0]!.rows.map(toolCallRowToLegacyNode), "/project");
-    expect(group.files).toHaveLength(1);
-    expect(group.files[0]?.summary?.path).toBe("/project/PRD.md");
-    expect(group.totals).toMatchObject({ completed: 2, added: 2, removed: 2, unknown: 0 });
-  }
-
+it("CG2b: markers without UI keep writes adjacent while visible markers split them", () => {
   const withoutUi = [
     edit(1),
     marker(2, { type: "retryNotice", attempt: 1, reasonCode: "rate_limit" }),
@@ -188,91 +188,30 @@ it("CG2b: reasoning steps and markers without UI never split the same file's wri
   // 有 UI 的 marker（compact / modelChange）仍然是硬边界。
   expect(
     buildAssistantWorkRenderItems(
-      [edit(1), marker(2, { type: "compact", origin: "auto", status: "success" }), edit(3)],
+      [
+        edit(1),
+        edit(2),
+        marker(3, { type: "compact", origin: "auto", status: "success" }),
+        edit(4),
+        edit(5),
+      ],
       visibility,
     ).filter((item) => item.kind === "changesGroup"),
   ).toHaveLength(2);
 });
 
-it("CG2c: same-file reads join the Changes group across reasoning steps", () => {
-  const rows = [
-    readTool(1),
-    reasoning(2),
-    edit(3, "success", "/project/PRD.md"),
-    reasoning(4),
-    readTool(5),
-    edit(6, "success", "/project/PRD.md"),
-  ];
-  const items = buildAssistantWorkRenderItems(rows, visibility);
-  expect(items.map((item) => item.kind)).toEqual(["reasoningGroup", "changesGroup"]);
-  const groups = items.filter((item) => item.kind === "changesGroup");
-  expect(groups).toHaveLength(1);
-  expect(groups[0]!.rows.map((row) => row.toolCallId)).toEqual([
+it("CG2e: relative and absolute reads of one file converge to a single read group", () => {
+  const items = buildAssistantWorkRenderItems(
+    [readTool(1, "src/main.ts"), readTool(2, "/project/src/main.ts")],
+    visibility,
+  );
+  expect(items.map((item) => item.kind)).toEqual(["readGroup"]);
+  const group = items[0]!;
+  expect(group.kind === "readGroup" && group.rows.map((row) => row.toolCallId)).toEqual([
     "read-1",
-    "edit-3",
-    "read-5",
-    "edit-6",
+    "read-2",
   ]);
-  const group = buildFileChangeGroup(groups[0]!.rows.map(toolCallRowToLegacyNode), "/project");
-  expect(group.files).toHaveLength(1);
-  expect(group.files[0]?.calls.map((call) => call.toolCall.toolId)).toEqual([
-    "read-1",
-    "edit-3",
-    "read-5",
-    "edit-6",
-  ]);
-  // 读取不是写操作：不虚报成功次数，也不会因为没有 changeStat 触发“部分操作无增删统计”。
-  expect(group.files[0]?.stats).toMatchObject({
-    completed: 2,
-    reads: 2,
-    added: 2,
-    removed: 2,
-    unknown: 0,
-  });
-  expect(group.totals).toMatchObject({ completed: 2, added: 2, removed: 2, unknown: 0 });
-  expect(items.filter((item) => item.kind === "row")).toHaveLength(0);
-
-  const ui = render(view(rows), { wrapper });
-  fireEvent.click(screen.getByText("更改"));
-  fireEvent.click(screen.getByText("PRD.md"));
-  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
-  expect(
-    [...ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")].map((node) =>
-      node.getAttribute("data-tool-call-id"),
-    ),
-  ).toEqual(["read-1", "edit-3", "read-5", "edit-6"]);
-});
-
-it("CG2d: reads and searches of other files stay in Explore inside the same stage", () => {
-  const rows = [
-    readTool(1),
-    grepTool(2),
-    readTool(3, "/project/OTHER.md"),
-    edit(4, "success", "/project/PRD.md"),
-  ];
-  const items = buildAssistantWorkRenderItems(rows, visibility);
-  expect(items.map((item) => item.kind)).toEqual(["exploreGroup", "changesGroup"]);
-  const explore = items.filter((item) => item.kind === "exploreGroup");
-  expect(explore[0]!.rows.map((row) => row.toolCallId)).toEqual(["grep-2", "read-3"]);
-  const changes = items.filter((item) => item.kind === "changesGroup");
-  expect(changes[0]!.rows.map((row) => row.toolCallId)).toEqual(["read-1", "edit-4"]);
-});
-
-it("CG2e: relative read paths and absolute edit paths resolve to the same file group", () => {
-  const rows = [
-    readTool(1, "src/main.ts"),
-    edit(2, "success", "/project/src/main.ts"),
-    readTool(3, "src/main.ts"),
-    edit(4, "success", "/project/src/main.ts"),
-  ];
-  const items = buildAssistantWorkRenderItems(rows, visibility);
-  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
-  const groups = items.filter((item) => item.kind === "changesGroup");
-  const group = buildFileChangeGroup(groups[0]!.rows.map(toolCallRowToLegacyNode), "/project");
-  expect(group.files).toHaveLength(1);
-  expect(group.files[0]?.key).toBe("/project/src/main.ts");
-  expect(group.files[0]?.calls).toHaveLength(4);
-  expect(group.totals).toMatchObject({ completed: 2, added: 2, removed: 2, unknown: 0 });
+  expect(group.kind === "readGroup" && group.node.toolCall.input).toEqual({ path: "src/main.ts" });
 });
 
 it("CG3: dozens of edits show one collapsed file summary and retain expansion as calls arrive", () => {
@@ -298,6 +237,117 @@ it("CG4: write without a before-image does not invent a deletion count", () => {
   const group = buildFileChangeGroup([toolCallRowToLegacyNode(row)], "/project");
   expect(group.totals).toMatchObject({ completed: 1, unknown: 1, added: 0, removed: 0 });
   expect(group.files[0]?.summary?.changeStat).toBeUndefined();
+});
+
+it("RD1: adjacent reads of one file collapse into a single read group", () => {
+  const rows = [readTool(1), readTool(2), readTool(3)];
+  const items = buildAssistantWorkRenderItems(rows, visibility);
+  expect(items.map((item) => item.kind)).toEqual(["readGroup"]);
+  const group = items[0]!;
+  expect(group.kind === "readGroup" && group.rows.map((row) => row.toolCallId)).toEqual([
+    "read-1",
+    "read-2",
+    "read-3",
+  ]);
+  expect(group.key).toBe("reads:1");
+  expect(group.kind === "readGroup" && group.node.toolCall.input).toEqual({
+    path: "/project/PRD.md",
+  });
+  // 没有任何一条读取散落成普通行。
+  expect(toolCallItemIds(items)).toEqual([]);
+});
+
+it("RD2: different files never merge and a single read keeps its own row", () => {
+  const differentFiles = buildAssistantWorkRenderItems(
+    [readTool(1), readTool(2, "/project/ARD.md")],
+    visibility,
+  );
+  expect(differentFiles.every((item) => item.kind !== "readGroup")).toBe(true);
+  expect(toolCallItemIds(differentFiles)).toEqual(["read-1", "read-2"]);
+  expect(
+    buildAssistantWorkRenderItems([readTool(1), readTool(2)], visibility).filter(
+      (item) => item.kind === "readGroup",
+    ),
+  ).toHaveLength(1);
+});
+
+it("RD2b: searches keep their own Explore group and never swallow adjacent reads", () => {
+  const items = buildAssistantWorkRenderItems([grepTool(1), readTool(2), readTool(3)], visibility);
+  expect(items.map((item) => item.kind)).toEqual(["row", "readGroup"]);
+  expect(toolCallItemIds(items)).toEqual(["grep-1"]);
+});
+
+it("RD3: thinking and assistant text break read merging", () => {
+  const acrossReasoning = buildAssistantWorkRenderItems(
+    [readTool(1), reasoning(2), readTool(3)],
+    visibility,
+  );
+  expect(toolCallItemIds(acrossReasoning)).toEqual(["read-1", "read-3"]);
+  expect(acrossReasoning.every((item) => item.kind !== "readGroup")).toBe(true);
+
+  const acrossText = buildAssistantWorkRenderItems(
+    [readTool(1), assistantTextRow(2), readTool(3)],
+    visibility,
+  );
+  expect(toolCallItemIds(acrossText)).toEqual(["read-1", "read-3"]);
+  expect(acrossText.every((item) => item.kind !== "readGroup")).toBe(true);
+});
+
+it("RD4: adjacent writes of one file form one changes group", () => {
+  const rows = [edit(1), edit(2)];
+  const items = buildAssistantWorkRenderItems(rows, visibility);
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const group = buildFileChangeGroup(rows.map(toolCallRowToLegacyNode), "/project");
+  expect(group.files).toHaveLength(1);
+  expect(group.totals).toMatchObject({ completed: 2, added: 2, removed: 2, unknown: 0 });
+  // reads 统计字段已被删除：读取永远不进入更改组。
+  expect(group.files[0]?.stats).not.toHaveProperty("reads");
+});
+
+it("RD5: a single write keeps its own row and thinking splits writes", () => {
+  expect(buildAssistantWorkRenderItems([edit(1)], visibility).map((item) => item.kind)).toEqual([
+    "row",
+  ]);
+  const acrossReasoning = buildAssistantWorkRenderItems(
+    [edit(1), reasoning(2), edit(3)],
+    visibility,
+  );
+  expect(toolCallItemIds(acrossReasoning)).toEqual(["edit-1", "edit-3"]);
+  expect(acrossReasoning.every((item) => item.kind !== "changesGroup")).toBe(true);
+});
+
+it("RD6: one changes group carries every adjacent write per file", () => {
+  const rows = [edit(1), edit(2, "success", "/project/ARD.md"), edit(3)];
+  const items = buildAssistantWorkRenderItems(rows, visibility);
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const group = items[0]!;
+  const fileGroup = buildFileChangeGroup(
+    group.kind === "changesGroup" ? group.rows.map(toolCallRowToLegacyNode) : [],
+    "/project",
+  );
+  expect(fileGroup.files).toHaveLength(2);
+  expect(fileGroup.files.map((file) => file.calls.length)).toEqual([2, 1]);
+  expect(fileGroup.totals.completed).toBe(3);
+});
+
+it("RD7: reads and writes of one file never fuse", () => {
+  const rows = [readTool(1), edit(2), readTool(3), edit(4)];
+  const items = buildAssistantWorkRenderItems(rows, visibility);
+  expect(items).toHaveLength(4);
+  expect(items.every((item) => item.kind === "row")).toBe(true);
+  expect(toolCallItemIds(items)).toEqual(["read-1", "edit-2", "read-3", "edit-4"]);
+});
+
+it("RD8: repeated reads show one summary and the changes hint is gone", () => {
+  const ui = render(view([readTool(1), readTool(2), readTool(3)]), { wrapper });
+  expect(screen.getAllByText("读取")).toHaveLength(1);
+  fireEvent.click(screen.getByText("读取"));
+  expect(ui.container.querySelectorAll("[data-read-group] [data-tool-call-id]")).toHaveLength(3);
+
+  const changes = render(view([edit(11), edit(12)]), { wrapper });
+  fireEvent.click(screen.getByText("更改"));
+  expect(changes.container.textContent).not.toContain("不是最终净差异");
+  expect(changes.container.textContent).not.toContain("展开文件可查看逐次操作");
 });
 
 it("merges consecutive thinking without losing text, known durations or row anchors", () => {

@@ -19,6 +19,7 @@ import { NekControlToolCallBlock } from "@/ToolCallBlocks/renderers/nek-tools.js
 import { McpToolCallBlock, readMcpToolPresentation } from "@/ToolCallBlocks/renderers/mcp.js";
 import { PlanGuidanceToolCallBlock } from "@/ToolCallBlocks/renderers/plan-guidance.js";
 import { ReadToolCallBlock } from "@/ToolCallBlocks/renderers/read.js";
+import { ReadGroupToolCallBlock } from "@/ToolCallBlocks/renderers/read-group.js";
 import { ReadSessionContextToolCallBlock } from "@/ToolCallBlocks/renderers/read-session-context.js";
 import { RespondToCoordinatorToolCallBlock } from "@/ToolCallBlocks/renderers/respond-to-coordinator.js";
 import { SearchToolCallBlock } from "@/ToolCallBlocks/renderers/search.js";
@@ -42,6 +43,9 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
   }
   if (context.toolCallNode.toolCall.kind === "executeGroup") {
     return ExecuteGroupToolCallBlock;
+  }
+  if (context.toolCallNode.toolCall.kind === "readGroup") {
+    return ReadGroupToolCallBlock;
   }
 
   const identity = resolveToolCallIdentity(context.toolCallNode.toolCall);

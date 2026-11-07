@@ -2587,8 +2587,8 @@ const enUS: Record<string, string> = {
   "chat.toolCall.changesGroup.cancelled": "{count} cancelled",
   "chat.toolCall.changesGroup.running": "{count} in progress",
   "chat.toolCall.changesGroup.unknownStats": "Some operations have no line statistics",
-  "chat.toolCall.changesGroup.scope":
-    "Cumulative additions and deletions from successful operations in this consecutive tool segment, not a final net diff. Expand a file to inspect its operations.",
+  "chat.toolCall.readGroup.label": "Read",
+  "chat.toolCall.readGroup.count": "{count} reads",
   "chat.toolCall.changesGroup.file.one": "{count} file",
   "chat.toolCall.changesGroup.file.other": "{count} files",
   "chat.toolCall.changesGroup.tool.one": "{count} tool",
