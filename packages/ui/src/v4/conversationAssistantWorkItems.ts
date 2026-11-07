@@ -264,44 +264,54 @@ function buildChangesGroup(rows: ToolCallRow[], stageTailIsRunning: boolean) {
  * `read → reasoning → edit → read → edit` 只剩一个 Changes，而不是一串碎片行；
  * 读取不是写操作，只进入文件明细，不参与任何写次数与增删统计。
  */
+function pushReasoningItem(items: ConversationAssistantWorkRenderItem[], rows: ReasoningRow[]) {
+  if (rows.length === 1) items.push(rowItem(rows[0]!));
+  else if (rows.length > 1) items.push(buildReasoningGroup(rows));
+}
+
 function buildFileWorkStageItems(
   stageRows: readonly AssistantWorkRow[],
   options: FileWorkStageOptions,
 ): ConversationAssistantWorkRenderItem[] {
   const items: ConversationAssistantWorkRenderItem[] = [];
-  const reasoningRows: ReasoningRow[] = [];
-  const toolRows: ToolCallRow[] = [];
-  for (const row of stageRows) {
-    if (row.kind === "reasoning") reasoningRows.push(row);
-    else if (isToolCallRow(row)) toolRows.push(row);
-  }
-
-  if (reasoningRows.length === 1) items.push(rowItem(reasoningRows[0]!));
-  else if (reasoningRows.length > 1) items.push(buildReasoningGroup(reasoningRows));
-
+  const lastToolIndex = stageRows.findLastIndex(isToolCallRow);
+  const bodyRows = lastToolIndex < 0 ? [] : stageRows.slice(0, lastToolIndex + 1);
+  const trailing = stageRows.slice(lastToolIndex + 1) as ReasoningRow[];
+  const toolRows = bodyRows.filter(isToolCallRow);
   const editedPaths = collectEditedPaths(toolRows);
-  const changeRows: ToolCallRow[] = [];
-  const exploreRows: ToolCallRow[] = [];
-  for (const row of toolRows) {
-    const target =
-      isChangesToolCallRow(row) || isSameFileReadRow(row, editedPaths) ? changeRows : exploreRows;
-    target.push(row);
+  const isChangeEntry = (row: ToolCallRow) =>
+    isChangesToolCallRow(row) || isSameFileReadRow(row, editedPaths);
+  const changeRows = toolRows.filter(isChangeEntry);
+  const exploreRows = toolRows.filter((row) => !isChangeEntry(row));
+  const hasExploreGroup = options.enableExploreGrouping && exploreRows.length > 1;
+  const hasChangesGroup = options.enableChangesGrouping && changeRows.length > 0;
+  // 未发生工具聚合时（如单个搜索工具前后各有思考），严格保持相邻思考与工具的先后顺序。
+  if (!hasExploreGroup && !hasChangesGroup) {
+    let run: ReasoningRow[] = [];
+    for (const row of bodyRows) {
+      if (row.kind === "reasoning") run.push(row);
+      else {
+        pushReasoningItem(items, run);
+        run = [];
+        items.push(rowItem(row));
+      }
+    }
+    pushReasoningItem(items, run);
+    pushReasoningItem(items, trailing);
+    return items;
   }
 
-  // 单个只读工具保留自身语义与渲染，只有出现第二个同类调用才成立 Explore 容器。
-  if (options.enableExploreGrouping && exploreRows.length > 1) {
-    items.push(
-      buildToolGroup(exploreRows, options.tailIsRunning && changeRows.length === 0, EXPLORE_GROUP),
-    );
-  } else {
-    for (const row of exploreRows) items.push(rowItem(row));
-  }
-
-  if (options.enableChangesGrouping && changeRows.length > 0) {
-    items.push(buildChangesGroup(changeRows, options.tailIsRunning));
-  } else {
-    for (const row of changeRows) items.push(rowItem(row));
-  }
+  pushReasoningItem(
+    items,
+    bodyRows.filter((row): row is ReasoningRow => row.kind === "reasoning"),
+  );
+  const toolsAtTail = options.tailIsRunning && trailing.length === 0;
+  if (hasExploreGroup) {
+    items.push(buildToolGroup(exploreRows, toolsAtTail && changeRows.length === 0, EXPLORE_GROUP));
+  } else for (const row of exploreRows) items.push(rowItem(row));
+  if (hasChangesGroup) items.push(buildChangesGroup(changeRows, toolsAtTail));
+  else for (const row of changeRows) items.push(rowItem(row));
+  pushReasoningItem(items, trailing);
   return items;
 }
 
