@@ -41,7 +41,11 @@ export function InteractionActionButton({
       data-interaction-action={labelId}
       onClick={() => void handle.run()}
     >
-      {handle.pending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : icon}
+      {handle.pending ? (
+        <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+      ) : (
+        icon
+      )}
       {label}
     </Button>
   );

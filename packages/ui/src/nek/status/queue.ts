@@ -85,14 +85,31 @@ export interface QueueKeyInput {
   metaKey?: boolean;
   isComposing?: boolean;
   keyCode?: number;
+  /** React 合成事件的原生键盘事件，IME 组字期间 `isComposing` 只在原生事件上。 */
+  nativeEvent?: { isComposing?: boolean; keyCode?: number };
   focusTarget?: "editor" | "other";
 }
 
 export type QueueEditKeyCommand = "submit" | "cancel";
 
+/**
+ * 队列多行编辑的按键语义：
+ * - Enter（无 Shift，非 IME 组字）提交；
+ * - Shift+Enter 是换行，必须原样放行给文本框；
+ * - Escape 取消编辑。
+ */
 export function resolveQueueEditKey(input: QueueKeyInput): QueueEditKeyCommand | null {
-  if (input.isComposing || input.keyCode === 229) return null;
-  if (input.key === "Enter" && !input.shiftKey && !input.ctrlKey && !input.metaKey) {
+  if (
+    input.isComposing ||
+    input.keyCode === 229 ||
+    input.nativeEvent?.isComposing === true ||
+    input.nativeEvent?.keyCode === 229
+  ) {
+    return null;
+  }
+  if (input.key === "Enter") {
+    if (input.shiftKey === true) return null;
+    if (input.ctrlKey === true || input.metaKey === true) return null;
     return "submit";
   }
   if (
