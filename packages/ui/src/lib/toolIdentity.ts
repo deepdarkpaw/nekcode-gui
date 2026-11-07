@@ -198,9 +198,7 @@ function isPlanModeExitToken(value: string): boolean {
 }
 
 export function resolveToolCallIdentity(toolCall: ToolIdentityLike): ToolCallIdentity {
-  // nek 的模式切换不是计划文档；只有明确的计划预览行才复用 ZCode 计划卡。
-  if (toolCall.toolName === "switch_mode")
-    return { toolName: "switch_mode", family: "unknown", source: "toolName", isLegacy: false };
+  // nek 的计划预览行复用 ZCode 计划卡：它是会话产出的计划文档，不是模式切换工具调用。
   if (toolCall.toolName === "nek.plan")
     return { toolName: "nek.plan", family: "switch-mode", source: "toolName", isLegacy: false };
   const rawNames = readRawToolNameCandidates(toolCall.raw);
@@ -211,6 +209,9 @@ export function resolveToolCallIdentity(toolCall: ToolIdentityLike): ToolCallIde
     return identityFromLegacyFamily("Explore", "explore", "legacy-kind");
   }
 
+  // 已登记的现役工具名必须先于所有 legacy 启发式命中：
+  // `create_plan` 会被 `^create_` 当成文件写入、`update_plan` 会被当成 todo，
+  // 一旦落到那些分支，工具卡就会退回通用 Parameters / Todo 形态。
   for (const candidate of [
     { value: toolCall.toolName, source: "toolName" as const },
     { value: toolCall.kind, source: "kind" as const },

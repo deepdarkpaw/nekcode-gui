@@ -15,6 +15,7 @@ import { FallbackToolCallBlock } from "@/ToolCallBlocks/renderers/fallback.js";
 import { ListModelsToolCallBlock } from "@/ToolCallBlocks/renderers/list-models.js";
 import { GoalToolCallBlock } from "@/ToolCallBlocks/renderers/goal.js";
 import { NodeReplToolCallBlock } from "@/ToolCallBlocks/renderers/node-repl.js";
+import { NekControlToolCallBlock } from "@/ToolCallBlocks/renderers/nek-tools.js";
 import { McpToolCallBlock, readMcpToolPresentation } from "@/ToolCallBlocks/renderers/mcp.js";
 import { PlanGuidanceToolCallBlock } from "@/ToolCallBlocks/renderers/plan-guidance.js";
 import { ReadToolCallBlock } from "@/ToolCallBlocks/renderers/read.js";
@@ -89,6 +90,8 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
       return EditToolCallBlock;
     case "explore":
       return ExploreToolCallBlock;
+    case "nek-control":
+      return NekControlToolCallBlock;
     case "switch-mode":
       return SwitchModeToolCallBlock;
     case "search":

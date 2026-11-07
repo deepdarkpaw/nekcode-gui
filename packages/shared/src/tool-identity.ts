@@ -28,6 +28,22 @@ export const ZCODE_KNOWN_TOOL_NAMES = [
   "Agent",
   "Task",
   "Skill",
+  // nek 原生工具。未登记时 UI identity 会退回 unknown / legacy 启发式，
+  // `create_plan` 被当成文件写入、`update_plan` 被当成 todo，
+  // 其余工具直接落到 raw fallback 卡把原始参数 JSON 摊进聊天区。
+  "subagent",
+  "powershell",
+  "find",
+  "ast_grep",
+  "tool_search",
+  "await",
+  "stop_subagent",
+  "create_plan",
+  "update_plan",
+  "switch_mode",
+  "read_mcp_resource",
+  "list_mcp_resources",
+  "list_mcp_resource_templates",
 ] as const;
 
 export type ZCodeKnownToolName = (typeof ZCODE_KNOWN_TOOL_NAMES)[number];
@@ -45,6 +61,7 @@ export type ZCodeToolFamily =
   | "session-context"
   | "message"
   | "task-control"
+  | "nek-control"
   | "node-repl";
 
 const TOOL_FAMILY_BY_NAME: Record<ZCodeKnownToolName, ZCodeToolFamily> = {
@@ -80,6 +97,21 @@ const TOOL_FAMILY_BY_NAME: Record<ZCodeKnownToolName, ZCodeToolFamily> = {
   Agent: "agent",
   Task: "agent",
   Skill: "skill",
+  // nek 子代理编排与运行时控制工具：统一走单行语义摘要，
+  // 不能让它们落进 fallback / file-write / todo 的任何启发式分支。
+  subagent: "agent",
+  powershell: "shell",
+  find: "search",
+  ast_grep: "search",
+  tool_search: "nek-control",
+  await: "nek-control",
+  stop_subagent: "nek-control",
+  create_plan: "nek-control",
+  update_plan: "nek-control",
+  switch_mode: "nek-control",
+  read_mcp_resource: "nek-control",
+  list_mcp_resources: "nek-control",
+  list_mcp_resource_templates: "nek-control",
 };
 
 const TOOL_NAME_BY_LOWER = new Map<string, ZCodeKnownToolName>(

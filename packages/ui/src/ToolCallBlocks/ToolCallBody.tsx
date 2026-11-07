@@ -78,7 +78,9 @@ export function ToolCallBody({
           {displayModel.showOutput ? (
             <ToolOutput errorText={toolCall.error} output={toolCall.output} />
           ) : null}
-          {displayModel.showKind ? (
+          {/* v4 协议里 kind 直接复用 toolName，摘要行已经展示了这份身份；
+              再在底部打印一遍裸 kind 只会让每个工具卡多出一行实现细节。 */}
+          {displayModel.showKind && toolCall.kind !== toolCall.toolName ? (
             <p className="text-ui-base text-muted-foreground">{toolCall.kind}</p>
           ) : null}
         </>
