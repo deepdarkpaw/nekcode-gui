@@ -254,6 +254,24 @@ const nodeReplToolStrategy: ToolDisplayStrategy = {
   },
 };
 
+const nekControlToolStrategy: ToolDisplayStrategy = {
+  matches(context) {
+    return context.identity.family === "nek-control";
+  },
+  build() {
+    // nek 控制类工具（计划、模式切换、子代理编排、MCP 资源）的 input 是模型给 runtime
+    // 的控制参数，专用 renderer 已经把语义摊平成单行摘要。通用 Parameters / kind 只会
+    // 把原始 JSON 重新摊回聊天区，因此这里全部关闭。
+    return {
+      inlinePreview: { type: "none" },
+      showSummaryFileLink: false,
+      showInput: false,
+      showOutput: false,
+      showKind: false,
+    };
+  },
+};
+
 const TOOL_DISPLAY_STRATEGIES: ToolDisplayStrategy[] = [
   diffToolStrategy,
   readToolStrategy,
@@ -261,6 +279,7 @@ const TOOL_DISPLAY_STRATEGIES: ToolDisplayStrategy[] = [
   executeToolStrategy,
   searchToolStrategy,
   goalToolStrategy,
+  nekControlToolStrategy,
   nodeReplToolStrategy,
   genericImageStrategy,
 ];

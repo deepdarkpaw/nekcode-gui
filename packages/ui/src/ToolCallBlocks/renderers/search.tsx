@@ -17,6 +17,44 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * AST 搜索的主文本就是结构化查询本身，不再是 "查找 {query}" 句式：
+ * 摘要行已经用「AST 搜索」标明动作，再包一层模板会重复动词。
+ */
+function getAstSearchPrimaryText(input: unknown): string | null {
+  if (!isPlainRecord(input)) {
+    return null;
+  }
+
+  for (const key of ["pattern", "path", "lang"] as const) {
+    const candidate = input[key];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
+function getSearchKindLabel(
+  intl: IntlLike,
+  state: { isAstSearch: boolean; isDirectoryListing: boolean; isRunning: boolean },
+): string {
+  if (state.isDirectoryListing) {
+    return "ls";
+  }
+  if (state.isAstSearch) {
+    return intl.formatMessage({
+      id: state.isRunning
+        ? "chat.toolCall.search.searchingAst"
+        : "chat.toolCall.search.searchedAst",
+    });
+  }
+  return intl.formatMessage({
+    id: state.isRunning ? "chat.toolCall.search.searching" : "chat.toolCall.kind.search",
+  });
+}
+
 export function getSearchPrimaryText(intl: IntlLike, input: unknown, toolName?: string): string {
   if (normalizeZCodeToolName(toolName) === "ls") {
     const path = isPlainRecord(input) && typeof input.path === "string" ? input.path.trim() : "";
@@ -98,10 +136,14 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCallNode, isRunning, statusLabel, errorText } = context;
   const { toolCall } = toolCallNode;
-  const isDirectoryListing = normalizeZCodeToolName(toolCall.toolName) === "ls";
-  const searchPrimaryText = getSearchPrimaryText(intl, toolCall.input, toolCall.toolName);
+  const normalizedToolName = normalizeZCodeToolName(toolCall.toolName);
+  const isDirectoryListing = normalizedToolName === "ls";
+  const isAstSearch = normalizedToolName === "ast_grep";
+  const searchPrimaryText = isAstSearch
+    ? getAstSearchPrimaryText(toolCall.input)
+    : getSearchPrimaryText(intl, toolCall.input, toolCall.toolName);
   const primaryText = useMemo(
-    () => <span className="truncate">{searchPrimaryText}</span>,
+    () => (searchPrimaryText ? <span className="truncate">{searchPrimaryText}</span> : null),
     [searchPrimaryText],
   );
 
@@ -114,11 +156,7 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
         canToggle={isDirectoryListing}
         kindLabel={
           context.kindLabelOverride ??
-          (isDirectoryListing
-            ? "ls"
-            : intl.formatMessage({
-                id: isRunning ? "chat.toolCall.search.searching" : "chat.toolCall.kind.search",
-              }))
+          getSearchKindLabel(intl, { isAstSearch, isDirectoryListing, isRunning })
         }
         sourceLabel={context.sourceLabel}
         // search 的主文本直接拼成一句完整摘要，不再拆 secondaryText；
