@@ -2061,6 +2061,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/ui/src/ToolCallBlocks/renderers/node-repl.tsx",
   "packages/ui/src/ToolCallBlocks/renderers/nodeReplImageGrid.tsx",
   "packages/ui/src/ToolCallBlocks/renderers/plan-guidance.tsx",
+  "packages/ui/src/ToolCallBlocks/renderers/read-group.tsx",
   "packages/ui/src/ToolCallBlocks/renderers/read-session-context.tsx",
   "packages/ui/src/ToolCallBlocks/renderers/read.tsx",
   "packages/ui/src/ToolCallBlocks/renderers/respond-to-coordinator.tsx",
