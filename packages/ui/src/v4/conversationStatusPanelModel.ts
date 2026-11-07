@@ -65,11 +65,9 @@ function buildGitModel({
   }
   const added = gitWorktreeChangeSummary?.added ?? 0;
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
-  // v4 之前只要是 Git repository 就创建 Git model，导致 clean repo
-  // 也挂出右上角状态卡；旧 ChatView 只在 worktree 有行级变化时展示 Git Tools。
-  if (added + removed <= 0) {
-    return null;
-  }
+  // 只要 workspace 是 Git repository 就必须给出 Git model：环境分区的「更改」入口、
+  // 分支切换与提交/推送菜单都挂在它上面。按行级变化决定有无会让 clean repo、
+  // 未跟踪/二进制/重命名改动（行统计为 0）和待推送 commit（ahead > 0）直接丢掉整个分区。
   const isClean =
     !gitSummary.isDirty &&
     gitDirtyFileCount === 0 &&

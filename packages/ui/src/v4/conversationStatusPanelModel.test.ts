@@ -90,14 +90,22 @@ describe("conversation status panel model", () => {
     { gitSummary: { ...GIT, isGitAvailable: false } },
     { gitSummary: { ...GIT, isRepository: false } },
     { gitSummary: GIT, isOfficeMode: true },
-    { gitSummary: GIT, gitWorktreeChangeSummary: { added: 0, removed: 0 } },
-  ])("does not show git without visible worktree changes or in office mode (%j)", (input) => {
+  ])("does not show git without a repository or in office mode (%j)", (input) => {
     const model = buildConversationStatusPanelModel({
       gitWorktreeChangeSummary: { added: 12, removed: 4 },
       ...input,
     });
     expect(model.git).toBeNull();
     expect(model.hasContent).toBe(false);
+  });
+
+  it("keeps the git entrance and branch controls available on a clean repository", () => {
+    const model = buildConversationStatusPanelModel({
+      gitSummary: { ...GIT, isDirty: false, ahead: 0, behind: 0 },
+      gitWorktreeChangeSummary: { added: 0, removed: 0 },
+    });
+    expect(model.git).toMatchObject({ added: 0, removed: 0, isClean: true });
+    expect(model.hasContent).toBe(true);
   });
 
   it("preserves a goal as panel content independently of git or running work", () => {

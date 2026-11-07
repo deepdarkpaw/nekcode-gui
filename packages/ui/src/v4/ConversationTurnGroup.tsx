@@ -865,7 +865,12 @@ function ConversationTurnGroupImpl({
     <section
       data-turn-id={unit.turnId}
       data-turn-key={unit.key}
-      className="relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5 pt-14"
+      // 只含维护型分割线（modelChange / compact）的 unit 没有正文，
+      // 继续按普通轮留 pt-14 + pb-5 会让相邻两条分割线之间出现几十像素空白。
+      className={cn(
+        "relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6",
+        unit.timelineOnly ? "pt-1 pb-1" : "pt-14 pb-5",
+      )}
     >
       {unit.leadingBoundaryRows.map((row) => (
         <ConversationTurnRow

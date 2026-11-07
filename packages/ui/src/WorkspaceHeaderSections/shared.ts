@@ -68,6 +68,12 @@ export interface WorkspaceHeaderActionSectionProps {
   onToggleTerminal: () => void;
   onToggleSidePane: () => void;
   toggleSidePaneShortcutLabel?: string;
+  /** 右侧 Git 改动树（GitPane）是否已打开。 */
+  isGitOpen?: boolean;
+  /** 一键打开/收起右侧 Git 改动树。 */
+  onToggleGit?: () => void;
+  /** 当前 workspace 是 Git repository 且非 office 模式时才挂出 Git 入口。 */
+  showGitButton?: boolean;
   onSelectedEditorChange?: (editor: EditorInfo | null) => void;
   simplifyForNarrowRemote?: boolean;
   hideHelpMenu?: boolean;

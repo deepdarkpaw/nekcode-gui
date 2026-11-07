@@ -40,6 +40,18 @@ export interface NekLiveContext {
   /** v4 没有通用 details 字段，这里保留原始 details 供上层自取。 */
   toolDetails: Map<string, unknown>;
   markerSerial: number;
+  /**
+   * 正在进行的压缩所占据的 marker 行。
+   *
+   * 不变量：同一次压缩全生命周期占同一条 marker row（running → 终态 upsert），
+   * 所以 `compaction_start` 只在这里登记身份，`compaction_end` 复用同一 rowId 收口，
+   * 不再另起一条终态行（否则 running 行会永久残留并阻塞 `chatLoadingVisibility`）。
+   */
+  activeCompactEntityId: string | undefined;
+  /** 刚收口的压缩行；紧随其后的 `entry_appended(compaction)` 把 summaryRef 补到这行上。 */
+  lastCompletedCompactEntityId?: string;
+  /** 上一个 `compaction_end` 已成功收口，等待同一次压缩的 `entry_appended(compaction)` 补摘要。 */
+  pendingCompactionEntrySync: boolean;
 }
 
 export function createNekLiveContext(
@@ -65,6 +77,8 @@ export function createNekLiveContext(
     toolRows: new Map(),
     toolDetails: new Map(),
     markerSerial: 0,
+    activeCompactEntityId: undefined,
+    pendingCompactionEntrySync: false,
   };
 }
 

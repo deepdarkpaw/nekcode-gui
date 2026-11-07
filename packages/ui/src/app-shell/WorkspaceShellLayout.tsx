@@ -707,13 +707,20 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       workspaceSidebarPanelWidthPx,
     ],
   );
-  const activePreviewPath = useMemo(() => {
-    const activeSidePaneTab =
-      sidePaneState?.tabs.find((tab) => tab.id === sidePaneState.activeTabId) ?? null;
-    return activeSidePaneTab?.type === "code-viewer"
-      ? (activeSidePaneTab.source.path ?? null)
-      : null;
-  }, [sidePaneState]);
+  const activeSidePaneTab = useMemo(
+    () => sidePaneState?.tabs.find((tab) => tab.id === sidePaneState.activeTabId) ?? null,
+    [sidePaneState],
+  );
+  const activePreviewPath = useMemo(
+    () =>
+      activeSidePaneTab?.type === "code-viewer" ? (activeSidePaneTab.source.path ?? null) : null,
+    [activeSidePaneTab],
+  );
+  // 顶部栏 Git 入口：草稿页与窄屏没有右侧状态卡，必须留一个直接打开 Git 改动树的按钮。
+  const isGitOpen = isSidePaneOpen && activeSidePaneTab?.type === "git";
+  const showGitButton = Boolean(
+    !isOfficeMode && gitState.summary.isGitAvailable && gitState.summary.isRepository,
+  );
   const findFileLinkOwnerWorkspace = useCallback(
     (
       targetPath: string,
@@ -1462,9 +1469,12 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           isSidebarVisible={isSidebarVisible}
                           isTerminalOpen={isTerminalOpen}
                           isSidePaneOpen={isSidePaneOpen}
+                          isGitOpen={isGitOpen}
+                          showGitButton={showGitButton}
                           onRefreshGit={handleRefreshGit}
                           onToggleTerminal={handleToggleTerminal}
                           onToggleSidePane={handleToggleSidePane}
+                          onToggleGit={handleToggleGit}
                           toggleSidePaneShortcutLabel={toggleSidePaneShortcutLabel}
                           onReloadSession={handleReloadSession}
                           reloadSessionDisabled={workspaceSessionActionDisabled}

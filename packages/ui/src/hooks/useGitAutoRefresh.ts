@@ -11,8 +11,9 @@ import { logger } from "@/logger.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 
 // agent 批量写文件时，150ms watcher 防抖 + 350ms Git 防抖仍会把长批次拆成多轮
-// `git status`。这里把 Git 自动刷新延后到 1 分钟，降低大工作区里的重复 Git I/O。
-const GIT_AUTO_REFRESH_DEBOUNCE_MS = 60_000;
+// `git status`。这里用 1.5s 合并批量写入的瞬时风暴，同时保证改完文件后 Git 统计
+// 与改动树在 1.5 秒内刷新（曾经的 60s 让 AI 改完文件后一分钟内什么都看不到）。
+const GIT_AUTO_REFRESH_DEBOUNCE_MS = 1_500;
 
 interface GitWatcherRegistration {
   subscription: IDisposable;

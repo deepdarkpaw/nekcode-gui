@@ -53,9 +53,12 @@ export function WorkspaceHeader({
   isSidebarVisible,
   isTerminalOpen,
   isSidePaneOpen,
+  isGitOpen = false,
+  showGitButton = false,
   onRefreshGit,
   onToggleTerminal,
   onToggleSidePane,
+  onToggleGit,
   toggleSidePaneShortcutLabel,
   onReloadSession,
   reloadSessionDisabled,
@@ -96,9 +99,14 @@ export function WorkspaceHeader({
   isSidebarVisible: boolean;
   isTerminalOpen: boolean;
   isSidePaneOpen: boolean;
+  /** 右侧 Git 改动树是否已打开（决定入口按钮的选中态）。 */
+  isGitOpen?: boolean;
+  /** workspace 是 Git repository 时挂出一键打开 Git 改动树的入口。 */
+  showGitButton?: boolean;
   onRefreshGit: () => void;
   onToggleTerminal: () => void;
   onToggleSidePane: () => void;
+  onToggleGit?: () => void;
   toggleSidePaneShortcutLabel?: string;
   onReloadSession: (options?: {
     resumeTaskId?: string | null;
@@ -206,6 +214,9 @@ export function WorkspaceHeader({
           isSidePaneOpen={isSidePaneOpen}
           onToggleTerminal={onToggleTerminal}
           onToggleSidePane={onToggleSidePane}
+          isGitOpen={isGitOpen}
+          showGitButton={showGitButton}
+          onToggleGit={onToggleGit}
           toggleSidePaneShortcutLabel={toggleSidePaneShortcutLabel}
           simplifyForNarrowRemote={simplifyForNarrowRemote}
           hideHelpMenu={false}

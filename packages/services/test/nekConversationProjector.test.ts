@@ -348,7 +348,6 @@ test("live event replay produces a coalesced delta stream that recreates the sam
     "toolCall",
     "timelineMarker",
     "timelineMarker",
-    "timelineMarker",
   ]);
   const text = snapshot.rows.window.find((row) => row.kind === "assistantText");
   assert.equal(text?.kind === "assistantText" && text.text, "Let me check.");
@@ -370,9 +369,19 @@ test("live event replay produces a coalesced delta stream that recreates the sam
   const header = snapshot.rows.window[0];
   assert.equal(header?.kind === "turnHeader" && header.state, "completedSuccess");
   const markers = snapshot.rows.window.filter((row) => row.kind === "timelineMarker");
+  // 一次压缩只占一条 marker row：compaction_start 发 appended(running)，
+  // compaction_end 复用同一 rowId 发 upserted(success)。
   assert.deepEqual(
     markers.map((marker) => (marker.kind === "timelineMarker" ? marker.marker.type : "")),
-    ["compact", "compact", "retryNotice"],
+    ["compact", "retryNotice"],
+  );
+  assert.deepEqual(
+    markers.map((marker) =>
+      marker.kind === "timelineMarker" && marker.marker.type === "compact"
+        ? marker.marker.status
+        : "",
+    ),
+    ["success", ""],
   );
   // 客户端重放出来的行必须与投影器内部状态逐行一致（增量没漏、没重）。
   assert.deepEqual(
@@ -386,6 +395,173 @@ test("live event replay produces a coalesced delta stream that recreates the sam
   // 文本增长走 row.delta（追加），终态才整行 upsert。
   assert.ok(ops.some((delta) => delta.op === "row.delta" && delta.path === "text"));
   assert.ok(ops.some((delta) => delta.op === "row.upserted"));
+});
+
+/** 客户端 replay 出来的 compact marker（带 rowId，用来证明同一次压缩始终是同一行）。 */
+function compactMarkerRows(snapshot: ConversationSnapshot): Array<{
+  rowId: number;
+  marker: Extract<
+    Extract<ConversationSnapshot["rows"]["window"][number], { kind: "timelineMarker" }>["marker"],
+    { type: "compact" }
+  >;
+}> {
+  return snapshot.rows.window.flatMap((row) =>
+    row.kind === "timelineMarker" && row.marker.type === "compact"
+      ? [{ rowId: row.rowId, marker: row.marker }]
+      : [],
+  );
+}
+
+test("compaction running -> success stays on one marker row", () => {
+  const { projector, frames, scheduler, advance } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  projector.handleEvent({ type: "agent_start" });
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: "compact me", timestamp: 1_000 },
+  });
+  projector.handleEvent({ type: "compaction_start", reason: "threshold" });
+  advance(10);
+  scheduler.flushAll();
+
+  const started = replay(frames);
+  const runningCompacts = compactMarkerRows(started);
+  assert.equal(runningCompacts.length, 1);
+  assert.equal(runningCompacts[0]?.marker.status, "running");
+  assert.equal(runningCompacts[0]?.marker.origin, "auto");
+  assert.equal(started.control.stopTargetKind, "compact");
+  assert.equal(started.control.canStop, true);
+  const compactRowId = runningCompacts[0]?.rowId;
+
+  projector.handleEvent({
+    type: "compaction_end",
+    reason: "threshold",
+    result: { tokensBefore: 900, estimatedTokensAfter: 300 },
+    aborted: false,
+    willRetry: false,
+  });
+  advance(10);
+  scheduler.flushAll();
+
+  const settled = replay(frames);
+  const settledCompacts = compactMarkerRows(settled);
+  // 关键不变量：压缩终态就地 upsert 起始行，不新增第二条 compact 行。
+  assert.equal(settledCompacts.length, 1);
+  assert.equal(settledCompacts[0]?.rowId, compactRowId);
+  assert.equal(settledCompacts[0]?.marker.status, "success");
+  assert.equal(settledCompacts[0]?.marker.origin, "auto");
+  assert.equal(settledCompacts[0]?.marker.tokensBefore, 900);
+  assert.equal(settledCompacts[0]?.marker.tokensAfter, 300);
+  // 残留的 running 行会让「正在压缩上下文」永久悬挂并阻塞 chatLoadingVisibility。
+  assert.equal(
+    settled.rows.window.filter(
+      (row) =>
+        row.kind === "timelineMarker" &&
+        row.marker.type === "compact" &&
+        row.marker.status === "running",
+    ).length,
+    0,
+  );
+  // 压缩结束后停止目标回到仍在本轮运行中的 assistant。
+  assert.equal(settled.control.stopTargetKind, "assistant");
+  assert.equal(settled.control.canStop, true);
+  // 客户端重放的行必须与投影器内部状态逐行一致（upsert 没漏）。
+  assert.deepEqual(
+    settled.rows.window.map((row) => [row.rowId, row.kind, row.entityId]),
+    projector.snapshot().rows.window.map((row) => [row.rowId, row.kind, row.entityId]),
+  );
+});
+
+test("the compaction entry appended after compaction_end fills the same marker row", () => {
+  const { projector, frames, scheduler, advance } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  projector.handleEvent({ type: "agent_start" });
+  projector.handleEvent({ type: "compaction_start", reason: "threshold" });
+  advance(10);
+  scheduler.flushAll();
+  const compactRowId = compactMarkerRows(replay(frames))[0]?.rowId;
+
+  projector.handleEvent({
+    type: "compaction_end",
+    reason: "threshold",
+    result: { tokensBefore: 900, estimatedTokensAfter: 300 },
+    aborted: false,
+    willRetry: false,
+  });
+  projector.handleEvent({
+    type: "entry_appended",
+    entry: {
+      type: "compaction",
+      id: "c1",
+      parentId: null,
+      timestamp: iso(1_400),
+      summary: "summary text",
+      firstKeptEntryId: "e2",
+      tokensBefore: 880,
+    },
+  });
+  advance(10);
+  scheduler.flushAll();
+
+  const snapshot = replay(frames);
+  const compacts = compactMarkerRows(snapshot);
+  // 紧随其后的 entry 只是补摘要引用，不能再造第二条 compact 行。
+  assert.equal(compacts.length, 1);
+  assert.equal(compacts[0]?.rowId, compactRowId);
+  assert.equal(compacts[0]?.marker.status, "success");
+  assert.equal(compacts[0]?.marker.summaryRef, "c1");
+  assert.equal(compacts[0]?.marker.tokensBefore, 880);
+});
+
+test("a retried compaction still converges to a single marker row", () => {
+  const { projector, frames, scheduler, advance } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  projector.handleEvent({ type: "agent_start" });
+  projector.handleEvent({ type: "compaction_start", reason: "overflow" });
+  advance(10);
+  scheduler.flushAll();
+  const runningRowId = compactMarkerRows(replay(frames))[0]?.rowId;
+
+  // willRetry：这一轮尝试失败但会自动重试，压缩仍在进行，保持 running 与 compact 停止目标。
+  projector.handleEvent({
+    type: "compaction_end",
+    reason: "overflow",
+    aborted: false,
+    willRetry: true,
+    errorMessage: "529",
+  });
+  advance(10);
+  scheduler.flushAll();
+  const retrying = replay(frames);
+  const retryingCompacts = compactMarkerRows(retrying);
+  assert.equal(retryingCompacts.length, 1);
+  assert.equal(retryingCompacts[0]?.rowId, runningRowId);
+  assert.equal(retryingCompacts[0]?.marker.status, "running");
+  assert.equal(retrying.control.stopTargetKind, "compact");
+  assert.equal(retrying.control.canStop, true);
+
+  // 重试轮复用同一行：start 只把该行刷新回 running，end 才写终态。
+  projector.handleEvent({ type: "compaction_start", reason: "overflow" });
+  advance(10);
+  scheduler.flushAll();
+  assert.equal(compactMarkerRows(replay(frames)).length, 1);
+  projector.handleEvent({
+    type: "compaction_end",
+    reason: "overflow",
+    result: { tokensBefore: 700, estimatedTokensAfter: 200 },
+    aborted: false,
+    willRetry: false,
+  });
+  advance(10);
+  scheduler.flushAll();
+
+  const settled = replay(frames);
+  const settledCompacts = compactMarkerRows(settled);
+  assert.equal(settledCompacts.length, 1);
+  assert.equal(settledCompacts[0]?.rowId, runningRowId);
+  assert.equal(settledCompacts[0]?.marker.status, "success");
+  assert.equal(settledCompacts[0]?.marker.tokensBefore, 700);
+  assert.equal(settledCompacts[0]?.marker.tokensAfter, 200);
 });
 
 test("streaming appends are coalesced into at most 20 flushes per second", () => {

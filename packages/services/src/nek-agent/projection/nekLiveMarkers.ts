@@ -7,7 +7,7 @@ import type {
   NekSessionEntry,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
-import type { ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { TimelineMarkerPayload, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { buildTimelineMarkerRow, buildToolCallRow, toEpochMs } from "./nekRows.js";
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
@@ -35,15 +35,32 @@ export function applyCompactionStart(
   ctx: NekLiveContext,
   reason: "manual" | "threshold" | "overflow",
 ): void {
-  const entityId = nextMarkerEntity(ctx, "compact");
-  const rowId = ctx.store.allocate(entityId);
-  ctx.store.add(
-    buildTimelineMarkerRow(
-      rowIdentity(entityId, rowId, currentTurnId(ctx), ctx.now()),
-      { type: "compact", origin: reason === "manual" ? "manual" : "auto", status: "running" },
-      "assistantWork",
-    ),
-  );
+  const origin = reason === "manual" ? "manual" : "auto";
+  const activeEntityId = ctx.activeCompactEntityId;
+  if (activeEntityId) {
+    // `willRetry` 的重试轮：复用上一次压缩的同一行，保持 running 而不是再挂一条新行。
+    const retryRowId = ctx.store.allocate(activeEntityId);
+    ctx.store.update(retryRowId, (prev) =>
+      buildTimelineMarkerRow(
+        rowIdentity(activeEntityId, retryRowId, prev.turnId, prev.createdAt),
+        { type: "compact", origin, status: "running" },
+        "assistantWork",
+      ),
+    );
+  } else {
+    const entityId = nextMarkerEntity(ctx, "compact");
+    const rowId = ctx.store.allocate(entityId);
+    ctx.activeCompactEntityId = entityId;
+    // 新一轮压缩开始：上一次收口留下的摘要补齐窗口必须作废。
+    ctx.pendingCompactionEntrySync = false;
+    ctx.store.add(
+      buildTimelineMarkerRow(
+        rowIdentity(entityId, rowId, currentTurnId(ctx), ctx.now()),
+        { type: "compact", origin, status: "running" },
+        "assistantWork",
+      ),
+    );
+  }
   ctx.store.setState({
     control: {
       ...ctx.store.state.control,
@@ -58,6 +75,18 @@ export function applyCompactionEnd(
   event: Extract<NekRpcEvent, { type: "compaction_end" }>,
 ): void {
   const result = event.result as NekCompactionResult | undefined;
+  // `willRetry` 的 end 只是这一轮尝试结束，压缩仍在进行（随后会有重试轮 start）：
+  // 保留 running 行与 compact 停止目标，等下一次 `compaction_end` 才收口。
+  if (event.willRetry === true && !event.aborted) {
+    ctx.store.setState({
+      control: {
+        ...ctx.store.state.control,
+        stopTargetKind: "compact",
+        canStop: true,
+      },
+    });
+    return;
+  }
   const status: "success" | "cancelled" | "failed" | "noop" = event.aborted
     ? "cancelled"
     : event.errorMessage
@@ -65,24 +94,54 @@ export function applyCompactionEnd(
       : result
         ? "success"
         : "noop";
-  const entityId = nextMarkerEntity(ctx, "compactEnd");
-  const rowId = ctx.store.allocate(entityId);
-  ctx.store.add(
-    buildTimelineMarkerRow(
-      rowIdentity(entityId, rowId, currentTurnId(ctx), ctx.now()),
-      {
-        type: "compact",
-        origin: event.reason === "manual" ? "manual" : "auto",
-        status,
-        ...(result ? { tokensBefore: result.tokensBefore } : {}),
-        ...(result?.estimatedTokensAfter === undefined
-          ? {}
-          : { tokensAfter: result.estimatedTokensAfter }),
-      },
-      "assistantWork",
-    ),
-  );
-  ctx.store.setState({ control: { ...ctx.store.state.control, stopTargetKind: "unknown" } });
+  const origin = event.reason === "manual" ? "manual" : "auto";
+  const marker: TimelineMarkerPayload = {
+    type: "compact",
+    origin,
+    status,
+    ...(result ? { tokensBefore: result.tokensBefore } : {}),
+    ...(result?.estimatedTokensAfter === undefined
+      ? {}
+      : { tokensAfter: result.estimatedTokensAfter }),
+  };
+  const activeEntityId = ctx.activeCompactEntityId;
+  if (activeEntityId) {
+    // 就地 upsert 起始行：同一次压缩始终只占一条 marker row。
+    const rowId = ctx.store.allocate(activeEntityId);
+    ctx.store.update(rowId, (prev) =>
+      buildTimelineMarkerRow(
+        rowIdentity(activeEntityId, rowId, prev.turnId, prev.createdAt),
+        marker,
+        "assistantWork",
+      ),
+    );
+    ctx.lastCompletedCompactEntityId = activeEntityId;
+    ctx.activeCompactEntityId = undefined;
+    ctx.pendingCompactionEntrySync = status === "success";
+  } else {
+    // 半程重连只收到 end（没有经过 running）：落一条终态行，行为与 entries 路径一致。
+    const entityId = nextMarkerEntity(ctx, "compact");
+    const rowId = ctx.store.allocate(entityId);
+    ctx.store.add(
+      buildTimelineMarkerRow(
+        rowIdentity(entityId, rowId, currentTurnId(ctx), ctx.now()),
+        marker,
+        "assistantWork",
+      ),
+    );
+    ctx.lastCompletedCompactEntityId = entityId;
+    ctx.pendingCompactionEntrySync = status === "success";
+  }
+  // 压缩结束后停止目标回到本轮运行中的 assistant；本轮已收口时不再可停止。
+  // `stopTargetKind` 是封闭枚举（没有 "turn"），进行中的轮用 "assistant" 表示。
+  const turnStillRunning = ctx.store.state.control.phase === "running";
+  ctx.store.setState({
+    control: {
+      ...ctx.store.state.control,
+      stopTargetKind: turnStillRunning ? "assistant" : "unknown",
+      canStop: turnStillRunning,
+    },
+  });
 }
 
 export function applyRetryMarker(ctx: NekLiveContext, attempt: number): void {
@@ -127,6 +186,29 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
       return;
     }
     case "compaction": {
+      const completedEntityId = ctx.pendingCompactionEntrySync
+        ? ctx.lastCompletedCompactEntityId
+        : undefined;
+      if (completedEntityId) {
+        // 同一次压缩刚由 `compaction_end` 就地收口：这里只补摘要引用与 token 数，不再新建行。
+        const syncedRowId = ctx.store.allocate(completedEntityId);
+        ctx.store.update(syncedRowId, (prev) =>
+          prev.kind === "timelineMarker" && prev.marker.type === "compact"
+            ? buildTimelineMarkerRow(
+                rowIdentity(completedEntityId, syncedRowId, prev.turnId, prev.createdAt),
+                {
+                  ...prev.marker,
+                  status: "success",
+                  tokensBefore: entry.tokensBefore,
+                  summaryRef: entry.id,
+                },
+                prev.lane ?? "assistantWork",
+              )
+            : prev,
+        );
+        ctx.pendingCompactionEntrySync = false;
+        return;
+      }
       const entityId = `entry:${entry.id}`;
       const rowId = ctx.store.allocate(entityId);
       ctx.store.add(
