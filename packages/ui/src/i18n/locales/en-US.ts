@@ -3234,6 +3234,8 @@ const enUS: Record<string, string> = {
   "onboarding.nek.ready": "nek {version} is installed",
   "onboarding.nek.notInstalled": "nek was not found",
   "onboarding.nek.incompatible": "nek {version} is too old and must be updated",
+  "onboarding.nek.minimumVersion":
+    "Complete streaming tool arguments require nek {version} or newer.",
   "onboarding.nek.failed": "nek detection failed",
   "onboarding.nek.installFailed": "nek installation failed: {message}",
   "onboarding.nek.installCancelled": "Installation cancelled",

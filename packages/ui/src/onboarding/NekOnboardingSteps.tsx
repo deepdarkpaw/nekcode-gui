@@ -110,7 +110,12 @@ function NekStep({ controller }: { controller: OnboardingController }) {
         ) : null}
         {nek.detection?.status === "incompatible" ? (
           <p className="mt-1 text-ui-sm text-warning">
-            {nek.detection.protocolVersion} / {nek.detection.requiredProtocolVersion}
+            {nek.detection.requiredNekVersion
+              ? intl.formatMessage(
+                  { id: "onboarding.nek.minimumVersion" },
+                  { version: nek.detection.requiredNekVersion },
+                )
+              : `${nek.detection.protocolVersion} / ${nek.detection.requiredProtocolVersion}`}
           </p>
         ) : null}
         {nek.message && nek.status === "failed" ? (

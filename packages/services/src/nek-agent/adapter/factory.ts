@@ -15,7 +15,13 @@ export function createNekAgentServiceAdapter(
   let infoPromise = serviceOptions.guiInfo ? Promise.resolve(serviceOptions.guiInfo) : undefined;
   const locate = async () => {
     infoPromise ??= (locator ?? new NekLocator()).locate().then((result) => result.info);
-    return await infoPromise;
+    try {
+      return await infoPromise;
+    } catch (error) {
+      // A failed version check must be retryable after the user updates nek.
+      infoPromise = undefined;
+      throw error;
+    }
   };
   return new NekAgentServiceAdapter({
     ...serviceOptions,

@@ -14,6 +14,7 @@ import {
   type ToolCallRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
+import { appendToolArgument } from "../src/nek-agent/projection/nekToolInput.js";
 
 const cases = [
   {
@@ -197,6 +198,26 @@ test("TP-5: edit result uses the actual patch rather than one replace_all input 
   p.loadSnapshot({ entries, leafId: "entry-1" });
   assert.deepEqual(tool(replay(frames)).output?.display, display);
   p.dispose();
+});
+
+test("TP-6: field deltas copy only ancestors and cannot traverse or mutate prototypes", () => {
+  const original = { files: [{ path: "G:/co" }], untouched: { content: "x".repeat(10000) } };
+  const next = appendToolArgument(original, ["files", 0, "path"], "ding/a.ts") as typeof original;
+  assert.equal(next.files[0]!.path, "G:/coding/a.ts");
+  assert.equal(original.files[0]!.path, "G:/co");
+  assert.equal(next.untouched, original.untouched);
+  assert.notEqual(next.files, original.files);
+  assert.throws(() => appendToolArgument({}, ["__proto__", "polluted"], "x"));
+  assert.throws(() => appendToolArgument({ a: 1 }, ["a"], "x"));
+  assert.throws(() => appendToolArgument([], [-1], "x"));
+  assert.throws(() => appendToolArgument([], ["length"], "x"));
+  const own = appendToolArgument(
+    JSON.parse('{"__proto__":{"safe":"a"}}'),
+    ["__proto__", "safe"],
+    "b",
+  ) as Record<string, { safe: string }>;
+  assert.equal(own.__proto__?.safe, "ab");
+  assert.equal(Object.getPrototypeOf(own), Object.prototype);
 });
 
 test("TP-2: an execution result without a prior row is projected immediately", () => {

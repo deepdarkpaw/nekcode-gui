@@ -3067,6 +3067,7 @@ const zhCN: Record<string, string> = {
   "onboarding.nek.ready": "已安装 nek {version}",
   "onboarding.nek.notInstalled": "没有找到 nek",
   "onboarding.nek.incompatible": "nek {version} 版本过旧，需要更新",
+  "onboarding.nek.minimumVersion": "完整显示流式工具参数需要 nek {version} 或更新版本。",
   "onboarding.nek.failed": "检测 nek 时出错",
   "onboarding.nek.installFailed": "安装 nek 失败：{message}",
   "onboarding.nek.installCancelled": "安装已取消",

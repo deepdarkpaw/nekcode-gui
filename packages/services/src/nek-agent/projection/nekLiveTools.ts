@@ -73,8 +73,8 @@ export function applyToolExecutionStart(
       ? {
           ...row,
           status: "running",
-          input: row.input === undefined ? args : row.input,
-          inputText: row.inputText || (args === undefined ? "" : JSON.stringify(args, null, 2)),
+          input: args === undefined ? row.input : args,
+          inputText: args === undefined ? row.inputText : JSON.stringify(args, null, 2),
           startedAt: row.startedAt ?? startedAt,
         }
       : row,

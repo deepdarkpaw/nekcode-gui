@@ -1,5 +1,9 @@
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
-import { NEK_GUI_PROTOCOL_VERSION } from "@zcode/shared/nek-protocol";
+import {
+  NEK_GUI_PROTOCOL_VERSION,
+  NEK_GUI_MIN_VERSION,
+  isNekGuiVersionSupported,
+} from "@zcode/shared/nek-protocol";
 import type { IRemoteBackend, StdioStream } from "./backend.js";
 import { quotePosixShellArg } from "./posixShell.js";
 
@@ -109,6 +113,15 @@ export async function detectRemoteNek(
       protocolVersion: info.protocolVersion,
       stderrSummary,
       error: `protocol ${info.protocolVersion} is incompatible with required ${required}`,
+    };
+  }
+  if (!isNekGuiVersionSupported(info.nekVersion)) {
+    return {
+      status: "incompatible",
+      info,
+      protocolVersion: info.protocolVersion,
+      stderrSummary,
+      error: `nek ${info.nekVersion} cannot provide complete GUI tool streams; update nek to ${NEK_GUI_MIN_VERSION} or newer`,
     };
   }
   return { status: "ready", info, protocolVersion: info.protocolVersion, stderrSummary };

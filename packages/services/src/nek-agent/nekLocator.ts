@@ -2,7 +2,11 @@ import { execFile } from "node:child_process";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
-import { NEK_GUI_PROTOCOL_VERSION } from "@zcode/shared/nek-protocol";
+import {
+  NEK_GUI_PROTOCOL_VERSION,
+  NEK_GUI_MIN_VERSION,
+  isNekGuiVersionSupported,
+} from "@zcode/shared/nek-protocol";
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 
 /**
@@ -28,6 +32,8 @@ export class NekLocatorError extends Error {
       /** 已安装版本与 GUI 要求的版本（`incompatible` 时都有值）。 */
       actualProtocolVersion?: number;
       expectedProtocolVersion?: number;
+      actualNekVersion?: string;
+      requiredNekVersion?: string;
       stderrSummary?: string;
     },
   ) {
@@ -296,6 +302,20 @@ export class NekLocator {
           launcherPath,
           actualProtocolVersion: info.protocolVersion,
           expectedProtocolVersion: required,
+          actualNekVersion: info.nekVersion,
+        },
+      );
+    }
+    if (!isNekGuiVersionSupported(info.nekVersion)) {
+      throw new NekLocatorError(
+        "incompatible",
+        `nek ${info.nekVersion} cannot provide complete GUI tool streams; update nek to ${NEK_GUI_MIN_VERSION} or newer`,
+        {
+          launcherPath,
+          actualProtocolVersion: info.protocolVersion,
+          expectedProtocolVersion: required,
+          actualNekVersion: info.nekVersion,
+          requiredNekVersion: NEK_GUI_MIN_VERSION,
         },
       );
     }

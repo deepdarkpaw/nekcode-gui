@@ -418,6 +418,7 @@ export type NekLocalDetection =
       path: string;
       protocolVersion: number;
       requiredProtocolVersion: number;
+      requiredNekVersion?: string;
     }
   | { status: "failed"; message: string };
 

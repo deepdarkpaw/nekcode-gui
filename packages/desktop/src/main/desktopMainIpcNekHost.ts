@@ -296,7 +296,8 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       if (error instanceof NekLocatorError && error.code === "incompatible") {
         return {
           status: "incompatible",
-          version: "unknown",
+          version: error.detail?.actualNekVersion ?? "unknown",
+          requiredNekVersion: error.detail?.requiredNekVersion,
           path: error.detail?.launcherPath ?? "",
           protocolVersion: error.detail?.actualProtocolVersion ?? -1,
           requiredProtocolVersion:

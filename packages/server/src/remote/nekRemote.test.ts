@@ -43,7 +43,7 @@ function fakeBackend(payload: {
 
 const readyInfo = JSON.stringify({
   protocolVersion: 1,
-  nekVersion: "0.4.0",
+  nekVersion: "0.4.3",
   piVersion: "1.0.0",
   node: { path: "/usr/bin/node", version: "v24.0.0" },
   launch: { args: ["/opt/nek/cli.js"] },
@@ -57,6 +57,7 @@ describe("detectRemoteNek", () => {
   it.each([
     ["ready", 0, readyInfo, ""],
     ["not_installed", 127, "", "sh: nek: command not found"],
+    ["incompatible", 0, readyInfo.replace('"nekVersion":"0.4.3"', '"nekVersion":"0.4.2"'), ""],
     ["incompatible", 0, readyInfo.replace('"protocolVersion":1', '"protocolVersion":9'), ""],
     ["failed", 1, "", "permission denied"],
   ] as const)("returns %s", async (status, code, stdout, stderr) => {

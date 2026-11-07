@@ -12,9 +12,19 @@
  */
 
 import type { NekMcpServerConfig, NekMode } from "./gui-extension-api.js";
+import { compareSemverVersions } from "../forceUpdate.js";
 
 /** 协议版本：任何不兼容的改动都要递增。GUI 要求 `protocolVersion === NEK_GUI_PROTOCOL_VERSION`。 */
 export const NEK_GUI_PROTOCOL_VERSION = 1;
+
+/** Protocol v1 before 0.4.3 loses structured tool deltas; the renderer cannot reconstruct them. */
+export const NEK_GUI_MIN_VERSION = "0.4.3";
+
+export function isNekGuiVersionSupported(version: unknown): boolean {
+  if (typeof version !== "string") return false;
+  const comparison = compareSemverVersions(version, NEK_GUI_MIN_VERSION);
+  return comparison !== null && comparison >= 0;
+}
 
 /** nek 的思考等级（与 `@earendil-works/pi-ai` 的 ModelThinkingLevel 一致）。 */
 export type NekThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
