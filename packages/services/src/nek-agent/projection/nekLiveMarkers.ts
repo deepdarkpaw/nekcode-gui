@@ -44,11 +44,13 @@ export function applyCompactionStart(
       "assistantWork",
     ),
   );
-  ctx.store.state.control = {
-    ...ctx.store.state.control,
-    stopTargetKind: "compact",
-    canStop: true,
-  };
+  ctx.store.setState({
+    control: {
+      ...ctx.store.state.control,
+      stopTargetKind: "compact",
+      canStop: true,
+    },
+  });
 }
 
 export function applyCompactionEnd(
@@ -80,7 +82,7 @@ export function applyCompactionEnd(
       "assistantWork",
     ),
   );
-  ctx.store.state.control = { ...ctx.store.state.control, stopTargetKind: "unknown" };
+  ctx.store.setState({ control: { ...ctx.store.state.control, stopTargetKind: "unknown" } });
 }
 
 export function applyRetryMarker(ctx: NekLiveContext, attempt: number): void {
@@ -115,11 +117,13 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
           ),
         );
       }
-      ctx.store.state.config = withNekModelSelection(
-        entry.type === "model_change"
-          ? { ...config, provider: entry.provider, model: entry.modelId }
-          : { ...config, thought: entry.thinkingLevel },
-      );
+      ctx.store.setState({
+        config: withNekModelSelection(
+          entry.type === "model_change"
+            ? { ...config, provider: entry.provider, model: entry.modelId }
+            : { ...config, thought: entry.thinkingLevel },
+        ),
+      });
       return;
     }
     case "compaction": {
@@ -166,7 +170,7 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
       return;
     }
     case "session_info": {
-      if (typeof entry.name === "string") ctx.store.state.title = entry.name;
+      if (typeof entry.name === "string") ctx.store.setState({ title: entry.name });
       return;
     }
     default:
@@ -251,7 +255,7 @@ export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEven
       todos?: Array<{ id: string; content: string; status: string }>;
     };
     if (typeof state.mode === "string")
-      ctx.store.state.config = withNekMode(ctx.store.state.config, state.mode);
+      ctx.store.setState({ config: withNekMode(ctx.store.state.config, state.mode) });
     const items = (state.todos ?? [])
       .filter((todo) => todo.status !== "cancelled")
       .map((todo) => ({
@@ -264,17 +268,19 @@ export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEven
               ? ("completed" as const)
               : ("pending" as const),
       }));
-    ctx.store.state.plan = items.length === 0 ? null : { items, updatedAt: ctx.now() };
+    ctx.store.setState({ plan: items.length === 0 ? null : { items, updatedAt: ctx.now() } });
   }
 }
 
 /** `get_state` 的响应合并进快照字段。 */
 export function applySessionState(ctx: NekLiveContext, state: NekRpcSessionState): void {
   const current = ctx.store.state.config;
-  ctx.store.state.config = withNekModelSelection({
-    ...current,
-    provider: state.model?.provider ?? current.provider,
-    model: state.model?.id ?? current.model,
-    thought: state.thinkingLevel,
+  ctx.store.setState({
+    config: withNekModelSelection({
+      ...current,
+      provider: state.model?.provider ?? current.provider,
+      model: state.model?.id ?? current.model,
+      thought: state.thinkingLevel,
+    }),
   });
 }

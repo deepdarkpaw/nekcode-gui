@@ -678,6 +678,63 @@ test("hidden custom_message entries are skipped on the entries path", () => {
   assert.equal(user?.kind === "userInput" && user.text, "用 @skill:pdf 看这个");
 });
 
+test("Q1: queue-only admission and consumption reach the renderer without snapshot recovery", () => {
+  const { projector, frames, scheduler } = createProjector();
+  projector.handleEvent({ type: "queue_update", steering: ["same", "same"], followUp: [] });
+  scheduler.flushAll();
+  assert.equal(replay(frames).queue.items.length, 2);
+  projector.handleEvent({ type: "queue_update", steering: ["same"], followUp: [] });
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: "same", timestamp: 100 },
+  });
+  scheduler.flushAll();
+  assert.equal(replay(frames).queue.items.length, 1);
+  projector.handleEvent({ type: "queue_update", steering: [], followUp: [] });
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: "same", timestamp: 200 },
+  });
+  scheduler.flushAll();
+  const view = replay(frames);
+  assert.equal(view.queue.items.length, 0);
+  assert.equal(view.rows.window.filter((row) => row.kind === "userInput").length, 2);
+  assert.deepEqual(view.queue, projector.snapshot().queue);
+  projector.dispose();
+});
+
+test("Q2: pure state changes are emitted once and snapshots reset the pending state baseline", () => {
+  const { projector, frames, scheduler } = createProjector();
+  projector.handleEvent({ type: "session_info_changed", name: "renamed" });
+  projector.handleEvent({ type: "thinking_level_changed", level: "high" });
+  projector.handleEvent({ type: "agent_start" });
+  scheduler.flushAll();
+  const view = replay(frames);
+  assert.equal(view.meta.title, "renamed");
+  assert.equal(view.config.thought, "high");
+  assert.equal(view.control.canStop, true);
+  const count = frames.length;
+  projector.flushNow();
+  assert.equal(frames.length, count);
+  projector.loadSnapshot({ entries: [], leafId: null });
+  const snapshotCount = frames.length;
+  projector.flushNow();
+  assert.equal(frames.length, snapshotCount);
+  projector.dispose();
+});
+
+test("Q3: joining a second subscriber does not consume pending updates or advance the first cursor", () => {
+  const { projector, frames, scheduler } = createProjector();
+  projector.handleEvent({ type: "queue_update", steering: ["guide"], followUp: [] });
+  const second: ConversationTopicFrame[] = [];
+  projector.subscribe((frame) => second.push(frame));
+  projector.handleEvent({ type: "queue_update", steering: [], followUp: [] });
+  scheduler.flushAll();
+  assert.deepEqual(replay(frames).queue, replay(second).queue);
+  assert.equal(replay(frames).queue.items.length, 0);
+  projector.dispose();
+});
+
 test("an extension-appended hidden custom message also stays out of the transcript", () => {
   const { projector, scheduler } = createProjector();
   projector.loadSnapshot({ entries: [], leafId: null });

@@ -8,8 +8,9 @@ import type {
   SessionControl,
   SessionUsageState,
   StreamablePath,
+  StatePatch,
 } from "@zcode/shared/zcode-protocol-v4";
-import { buildConversationSnapshot } from "./nekProjectionSnapshot.js";
+import { buildControlProjection, buildConversationSnapshot } from "./nekProjectionSnapshot.js";
 
 /**
  * 投影状态容器：行窗口 + 待下发增量。
@@ -57,7 +58,8 @@ export class NekProjectionStore {
   private nextRowId: number;
   private firstRowId: number | null;
   private totalCount: number;
-  state: NekProjectionState;
+  private stateValue: NekProjectionState;
+  private pendingState: StatePatch | undefined;
 
   constructor(private readonly options: NekProjectionStoreOptions) {
     this.rows = [...(options.existing?.rows ?? [])];
@@ -66,11 +68,36 @@ export class NekProjectionStore {
     this.maxWindowRows = Math.max(1, options.maxWindowRows ?? DEFAULT_MAX_WINDOW_ROWS);
     this.firstRowId = this.rows[0]?.rowId ?? null;
     this.totalCount = this.rows.length;
-    this.state = options.initialState;
+    this.stateValue = options.initialState;
     if (this.rows.length > 0) {
       // 已存在的行视为"客户端已经持有"：之后只发 upsert/delta。
       for (const row of this.rows) this.emitted.add(row.rowId);
     }
+  }
+
+  get state(): Readonly<NekProjectionState> {
+    return this.stateValue;
+  }
+
+  /** State-only events must cross the same flush boundary as rows; no snapshot polling. */
+  setState(patch: Partial<NekProjectionState>): void {
+    const previous = this.stateValue;
+    const next = { ...previous };
+    const changed: StatePatch = {};
+    for (const key of ["config", "usage", "plan", "queue", "control"] as const) {
+      if (patch[key] !== undefined && patch[key] !== previous[key]) {
+        Object.assign(changed, { [key]: patch[key] });
+        Object.assign(next, { [key]: patch[key] });
+      }
+    }
+    if (patch.title !== undefined && patch.title !== previous.title) {
+      changed.meta = { title: patch.title, titleSource: patch.title === "" ? "default" : "custom" };
+      next.title = patch.title;
+    }
+    if (changed.control) Object.assign(changed, buildControlProjection(changed.control));
+    if (Object.keys(changed).length === 0) return;
+    this.stateValue = next;
+    this.pendingState = { ...this.pendingState, ...changed };
   }
 
   get sessionId(): string {
@@ -186,12 +213,17 @@ export class NekProjectionStore {
       }
       this.pendingStream.delete(rowId);
     }
+    if (this.pendingState) {
+      deltas.push({ op: "state.updated", patch: this.pendingState });
+      this.pendingState = undefined;
+    }
     return deltas;
   }
 
   /** 是否还有未下发的增量（调度器据此决定要不要 flush）。 */
   get hasPendingDeltas(): boolean {
     return (
+      this.pendingState !== undefined ||
       this.needsUpsert.size > 0 ||
       this.pendingStream.size > 0 ||
       this.rows.some((row) => !this.emitted.has(row.rowId))
@@ -219,6 +251,7 @@ export class NekProjectionStore {
 
   /** 发过快照后：所有行都视为客户端已持有，且待发增量作废（已包含在快照里）。 */
   markAllEmitted(): void {
+    this.pendingState = undefined;
     for (const row of this.rows) this.emitted.add(row.rowId);
     this.needsUpsert.clear();
     this.pendingStream.clear();

@@ -117,15 +117,17 @@ export function closeTurn(
 /** 轮次级别的控制态（其余事件由 nekLiveProjection.ts 分发给各处理器）。 */
 export function applyTurnLifecycleEvent(ctx: NekLiveContext, event: NekRpcEvent): boolean {
   if (event.type === "agent_start") {
-    ctx.store.state.control = {
-      ...ctx.store.state.control,
-      phase: "running",
-      sessionEnded: false,
-      canStop: true,
-      stopState: "stoppable",
-      stopTargetKind: "assistant",
-      activeWorks: [{ kind: "primaryTurn", startedAt: ctx.now() }],
-    };
+    ctx.store.setState({
+      control: {
+        ...ctx.store.state.control,
+        phase: "running",
+        sessionEnded: false,
+        canStop: true,
+        stopState: "stoppable",
+        stopTargetKind: "assistant",
+        activeWorks: [{ kind: "primaryTurn", startedAt: ctx.now() }],
+      },
+    });
     return true;
   }
   if (event.type === "agent_settled") {
@@ -133,16 +135,18 @@ export function applyTurnLifecycleEvent(ctx: NekLiveContext, event: NekRpcEvent)
       ctx,
       ctx.turn?.lastStopReason === "aborted" ? "completedInterrupted" : "completedSuccess",
     );
-    ctx.store.state.control = {
-      ...ctx.store.state.control,
-      phase: "completedSuccess",
-      sessionEnded: false,
-      canStop: false,
-      stopState: "idle",
-      stopTargetKind: "unknown",
-      activeWorks: [],
-      apiRetry: null,
-    };
+    ctx.store.setState({
+      control: {
+        ...ctx.store.state.control,
+        phase: "completedSuccess",
+        sessionEnded: false,
+        canStop: false,
+        stopState: "idle",
+        stopTargetKind: "unknown",
+        activeWorks: [],
+        apiRetry: null,
+      },
+    });
     return true;
   }
   return false;

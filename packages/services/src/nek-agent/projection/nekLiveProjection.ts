@@ -57,19 +57,23 @@ export function applyNekLiveEvent(ctx: NekLiveContext, event: NekRpcEvent): void
       applyToolExecutionEnd(ctx, event.toolCallId, event.toolName, event.result, event.isError);
       return;
     case "queue_update":
-      ctx.store.state.queue = {
-        items: buildQueueItems(event.steering, event.followUp, ctx.now()),
-        autoDrain: true,
-      };
+      ctx.store.setState({
+        queue: {
+          items: buildQueueItems(event.steering, event.followUp, ctx.now()),
+          autoDrain: true,
+        },
+      });
       return;
     case "thinking_level_changed":
-      ctx.store.state.config = withNekModelSelection({
-        ...ctx.store.state.config,
-        thought: event.level,
+      ctx.store.setState({
+        config: withNekModelSelection({
+          ...ctx.store.state.config,
+          thought: event.level,
+        }),
       });
       return;
     case "session_info_changed":
-      ctx.store.state.title = event.name ?? "";
+      ctx.store.setState({ title: event.name ?? "" });
       return;
     case "compaction_start":
       applyCompactionStart(ctx, event.reason);

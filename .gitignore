@@ -98,6 +98,7 @@ mise.local.toml
 .tool-versions
 
 # 日志、临时文件、系统垃圾
+/.tmp/
 logs/
 *.log
 *.tmp

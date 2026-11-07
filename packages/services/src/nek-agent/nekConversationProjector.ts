@@ -142,6 +142,8 @@ export class NekConversationProjector {
    * 之后是增量帧。返回退订函数。
    */
   subscribe(listener: (frame: ConversationTopicFrame) => void): () => void {
+    // Existing listeners must receive pending facts before the newcomer takes the same cursor.
+    this.flushNow();
     this.listeners.add(listener);
     this.emitSnapshot(listener);
     return () => {
@@ -161,8 +163,7 @@ export class NekConversationProjector {
     projected.rows = preserveObservedTiming(projected.rows, this.store.window);
     this.store.replaceRows(projected.rows, projected.byEntity, projected.nextRowId);
     this.extensionErrors.project(this.store, projected.rows.at(-1)?.turnId ?? "turn-0");
-    this.store.state = {
-      ...this.store.state,
+    this.store.setState({
       title: projected.title || this.store.state.title,
       config: withNekMode(
         {
@@ -173,9 +174,9 @@ export class NekConversationProjector {
         projected.config.mode,
       ),
       usage: projected.usage,
-      plan: projected.plan ?? this.store.state.plan,
+      plan: input.nekState ? projected.plan : this.store.state.plan,
       control: buildControlState(input.state, this.store.state.control.phase),
-    };
+    });
     this.live = createNekLiveContext(this.store, this.now);
     // 快照本身就包含全部行，所以不再额外发增量帧。
     this.emitSnapshotToAll();
@@ -194,27 +195,31 @@ export class NekConversationProjector {
   /** 合并 `get_state` / `get_session_stats` 的结果（含上下文窗口用量）。 */
   applySessionState(state: NekRpcSessionState, stats?: NekSessionStats): void {
     applySessionState(this.live, state);
-    this.store.state.control = buildControlState(state, this.store.state.control.phase);
+    this.store.setState({ control: buildControlState(state, this.store.state.control.phase) });
     // 窗口大小只能从 nek 报告里取：`get_session_stats.contextUsage` 优先，其次模型元数据。
     const maxTokens = stats?.contextUsage?.contextWindow ?? state.model?.contextWindow;
     if (maxTokens !== undefined && maxTokens > 0) {
-      this.store.state.usage = {
-        ...this.store.state.usage,
-        contextWindow: {
-          usedTokens:
-            stats?.contextUsage?.tokens ?? this.store.state.usage.contextWindow?.usedTokens ?? 0,
-          maxTokens,
-          autoCompactThresholdTokens: null,
+      this.store.setState({
+        usage: {
+          ...this.store.state.usage,
+          contextWindow: {
+            usedTokens:
+              stats?.contextUsage?.tokens ?? this.store.state.usage.contextWindow?.usedTokens ?? 0,
+            maxTokens,
+            autoCompactThresholdTokens: null,
+          },
         },
-      };
+      });
     }
     this.scheduleFlush();
   }
 
   /** `extension_event: nek.state` 的完整快照。 */
   applyNekState(state: NekState): void {
-    this.store.state.config = withNekMode(this.store.state.config, state.mode);
-    this.store.state.plan = planFromNekState(state) ?? this.store.state.plan;
+    this.store.setState({
+      config: withNekMode(this.store.state.config, state.mode),
+      plan: planFromNekState(state),
+    });
     this.scheduleFlush();
   }
 
@@ -252,7 +257,8 @@ export class NekConversationProjector {
 
   /** Read-only admission facts belong to the service, not to pane-local guesses. */
   applyReadOnly(readOnly: NonNullable<ConversationSnapshot["control"]["readOnly"]>): void {
-    this.store.state.control = { ...this.store.state.control, readOnly };
+    this.store.setState({ control: { ...this.store.state.control, readOnly } });
+    this.scheduleFlush();
   }
 
   /** 当前快照（不发帧；给需要直接读状态的调用方）。 */
@@ -286,18 +292,17 @@ export class NekConversationProjector {
   }
 
   private emitSnapshotToAll(): void {
-    for (const listener of Array.from(this.listeners)) this.emitSnapshot(listener);
-  }
-
-  private emitSnapshot(listener: (frame: ConversationTopicFrame) => void): void {
-    // 快照包含当前全部行，所以未下发的增量作废；水位推进一格作为对齐点。
     this.cancelScheduledFlush();
-    this.store.drainDeltas();
     this.revisionValue += 1;
     this.seq += 1;
-    const snapshot = this.store.snapshot(this.seq, this.revisionValue);
     this.store.markAllEmitted();
-    const frame: ConversationTopicFrame = {
+    const frame = this.snapshotFrame();
+    this.emitFrame(frame);
+  }
+
+  private snapshotFrame(): ConversationTopicFrame {
+    const snapshot = this.store.snapshot(this.seq, this.revisionValue);
+    return {
       topic: this.topic,
       subscriptionId: this.subscriptionId,
       fromSeq: 0,
@@ -305,8 +310,11 @@ export class NekConversationProjector {
       sentAt: this.now(),
       payload: { kind: "snapshot", snapshot },
     };
+  }
+
+  private emitSnapshot(listener: (frame: ConversationTopicFrame) => void): void {
     try {
-      listener(frame);
+      listener(this.snapshotFrame());
     } catch (error) {
       this.logger?.warn("nek projection frame listener threw", error);
     }

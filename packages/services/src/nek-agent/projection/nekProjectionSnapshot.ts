@@ -197,6 +197,25 @@ export function buildAvailability(): SessionActionAvailability {
   };
 }
 
+/** Snapshot and live state patches derive admission from the same accepted control facts. */
+export function buildControlProjection(
+  control: SessionControl,
+): Pick<ConversationSnapshot, "availability" | "inputRouting"> {
+  return {
+    availability: control.readOnly
+      ? (Object.fromEntries(
+          Object.keys(buildAvailability()).map((key) => [
+            key,
+            { allowed: false, reasonCode: "guard.sessionLocked" },
+          ]),
+        ) as SessionActionAvailability)
+      : buildAvailability(),
+    inputRouting: control.readOnly
+      ? { mode: "reject", reasonCode: "guard.sessionLocked" }
+      : { mode: "startNow" },
+  };
+}
+
 /** `queue_update` 的字符串队列 → v4 queue item（id 由位置合成，nek 没有队列项 id）。 */
 export function buildQueueItems(
   steering: readonly string[],
@@ -251,17 +270,7 @@ export function buildConversationSnapshot(args: {
     seq: args.seq,
     revision: args.revision,
     control: args.control,
-    availability: args.control.readOnly
-      ? (Object.fromEntries(
-          Object.keys(buildAvailability()).map((key) => [
-            key,
-            { allowed: false, reasonCode: "guard.sessionLocked" },
-          ]),
-        ) as SessionActionAvailability)
-      : buildAvailability(),
-    inputRouting: args.control.readOnly
-      ? { mode: "reject", reasonCode: "guard.sessionLocked" }
-      : { mode: "startNow" },
+    ...buildControlProjection(args.control),
     meta: { title: args.title, titleSource: args.title === "" ? "default" : "custom" },
     config: args.config,
     modelTransition: null,
