@@ -164,9 +164,16 @@ test("the first sessions-index snapshot seeds CLI sessions and tells the sidebar
       await waitFor(() => taskCreatedCount(events) === 1, "task_created broadcast");
       const spawned = h.sessions.length;
 
-      // 基线之后终端里又建了一个会话：它没有 GUI 进程，按摘要补行，不为它启动 nek。
+      // External sessions are discovered by explicit catalog refresh/import, not incidental queue traffic.
+      const subscription = await h.adapter.subscribeSessionsIndexV4(target);
       extraSessions.push(laterCliSession);
       h.sessions[0]?.emit({ type: "queue_update", steering: [], followUp: [] });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal((await listedTaskIds(repo)).includes(laterCliSession.id), false);
+      await h.adapter.resyncSessionsIndexV4({
+        ...target,
+        subscriptionId: subscription.ack.subscriptionId,
+      });
       await waitFor(
         async () => (await listedTaskIds(repo)).includes(laterCliSession.id),
         "external session row",

@@ -127,10 +127,17 @@ export function applyConversationDeltas(
   deltas: readonly ConversationDelta[],
 ): ConversationSnapshot {
   let current = snapshot;
+  let candidate: MutableConversationSnapshotAccumulator | undefined;
   for (const delta of deltas) {
-    current = applyConversationDelta(current, delta);
+    if (!candidate && delta.op === "state.updated") {
+      current = applyConversationDelta(current, delta);
+      continue;
+    }
+    // One private candidate per batch, never mutate an already published snapshot.
+    candidate ??= createMutableConversationSnapshotAccumulator(current);
+    applyConversationDeltaMutable(candidate, delta);
   }
-  return current;
+  return candidate?.snapshot ?? current;
 }
 
 /**

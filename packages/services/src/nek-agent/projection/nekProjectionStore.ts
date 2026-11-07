@@ -188,20 +188,21 @@ export class NekProjectionStore {
 
   /** 取走待下发增量（按 rowId 升序，保证确定性）。 */
   drainDeltas(): ConversationDelta[] {
-    const deltas: ConversationDelta[] = [];
-    const rowIds = this.rows.map((row) => row.rowId).sort((left, right) => left - right);
-    for (const rowId of rowIds) {
-      const row = this.rows.find((candidate) => candidate.rowId === rowId);
-      if (!row) continue;
+    const rowDeltas: Extract<
+      ConversationDelta,
+      { op: "row.appended" | "row.upserted" | "row.delta" }
+    >[] = [];
+    for (const row of this.rows) {
+      const rowId = row.rowId;
       if (!this.emitted.has(rowId)) {
-        deltas.push({ op: "row.appended", row });
+        rowDeltas.push({ op: "row.appended", row });
         this.emitted.add(rowId);
         this.needsUpsert.delete(rowId);
         this.pendingStream.delete(rowId);
         continue;
       }
       if (this.needsUpsert.has(rowId)) {
-        deltas.push({ op: "row.upserted", row });
+        rowDeltas.push({ op: "row.upserted", row });
         this.needsUpsert.delete(rowId);
         this.pendingStream.delete(rowId);
         continue;
@@ -209,10 +210,16 @@ export class NekProjectionStore {
       const pending = this.pendingStream.get(rowId);
       if (!pending) continue;
       for (const entry of pending) {
-        deltas.push({ op: "row.delta", rowId, path: entry.path, append: entry.append });
+        rowDeltas.push({ op: "row.delta", rowId, path: entry.path, append: entry.append });
       }
       this.pendingStream.delete(rowId);
     }
+    // Preserve row-id ordering, sorting only changed rows rather than searching the whole history per id.
+    const deltas: ConversationDelta[] = rowDeltas.sort(
+      (left, right) =>
+        (left.op === "row.delta" ? left.rowId : left.row.rowId) -
+        (right.op === "row.delta" ? right.rowId : right.row.rowId),
+    );
     if (this.pendingState) {
       deltas.push({ op: "state.updated", patch: this.pendingState });
       this.pendingState = undefined;

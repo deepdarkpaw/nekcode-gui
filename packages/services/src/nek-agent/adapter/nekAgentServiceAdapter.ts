@@ -165,6 +165,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
       (target) => this.resolveSessionKey(target),
       syncer,
       options.maxV4Subscriptions,
+      options.logger,
     );
     this.interactions = new NekAgentInteractionChannel(this.service);
     const statusFeed = createNekAgentStatusFeed(this, options.logger);

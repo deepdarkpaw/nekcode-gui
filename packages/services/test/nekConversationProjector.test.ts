@@ -3,6 +3,8 @@ import test from "node:test";
 import type { ConversationSnapshot, ConversationTopicFrame } from "@zcode/shared/zcode-protocol-v4";
 import {
   applyConversationDeltas,
+  applyConversationDelta,
+  type ConversationDelta,
   conversationTopicFrameSchema,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekRpcEvent, NekSessionEntry, NekUsage } from "@zcode/shared/nek-protocol";
@@ -676,6 +678,46 @@ test("hidden custom_message entries are skipped on the entries path", () => {
   );
   const user = snapshot.rows.window[1];
   assert.equal(user?.kind === "userInput" && user.text, "用 @skill:pdf 看这个");
+});
+
+test("PERF-2: batch delta apply matches sequential semantics without mutating published rows", () => {
+  const { projector } = createProjector();
+  projector.loadSnapshot({ entries });
+  const original = projector.snapshot();
+  const before = structuredClone(original);
+  const text = original.rows.window.find((row) => row.kind === "assistantText")!;
+  const deltas: ConversationDelta[] = [
+    ...Array.from({ length: 100 }, () => ({
+      op: "row.delta" as const,
+      rowId: text.rowId,
+      path: "text" as const,
+      append: "x",
+    })),
+    { op: "state.updated", patch: { meta: { title: "changed", titleSource: "custom" } } },
+  ];
+  assert.deepEqual(
+    applyConversationDeltas(original, deltas),
+    deltas.reduce(applyConversationDelta, original),
+  );
+  assert.deepEqual(original, before);
+  const updated = applyConversationDeltas(original, deltas);
+  assert.equal(updated.rows.window[0], original.rows.window[0]);
+  assert.equal(
+    applyConversationDeltas(original, [deltas.at(-1)!]).rows.window,
+    original.rows.window,
+  );
+  const structural: ConversationDelta[] = [
+    { op: "row.removed", fromRowId: text.rowId },
+    { op: "row.appended", row: { ...text, rowId: 10000 } },
+    { op: "row.delta", rowId: 10000, path: "text", append: "tail" },
+    { op: "row.upserted", row: { ...text, rowId: 10000 } },
+  ];
+  assert.deepEqual(
+    applyConversationDeltas(original, structural),
+    structural.reduce(applyConversationDelta, original),
+  );
+  assert.deepEqual(original, before);
+  projector.dispose();
 });
 
 test("Q1: queue-only admission and consumption reach the renderer without snapshot recovery", () => {

@@ -1,15 +1,13 @@
+import { isDeepStrictEqual } from "node:util";
 import { Emitter, type Event } from "@zcode/rpc";
-import type { NekModel, NekRpcSlashCommand } from "@zcode/shared/nek-protocol";
 import type {
   SessionsIndexSnapshot,
   SessionsIndexTopicFrame,
   SessionsIndexTopicWireCandidate,
-  SubscribeAck,
   V4ConversationResyncResult,
   V4SessionsIndexSubscribeResult,
   V4WorkspaceConfigSubscribeResult,
   WorkspaceConfigSnapshot,
-  WorkspaceConfigState,
   WorkspaceConfigTopicFrame,
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -17,8 +15,9 @@ import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import type { NekSessionIndexItem } from "../index/types.js";
 import { isListedNekSession } from "./nekSessionListing.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
-import { isNekState, type NekAgentServiceEvent } from "../service/types.js";
+import type { NekAgentServiceEvent, NekAgentServiceOptions } from "../service/types.js";
 import { makeSubscriptionId, makeTopicWireFrames, workspaceKey } from "./frameHelpers.js";
+import { readNekWorkspaceConfig } from "./nekWorkspaceConfig.js";
 import type {
   NekConversationResyncParams,
   NekConversationUnsubscribeParams,
@@ -27,26 +26,22 @@ import type {
   NekWorkspaceTarget,
 } from "./types.js";
 
-interface IndexSubscription {
+type TopicKind = "index" | "config";
+interface Subscription {
   id: string;
   workspaceKey: string;
   topic: string;
+  target: NekWorkspaceTarget;
   ordinal: number;
+  ready: boolean;
 }
-
-interface ConfigSubscription {
-  id: string;
-  workspaceKey: string;
-  topic: string;
-  ordinal: number;
-}
-
 interface TopicState<T> {
   logEpoch: string;
   seq: number;
   snapshot?: T;
+  flight?: Promise<T>;
+  dirty: boolean;
 }
-
 const MAX_SUBSCRIPTIONS = 128;
 
 function sessionSummary(item: NekSessionIndexItem, workspaceId: string) {
@@ -56,7 +51,6 @@ function sessionSummary(item: NekSessionIndexItem, workspaceId: string) {
     sessionId: summary.id,
     workspaceId,
     title: summary.name ?? summary.firstMessage,
-    // 磁盘目录只有已结束的会话；被其他进程锁住的视为中断。运行态来自会话订阅，不在目录里。
     phase: summary.locked ? ("completedInterrupted" as const) : ("completedSuccess" as const),
     sessionEnded: true,
     hasBackgroundWork: false,
@@ -65,35 +59,23 @@ function sessionSummary(item: NekSessionIndexItem, workspaceId: string) {
   };
 }
 
-function ack(subscriptionId: string, logEpoch: string, mode: "snapshot" | "resume"): SubscribeAck {
-  return { subscriptionId, mode, logEpoch };
-}
-
-function modelOptions(models: NekModel[]) {
-  return models.map((model) => ({
-    value: `${model.provider}/${model.id}`,
-    name: model.name,
-    ...(model.reasoning ? { description: "支持思考" } : {}),
-    modelProviderId: model.provider,
-    modelProviderName: model.provider,
-    modelThoughtLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
-  }));
-}
-
+/** Workspace facts refresh on semantic changes, never on individual streaming chunks. */
 export class NekAgentServiceTopics {
-  private readonly indexSubscriptions = new Map<string, IndexSubscription>();
-  private readonly configSubscriptions = new Map<string, ConfigSubscription>();
+  private readonly indexSubscriptions = new Map<string, Subscription>();
+  private readonly configSubscriptions = new Map<string, Subscription>();
   private readonly indexEmitters = new Map<string, Emitter<SessionsIndexTopicWireCandidate>>();
   private readonly configEmitters = new Map<string, Emitter<WorkspaceConfigTopicWireCandidate>>();
   private readonly indexState = new Map<string, TopicState<SessionsIndexSnapshot>>();
   private readonly configState = new Map<string, TopicState<WorkspaceConfigSnapshot>>();
   private readonly detachServiceEvent: () => void;
+  private disposed = false;
 
   constructor(
     private readonly service: NekAgentService,
     private readonly resolveSessionKey: (target: NekWorkspaceTarget) => string | undefined,
     private readonly syncer: NekSessionIndexSyncer,
     private readonly maxSubscriptions = MAX_SUBSCRIPTIONS,
+    private readonly logger?: NekAgentServiceOptions["logger"],
   ) {
     this.detachServiceEvent = service.onEvent((event) => this.handleServiceEvent(event));
   }
@@ -101,31 +83,50 @@ export class NekAgentServiceTopics {
   onDynamicSessionsIndexFrame(target: NekWorkspaceTarget): Event<SessionsIndexTopicWireCandidate> {
     return this.indexEmitter(workspaceKey(target)).event;
   }
-
   onDynamicWorkspaceConfigFrame(
     target: NekWorkspaceTarget,
   ): Event<WorkspaceConfigTopicWireCandidate> {
     return this.configEmitter(workspaceKey(target)).event;
   }
 
+  private addSubscription(target: NekWorkspaceTarget, kind: TopicKind): Subscription {
+    if (this.disposed) throw new Error("nek workspace topics are disposed");
+    if (this.indexSubscriptions.size + this.configSubscriptions.size >= this.maxSubscriptions)
+      throw new Error(`nek v4 subscription limit exceeded (${this.maxSubscriptions})`);
+    const key = workspaceKey(target);
+    const topic = `${kind === "index" ? "sessions-index" : "workspace-config"}/${key}`;
+    const subscription = {
+      id: makeSubscriptionId(topic),
+      workspaceKey: key,
+      topic,
+      target,
+      ordinal: 0,
+      ready: false,
+    };
+    (kind === "index" ? this.indexSubscriptions : this.configSubscriptions).set(
+      subscription.id,
+      subscription,
+    );
+    return subscription;
+  }
+
   async subscribeSessionsIndexV4(
     input: NekSessionsIndexSubscribeParams,
   ): Promise<V4SessionsIndexSubscribeResult> {
-    this.assertCapacity();
-    const id = makeSubscriptionId(`sessions-index/${workspaceKey(input)}`);
-    const workspaceId = workspaceKey(input);
-    const subscription: IndexSubscription = {
-      id,
-      workspaceKey: workspaceId,
-      topic: `sessions-index/${workspaceId}`,
-      ordinal: 0,
-    };
-    this.indexSubscriptions.set(id, subscription);
-    const snapshot = await this.syncIndex(input);
-    this.pushIndex(subscription, snapshot, "initial");
-    const state = this.indexState.get(workspaceId);
-    if (!state) throw new Error(`missing sessions-index state for ${workspaceId}`);
-    return { ack: ack(id, state.logEpoch, "snapshot") };
+    const subscription = this.addSubscription(input, "index");
+    try {
+      await this.syncIndex(input);
+      const snapshot = this.indexState.get(subscription.workspaceKey)?.snapshot;
+      if (!snapshot) throw new Error("nek index subscription retired");
+      this.pushIndex(subscription, snapshot, "initial");
+      subscription.ready = true;
+      return {
+        ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch },
+      };
+    } catch (error) {
+      await this.unsubscribeSessionsIndexV4({ ...input, subscriptionId: subscription.id });
+      throw error;
+    }
   }
 
   async resyncSessionsIndexV4(
@@ -134,35 +135,39 @@ export class NekAgentServiceTopics {
     const subscription = this.indexSubscriptions.get(input.subscriptionId);
     if (!subscription)
       throw new Error(`unknown sessions-index subscription ${input.subscriptionId}`);
-    const snapshot = await this.syncIndex(input);
+    await this.syncIndex(subscription.target);
+    const snapshot = this.indexState.get(subscription.workspaceKey)?.snapshot;
+    if (!snapshot) throw new Error("nek index subscription retired");
     this.pushIndex(subscription, snapshot, "recovery");
-    const state = this.indexState.get(subscription.workspaceKey);
-    if (!state) throw new Error(`missing sessions-index state for ${subscription.workspaceKey}`);
-    return { ack: ack(subscription.id, state.logEpoch, "snapshot") };
+    return {
+      ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch },
+    };
   }
 
   async unsubscribeSessionsIndexV4(input: NekConversationUnsubscribeParams): Promise<void> {
+    const subscription = this.indexSubscriptions.get(input.subscriptionId);
     this.indexSubscriptions.delete(input.subscriptionId);
+    if (subscription && !this.hasSubscribers("index", subscription.workspaceKey))
+      this.indexState.delete(subscription.workspaceKey);
   }
 
   async subscribeWorkspaceConfigV4(
     input: NekWorkspaceConfigSubscribeParams,
   ): Promise<V4WorkspaceConfigSubscribeResult> {
-    this.assertCapacity();
-    const id = makeSubscriptionId(`workspace-config/${workspaceKey(input)}`);
-    const workspaceId = workspaceKey(input);
-    const subscription: ConfigSubscription = {
-      id,
-      workspaceKey: workspaceId,
-      topic: `workspace-config/${workspaceId}`,
-      ordinal: 0,
-    };
-    this.configSubscriptions.set(id, subscription);
-    const snapshot = await this.syncConfig(input);
-    this.pushConfig(subscription, snapshot, "initial");
-    const state = this.configState.get(workspaceId);
-    if (!state) throw new Error(`missing workspace-config state for ${workspaceId}`);
-    return { ack: ack(id, state.logEpoch, "snapshot") };
+    const subscription = this.addSubscription(input, "config");
+    try {
+      await this.syncConfig(input);
+      const snapshot = this.configState.get(subscription.workspaceKey)?.snapshot;
+      if (!snapshot) throw new Error("nek config subscription retired");
+      this.pushConfig(subscription, snapshot, "initial");
+      subscription.ready = true;
+      return {
+        ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch },
+      };
+    } catch (error) {
+      await this.unsubscribeWorkspaceConfigV4({ ...input, subscriptionId: subscription.id });
+      throw error;
+    }
   }
 
   async resyncWorkspaceConfigV4(
@@ -171,18 +176,24 @@ export class NekAgentServiceTopics {
     const subscription = this.configSubscriptions.get(input.subscriptionId);
     if (!subscription)
       throw new Error(`unknown workspace-config subscription ${input.subscriptionId}`);
-    const snapshot = await this.syncConfig(input);
+    await this.syncConfig(subscription.target);
+    const snapshot = this.configState.get(subscription.workspaceKey)?.snapshot;
+    if (!snapshot) throw new Error("nek config subscription retired");
     this.pushConfig(subscription, snapshot, "recovery");
-    const state = this.configState.get(subscription.workspaceKey);
-    if (!state) throw new Error(`missing workspace-config state for ${subscription.workspaceKey}`);
-    return { ack: ack(subscription.id, state.logEpoch, "snapshot") };
+    return {
+      ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch: snapshot.logEpoch },
+    };
   }
 
   async unsubscribeWorkspaceConfigV4(input: NekConversationUnsubscribeParams): Promise<void> {
+    const subscription = this.configSubscriptions.get(input.subscriptionId);
     this.configSubscriptions.delete(input.subscriptionId);
+    if (subscription && !this.hasSubscribers("config", subscription.workspaceKey))
+      this.configState.delete(subscription.workspaceKey);
   }
 
   async dispose(): Promise<void> {
+    this.disposed = true;
     this.detachServiceEvent();
     for (const emitter of this.indexEmitters.values()) emitter.dispose();
     for (const emitter of this.configEmitters.values()) emitter.dispose();
@@ -190,142 +201,150 @@ export class NekAgentServiceTopics {
     this.configSubscriptions.clear();
     this.indexState.clear();
     this.configState.clear();
+    this.indexEmitters.clear();
+    this.configEmitters.clear();
   }
 
   private handleServiceEvent(event: NekAgentServiceEvent): void {
-    // `process_attached` 是新会话/恢复会话的第一条事实：新建会话的 phase 从 idle 开始，
-    // 随后 setPhase 遇到相同值不再发 state，只认 state 会让新会话迟迟不进索引。
-    if (event.type !== "state" && event.type !== "rpc_event" && event.type !== "process_attached")
+    let index = false;
+    let config = false;
+    let mode: string | undefined;
+    const cwd = event.type === "catalog_changed" ? event.cwd : event.session.cwd;
+    if (event.type === "catalog_changed") {
+      index = event.topic === "index";
+      config = event.topic === "config";
+    } else if (event.type === "process_attached") {
+      index = config = true;
+    } else if (event.type === "state" || event.type === "process_exit") {
+      index = true;
+    } else if (event.type === "rpc_event") {
+      const rpc = event.event;
+      index =
+        rpc.type === "message_end" ||
+        rpc.type === "agent_settled" ||
+        rpc.type === "session_info_changed" ||
+        rpc.type === "entry_appended";
+      config =
+        rpc.type === "thinking_level_changed" ||
+        (rpc.type === "entry_appended" &&
+          (rpc.entry.type === "model_change" || rpc.entry.type === "thinking_level_change"));
+      if (rpc.type === "extension_event" && rpc.name === "nek.state") {
+        const value = (rpc.payload as { mode?: unknown } | null)?.mode;
+        if (typeof value === "string") {
+          mode = value;
+          config = true;
+        }
+      }
+    }
+    if (!index && !config) return;
+    const targets = new Map<string, NekWorkspaceTarget>();
+    for (const subscription of [
+      ...this.indexSubscriptions.values(),
+      ...this.configSubscriptions.values(),
+    ]) {
+      if (cwd === undefined || subscription.target.workspacePath === cwd)
+        targets.set(subscription.workspaceKey, subscription.target);
+    }
+    for (const [key, target] of targets) {
+      if (index) this.invalidate("index", target);
+      const currentMode = this.configState
+        .get(key)
+        ?.snapshot?.config.configOptions.find((option) => option.id === "mode")?.currentValue;
+      if (config && (mode === undefined || mode !== currentMode)) this.invalidate("config", target);
+    }
+  }
+
+  /** One in-flight read plus one dirty bit per subscribed workspace/topic; no queued refresh jobs. */
+  private invalidate(kind: TopicKind, target: NekWorkspaceTarget): void {
+    const key = workspaceKey(target);
+    if (this.disposed || !this.hasSubscribers(kind, key)) return;
+    const state = kind === "index" ? this.indexState.get(key) : this.configState.get(key);
+    if (state?.flight) {
+      state.dirty = true;
       return;
-    const target = { workspacePath: event.session.cwd };
-    const workspaceId = workspaceKey(target);
-    if (this.indexSubscriptionsHas(workspaceId)) void this.publishIndex(target);
-    if (this.configSubscriptionsHas(workspaceId)) void this.publishConfig(target);
-  }
-
-  private async syncIndex(input: NekWorkspaceTarget): Promise<SessionsIndexSnapshot> {
-    const result = await this.syncer.sync({ cwd: input.workspacePath });
-    const workspaceId = workspaceKey(input);
-    const state = this.indexState.get(workspaceId) ?? {
-      logEpoch: `nek-index:${workspaceId}`,
-      seq: 0,
-    };
-    state.seq += 1;
-    const sessions = result.items
-      .map((item) => sessionSummary(item, workspaceId))
-      .filter((item): item is NonNullable<typeof item> => item !== undefined);
-    const snapshot: SessionsIndexSnapshot = {
-      protocolVersion: 1,
-      workspaceId,
-      logEpoch: state.logEpoch,
-      sessions,
-    };
-    state.snapshot = snapshot;
-    this.indexState.set(workspaceId, state);
-    return snapshot;
-  }
-
-  private async syncConfig(input: NekWorkspaceTarget): Promise<WorkspaceConfigSnapshot> {
-    const workspaceId = workspaceKey(input);
-    const sessionKey = this.resolveSessionKey(input);
-    const models = sessionKey
-      ? (
-          await this.service
-            .commandContext()
-            .target(sessionKey)
-            .client.call({ type: "get_available_models" })
-        ).models
-      : await this.service
-          .commandContext()
-          .control()
-          .then(async (client) => {
-            return (await client.call({ type: "get_available_models" })).models;
-          });
-    const state = sessionKey
-      ? await this.service.commandContext().target(sessionKey).client.call({ type: "get_state" })
-      : undefined;
-    const commands: NekRpcSlashCommand[] = sessionKey
-      ? await this.service.getCommands(sessionKey)
-      : [];
-    const rawNekState = sessionKey
-      ? (
-          await this.service.commandContext().target(sessionKey).client.call({
-            type: "extension_call",
-            method: "nek.get_state",
-          })
-        ).result
-      : undefined;
-    const nekState = isNekState(rawNekState) ? rawNekState : undefined;
-    const config: WorkspaceConfigState = {
-      configOptions: [
-        {
-          id: "model",
-          name: "模型",
-          type: "select",
-          currentValue: state?.model ? `${state.model.provider}/${state.model.id}` : "",
-          options: modelOptions(models),
-        },
-        {
-          id: "thought_level",
-          name: "思考等级",
-          type: "select",
-          currentValue: state?.thinkingLevel ?? "medium",
-          options: ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((value) => ({
-            value,
-            name: value,
-          })),
-        },
-        {
-          id: "mode",
-          name: "模式",
-          type: "select",
-          currentValue: nekState?.mode ?? "agent",
-          options: [
-            { value: "agent", name: "Agent" },
-            { value: "plan", name: "Plan" },
-          ],
-        },
-      ],
-      slashCommands: commands.map((command) => ({
-        name: command.name,
-        description: command.description ?? "",
-        source: command.source === "extension" ? "custom" : "builtin",
-      })),
-    };
-    const topicState = this.configState.get(workspaceId) ?? {
-      logEpoch: `nek-config:${workspaceId}`,
-      seq: 0,
-    };
-    topicState.seq += 1;
-    const snapshot: WorkspaceConfigSnapshot = {
-      protocolVersion: 1,
-      workspaceId,
-      logEpoch: topicState.logEpoch,
-      config,
-    };
-    topicState.snapshot = snapshot;
-    this.configState.set(workspaceId, topicState);
-    return snapshot;
-  }
-
-  private async publishIndex(target: NekWorkspaceTarget): Promise<void> {
-    const snapshot = await this.syncIndex(target);
-    for (const subscription of this.indexSubscriptions.values()) {
-      if (subscription.workspaceKey === workspaceKey(target))
-        this.pushIndex(subscription, snapshot, "online");
     }
+    const flight = kind === "index" ? this.syncIndex(target) : this.syncConfig(target);
+    void flight.catch((error) => {
+      if (!this.disposed && this.hasSubscribers(kind, key))
+        this.logger?.warn("nek workspace topic refresh failed", { kind, error });
+    });
   }
 
-  private async publishConfig(target: NekWorkspaceTarget): Promise<void> {
-    const snapshot = await this.syncConfig(target);
-    for (const subscription of this.configSubscriptions.values()) {
-      if (subscription.workspaceKey === workspaceKey(target))
-        this.pushConfig(subscription, snapshot, "online");
+  private syncIndex(target: NekWorkspaceTarget): Promise<SessionsIndexSnapshot> {
+    const key = workspaceKey(target);
+    let state = this.indexState.get(key);
+    if (!state) {
+      state = { logEpoch: `nek-index:${key}`, seq: 0, dirty: false };
+      this.indexState.set(key, state);
     }
+    const current = state;
+    if (current.flight) return current.flight;
+    current.flight = this.syncer
+      .sync({ cwd: target.workspacePath })
+      .then((result) => {
+        if (this.disposed || this.indexState.get(key) !== current)
+          throw new Error("nek index refresh retired");
+        const snapshot: SessionsIndexSnapshot = {
+          protocolVersion: 1,
+          workspaceId: key,
+          logEpoch: current.logEpoch,
+          sessions: result.items
+            .map((item) => sessionSummary(item, key))
+            .filter((item) => item !== undefined),
+        };
+        if (!isDeepStrictEqual(current.snapshot, snapshot)) {
+          current.seq++;
+          for (const subscription of this.indexSubscriptions.values())
+            if (subscription.ready && subscription.workspaceKey === key)
+              this.pushIndex(subscription, snapshot, "online");
+          current.snapshot = snapshot;
+        }
+        return current.snapshot!;
+      })
+      .finally(() => {
+        current.flight = undefined;
+        if (current.dirty && this.indexState.get(key) === current) {
+          current.dirty = false;
+          this.invalidate("index", target);
+        }
+      });
+    return current.flight;
+  }
+
+  private syncConfig(target: NekWorkspaceTarget): Promise<WorkspaceConfigSnapshot> {
+    const key = workspaceKey(target);
+    let state = this.configState.get(key);
+    if (!state) {
+      state = { logEpoch: `nek-config:${key}`, seq: 0, dirty: false };
+      this.configState.set(key, state);
+    }
+    const current = state;
+    if (current.flight) return current.flight;
+    current.flight = readNekWorkspaceConfig(this.service, target, this.resolveSessionKey(target))
+      .then((snapshot) => {
+        if (this.disposed || this.configState.get(key) !== current)
+          throw new Error("nek config refresh retired");
+        if (!isDeepStrictEqual(current.snapshot, snapshot)) {
+          current.seq++;
+          for (const subscription of this.configSubscriptions.values())
+            if (subscription.ready && subscription.workspaceKey === key)
+              this.pushConfig(subscription, snapshot, "online");
+          current.snapshot = snapshot;
+        }
+        return current.snapshot!;
+      })
+      .finally(() => {
+        current.flight = undefined;
+        if (current.dirty && this.configState.get(key) === current) {
+          current.dirty = false;
+          this.invalidate("config", target);
+        }
+      });
+    return current.flight;
   }
 
   private pushIndex(
-    subscription: IndexSubscription,
+    subscription: Subscription,
     snapshot: SessionsIndexSnapshot,
     deliveryKind: "initial" | "online" | "recovery",
   ): void {
@@ -334,25 +353,22 @@ export class NekAgentServiceTopics {
     const frame: SessionsIndexTopicFrame = {
       topic: subscription.topic,
       subscriptionId: subscription.id,
-      fromSeq: deliveryKind === "recovery" || deliveryKind === "initial" ? 0 : state.seq - 1,
+      fromSeq: deliveryKind === "online" ? state.seq - 1 : 0,
       toSeq: state.seq,
       sentAt: Date.now(),
       payload: { kind: "snapshot", snapshot },
     };
-    subscription.ordinal += 1;
-    const emitter = this.indexEmitter(subscription.workspaceKey);
     for (const wire of makeTopicWireFrames(
       frame,
       subscription.id,
-      subscription.ordinal,
+      ++subscription.ordinal,
       deliveryKind,
-    )) {
-      emitter.fire(wire);
-    }
+    ))
+      this.indexEmitter(subscription.workspaceKey).fire(wire);
   }
 
   private pushConfig(
-    subscription: ConfigSubscription,
+    subscription: Subscription,
     snapshot: WorkspaceConfigSnapshot,
     deliveryKind: "initial" | "online" | "recovery",
   ): void {
@@ -361,51 +377,38 @@ export class NekAgentServiceTopics {
     const frame: WorkspaceConfigTopicFrame = {
       topic: subscription.topic,
       subscriptionId: subscription.id,
-      fromSeq: deliveryKind === "recovery" || deliveryKind === "initial" ? 0 : state.seq - 1,
+      fromSeq: deliveryKind === "online" ? state.seq - 1 : 0,
       toSeq: state.seq,
       sentAt: Date.now(),
       payload: { kind: "snapshot", snapshot },
     };
-    subscription.ordinal += 1;
-    const emitter = this.configEmitter(subscription.workspaceKey);
     for (const wire of makeTopicWireFrames(
       frame,
       subscription.id,
-      subscription.ordinal,
+      ++subscription.ordinal,
       deliveryKind,
-    )) {
-      emitter.fire(wire);
-    }
+    ))
+      this.configEmitter(subscription.workspaceKey).fire(wire);
   }
 
-  private indexSubscriptionsHas(workspaceId: string): boolean {
-    return [...this.indexSubscriptions.values()].some((item) => item.workspaceKey === workspaceId);
+  private hasSubscribers(kind: TopicKind, key: string): boolean {
+    const subscriptions = kind === "index" ? this.indexSubscriptions : this.configSubscriptions;
+    return [...subscriptions.values()].some((subscription) => subscription.workspaceKey === key);
   }
-
-  private configSubscriptionsHas(workspaceId: string): boolean {
-    return [...this.configSubscriptions.values()].some((item) => item.workspaceKey === workspaceId);
-  }
-
-  private indexEmitter(workspaceId: string): Emitter<SessionsIndexTopicWireCandidate> {
-    let emitter = this.indexEmitters.get(workspaceId);
+  private indexEmitter(key: string): Emitter<SessionsIndexTopicWireCandidate> {
+    let emitter = this.indexEmitters.get(key);
     if (!emitter) {
       emitter = new Emitter<SessionsIndexTopicWireCandidate>();
-      this.indexEmitters.set(workspaceId, emitter);
+      this.indexEmitters.set(key, emitter);
     }
     return emitter;
   }
-
-  private configEmitter(workspaceId: string): Emitter<WorkspaceConfigTopicWireCandidate> {
-    let emitter = this.configEmitters.get(workspaceId);
+  private configEmitter(key: string): Emitter<WorkspaceConfigTopicWireCandidate> {
+    let emitter = this.configEmitters.get(key);
     if (!emitter) {
       emitter = new Emitter<WorkspaceConfigTopicWireCandidate>();
-      this.configEmitters.set(workspaceId, emitter);
+      this.configEmitters.set(key, emitter);
     }
     return emitter;
-  }
-
-  private assertCapacity(): void {
-    if (this.indexSubscriptions.size + this.configSubscriptions.size >= this.maxSubscriptions)
-      throw new Error(`nek v4 subscription limit exceeded (${this.maxSubscriptions})`);
   }
 }

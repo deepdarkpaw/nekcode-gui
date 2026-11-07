@@ -545,12 +545,13 @@ export function SessionPane({
     enabled: shareSelectionPanelVisible,
     onDismiss: dismissShareSelectionPanel,
   });
+  const shareRows = shareActive ? snapshot?.rows.window : undefined;
   const shareRenderUnits = useMemo(
-    () => buildConversationTurnRenderUnits(snapshot?.rows.window ?? []),
-    [snapshot?.rows.window],
+    () => shareRows ? buildConversationTurnRenderUnits(shareRows) : [],
+    [shareRows],
   );
   const shareItems = useMemo(
-    () =>
+    () => shareRenderUnits.length === 0 ? [] :
       buildConversationTurnNavigatorItems(shareRenderUnits, {
         assistantEmptyPreview: intl.formatMessage({
           id: "chat.turnNavigator.emptyAssistant",
@@ -574,7 +575,7 @@ export function SessionPane({
   );
   useEffect(() => {
     if (!sessionId || !shareActive) return;
-    const rowsById = new Map((snapshot?.rows.window ?? []).map((row) => [row.rowId, row]));
+    const rowsById = new Map((shareRows ?? []).map((row) => [row.rowId, row]));
     syncAvailableTurns(
       sessionId,
       eligibleShareItems.flatMap((item) => {
@@ -582,7 +583,7 @@ export function SessionPane({
         return productTurnId ? [{ rowId: item.rowId, productTurnId }] : [];
       }),
     );
-  }, [eligibleShareItems, sessionId, shareActive, snapshot?.rows.window, syncAvailableTurns]);
+  }, [eligibleShareItems, sessionId, shareActive, shareRows, syncAvailableTurns]);
   const selectedShareRowIds = useMemo(
     () =>
       new Set(
@@ -620,10 +621,10 @@ export function SessionPane({
   const selectedShareTurnFingerprints = useMemo(
     () =>
       new Map(
-        selectedShareProductTurnIds.map((productTurnId) => [
+        (shareActive ? selectedShareProductTurnIds : []).map((productTurnId) => [
           productTurnId,
           conversationShareTurnFingerprint(
-            snapshot?.rows.window ?? [],
+            shareRows ?? [],
             productTurnId,
             workspacePath,
             {
@@ -641,16 +642,17 @@ export function SessionPane({
       remoteSessionId,
       selectedShareProductTurnIds,
       sessionId,
+      shareActive,
+      shareRows,
       sharePreflightVersion,
       snapshot?.logEpoch,
       snapshot?.revision,
-      snapshot?.rows.window,
       workspaceIdentity,
       workspacePath,
     ],
   );
   const eligibleShareProductTurnIds = useMemo(() => {
-    const rowsById = new Map((snapshot?.rows.window ?? []).map((row) => [row.rowId, row]));
+    const rowsById = new Map((shareRows ?? []).map((row) => [row.rowId, row]));
     const seen = new Set<string>();
     return eligibleShareItems.flatMap((item) => {
       const productTurnId = rowsById.get(item.rowId)?.productTurnId;
@@ -658,7 +660,7 @@ export function SessionPane({
       seen.add(productTurnId);
       return [productTurnId];
     });
-  }, [eligibleShareItems, snapshot?.rows.window]);
+  }, [eligibleShareItems, shareRows]);
   const sharePreflightCacheRef = useRef(new Map<string, ConversationShareTurnPreflightResult>());
   // 传输类失败会被按 turn 缓存成阻断项，仅靠选择变化无法再次触发 RPC；
   // 重试 token 变化时清缓存并重新发起，避免一次网络抖动把用户卡死在选择阶段。

@@ -200,6 +200,20 @@ test("TP-5: edit result uses the actual patch rather than one replace_all input 
   p.dispose();
 });
 
+test("TP-7: SQL comment lines and C++ increments inside hunks are counted as data, not file headers", () => {
+  const { entries, result } = messages("edit", { file_path: "/project/a.sql" });
+  for (const body of ["--- old SQL comment\n+-- new SQL comment", "-++old;\n+++new;"]) {
+    result.details = { patch: `--- a/a.sql\n+++ b/a.sql\n@@ -1 +1 @@\n${body}\n` };
+    const p = new NekConversationProjector({ sessionId: "s", schedule: () => () => {} });
+    p.loadSnapshot({ entries, leafId: "entry-1" });
+    const display = tool(p.snapshot()).output?.display;
+    assert.ok(display?.kind === "file_diff");
+    assert.equal(display.additions, 1);
+    assert.equal(display.deletions, 1);
+    p.dispose();
+  }
+});
+
 test("TP-6: field deltas copy only ancestors and cannot traverse or mutate prototypes", () => {
   const original = { files: [{ path: "G:/co" }], untouched: { content: "x".repeat(10000) } };
   const next = appendToolArgument(original, ["files", 0, "path"], "ding/a.ts") as typeof original;

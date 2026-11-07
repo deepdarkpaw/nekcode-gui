@@ -43,6 +43,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
   const allocator = new RowAllocator(input.existing);
   const branch = orderActiveBranch(input.entries, input.leafId);
   const rows: ConversationRow[] = [];
+  const rowIndexById = new Map<number, number>();
   const toolRows = new Map<string, number>();
 
   let turn: TurnContext = { turnId: "turn-0", entityId: "turn-0", startedAt: 0 };
@@ -65,9 +66,11 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
   // 同一 entityId 可能被先后投影两次（例如 toolCall 内容块与对应的 toolResult）：
   // 后者是同一行的状态更新，必须替换而不是再追加一行。
   const push = (row: ConversationRow) => {
-    const index = rows.findIndex((existing) => existing.rowId === row.rowId);
-    if (index === -1) rows.push(row);
-    else rows[index] = row;
+    const index = rowIndexById.get(row.rowId);
+    if (index === undefined) {
+      rowIndexById.set(row.rowId, rows.length);
+      rows.push(row);
+    } else rows[index] = row;
     return row;
   };
   const pushTurnHeader = (
@@ -243,7 +246,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
           push(
             mergeToolResultRow(
               identity(`tool:${result.toolCallId}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-              rows.find((row) => row.rowId === rowId),
+              rows[rowIndexById.get(rowId) ?? -1],
               {
                 toolCallId: result.toolCallId,
                 toolName: result.toolName,

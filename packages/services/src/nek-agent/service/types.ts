@@ -100,6 +100,7 @@ export interface NekAgentServiceOptions {
 }
 
 export type NekAgentServiceEvent =
+  | { type: "catalog_changed"; topic: "index" | "config"; cwd?: string }
   | {
       type: "state";
       session: NekSession;

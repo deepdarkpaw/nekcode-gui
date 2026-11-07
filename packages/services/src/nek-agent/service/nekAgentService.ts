@@ -69,17 +69,27 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   /** 一次命令 = 一次会话租约：按 `input.sessionKey` 持进程引用，结束即归还给进程池。 */
   private forInput<I extends { sessionKey: string }, R>(
     run: (context: NekAgentCommandContext, input: I) => Promise<R>,
+    invalidates?: "index" | "config",
   ): (input: I) => Promise<R> {
     return async (input) =>
-      await this.withSession(input.sessionKey, async () => await run(this.commandContext(), input));
+      await this.withSession(input.sessionKey, async () => {
+        const cwd = this.requireRecord(input.sessionKey).cwd;
+        const result = await run(this.commandContext(), input);
+        if (invalidates) this.emit({ type: "catalog_changed", topic: invalidates, cwd });
+        return result;
+      });
   }
 
   /** 同 {@link forInput}，命令参数就是 sessionKey。 */
   private forKey<R>(
     run: (context: NekAgentCommandContext, sessionKey: string) => Promise<R>,
+    invalidates?: "index" | "config",
   ): (sessionKey: string) => Promise<R> {
-    return async (sessionKey) =>
-      await this.withSession(sessionKey, async () => await run(this.commandContext(), sessionKey));
+    const invoke = this.forInput<{ sessionKey: string }, R>(
+      (context, input) => run(context, input.sessionKey),
+      invalidates,
+    );
+    return (sessionKey) => invoke({ sessionKey });
   }
 
   // ---- 输入 ----
@@ -92,17 +102,19 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
 
   // ---- 会话操作 ----
   readonly compact: Methods["compact"] = this.forInput(commands.compact);
-  readonly setModel: Methods["setModel"] = this.forInput(commands.setModel);
-  readonly cycleModel: Methods["cycleModel"] = this.forKey(commands.cycleModel);
-  readonly setThinkingLevel: Methods["setThinkingLevel"] = this.forInput(commands.setThinkingLevel);
-  readonly setThoughtLevel: Methods["setThoughtLevel"] = this.forInput(commands.setThinkingLevel);
+  readonly setModel: Methods["setModel"] = this.forInput(commands.setModel, "config");
+  readonly cycleModel: Methods["cycleModel"] = this.forKey(commands.cycleModel, "config");
+  readonly setThinkingLevel: Methods["setThinkingLevel"] = this.forInput(
+    commands.setThinkingLevel,
+    "config",
+  );
+  readonly setThoughtLevel: Methods["setThoughtLevel"] = this.setThinkingLevel;
   readonly cycleThinkingLevel: Methods["cycleThinkingLevel"] = this.forKey(
     commands.cycleThinkingLevel,
+    "config",
   );
-  readonly cycleThoughtLevel: Methods["cycleThoughtLevel"] = this.forKey(
-    commands.cycleThinkingLevel,
-  );
-  readonly setMode: Methods["setMode"] = this.forInput(commands.setMode);
+  readonly cycleThoughtLevel: Methods["cycleThoughtLevel"] = this.cycleThinkingLevel;
+  readonly setMode: Methods["setMode"] = this.forInput(commands.setMode, "config");
   readonly getStats: Methods["getStats"] = this.forKey(commands.getStats);
 
   /**
@@ -130,7 +142,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     );
   };
 
-  readonly reload: Methods["reload"] = this.forKey(commands.reload);
+  readonly reload: Methods["reload"] = this.forKey(commands.reload, "config");
   readonly stopSubagent: Methods["stopSubagent"] = this.forInput(commands.stopSubagent);
   readonly getSubagentTranscript: Methods["getSubagentTranscript"] = this.forInput(
     commands.getSubagentTranscript,
@@ -148,8 +160,11 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   readonly shareSession: Methods["shareSession"] = this.forKey(commands.shareSession);
 
   /** 导入只看会话文件与目标 cwd，不依赖已打开的会话进程。 */
-  readonly importSession: Methods["importSession"] = async (input) =>
-    await commands.importSession(this.commandContext(), input);
+  readonly importSession: Methods["importSession"] = async (input) => {
+    const result = await commands.importSession(this.commandContext(), input);
+    this.emit({ type: "catalog_changed", topic: "index", cwd: input.cwd });
+    return result;
+  };
 
   // ---- 会话生命周期 ----
 
@@ -252,6 +267,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     this.detachProcess(record);
     await this.pool.reclaimSession(record.key, "dispose");
     this.removeRecord(record);
+    this.emit({ type: "catalog_changed", topic: "index", cwd: record.cwd });
     return true;
   }
 
@@ -264,6 +280,11 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     if (!path) throw new Error("renameSession requires sessionPath");
     const control = await this.pool.ensureControl();
     await control.client.call({ type: "rename_session", sessionPath: path, name: input.name });
+    this.emit({
+      type: "catalog_changed",
+      topic: "index",
+      cwd: this.resolveRecord(input.sessionKey ?? path)?.cwd,
+    });
   }
 
   /** 先关闭持锁的会话进程再删文件：nek 拒绝删除被活进程锁住的会话。 */
@@ -274,6 +295,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     if (record) await this.closeSession(record.key);
     const control = await this.pool.ensureControl();
     await control.client.call({ type: "delete_session", sessionPath: path });
+    this.emit({ type: "catalog_changed", topic: "index", cwd: record?.cwd });
   }
 
   /** 会话目录走控制进程：不需要为列目录启动任何会话进程。 */

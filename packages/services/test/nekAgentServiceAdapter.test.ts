@@ -220,6 +220,79 @@ function fakeProcess(
   };
 }
 
+test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce and remain retryable", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const warnings: unknown[] = [];
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+    logger: { warn: (...args) => warnings.push(args) },
+  });
+  const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    const target = { workspacePath: "/workspace", workspaceIdentity: "logical-workspace" };
+    const created = await adapter.createNekSession(target);
+    const frames: unknown[] = [];
+    const indexListener = adapter.onDynamicSessionsIndexFrame(target)((frame) =>
+      frames.push(frame),
+    );
+    const configListener = adapter.onDynamicWorkspaceConfigFrame(target)((frame) =>
+      frames.push(frame),
+    );
+    await adapter.subscribeSessionsIndexV4(target);
+    await adapter.subscribeWorkspaceConfigV4(target);
+    await drain();
+    control.commands.length = session.commands.length = 0;
+    const initialFrames = frames.length;
+    for (let i = 0; i < 100; i++)
+      session.emit({
+        type: "message_update",
+        usage: {},
+        assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" },
+      });
+    await drain();
+    assert.equal(control.commands.length, 0);
+    assert.equal(session.commands.length, 0);
+    assert.equal(frames.length, initialFrames);
+
+    for (let i = 0; i < 100; i++) session.emit({ type: "session_info_changed", name: "same" });
+    await drain();
+    assert.equal(control.commands.filter((command) => command.type === "list_sessions").length, 2);
+    assert.equal(frames.length, initialFrames, "unchanged catalogs must not be republished");
+
+    session.failExtensions.add("nek.get_state");
+    await adapter.service.setThinkingLevel({ sessionKey: created.sessionKey, level: "high" });
+    await drain();
+    assert.ok(warnings.some((warning) => String(warning).includes("topic refresh failed")));
+    session.failExtensions.clear();
+    const previous = session.commands.filter(
+      (command) => command.type === "get_available_models",
+    ).length;
+    await adapter.service.reload(created.sessionKey);
+    await drain();
+    assert.equal(
+      session.commands.filter((command) => command.type === "get_available_models").length,
+      previous + 1,
+    );
+
+    control.commands.length = 0;
+    await adapter.service.renameSession({ sessionKey: created.sessionKey, name: "renamed" });
+    await drain();
+    assert.ok(control.commands.some((command) => command.type === "list_sessions"));
+    control.commands.length = 0;
+    await adapter.service.deleteSession({ sessionKey: created.sessionKey });
+    await drain();
+    assert.ok(control.commands.some((command) => command.type === "list_sessions"));
+    indexListener.dispose();
+    configListener.dispose();
+  } finally {
+    await adapter.dispose();
+  }
+});
+
 test("maps a nek session to v4 conversation and rejects non-image attachments", async () => {
   const control = fakeProcess("control");
   const session = fakeProcess("session");
