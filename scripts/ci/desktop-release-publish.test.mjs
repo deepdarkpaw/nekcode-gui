@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { publishRelease, releaseNotes, releaseTitle } from "./desktop-release-publish.mjs";
+import {
+  publishRelease,
+  releaseNotes,
+  releaseTitle,
+  REQUIRED_NEK_VERSION,
+} from "./desktop-release-publish.mjs";
 
 const release = {
   tag: "v0.1.0",
@@ -31,11 +37,21 @@ test("notes list the installer to download for each released platform", () => {
   const mac = notes.indexOf("nekcode-0.1.0-mac-arm64.dmg");
   assert.ok(windows > 0 && mac > windows, "Windows first, then macOS");
   assert.match(notes, /win-arm64/);
-  assert.match(notes, /nek 0\.4\.0/);
+  assert.match(notes, new RegExp(`nek ${REQUIRED_NEK_VERSION.replaceAll(".", "\\.")}`));
   assert.match(notes, /SmartScreen/);
   assert.match(notes, /隐私与安全性/);
   assert.match(notes, /SHA256SUMS/);
   assert.equal(releaseTitle("nekcode", "v0.1.0"), "nekcode v0.1.0");
+});
+
+test("published minimum nek version matches the GUI compatibility gate", () => {
+  const source = readFileSync(
+    new URL("../../packages/shared/src/nek-protocol/gui-rpc.ts", import.meta.url),
+    "utf8",
+  );
+  const match = source.match(/NEK_GUI_MIN_VERSION\s*=\s*"([^"]+)"/u);
+  assert.ok(match, "NEK_GUI_MIN_VERSION must be a string literal");
+  assert.equal(REQUIRED_NEK_VERSION, match[1], "release notes must state the enforced nek version");
 });
 
 test("notes only describe platforms that are actually released", () => {

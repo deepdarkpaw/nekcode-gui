@@ -17,6 +17,14 @@ const PLATFORM_DOWNLOADS = {
     `- macOS：\`${productName}-${version}-mac-arm64.dmg\`（Intel 芯片选 \`mac-x64\`）`,
 };
 
+/**
+ * 发布说明里声明的最低 nek 版本。
+ * 必须与 `packages/shared/src/nek-protocol/gui-rpc.ts` 的 `NEK_GUI_MIN_VERSION` 一致
+ * （`desktop-release-publish.test.mjs` 会读取源码比对）：这里不能 import TS，否则 CI 的
+ * `node --test scripts/ci/*.test.mjs` 在没有 tsx 的情况下无法加载。
+ */
+export const REQUIRED_NEK_VERSION = "0.4.3";
+
 /** 首次打开未签名安装包的操作提示。 */
 const UNSIGNED_HINTS = {
   win: "Windows 弹出 SmartScreen 时点「更多信息 → 仍要运行」",
@@ -43,7 +51,7 @@ export function releaseNotes({ productName, version, platforms }) {
     ...downloads,
     "",
     "### 说明",
-    "- 需要 nek 0.4.0 或更新版本，首次启动的引导可以直接安装。",
+    `- 需要 nek ${REQUIRED_NEK_VERSION} 或更新版本，首次启动的引导可以直接安装。`,
     version.includes("-beta.")
       ? "- 这是 Beta 预发布，请从本页手动下载安装；不会替换稳定版的 Latest。"
       : `- 已安装的 ${productName} 会自动检查这里的新版本。`,
