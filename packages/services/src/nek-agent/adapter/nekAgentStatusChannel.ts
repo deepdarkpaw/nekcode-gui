@@ -25,6 +25,7 @@ import {
   type NekStatusQueue,
   type NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
+import { isNekSubagentRecord } from "../projection/nekSubagentRecords.js";
 import { isNekState, type NekAgentServiceEvent, type NekSession } from "../service/types.js";
 import { workspaceKey } from "./frameHelpers.js";
 import type { NekWorkspaceTarget } from "./types.js";
@@ -98,22 +99,6 @@ export function boundNekStatusSnapshot(snapshot: NekStatusSnapshot): NekStatusSn
 /** `clear_queue` 的回包也要有界，否则一次异常队列就能把 store 撑爆。 */
 export function boundNekStatusQueue(queue: NekStatusQueue): NekStatusQueue {
   return { steering: boundList(queue.steering), followUp: boundList(queue.followUp) };
-}
-
-function isNekSubagentRecord(value: unknown): value is NekSubagentRecord {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Partial<NekSubagentRecord>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.description === "string" &&
-    typeof record.type === "string" &&
-    typeof record.background === "boolean" &&
-    (record.status === "running" ||
-      record.status === "completed" ||
-      record.status === "errored" ||
-      record.status === "aborted") &&
-    typeof record.startedAt === "number"
-  );
 }
 
 function projectExtensionEvent(event: NekExtensionEvent): NekExtensionEvent | null {

@@ -19,6 +19,7 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
+import { collectPersistedSubagentRecords } from "../projection/nekSubagentRecords.js";
 import { isNekState, type NekMode, type NekPromptInput, type NekThoughtLevel } from "./types.js";
 
 export interface NekAgentCommandTarget {
@@ -142,29 +143,43 @@ export async function abortRetry(
 
 /**
  * 状态 feed 的权威快照：`nek.get_state`（运行态）、`get_session_stats`（用量）、
- * `extension_call nek.get_state`（todos/计划/子代理）一次取齐。
+ * `extension_call nek.get_state`（todos/计划/子代理）与 `get_entries`（持久化子代理）一次取齐。
  *
- * 三份事实里任何一份失败都会让整次快照失败：状态卡宁可继续显示上一份，也不拼半个快照。
+ * 四份事实里任何一份失败都会让整次快照失败：状态卡宁可继续显示上一份，也不拼半个快照。
  */
 export async function getStatusSnapshot(
   context: NekAgentCommandContext,
   sessionKey: string,
 ): Promise<NekStatusSnapshot> {
   const target = context.target(sessionKey);
-  const [state, stats, extension] = await Promise.all([
+  const [state, stats, extension, entries] = await Promise.all([
     target.client.call({ type: "get_state" }),
     target.client.call({ type: "get_session_stats" }),
     target.client.call({ type: "extension_call", method: "nek.get_state" }),
+    // nek 的 subagent registry 是纯内存表：重开 GUI 后只剩 entries 里 toolResult 的 details。
+    target.client.call({ type: "get_entries" }),
   ]);
   if (!isNekState(extension.result)) {
     throw new Error("nek returned an invalid status state snapshot");
   }
+  const live = extension.result;
+  // 内存里的子代理是活的权威：histories 只补它没有的 id，绝不覆盖实时状态。
+  const persisted = collectPersistedSubagentRecords(entries.entries, {
+    // 父会话还在跑时，内存里缺席的持久 running 记录可能只是这两次请求的时序差，
+    // 判死会把刚 spawn 的子代理永久标成 aborted（状态 store 不复活终态）；
+    // 父会话静止时残留的 running 不可能真实存在，必须收敛。
+    sessionRunning: state.isStreaming === true,
+  });
+  const liveIds = new Set(live.subagents.map((record) => record.id));
+  const restored = [...persisted.values()]
+    .filter((entry) => !liveIds.has(entry.record.id))
+    .map((entry) => entry.record);
   return {
     sessionKey: state.sessionId,
     running: state.isStreaming,
     compacting: state.isCompacting,
     pendingMessageCount: state.pendingMessageCount,
-    state: extension.result,
+    state: restored.length === 0 ? live : { ...live, subagents: [...live.subagents, ...restored] },
     stats,
   };
 }
