@@ -41,7 +41,7 @@ function isRawToolCallFailed(raw: unknown) {
   return typeof status === "string" && status === "failed";
 }
 
-export function buildEditCodeViewerSource(
+function buildEditCodeViewerSource(
   summary: NonNullable<ToolCallBlockRenderContext["rawFileSummaries"]>[number],
 ): CodeViewerSource {
   if (!summary.patch) {

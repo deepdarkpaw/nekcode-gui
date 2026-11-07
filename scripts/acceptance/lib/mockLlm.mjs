@@ -28,6 +28,12 @@ export const MOCK_SECOND_QUESTION_TEXT = "Anything else to record?";
 export const MOCK_OTHER_ANSWER = "Prefer in-memory caching";
 export const MOCK_SLOW_CHUNKS = 120;
 export const MOCK_PLAN_TITLE = "Acceptance workspace plan";
+export const MOCK_FILE_PROMPT = "Exercise streamed file changes.";
+export const MOCK_FILE_REPLY = "The file changes are complete.";
+export const MOCK_FILE_NAME = "streaming-路径.txt";
+export const MOCK_FILE_CONTENT = 'alpha "quoted"\nbeta C:\\tmp\n';
+export const MOCK_QUEUE_PROMPT = "Continue with a queued message.";
+export const MOCK_QUEUE_REPLY = "The queued message was consumed.";
 const MAX_REQUESTS = 200;
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -141,9 +147,21 @@ export function pickMockTurn(body) {
     return "plan";
   }
   if (toolCallId === "call_todos") return "final";
+  const fileTurns = {
+    call_stream_write: "editOne",
+    call_edit_one: "editTwo",
+    call_edit_two: "fileDone",
+  };
+  if (Object.hasOwn(fileTurns, toolCallId)) {
+    if (!/successfully/i.test(JSON.stringify(lastTool.content)))
+      throw new Error("file operation failed");
+    return fileTurns[toolCallId];
+  }
   const content = messages[userIndex]?.content;
   const text = typeof content === "string" ? content : JSON.stringify(content ?? "");
   if (text.includes("Implement the plan.") && text.includes(MOCK_PLAN_TITLE)) return "todos";
+  if (text.includes(MOCK_FILE_PROMPT)) return "streamWrite";
+  if (text.includes(MOCK_QUEUE_PROMPT)) return "queued";
   if (text.includes(MOCK_LONG_PROMPT)) return "slow";
   if (text.includes(MOCK_FIRST_PROMPT)) return "first";
   if (text.includes(MOCK_CLI_PROMPT)) return "cli";
@@ -209,6 +227,13 @@ export async function startMockLlm(options = {}) {
   const slowChunks = options.slowChunks ?? MOCK_SLOW_CHUNKS;
   const slowDelayMs = options.slowDelayMs ?? 250;
   const requests = [];
+  let releaseFileStream;
+  const fileGate = new Promise((resolve) => {
+    releaseFileStream = resolve;
+  });
+  const filePath = options.projectPath
+    ? `${options.projectPath.replaceAll("\\", "/")}/${MOCK_FILE_NAME}`
+    : undefined;
   const server = createServer((request, response) => {
     const body = [];
     let bytes = 0;
@@ -235,6 +260,8 @@ export async function startMockLlm(options = {}) {
         const text = Buffer.concat(body).toString("utf8");
         turn = pickMockTurn(text);
         hasImage = latestUserTurnHasImage(text);
+        if (turn === "streamWrite" && !filePath)
+          throw new Error("file scenario requires a sandbox projectPath");
       } catch (error) {
         requests.push({ url: request.url, turn: "invalid", error: error.message, aborted: false });
         response.writeHead(400).end(error.message);
@@ -255,6 +282,63 @@ export async function startMockLlm(options = {}) {
       const finish = () => {
         if (!response.writableEnded && !response.destroyed) response.end("data: [DONE]\n\n");
       };
+      if (turn === "streamWrite") {
+        void (async () => {
+          const prefix = `{"path":${JSON.stringify(filePath)},"content":`;
+          write(
+            chunk({
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_stream_write",
+                  type: "function",
+                  function: { name: "write", arguments: prefix.slice(0, 14) },
+                },
+              ],
+            }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          write(chunk({ tool_calls: [{ index: 0, function: { arguments: prefix.slice(14) } }] }));
+          let timer;
+          await Promise.race([
+            fileGate,
+            new Promise((resolve) => {
+              timer = setTimeout(resolve, 30_000);
+            }),
+          ]);
+          clearTimeout(timer);
+          const suffix = `${JSON.stringify(MOCK_FILE_CONTENT)}}`;
+          for (let index = 0; index < suffix.length; index += 3) {
+            write(
+              chunk({
+                tool_calls: [{ index: 0, function: { arguments: suffix.slice(index, index + 3) } }],
+              }),
+            );
+            await new Promise((resolve) => setTimeout(resolve, 30));
+          }
+          write(chunk({}, "tool_calls"));
+          finish();
+        })();
+        return;
+      }
+      if (turn === "editOne" || turn === "editTwo") {
+        const first = turn === "editOne";
+        for (const event of toolTurn(first ? "call_edit_one" : "call_edit_two", "edit", {
+          file_path: filePath,
+          old_string: first ? "alpha" : "gamma",
+          new_string: first ? "gamma" : "omega",
+        }))
+          write(event);
+        finish();
+        return;
+      }
+      if (turn === "fileDone" || turn === "queued") {
+        for (const event of textTurn(turn === "fileDone" ? MOCK_FILE_REPLY : MOCK_QUEUE_REPLY))
+          write(event);
+        finish();
+        return;
+      }
       if (turn === "slow") {
         void (async () => {
           // 逐块慢速输出，验收脚本在流式过程中点停止。
@@ -265,6 +349,7 @@ export async function startMockLlm(options = {}) {
             if (record.aborted) break;
             write(chunk({ content: ` step ${index + 1}.` }));
           }
+          write(usageChunk());
           finish();
         })();
         return;
@@ -303,6 +388,7 @@ export async function startMockLlm(options = {}) {
   return {
     baseUrl: `http://127.0.0.1:${port}/v1`,
     requests,
+    releaseFileStream,
     close: () =>
       new Promise((resolve) => {
         server.closeAllConnections();

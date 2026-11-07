@@ -14,6 +14,8 @@ import {
   MOCK_IMAGE_PROMPT,
   MOCK_IMAGE_REPLY,
   MOCK_LONG_PROMPT,
+  MOCK_FILE_PROMPT,
+  MOCK_QUEUE_PROMPT,
   MOCK_OTHER_ANSWER,
   MOCK_PLAN_TITLE,
   listenOnFetchablePort,
@@ -24,6 +26,39 @@ import {
 const user = (content) => ({ role: "user", content });
 const tool = (tool_call_id, content) => ({ role: "tool", tool_call_id, content });
 const body = (messages) => JSON.stringify({ messages });
+
+test("file flow accepts real edit result wording and queued user input starts a fresh turn", () => {
+  const prefix = [user(MOCK_FILE_PROMPT)];
+  assert.equal(pickMockTurn(body(prefix)), "streamWrite");
+  assert.equal(
+    pickMockTurn(body([...prefix, tool("call_stream_write", "Successfully wrote to fixture")])),
+    "editOne",
+  );
+  assert.equal(
+    pickMockTurn(
+      body([...prefix, tool("call_edit_one", "The file has been updated successfully.")]),
+    ),
+    "editTwo",
+  );
+  assert.throws(
+    () => pickMockTurn(body([...prefix, tool("call_edit_one", "Edit failed")])),
+    /file operation failed/,
+  );
+  assert.equal(pickMockTurn(body([...prefix, user(MOCK_QUEUE_PROMPT)])), "queued");
+});
+
+test("a completed slow mock stream has a finish_reason, so queue draining is not replaced by retries", async () => {
+  const mock = await startMockLlm({ slowChunks: 2, slowDelayMs: 1 });
+  try {
+    const response = await fetch(`${mock.baseUrl}/chat/completions`, {
+      method: "POST",
+      body: body([user(MOCK_LONG_PROMPT)]),
+    });
+    assert.match(await response.text(), /"finish_reason":"stop"/);
+  } finally {
+    await mock.close();
+  }
+});
 
 test("mock routes only the latest user turn, not a previous completed tool chain", () => {
   const history = [user(MOCK_FIRST_PROMPT), tool("call_switch", "You are now in Plan mode.")];

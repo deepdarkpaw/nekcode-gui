@@ -203,6 +203,7 @@ export async function checkPastedImage(session, mock) {
 }
 
 export async function checkStop(session, mock) {
+  const firstNewRequest = mock.requests.length;
   await fillInput(session, COMPOSER, MOCK_LONG_PROMPT);
   await waitForPage(session, SEND_READY, "enabled send for stop test");
   await clickAt(session, SEND);
@@ -213,12 +214,22 @@ export async function checkStop(session, mock) {
     "streaming output before stop",
     90_000,
   );
+  const startedDeadline = Date.now() + 30_000;
+  while (!mock.requests.slice(firstNewRequest).some((request) => request.turn === "slow")) {
+    if (Date.now() >= startedDeadline) throw new Error("new stop-test stream did not start");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
   await clickAt(session, STOP);
   await waitForSelector(session, STOP, "stop button cleared", 60_000, false);
   await waitForSelector(session, SEND, "composer send button restored", 60_000);
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    if (mock.requests.some((request) => request.turn === "slow" && request.aborted)) return;
+    if (
+      mock.requests
+        .slice(firstNewRequest)
+        .some((request) => request.turn === "slow" && request.aborted)
+    )
+      return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("stop did not abort the mock stream before harness cleanup");

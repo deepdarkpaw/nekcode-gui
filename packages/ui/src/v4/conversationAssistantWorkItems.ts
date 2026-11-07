@@ -91,6 +91,8 @@ function isExecuteToolCallRow(row: AssistantWorkRow): row is ToolCallRow {
 
 function isChangesToolCallRow(row: AssistantWorkRow): row is ToolCallRow {
   if (!isToolCallRow(row)) return false;
+  // Plan commands publish their own plan card; the legacy create_* heuristic is not a file edit.
+  if (row.toolName === "create_plan" || row.toolName === "update_plan") return false;
   return (
     resolveToolCallIdentity({ toolName: row.toolName, kind: row.toolName }).family === "file-write"
   );

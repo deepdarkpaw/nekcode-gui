@@ -106,6 +106,8 @@ it("CG2: hidden reasoning, other tools, text and turn boundaries stop write grou
   for (const boundary of [
     reasoning(2),
     tool(2),
+    { ...tool(2), toolName: "create_plan" },
+    { ...tool(2), toolName: "update_plan" },
     { ...base(2), kind: "assistantText" as const, text: "note", state: "complete" as const },
   ]) {
     const items = buildAssistantWorkRenderItems([edit(1), boundary, edit(3)], {

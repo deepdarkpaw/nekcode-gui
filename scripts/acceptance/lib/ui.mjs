@@ -20,11 +20,13 @@ export async function assertNoRendererFailure(session) {
 async function clickTarget(session, expression) {
   const rect = await evaluate(
     session,
-    `(() => {
+    `(async () => {
     const element = ${expression};
     if (!(element instanceof HTMLElement)) throw new Error('click target not found');
     if (element.matches(':disabled, [aria-disabled="true"]')) throw new Error('click target is disabled');
     element.scrollIntoView({ block: 'center' });
+    // Let virtual-list measurement and scroll anchoring settle before computing click coordinates.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const box = element.getBoundingClientRect();
     if (!box.width || !box.height) throw new Error('click target is not visible');
     const x = box.x + box.width / 2;

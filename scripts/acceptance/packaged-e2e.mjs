@@ -16,7 +16,7 @@ import {
   stopApp,
   writeNekShim,
 } from "./lib/app.mjs";
-import { connectRenderer, screenshot, waitForPage } from "./lib/cdp.mjs";
+import { connectRenderer, evaluate, screenshot, waitForPage } from "./lib/cdp.mjs";
 import { MOCK_CLI_PROMPT, MOCK_CLI_REPLY, mockNekConfig, startMockLlm } from "./lib/mockLlm.mjs";
 import {
   assertNoRendererFailure,
@@ -26,6 +26,12 @@ import {
   waitForTextGone,
 } from "./lib/ui.mjs";
 import { checkSettings } from "./lib/settings-check.mjs";
+import {
+  checkAcceptedAnswers,
+  checkFileFlow,
+  checkFileSummary,
+  checkQueuedMessage,
+} from "./lib/tool-flow-check.mjs";
 import {
   checkFirstPrompt,
   checkInteractions,
@@ -39,7 +45,7 @@ const { values } = parseArgs({
   options: { app: { type: "string" }, keep: { type: "boolean", default: false } },
 });
 const sandbox = await createSandbox("e2e");
-const mock = await startMockLlm();
+const mock = await startMockLlm({ projectPath: sandbox.project, slowChunks: 80, slowDelayMs: 100 });
 const nekCli = join(
   process.env.NEK_RPC_WORKTREE ?? "G:/coding/nekcode-gui/.worktree/nek-rpc",
   "packages/coding-agent/dist/bundle/cli.js",
@@ -51,6 +57,12 @@ let app;
 
 async function capture(name) {
   const path = join(sandbox.screenshots, `${name}.png`);
+  await waitForPage(
+    session,
+    `document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity)`,
+    "finite UI animations settled",
+    10_000,
+  );
   await screenshot(session, path);
   return path;
 }
@@ -62,9 +74,20 @@ async function step(name, action, dependency) {
     return;
   }
   try {
+    const measuredSession = session;
+    const before = await evaluate(session, "window.__acceptancePerf.commits");
     await action();
     await assertNoRendererFailure(session);
-    matrix.push({ name, status: "pass", screenshot: await capture(name) });
+    const perf = await evaluate(session, "window.__acceptancePerf");
+    matrix.push({
+      name,
+      status: "pass",
+      screenshot: await capture(name),
+      metrics: {
+        commits: perf.commits - (session === measuredSession ? before : 0),
+        maxMountedNodes: perf.maxMountedNodes,
+      },
+    });
   } catch (error) {
     const row = {
       name,
@@ -91,6 +114,20 @@ async function launchAndConnect() {
     extraArgs: [`--open-workspace=${sandbox.project}`],
   });
   session = await connectRenderer(port);
+  await session.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `
+    window.__acceptancePerf = { commits: 0, maxMountedNodes: 0 };
+    window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+      supportsFiber: true, inject: () => 1,
+      onCommitFiberRoot: () => {
+        window.__acceptancePerf.commits++;
+        window.__acceptancePerf.maxMountedNodes = Math.max(window.__acceptancePerf.maxMountedNodes, document.querySelectorAll('*').length);
+      },
+      onCommitFiberUnmount: () => {}, onPostCommitFiberRoot: () => {},
+    };
+  `,
+  });
+  await session.send("Page.reload", { ignoreCache: true });
   await waitForPage(
     session,
     "document.getElementById('root')?.children.length > 0",
@@ -161,9 +198,18 @@ try {
   await step("07-status-and-usage", () => checkStatus(session), "06-prompt-trust-and-run");
   await step(
     "08-structured-interactions",
-    () => checkInteractions(session, sandbox, mock),
+    async () => {
+      await checkInteractions(session, sandbox, mock);
+      await checkAcceptedAnswers(session);
+    },
     "06-prompt-trust-and-run",
   );
+  await step(
+    "08b-file-flow",
+    () => checkFileFlow(session, sandbox, mock),
+    "08-structured-interactions",
+  );
+  await step("08c-queued-input", () => checkQueuedMessage(session), "08b-file-flow");
   await step(
     "09-session-resume",
     async () => {
@@ -171,8 +217,12 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
       await launchAndConnect();
       await checkRestoredSession(session);
+      await checkAcceptedAnswers(session);
+      await capture("09-answers-restored");
+      await checkFileSummary(session);
+      await waitForTextGone(session, "已排队，等待当前步骤结束");
     },
-    "08-structured-interactions",
+    "08c-queued-input",
   );
   await step("10-stop-running", () => checkStop(session, mock), "09-session-resume");
   await step(
