@@ -29,6 +29,7 @@ import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
 import { planSubagentRows, type SubagentRowAnchor } from "./nekSubagentRecords.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 import { projectNekUserImages } from "./nekUserImages.js";
+import { projectNekUserFiles, readNekStoredAttachments, withNekUserFiles } from "./nekUserFiles.js";
 
 export type { NekProjectedSnapshot, NekSnapshotInput } from "./nekEntryShared.js";
 export { orderActiveBranch } from "./nekEntryShared.js";
@@ -170,6 +171,17 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
         break;
       }
       case "custom_message": {
+        const files = readNekStoredAttachments(entry);
+        if (files) {
+          // CLI 将附件消息紧接在所属 user 后落盘；按 parentId 配对，不靠文本/时间/并发顺序猜。
+          const parentRowId = allocator.resolve(`entry:${entry.parentId}:user`);
+          const parentIndex = rowIndexById.get(parentRowId);
+          const parent = parentIndex === undefined ? undefined : rows[parentIndex];
+          if (parent?.kind !== "userInput")
+            throw new Error("nek attachments have no owning user entry");
+          push(withNekUserFiles(parent, projectNekUserFiles(input.sessionId, files)));
+          break;
+        }
         // `display: false` 的隐藏消息（如 `@skill:` 展开出的 `skill_mention`）不进对话记录。
         if (entry.display === false) break;
         const row = projectCustomMessage(entry as NekCustomMessageEntry, turn, allocator);

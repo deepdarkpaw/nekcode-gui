@@ -21,6 +21,7 @@ export const sessionId = "disk-session";
 export const sessionPath = "/sessions/disk.jsonl";
 export const guiInfo: NekGuiInfo = {
   protocolVersion: 1,
+  capabilities: { promptAttachments: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },

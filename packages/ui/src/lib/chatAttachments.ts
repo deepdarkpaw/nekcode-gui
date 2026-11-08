@@ -8,6 +8,7 @@ import {
 import { PROTOCOL_V4_LIMITS } from "@zcode/shared/zcode-protocol-v4";
 import {
   OversizedInlineImageAttachmentError,
+  OversizedInlineFileAttachmentError,
   OversizedInlinePdfAttachmentError,
   OversizedInlineVideoAttachmentError,
 } from "@/lib/chatAttachmentErrors.js";
@@ -16,13 +17,13 @@ import {
   countClipboardTextLines,
   createClipboardTextAttachmentFilename,
   inferAttachmentMimeType,
-  isTextLikeAttachment,
 } from "@/lib/chatAttachmentMetadata.js";
 
 export {
   MissingInlineImageContentError,
   MissingInlinePdfContentError,
   OversizedInlineImageAttachmentError,
+  OversizedInlineFileAttachmentError,
   OversizedInlinePdfAttachmentError,
   OversizedInlineVideoAttachmentError,
 } from "@/lib/chatAttachmentErrors.js";
@@ -39,7 +40,6 @@ const INLINE_VIDEO_ATTACHMENT_MAX_BYTES = Math.min(
   VIDEO_INPUT_MAX_BYTES,
   PROTOCOL_V4_LIMITS.attachmentMaxBytes,
 );
-const INLINE_TEXT_ATTACHMENT_MAX_CHARS = 64 * 1024;
 
 export type ChatComposerAttachmentSourceKind = "clipboard-text";
 
@@ -250,16 +250,21 @@ export async function serializeChatComposerAttachment(
     };
   }
 
-  const textContent =
-    attachment.file && isTextLikeAttachment(attachment)
-      ? await readAttachmentText(attachment.file)
-      : undefined;
+  if (attachment.sizeBytes > PROTOCOL_V4_LIMITS.attachmentMaxBytes) {
+    throw new OversizedInlineFileAttachmentError({
+      filename: attachment.filename,
+      maxSizeBytes: PROTOCOL_V4_LIMITS.attachmentMaxBytes,
+      sizeBytes: attachment.sizeBytes,
+    });
+  }
+  // 无 native path 的文件必须传完整字节，不能只传元信息或在 renderer 静默截断正文。
+  const dataBase64 = await readAttachmentBase64(attachment);
   return {
     kind: "file",
     filename: attachment.filename,
     mimeType,
     sizeBytes: attachment.sizeBytes,
-    ...(textContent !== undefined ? { textContent } : {}),
+    dataBase64,
   };
 }
 
@@ -290,11 +295,4 @@ export function isPdfChatComposerAttachment(attachment: ChatComposerAttachment):
 /** 图片与视频同属媒体组：输入框与消息流统一按媒体卡片渲染。 */
 export function isMediaChatComposerAttachment(attachment: ChatComposerAttachment): boolean {
   return isImageChatComposerAttachment(attachment) || isVideoChatComposerAttachment(attachment);
-}
-
-async function readAttachmentText(file: File): Promise<string> {
-  const text = await file.text();
-  return text.length > INLINE_TEXT_ATTACHMENT_MAX_CHARS
-    ? `${text.slice(0, INLINE_TEXT_ATTACHMENT_MAX_CHARS)}\n\n[内容过长，已截断]`
-    : text;
 }

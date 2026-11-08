@@ -43,7 +43,7 @@ function declaration(bytes: Buffer, uploadId: string) {
   };
 }
 
-test("a pasted image uploads through the connection facade and reaches nek inline", async () => {
+test("a pasted image uploads through the connection facade and reaches nek as a target-local attachment", async () => {
   const stagingDir = await mkdtemp(join(tmpdir(), "nek-attachment-upload-"));
   const h = harness({ attachmentStagingDir: stagingDir });
   const scope = await connectedScope(h);
@@ -88,9 +88,10 @@ test("a pasted image uploads through the connection facade and reaches nek inlin
     assert.equal(ack.status, "accepted");
     const prompt = h.sessions[0]?.commands.find((command) => command.type === "prompt");
     assert.ok(prompt && prompt.type === "prompt", "nek received the prompt");
-    assert.deepEqual(prompt.images, [
-      { type: "image", data: bytes.toString("base64"), mimeType: "image/png" },
+    assert.deepEqual(prompt.attachments, [
+      { path: ref, fileName: upload.fileName, mimeType: "image/png" },
     ]);
+    assert.equal(prompt.images, undefined, "image decoding belongs to nek, not the GUI");
   } finally {
     await scope.dispose();
     await h.adapter.dispose();

@@ -4,6 +4,7 @@ import type {
   NekAgentMessage,
   NekGuiInfo,
   NekProjectTrust,
+  NekPromptAttachment,
   NekRpcEvent,
   NekRpcSessionState,
   NekSessionEntry,
@@ -66,6 +67,7 @@ export interface NekPromptInput {
   sessionKey: string;
   message: string;
   images?: Array<{ type: "image"; data: string; mimeType: string }>;
+  attachments?: NekPromptAttachment[];
   streamingBehavior?: "steer" | "follow_up" | "followUp";
 }
 

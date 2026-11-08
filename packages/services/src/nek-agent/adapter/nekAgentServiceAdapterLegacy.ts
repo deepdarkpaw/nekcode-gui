@@ -6,7 +6,7 @@ import type {
   V4ConversationFileRewindPreviewResult,
   V4AttachmentPreviewSourceResult,
 } from "@zcode/shared/zcode-protocol-v4";
-import { toNekImages } from "./attachmentImages.js";
+import { toNekPromptAttachments } from "./attachmentInput.js";
 import type { NekPlanSummary } from "@zcode/shared/nek-protocol";
 import type { NekSessionCommandEnvelope } from "./types.js";
 import { isNekState } from "../service/types.js";
@@ -170,11 +170,15 @@ export function createNekLegacyMethods(
           modelId: input.modelSelection.modelId,
         });
       }
-      const images = await toNekImages(input.attachments);
+      const attachments = await toNekPromptAttachments(
+        target.service,
+        sessionKey,
+        input.attachments,
+      );
       await target.service.sendPrompt({
         sessionKey,
         message: input.content,
-        ...(images ? { images } : {}),
+        ...attachments,
       });
       return {
         sessionId: input.sessionId,

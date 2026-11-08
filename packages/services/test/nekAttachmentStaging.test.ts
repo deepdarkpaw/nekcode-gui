@@ -9,7 +9,6 @@ import test from "node:test";
 import { PROTOCOL_V4_LIMITS } from "@zcode/shared/zcode-protocol-v4";
 import { toNekImages } from "../src/nek-agent/adapter/attachmentImages.js";
 import {
-  NEK_ATTACHMENT_IMAGE_ONLY_MESSAGE,
   NEK_ATTACHMENT_MAX_COMMITTED_UPLOADS,
   NEK_ATTACHMENT_STAGING_FULL_MESSAGE,
   NekAttachmentStaging,
@@ -106,12 +105,12 @@ test("stages chunks and commits a checksum-verified image that nek can read", as
   });
 });
 
-test("rejects non-images, conflicting retries, bad chunks and checksum mismatches", async () => {
+test("rejects invalid MIME, conflicting retries, bad chunks and checksum mismatches", async () => {
   await withStaging(async ({ staging }) => {
     const bytes = randomBytes(600);
     await assert.rejects(
-      staging.begin(declare(bytes, { mime: "text/plain" })),
-      new Error(NEK_ATTACHMENT_IMAGE_ONLY_MESSAGE),
+      staging.begin(declare(bytes, { mime: "text/plain\r\nbad" })),
+      /fault\.attachment\.invalidParams: mime/u,
     );
     await assert.rejects(
       staging.begin(declare(bytes, { totalBytes: PROTOCOL_V4_LIMITS.attachmentMaxBytes + 1 })),
@@ -141,6 +140,26 @@ test("rejects non-images, conflicting retries, bad chunks and checksum mismatche
       staging.chunk({ ...mismatched, chunkIndex: 0, dataBase64: "AAAA" }),
       /fault\.attachment\.unknownUpload/,
     );
+  });
+});
+
+test("ordinary text and binary documents retain their exact uploaded bytes", async () => {
+  await withStaging(async ({ staging }) => {
+    for (const [index, mime] of [
+      "text/plain",
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ].entries()) {
+      const bytes = randomBytes(800);
+      const input = declare(bytes, {
+        mime,
+        uploadId: `document-${index}`,
+        fileName: `file-${index}.bin`,
+      });
+      const ref = await upload(staging, input, bytes);
+      assert.deepEqual(await readFile(ref), bytes);
+      assert.deepEqual(await staging.commit(input), { ref });
+    }
   });
 });
 

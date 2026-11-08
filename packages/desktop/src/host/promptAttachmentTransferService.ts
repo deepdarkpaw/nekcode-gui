@@ -1,4 +1,6 @@
+import { stat } from "node:fs/promises";
 import { Emitter } from "@zcode/rpc";
+import { NEK_PROMPT_ATTACHMENT_LIMITS } from "@zcode/shared/nek-protocol";
 import type { IRemoteBackend } from "@zcode/server/remote";
 import type {
   IPromptAttachmentTransferService,
@@ -29,7 +31,10 @@ function isAbortError(error: unknown): boolean {
  */
 export function createRemotePromptAttachmentTransferService(
   backend: Pick<IRemoteBackend, "exec" | "upload">,
-  options: { onJanitorError?: (error: unknown) => void } = {},
+  options: {
+    onJanitorError?: (error: unknown) => void;
+    statLocalFile?: (path: string) => Promise<{ size: number; isFile(): boolean }>;
+  } = {},
 ): IPromptAttachmentTransferService {
   const records = new Map<string, TransferRecord>();
   const emitters = new Map<string, Emitter<PromptAttachmentTransferProgress>>();
@@ -58,16 +63,20 @@ export function createRemotePromptAttachmentTransferService(
     if (record.ref && (includeAdopted || !record.adopted)) {
       await cleanupRemotePromptAttachment(backend, record.ref);
     }
-    records.delete(operationId);
+    if (records.get(operationId) === record) records.delete(operationId);
   };
 
   return {
     async stage(params): Promise<PromptAttachmentStageResult> {
-      await cleanup(params.operationId, false);
+      const previous = records.get(params.operationId);
+      previous?.controller.abort();
+      const maxBytes = params.mime.toLowerCase().startsWith("image/")
+        ? NEK_PROMPT_ATTACHMENT_LIMITS.maxImageBytes
+        : NEK_PROMPT_ATTACHMENT_LIMITS.maxFileBytes;
       const controller = new AbortController();
       const record: TransferRecord = {
         controller,
-        bytes: Math.max(0, params.sizeBytes ?? 0),
+        bytes: 0,
         adopted: false,
       };
       records.set(params.operationId, record);
@@ -75,15 +84,24 @@ export function createRemotePromptAttachmentTransferService(
       let lastPercent = -1;
       let lastEmittedAt = 0;
       let lastUploadedBytes = 0;
-      const attachment: ZCodePromptAttachment = {
-        kind: params.mime.startsWith("image/") ? "image" : "file",
-        filename: params.fileName,
-        localPath: params.localPath,
-        mimeType: params.mime,
-        sizeBytes: params.sizeBytes ?? 0,
-      } as ZCodePromptAttachment;
       const workspaceKey = params.workspaceIdentity?.trim() || params.workspacePath;
       try {
+        if (previous?.ref && !previous.adopted)
+          await cleanupRemotePromptAttachment(backend, previous.ref);
+        const fileStat = await (options.statLocalFile ?? stat)(params.localPath);
+        if (records.get(params.operationId) !== record || controller.signal.aborted)
+          throw Object.assign(new Error("Remote upload canceled"), { name: "AbortError" });
+        if (!fileStat.isFile()) throw new Error("附件路径不是普通文件");
+        if (fileStat.size > maxBytes)
+          throw new Error(`附件超过 ${maxBytes / 1024 / 1024} MB 限制；请缩小后重试`);
+        record.bytes = fileStat.size;
+        const attachment: ZCodePromptAttachment = {
+          kind: params.mime.startsWith("image/") ? "image" : "file",
+          filename: params.fileName,
+          localPath: params.localPath,
+          mimeType: params.mime,
+          sizeBytes: fileStat.size,
+        } as ZCodePromptAttachment;
         const materialized = await materializeRemotePromptAttachments(
           {
             taskId: params.sessionId,
@@ -98,6 +116,8 @@ export function createRemotePromptAttachmentTransferService(
             uploadOptions: {
               signal: controller.signal,
               onProgress(progress) {
+                if (progress.uploadedBytes > maxBytes || progress.totalBytes > maxBytes)
+                  controller.abort();
                 const totalBytes = Math.max(progress.totalBytes, record.bytes);
                 record.bytes = totalBytes;
                 lastUploadedBytes = Math.max(lastUploadedBytes, progress.uploadedBytes);
@@ -121,6 +141,7 @@ export function createRemotePromptAttachmentTransferService(
         const ref = next?.localPath?.trim();
         if (!ref) throw new Error("Remote attachment staging returned no path");
         if (records.get(params.operationId) !== record || controller.signal.aborted) {
+          await cleanupRemotePromptAttachment(backend, ref);
           throw Object.assign(new Error("Remote upload canceled"), { name: "AbortError" });
         }
         record.ref = ref;
@@ -160,8 +181,10 @@ export function createRemotePromptAttachmentTransferService(
     async adopt(operationId) {
       const record = records.get(operationId);
       if (record?.ref) {
+        // adopt 只在 nek 接纳后调用：稳定副本已由执行端拥有，SSH 暂存不再承担会话存储。
+        await cleanupRemotePromptAttachment(backend, record.ref);
         record.adopted = true;
-        records.delete(operationId);
+        if (records.get(operationId) === record) records.delete(operationId);
       }
     },
     async cancel(operationId) {

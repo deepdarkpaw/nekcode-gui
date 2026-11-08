@@ -1,7 +1,7 @@
 import type { NekMode, NekThinkingLevel } from "@zcode/shared/nek-protocol";
 import type { CommandAck, CommandsQueryResult } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionResult } from "../service/types.js";
-import { toNekImages } from "./attachmentImages.js";
+import { toNekPromptAttachments } from "./attachmentInput.js";
 import { forkUserMessage } from "./nekForkUserMessage.js";
 import {
   acceptedCommand,
@@ -76,12 +76,16 @@ export async function sendConversationCommand(
       return await forkUserMessage(context, input.target, binding, envelope);
     case "sendText": {
       await applySelection(context.service, binding.sessionKey, payload);
-      const images = await toNekImages(payload.attachments);
+      const attachments = await toNekPromptAttachments(
+        context.service,
+        binding.sessionKey,
+        payload.attachments,
+      );
       const delivery = await prepareDelivery(context.service, binding.sessionKey, payload);
       const result = await context.service.sendPrompt({
         sessionKey: binding.sessionKey,
         message: readString(payload, "text") ?? "",
-        ...(images ? { images } : {}),
+        ...attachments,
         streamingBehavior: delivery,
       });
       return acceptedCommand(envelope, revision, {
@@ -163,11 +167,15 @@ async function createFromCommand(
     ...(requestedMode !== undefined ? { mode: mode(requestedMode) } : {}),
   });
   if (firstInput) {
-    const images = await toNekImages(firstInput.attachments);
+    const attachments = await toNekPromptAttachments(
+      context.service,
+      result.sessionKey,
+      firstInput.attachments,
+    );
     await context.service.sendPrompt({
       sessionKey: result.sessionKey,
       message: readString(firstInput, "text") ?? "",
-      ...(images ? { images } : {}),
+      ...attachments,
     });
   }
   return acceptedCommand(envelope, result.conversation.revision, {

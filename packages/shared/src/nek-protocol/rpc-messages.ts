@@ -18,6 +18,29 @@ export interface NekTextContent {
   textSignature?: string;
 }
 
+/** 路径附件的接纳预算，与 nek 的核心附件契约保持一致；分片传输仍受 v4 的 20 MB 上限约束。 */
+export const NEK_PROMPT_ATTACHMENT_LIMITS = {
+  maxCount: 8,
+  maxFileBytes: 256 * 1024 * 1024,
+  maxImageBytes: 20 * 1024 * 1024,
+} as const;
+
+/** 附件路径属于 nek 执行机器；Remote SSH 必须先完成远端传输。 */
+export interface NekPromptAttachment {
+  path: string;
+  fileName?: string;
+  mimeType?: string;
+}
+
+/** nek 持久化的附件快照；由隐藏 `nek.attachments` 消息携带，不由 GUI 自行保存。 */
+export interface NekStoredAttachment {
+  path: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
 /** 图片块。`data` 是 base64。 */
 export interface NekImageContent {
   type: "image";

@@ -5,6 +5,7 @@ import type {
   NekCompactionResult,
   NekCycleModelResult,
   NekImageContent,
+  NekGuiInfo,
   NekMentionTargetInfo,
   NekModel,
   NekReloadResult,
@@ -24,6 +25,7 @@ import { isNekState, type NekMode, type NekPromptInput, type NekThoughtLevel } f
 
 export interface NekAgentCommandTarget {
   client: NekRpcClient;
+  capabilities?: NekGuiInfo["capabilities"];
   projector?: NekConversationProjector;
   phase: "idle" | "running" | "waiting_input" | "error" | "locked";
   setPhase: (phase: "idle" | "running" | "waiting_input" | "error" | "locked") => void;
@@ -45,25 +47,31 @@ export async function sendPrompt(
 ): Promise<{ disposition: string }> {
   const target = context.writableTarget(input.sessionKey);
   const images = input.images as NekImageContent[] | undefined;
+  const attachments = input.attachments?.length ? input.attachments : undefined;
+  if (attachments && target.capabilities?.promptAttachments !== 1) {
+    throw new Error("当前 nek 不支持文件附件，请更新 nek；Remote SSH 会话需要更新远端 nek");
+  }
+  const content = {
+    message: input.message,
+    ...(images ? { images } : {}),
+    ...(attachments ? { attachments } : {}),
+  };
   if (target.phase === "running" || target.phase === "waiting_input") {
     if (!input.streamingBehavior)
       throw new Error("streamingBehavior is required while nek is running");
     if (input.streamingBehavior === "steer")
       return await target.client.call({
         type: "steer",
-        message: input.message,
-        ...(images ? { images } : {}),
+        ...content,
       });
     return await target.client.call({
       type: "follow_up",
-      message: input.message,
-      ...(images ? { images } : {}),
+      ...content,
     });
   }
   const result = await target.client.call({
     type: "prompt",
-    message: input.message,
-    ...(images ? { images } : {}),
+    ...content,
   });
   if (result.disposition === "started") target.setPhase("running");
   return result;

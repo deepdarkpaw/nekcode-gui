@@ -3,7 +3,7 @@ import type {
   NekExtensionUiResponse,
   NekInteractionFrame,
   NekImageContent,
-  NekSessionEntry,
+  NekStoredAttachment,
   NekSessionSummary,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
@@ -13,11 +13,11 @@ import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentSe
 import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
 import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
 import { findNekUserImage, parseNekUserImageRef } from "../projection/nekUserImages.js";
+import { findNekUserFile } from "../projection/nekUserFiles.js";
+import { resolveNekSessionAttachment } from "./nekSessionAttachments.js";
 
 /** 用户图片缓存上限（base64 字符数，约 24 MB 原始字节）。 */
 const USER_IMAGE_CACHE_MAX_CHARS = 32 * 1024 * 1024;
-/** 解析图片时每次向 nek 取的条目数：减少往返，单页内存仍由 nek 分页限制。 */
-const USER_IMAGE_PAGE_ENTRIES = 8;
 
 import {
   type NekAgentServiceOptions,
@@ -326,15 +326,29 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
    * 用按字节封顶的 LRU 缓存最近解析的图片（ref 含会话与内容哈希，可跨会话共用）。
    */
   async readUserImage(sessionKey: string, ref: string): Promise<NekImageContent> {
-    const cached = this.userImageCache.get(ref);
+    const key = `${this.requireRecord(sessionKey).sessionId}\0${ref}`;
+    const cached = this.userImageCache.get(key);
     if (cached) {
-      this.userImageCache.delete(ref);
-      this.userImageCache.set(ref, cached);
+      this.userImageCache.delete(key);
+      this.userImageCache.set(key, cached);
       return cached;
     }
     const image = await this.resolveUserImage(sessionKey, ref);
-    this.cacheUserImage(ref, image);
+    this.cacheUserImage(key, image);
     return image;
+  }
+
+  /** 普通附件只解析会话内的元数据；字节由已授权的分块预览入口按需读取。 */
+  async readUserFile(sessionKey: string, ref: string): Promise<NekStoredAttachment> {
+    const record = this.requireRecord(sessionKey);
+    return await this.withSession(sessionKey, () =>
+      resolveNekSessionAttachment(
+        record,
+        (entries) => findNekUserFile(record.sessionId, ref, entries),
+        () => this.requireProcess(record).client,
+        "file",
+      ),
+    );
   }
 
   private readonly userImageCache = new Map<string, NekImageContent>();
@@ -355,34 +369,14 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   private async resolveUserImage(sessionKey: string, ref: string): Promise<NekImageContent> {
     const locator = parseNekUserImageRef(ref);
     const record = this.requireRecord(sessionKey);
-    return await this.withSession(sessionKey, async () => {
-      if (record.readonly) {
-        if (!record.snapshot) throw new Error("nek read-only session snapshot is not loaded");
-        const image = findNekUserImage(
-          record.sessionId,
-          ref,
-          locator,
-          record.snapshot.entries as NekSessionEntry[],
-        );
-        if (image) return image;
-        throw new Error("Unknown nek image attachment ref in session");
-      }
-      let beforeEntryId: string | undefined;
-      for (;;) {
-        const page = await this.requireProcess(record).client.call({
-          type: "get_entries",
-          limit: USER_IMAGE_PAGE_ENTRIES,
-          ...(beforeEntryId ? { beforeEntryId } : {}),
-        });
-        const image = findNekUserImage(record.sessionId, ref, locator, page.entries);
-        if (image) return image;
-        if (!page.hasMore) throw new Error("Unknown nek image attachment ref in session");
-        const next = page.entries[0]?.id;
-        if (!next || next === beforeEntryId)
-          throw new Error("nek image lookup page did not advance");
-        beforeEntryId = next;
-      }
-    });
+    return await this.withSession(sessionKey, () =>
+      resolveNekSessionAttachment(
+        record,
+        (entries) => findNekUserImage(record.sessionId, ref, locator, entries),
+        () => this.requireProcess(record).client,
+        "image",
+      ),
+    );
   }
 
   async dispose(): Promise<void> {
@@ -411,6 +405,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     const process = this.requireProcess(record);
     return {
       client: process.client,
+      capabilities: process.guiInfo.capabilities,
       projector: record.projector,
       phase: record.phase,
       setPhase: (phase) => this.setPhase(record, phase),

@@ -54,6 +54,15 @@ const readyInfo = JSON.stringify({
 });
 
 describe("detectRemoteNek", () => {
+  it("preserves the remote process attachment capability instead of using the local CLI's abilities", async () => {
+    const info = { ...JSON.parse(readyInfo), capabilities: { promptAttachments: 1 } };
+    const result = await detectRemoteNek(fakeBackend({ code: 0, stdout: JSON.stringify(info) }));
+    expect(result.status).toBe("ready");
+    expect(result.info?.capabilities?.promptAttachments).toBe(1);
+    const older = await detectRemoteNek(fakeBackend({ code: 0, stdout: readyInfo }));
+    expect(older.info?.capabilities?.promptAttachments).toBeUndefined();
+  });
+
   it.each([
     ["ready", 0, readyInfo, ""],
     ["not_installed", 127, "", "sh: nek: command not found"],

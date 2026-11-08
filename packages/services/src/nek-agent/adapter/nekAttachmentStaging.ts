@@ -2,10 +2,10 @@
  * nek 模式的 v4 附件上传事务（begin / chunk / commit / abort）。
  *
  * 粘贴的截图没有本地路径，渲染层按协议分片上传；这里把分片落到 GUI 数据目录下的暂存文件，
- * commit 校验 sha256 后返回绝对路径作为 ref。发送时 `toNekImages` 按 ref 读文件、转成
- * nek prompt 的 images，所以暂存文件只需活到消息发出。
+ * commit 校验 sha256 后返回执行端绝对路径作为 ref。发送时由 nek 接纳并复制到持久附件库，
+ * 因此本层只拥有未发送的暂存文件，不承担已接受附件的持久化。
  *
- * - 只收图片：nek 只接受图片附件，其它类型在 begin 就明确拒绝，不拖到发送时才失败；
+ * - 接收图片与普通文件；内容识别及文档解析属于 nek，不在 GUI 暂存层解析；
  * - 有界：进行中的上传数与字节数遵守协议上限，已提交未发送的文件另有条数/字节上限，
  *   超出时先淘汰最久未用的已提交文件；进行中的上传超时作废，已提交文件超过保留期删除；
  * - 可重试：同一 uploadId 的 begin、重复 chunk、重复 commit 都是幂等的；分片按偏移写入，
@@ -22,7 +22,7 @@ import {
   type V4AttachmentCommitResult,
 } from "@zcode/shared/zcode-protocol-v4";
 
-/** 已提交、等待发送的图片上限（条数 / 字节）；超出时淘汰最久未用的。 */
+/** 已提交、等待发送的附件上限（条数 / 字节）；超出时淘汰最久未用的。 */
 export const NEK_ATTACHMENT_MAX_COMMITTED_UPLOADS = 64;
 const MAX_COMMITTED_BYTES = 4 * PROTOCOL_V4_LIMITS.attachmentUploadMaxStagedBytes;
 const DISK_NAME_MAX_CHARS = 80;
@@ -30,8 +30,7 @@ const UPLOAD_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const CHECKSUM_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
 
-export const NEK_ATTACHMENT_IMAGE_ONLY_MESSAGE = "nek 仅支持图片附件；请使用 @路径引用文件";
-export const NEK_ATTACHMENT_STAGING_FULL_MESSAGE = "图片暂存已满：请先发送或移除已添加的图片后重试";
+export const NEK_ATTACHMENT_STAGING_FULL_MESSAGE = "附件暂存已满：请先发送或移除已添加的附件后重试";
 
 interface UploadIdentity {
   sessionId: string;
@@ -84,8 +83,12 @@ function validateBegin(input: NekAttachmentBeginInput): void {
   const name = input.fileName;
   if (!name || name.length > 255 || ["\u0000", "\r", "\n"].some((char) => name.includes(char)))
     throw invalid("fileName");
-  if (!input.mime.toLowerCase().startsWith("image/"))
-    throw new Error(NEK_ATTACHMENT_IMAGE_ONLY_MESSAGE);
+  if (
+    !input.mime ||
+    input.mime.length > 255 ||
+    ["\0", "\r", "\n"].some((char) => input.mime.includes(char))
+  )
+    throw invalid("mime");
   if (!Number.isInteger(input.totalBytes) || input.totalBytes <= 0) throw invalid("totalBytes");
   if (input.totalBytes > PROTOCOL_V4_LIMITS.attachmentMaxBytes)
     throw new Error("proto.payloadTooLarge");
@@ -115,7 +118,7 @@ function diskFileName(fileName: string): string {
     .replace(/[\\/:*?"<>|]/gu, "-")
     .replace(/\p{Cc}/gu, "")
     .trim();
-  const safe = cleaned.replace(/^\.+/u, "") || "image";
+  const safe = cleaned.replace(/^\.+/u, "") || "attachment";
   return safe.length <= DISK_NAME_MAX_CHARS ? safe : safe.slice(-DISK_NAME_MAX_CHARS);
 }
 

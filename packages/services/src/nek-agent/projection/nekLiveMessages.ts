@@ -25,6 +25,7 @@ import { currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentDetails } from "./nekLiveTools.js";
 import { projectNekUserImages } from "./nekUserImages.js";
+import { projectNekUserFiles, readNekStoredAttachments, withNekUserFiles } from "./nekUserFiles.js";
 import { appendToolArgument } from "./nekToolInput.js";
 
 /**
@@ -321,6 +322,15 @@ function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessag
  * 它们不生成任何可见行，用户输入原样显示，`@agent:`/`@skill:` 的高亮由渲染层负责。
  */
 function applyCustomMessage(ctx: NekLiveContext, message: NekCustomMessage): void {
+  const files = readNekStoredAttachments(message);
+  if (files) {
+    // 同一次 durable submission 的事件顺序为 user -> attachments；start/end 重放均为幂等 upsert。
+    const parent = ctx.store.window.at(-1);
+    if (parent?.kind !== "userInput" || parent.origin === "synthetic")
+      throw new Error("nek attachments have no owning live user input");
+    ctx.store.add(withNekUserFiles(parent, projectNekUserFiles(ctx.store.sessionId, files)));
+    return;
+  }
   if (message.display === false) return;
   const timestamp = toEpochMs(message.timestamp);
   if (message.customType === "nek.plan_preview" && isPlanPreviewDetails(message.details)) {

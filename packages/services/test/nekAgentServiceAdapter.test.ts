@@ -293,7 +293,7 @@ test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce 
   }
 });
 
-test("maps a nek session to v4 conversation and rejects non-image attachments", async () => {
+test("maps a nek session to v4 and requires the target nek attachment capability", async () => {
   const control = fakeProcess("control");
   const session = fakeProcess("session");
   const adapter = createNekAgentServiceAdapter({
@@ -326,7 +326,7 @@ test("maps a nek session to v4 conversation and rejects non-image attachments", 
           issuedAt: Date.now(),
         },
       }),
-      /仅支持图片/u,
+      /请更新 nek.*远端 nek/u,
     );
     await adapter.unsubscribeConversationV4({
       ...target,

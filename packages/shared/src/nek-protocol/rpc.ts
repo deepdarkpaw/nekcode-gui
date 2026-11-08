@@ -19,6 +19,7 @@ import type { NekMentionTargetInfo } from "./mentions.js";
 import type {
   NekAgentMessage,
   NekImageContent,
+  NekPromptAttachment,
   NekSessionEntry,
   NekSessionTreeNode,
   NekUsage,
@@ -162,10 +163,23 @@ export type NekSessionRpcCommand =
       type: "prompt";
       message: string;
       images?: NekImageContent[];
+      attachments?: NekPromptAttachment[];
       streamingBehavior?: "steer" | "followUp";
     }
-  | { id?: string; type: "steer"; message: string; images?: NekImageContent[] }
-  | { id?: string; type: "follow_up"; message: string; images?: NekImageContent[] }
+  | {
+      id?: string;
+      type: "steer";
+      message: string;
+      images?: NekImageContent[];
+      attachments?: NekPromptAttachment[];
+    }
+  | {
+      id?: string;
+      type: "follow_up";
+      message: string;
+      images?: NekImageContent[];
+      attachments?: NekPromptAttachment[];
+    }
   | { id?: string; type: "abort" }
   | { id?: string; type: "clear_queue" }
   | { id?: string; type: "new_session"; parentSession?: string }
