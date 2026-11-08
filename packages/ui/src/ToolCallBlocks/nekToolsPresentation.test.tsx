@@ -7,6 +7,7 @@ import { resolveToolCallRenderer } from "@/ToolCallBlocks/resolveRenderer.js";
 import type { ToolCallBlockRenderContext } from "@/ToolCallBlocks/shared.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
 import type { TaskChatToolCall } from "@/lib/taskChatMessageTypes.js";
 
@@ -71,13 +72,14 @@ function renderContext(toolCallValue: TaskChatToolCall): ToolCallBlockRenderCont
   };
 }
 
-function show(toolCallValue: TaskChatToolCall) {
+function show(toolCallValue: TaskChatToolCall, blockProps: { depth?: number } = {}) {
   return render(
     <ZCodeIntlProvider initialLocale="zh-CN">
       <TooltipProvider>
         <ToolCallBlock
           toolCallNode={{ toolCall: toolCallValue, childToolCalls: [] }}
           workspacePath="G:/project"
+          {...blockProps}
         />
       </TooltipProvider>
     </ZCodeIntlProvider>,
@@ -253,6 +255,82 @@ describe("nek tool presentation", () => {
     expect(screen.getByText("执行失败")).toBeTruthy();
     expect(container.textContent).not.toContain("nek rejected create_plan");
     expectRenderedWithoutRawParameters(container, "# NekLASCA");
+  });
+});
+
+describe("synthetic tool group nodes", () => {
+  const GROUP_TOOL_NAMES = {
+    exploreGroup: "Explore",
+    executeGroup: "ExecuteGroup",
+    readGroup: "ReadGroup",
+    changesGroup: "ChangesGroup",
+  } as const;
+
+  function groupNode(
+    kind: keyof typeof GROUP_TOOL_NAMES,
+    children: TaskChatToolCallTreeNode[],
+  ): TaskChatToolCallTreeNode {
+    return {
+      toolCall: {
+        toolId: `${kind}:call_1`,
+        toolName: GROUP_TOOL_NAMES[kind],
+        kind,
+        title: GROUP_TOOL_NAMES[kind],
+        status: "completed",
+        input: {},
+      },
+      childToolCalls: children,
+    };
+  }
+
+  function showGroup(node: TaskChatToolCallTreeNode) {
+    return render(
+      <ZCodeIntlProvider initialLocale="zh-CN">
+        <TooltipProvider>
+          <ToolCallBlock toolCallNode={node} workspacePath="G:/project" />
+        </TooltipProvider>
+      </ZCodeIntlProvider>,
+    );
+  }
+
+  it.each(Object.keys(GROUP_TOOL_NAMES))(
+    "routes %s to a semantic renderer instead of the raw fallback",
+    (kind) => {
+      const node = groupNode(kind as keyof typeof GROUP_TOOL_NAMES, []);
+      const context = renderContext(node.toolCall);
+
+      expect(resolveToolCallRenderer({ ...context, toolCallNode: node })).not.toBe(
+        FallbackToolCallBlock,
+      );
+    },
+  );
+
+  it("renders the explore group as a semantic stage instead of a raw node dump", () => {
+    const node = groupNode("exploreGroup", [
+      {
+        toolCall: toolCall("bash", { input: { command: "ls -a .nek" } }),
+        childToolCalls: [],
+      },
+    ]);
+    const { container } = showGroup(node);
+
+    expect(screen.getByText("查阅")).toBeTruthy();
+    // 兜底卡会把合成节点整段 JSON（含 kind: "exploreGroup"）摊进聊天区。
+    expect(container.textContent).not.toContain("exploreGroup");
+  });
+
+  it("derives the subagent source badge from parentToolUseId, never from nesting depth", () => {
+    // 分组容器的子工具仍在主会话里执行：缩进层级是布局事实，不是子智能体身份。
+    const nested = show(toolCall("bash", { input: { command: "ls -a .nek" } }), { depth: 1 });
+    expect(nested.queryByText("子智能体")).toBeNull();
+    cleanup();
+
+    // 协议给出 parentToolUseId 时才真的是子智能体发起的工具调用。
+    const fromSubAgent = show(
+      toolCall("bash", { input: { command: "ls -a .nek" }, parentToolUseId: "agent-1" }),
+      { depth: 1 },
+    );
+    expect(fromSubAgent.getByText("子智能体")).toBeTruthy();
   });
 });
 

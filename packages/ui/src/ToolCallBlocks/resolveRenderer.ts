@@ -37,15 +37,29 @@ function matchesToolName(source: { toolName?: string | null }, expected: string)
   return source.toolName?.trim().toLowerCase().replace(/[ _-]/g, "") === expected;
 }
 
+type ToolGroupRenderer =
+  | typeof ExploreToolCallBlock
+  | typeof ExecuteGroupToolCallBlock
+  | typeof ReadGroupToolCallBlock
+  | typeof ChangesGroupToolCallBlock;
+
+/**
+ * UI 阶段容器的 kind → 分组 renderer。合成节点没有真实工具名，
+ * 漏登记一项就会落到兜底卡：分组标题退化成原始 kind、把整段节点 JSON 摊进聊天区，
+ * 子工具还会被当成子智能体来源。所以这张表必须覆盖 conversationAssistantWorkItems 的
+ * 全部 ToolGroupKind。
+ */
+const TOOL_GROUP_RENDERERS = new Map<string, ToolGroupRenderer>([
+  ["exploreGroup", ExploreToolCallBlock],
+  ["executeGroup", ExecuteGroupToolCallBlock],
+  ["readGroup", ReadGroupToolCallBlock],
+  ["changesGroup", ChangesGroupToolCallBlock],
+]);
+
 export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
-  if (context.toolCallNode.toolCall.kind === "changesGroup") {
-    return ChangesGroupToolCallBlock;
-  }
-  if (context.toolCallNode.toolCall.kind === "executeGroup") {
-    return ExecuteGroupToolCallBlock;
-  }
-  if (context.toolCallNode.toolCall.kind === "readGroup") {
-    return ReadGroupToolCallBlock;
+  const groupRenderer = TOOL_GROUP_RENDERERS.get(context.toolCallNode.toolCall.kind);
+  if (groupRenderer) {
+    return groupRenderer;
   }
 
   const identity = resolveToolCallIdentity(context.toolCallNode.toolCall);

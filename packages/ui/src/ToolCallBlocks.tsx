@@ -189,7 +189,10 @@ function ToolCallBlockComponent({
   });
   const errorText = getToolCallErrorText(toolCall);
   const isCurrentAgentToolCall = isAgentToolCall(toolCall);
-  const isSubAgentToolCall = !isCurrentAgentToolCall && (depth > 0 || toolCall.parentToolUseId);
+  // 来源身份只能来自协议给出的 parentToolUseId：depth 是布局缩进，分组容器（Explore/终端/
+  // 读取/更改）的子工具仍在主会话里执行，按层级推导会把它们全部错标成子智能体。
+  // 真正的子智能体明细由 Agent 卡片自己渲染并显式 suppressSourceLabel。
+  const isSubAgentToolCall = !isCurrentAgentToolCall && Boolean(toolCall.parentToolUseId);
   const sourceLabel =
     !suppressSourceLabel && isSubAgentToolCall
       ? intl.formatMessage({ id: "chat.toolCall.source.subAgent" })
