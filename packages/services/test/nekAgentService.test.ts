@@ -416,6 +416,36 @@ function sendCommands(process: FakeProcess): string[] {
     .filter((type) => type === "prompt" || type === "steer" || type === "follow_up");
 }
 
+/** 发送类命令里的消息正文（按提交顺序）。 */
+function sentMessages(process: FakeProcess): string[] {
+  return process.commands.flatMap((command) =>
+    "message" in command && typeof command.message === "string" ? [command.message] : [],
+  );
+}
+
+/** 卡住某类命令的应答：模拟 ACK 比事件更晚回来。 */
+function holdCommandReplies(process: FakeProcess, type: NekRpcCommand["type"]) {
+  const original = process.process.client.call.bind(process.process.client);
+  const gate = Promise.withResolvers<void>();
+  let armed = true;
+  process.process.client.call = (async (command: NekRpcCommand, ...rest: unknown[]) => {
+    if (armed && command.type === type) {
+      armed = false;
+      await gate.promise;
+    }
+    return await (original as (c: NekRpcCommand, ...r: unknown[]) => Promise<unknown>)(
+      command,
+      ...rest,
+    );
+  }) as typeof process.process.client.call;
+  return {
+    release: () => gate.resolve(),
+    restore: () => {
+      process.process.client.call = original as typeof process.process.client.call;
+    },
+  };
+}
+
 test("压缩期间 GUI 暂存输入：0 次 prompt/steer/follow_up，收口后恰好一次", async () => {
   const harness = serviceHarness();
   try {
@@ -617,6 +647,94 @@ test("压缩失败（非取消）仍按序提交：压缩本身不是发送错�
     process.emit({ ...COMPACTION_END, errorMessage: "summariser failed" });
     await sending;
     assert.deepEqual(sendCommands(process), ["prompt"]);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("收口期间再次进入压缩：后续待发输入暂停，下一次收口各提交一次", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const first = harness.service.sendPrompt({ sessionKey, message: "first" });
+    const second = harness.service.sendPrompt({ sessionKey, message: "second" });
+    await tick();
+    assert.equal(harness.service.pendingInputCount(sessionKey), 2);
+
+    const held = holdCommandReplies(process, "prompt");
+    process.emit(COMPACTION_END);
+    await tick();
+    // 第 1 条已经提交、ACK 还没回；此时又发生一次压缩。
+    process.emit({ type: "compaction_start", reason: "manual" });
+    held.release();
+    await first;
+    await tick();
+    assert.deepEqual(sentMessages(process), ["first"]);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 1);
+
+    process.emit(COMPACTION_END);
+    await second;
+    assert.deepEqual(sentMessages(process), ["first", "second"]);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 0);
+    held.restore();
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("第 1 项 ACK 未回时的新发送排到队尾，不越过旧条目", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const first = harness.service.sendPrompt({ sessionKey, message: "first" });
+    await tick();
+    const held = holdCommandReplies(process, "prompt");
+    process.emit(COMPACTION_END);
+    await tick();
+    const third = harness.service.sendPrompt({ sessionKey, message: "third" });
+    await tick();
+    // 队列里已经有一项在提交、一项刚入队：新发送不能插队直接发。
+    assert.deepEqual(sentMessages(process), []);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 1);
+    held.release();
+    await Promise.all([first, third]);
+    assert.deepEqual(sentMessages(process), ["first", "third"]);
+    held.restore();
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("晚到的旧快照不能把压缩状态覆盖回 false，也不会提前发请求", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    // agent_settled 触发一次后台快照：get_state 先回来（isCompacting=false），
+    // get_entries 挂住；随后压缩开始，快照整批在压缩之后才完成。
+    const held = holdCommandReplies(process, "get_entries");
+    process.emit({ type: "agent_settled" });
+    await tick();
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const sending = harness.service.sendPrompt({ sessionKey, message: "stale snapshot" });
+    await tick();
+    held.release();
+    await tick();
+    await tick();
+    // 旧快照作废：状态仍来自实时事件，输入还在 GUI 手里。
+    assert.equal(harness.service.getSession(sessionKey)?.isCompacting, true);
+    assert.equal(harness.service.conversationSnapshot(sessionKey).inputRouting.mode, "enqueue");
+    assert.equal(harness.service.pendingInputCount(sessionKey), 1);
+    assert.deepEqual(sentMessages(process), []);
+
+    process.emit(COMPACTION_END);
+    await sending;
+    assert.deepEqual(sentMessages(process), ["stale snapshot"]);
+    held.restore();
   } finally {
     await harness.service.dispose();
   }

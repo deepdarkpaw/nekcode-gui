@@ -15,6 +15,8 @@ const nekSchema = z.object({
   stderrBufferKb: positiveInt,
   maxLineMb: positiveInt.max(1024),
   maxConversationPlans: positiveInt.max(500),
+  /** 压缩期间 GUI 暂存的待发送输入上限（每条会话）。 */
+  pendingInputsPerSession: positiveInt.max(64),
 });
 
 const timeoutsSchema = z.object({
@@ -24,6 +26,11 @@ const timeoutsSchema = z.object({
   shutdownGraceMs: nonNegativeInt,
   /** host 等渲染层回答一次交互请求（含项目信任）的上限。 */
   interactionMs: positiveInt,
+  /**
+   * 压缩期间 GUI 暂存输入的排队等待上限（不含进入提交后的 RPC 时间）。
+   * 到点可见失败、草稿回到输入框，绝不补发。
+   */
+  pendingInputMs: positiveInt,
 });
 
 const eventsSchema = z.object({
@@ -86,6 +93,7 @@ export const DEFAULT_GUI_RUNTIME_CONFIG: GuiRuntimeConfig = {
     stderrBufferKb: 512,
     maxLineMb: 64,
     maxConversationPlans: 100,
+    pendingInputsPerSession: 16,
   },
   timeouts: {
     commandMs: 15_000,
@@ -93,6 +101,7 @@ export const DEFAULT_GUI_RUNTIME_CONFIG: GuiRuntimeConfig = {
     longRunningMs: 180_000,
     shutdownGraceMs: 1_500,
     interactionMs: 300_000,
+    pendingInputMs: 600_000,
   },
   events: {
     streamFlushPerSecond: 20,

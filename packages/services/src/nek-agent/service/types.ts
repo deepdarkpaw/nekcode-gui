@@ -43,6 +43,13 @@ export interface NekSessionRecord {
    * `state.isCompacting` 接管。
    */
   compactReserved?: boolean;
+  /**
+   * 生命周期世代：agent 回合、压缩、手动压缩预约每次推进。
+   *
+   * 异步快照只在世代未变时才能覆盖 `state` 并收口待发输入，避免早于事件的
+   * `get_state` 结果把 `isCompacting` 覆盖回 false。
+   */
+  stateEpoch?: number;
   readonly: boolean;
   /** 只读快照的占用者，人类可读；nek 不报持有者时为 `"nek"`。 */
   lockedBy?: string;

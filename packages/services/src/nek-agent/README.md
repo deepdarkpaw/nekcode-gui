@@ -66,12 +66,60 @@ spawn branch is deleted in favor of resume's authoritative lock decision.
   count and `ls` keeps its path. Generic row upsert remains whole-row replacement;
   it is not changed to a broad merge that could preserve stale unrelated fields.
 
+## Compaction input admission owner (CI)
+
+`composer submit → service pending-input gate → (compaction ends) → normal send entry → CLI ACK`
+
+- **CI-1 — One pre-submit owner:** while nek compacts, the GUI holds the future input in
+  `NekPendingInputController` (one FIFO per `sessionKey + sessionId`, bounded by
+  `nek.pendingInputsPerSession`). The CLI receives no `prompt` / `steer` / `follow_up`
+  during compaction, and no CLI-side accepted queue is fabricated. Compaction state is
+  read from `record.state.isCompacting`, `get_state`, compaction events and the
+  `compact()` reservation taken before its first `await`.
+- **CI-2 — Ordering without bypass:** the gate only submits from the queue head. A new
+  input during a drain joins the tail; it never overtakes an older entry or an in-flight
+  ACK. If a new compaction starts mid-drain, the remaining entries pause and are
+  submitted exactly once at the next `compaction_end`. Adapters enter through
+  `deferInput` and use `submitAdmittedInput` for the inner send, so there is exactly one
+  gate instead of a public-entry re-queue.
+- **CI-3 — Waiting vs submitting:** the queue timer only covers the pre-submit wait.
+  `submit()` disarms it; afterwards only the real RPC result decides, so a slow ACK can
+  never be reported as "not sent" (which would invite a duplicate retry).
+- **CI-4 — Visible withdrawal:** cancel/abort, `compaction_end(aborted)`, process exit,
+  pool `dispose|crashed`, session close, disposal and queue timeout all reject with
+  `NekPendingInputCancelledError` (`name` preserved across IPC). The composer restores the
+  draft, SessionPane shows an informational toast, clears the renderer command-recovery
+  ledger and records no `SEND_FAILED` / transport error — the command never reached the
+  CLI, so classifying it as "result unknown" would let a retry duplicate the message.
+  A submitted-but-unknown RPC result keeps its existing handling.
+- **CI-5 — Snapshot/live same source:** snapshots are taken with a record-local
+  `stateEpoch`. `agent_start` / `agent_settled` / `compaction_start` / `compaction_end`,
+  the manual compaction reservation and stop advance the epoch. A batch whose epoch moved
+  while its four parallel reads were in flight is discarded and retried (bounded); a stale
+  `get_state.isCompacting=false` can never overwrite live compaction state or release the
+  queue early.
+- Attachments are untouched until the real ACK: `adoptSentAttachments` and SSH staging
+  cleanup still run only after the send resolves, and model/thinking/mode pre-submits plus
+  attachment resolution happen inside the gate, never during compaction.
+
 ## Verification
 
 - `packages/services/test/nekSessionResume.test.ts` exercises the real adapter,
   service, pool, RPC client and projector using deterministic in-memory JSONL IO.
 - `packages/services/test/nekToolProjection.test.ts` validates actual v4 frames and
   replays them with the renderer's delta reducer, for historical and live paths.
+- `packages/services/test/nekPendingInputQueue.test.ts` pins the gate itself: FIFO
+  without bypass, pause on re-compaction, timer disarmed at submission, scope change,
+  withdrawal only before submission, bounded queue.
+- `packages/services/test/nekCompactionInput.test.ts` drives the real adapter/service
+  with in-memory JSONL: no CLI command while compacting, one submission after release,
+  and `set_model` still ordered before the prompt.
+- `packages/services/test/nekAgentService.test.ts` covers the compaction reservation,
+  snapshot recovery, stale-snapshot fencing, abort/stop/close/exit withdrawal and the
+  `agent_settled`-during-compaction case.
+- `packages/client/src/nekPendingInputErrorIpc.test.ts` proves the cancellation `name`
+  survives a real MessageChannel RPC round trip, so the UI classifies by name and not by
+  message text.
 - `packages/services/test/nekAgentE2E.test.ts` uses real nek + a local HTTP mock,
   disposes the entire service, opens by disk ID in a new service, reads history and
   sends a continuation. It requires `NEK_E2E=1` and `NEK_RPC_WORKTREE` and never uses
@@ -87,6 +135,14 @@ spawn branch is deleted in favor of resume's authoritative lock decision.
 | Restart directly spawns instead of checking the snapshot lock        | SR-4 returns writable despite an external holder                           |
 | Result rebuilding receives no existing historical tool row           | All six TP-1 history/live parity cases lose structured input               |
 | Live upsert creates a placeholder without applying the result/update | TP-2/TP-3 remain `inputStreaming` instead of their actual execution status |
+| Temporarily restored old behavior                                    | Deterministic failure                                                      |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Submit `follow_up` while nek is compacting                           | `CI-1`/native e2e: one send command during compaction                      |
+| Clear the queue timer only on ACK                                    | `CI-3`: slow ACK reported as "not sent" and the entry resolves twice       |
+| Let any same-session request bypass the drain                        | `CI-2`: the 3rd input overtakes queued entries / rejected by CLI           |
+| Drain past a newly started compaction                                | `CI-2`: the second entry is submitted during the new compaction            |
+| Apply a snapshot without the epoch fence                             | `CI-5`: stale `isCompacting=false` releases the pending input early        |
+| Treat pre-submit withdrawal as a generic send failure                | `CI-4`: recovery ledger keeps an unknown command / red send error shown    |
 
 Each change was restored after observing the expected red test, then the full checks
 were run against the final implementation. Gate baselines were not changed.

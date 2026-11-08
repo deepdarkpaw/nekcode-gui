@@ -17,6 +17,8 @@ nek:
   maxLineMb: 64
   # 计划列表（`conversationPlansV4`）一次返回的最大条数；按 nek 会话里的顺序取最近 N 个
   maxConversationPlans: 100
+  # 压缩期间 GUI 暂存的待发送输入上限（每条会话）
+  pendingInputsPerSession: 16
 
 # RPC 超时（毫秒）。命令按类型取不同超时；这里只列可调的几类
 timeouts:
@@ -30,6 +32,8 @@ timeouts:
   shutdownGraceMs: 1500
   # host 等渲染层回答一次交互请求（含项目信任确认）的上限；超时按取消处理
   interactionMs: 300000
+  # 压缩期间 GUI 暂存输入的排队等待上限；不含进入提交后的 RPC 时间
+  pendingInputMs: 600000
 
 # 事件与渲染
 events:
