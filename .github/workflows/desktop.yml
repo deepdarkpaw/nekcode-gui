@@ -123,11 +123,12 @@ jobs:
         id: setup
       # 用 vitest list 收集到的文件清单断言完整 UI 套件确实包含那两条曾单跑的定点套件：
       # 有人调整 include/exclude 把覆盖弄丢时，这里立刻失败。
+      # --filesOnly 直接输出一行一个套件文件，不需要再按 case title 拆分。
       - name: Verify full UI suite still owns the pinpoint suites
         if: ${{ !cancelled() && matrix.lane.id == 'ui' && steps.setup.outcome == 'success' }}
         run: |
           listing="$RUNNER_TEMP/ui-vitest-files.txt"
-          pnpm --filter @zcode/ui exec vitest list src | sed 's/ > .*//' | sort -u > "$listing"
+          pnpm --filter @zcode/ui exec vitest list src --filesOnly | sort -u > "$listing"
           for suite in \
             src/v4/conversationTurnNavigatorPreview.test.ts \
             src/v4/conversationTurnRenderUnits.test.ts; do

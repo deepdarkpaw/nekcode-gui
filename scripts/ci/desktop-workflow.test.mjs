@@ -502,7 +502,8 @@ test("full UI suite provably owns the collapsed pinpoint suites", async () => {
     "src/v4/conversationTurnRenderUnits.test.ts",
   ])
     assert.ok(String(proof.run).includes(suite), `proof must check ${suite}`);
-  assert.match(String(proof.run), /vitest list src/u);
+  assert.match(String(proof.run), /vitest list src --filesOnly/u);
+  assert.doesNotMatch(String(proof.run), /\bsed\b/u);
   assert.match(String(proof.run), /exit 1/u);
   // 静态侧同样成立：两条套件确实在 packages/ui/src 下，且 UI vitest 配置没有把它们排除。
   const uiSources = await readdir(resolve(root, "packages/ui/src/v4"));

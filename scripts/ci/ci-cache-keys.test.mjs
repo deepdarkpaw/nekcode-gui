@@ -6,6 +6,7 @@ import {
   downloadCacheKey,
   electronBuilderCacheDirectory,
   electronCacheDirectory,
+  lockfileFingerprint,
   normalizeRunnerArch,
   readPinnedVersions,
   remoteNodeCacheKey,
@@ -15,8 +16,8 @@ import {
 } from "./ci-cache-keys.mjs";
 
 // 缓存键与缓存目录只由 scripts/ci/ci-cache-keys.mjs 派生，工作流消费它的 $GITHUB_OUTPUT。
-// 这里锁住派生规则：平台、runner 架构、目标架构、版本、Node/pnpm 指纹缺一不可，
-// 且目录必须等于 Electron/@electron/get/electron-builder 真实使用的路径。
+// 这里锁住派生规则：平台、runner 架构、目标架构、manifest 版本、pnpm-lock.yaml 摘要、
+// Node/pnpm 指纹缺一不可，且目录必须等于 Electron/@electron/get/electron-builder 真实使用的路径。
 const root = resolve(import.meta.dirname, "../..");
 const toolchain = "node24.14.0-pnpm10.33.2";
 
@@ -52,6 +53,37 @@ test("cache keys separate OS, runner arch, target arch and pinned versions", () 
   assert.throws(() => downloadCacheKey({ kind: "electron", runnerOs: "windows" }));
 });
 
+test("lockfile changes invalidate download keys even when the manifest range is unchanged", () => {
+  // 典型场景：manifest 还是 ^26.8.1，lockfile 把它解析成 26.8.2。
+  // 只剥 semver 前缀的键会保持不变，从而命中旧工具缓存并跳过保存新的工具链缓存。
+  const base = {
+    kind: "electron-builder",
+    runnerOs: "windows",
+    runnerArch: "x64",
+    targetArch: "arm64",
+    version: "26.8.1",
+    toolchain,
+  };
+  const lockA = lockfileFingerprint("lockfile: electron-builder 26.8.1\n");
+  const lockB = lockfileFingerprint("lockfile: electron-builder 26.8.2\n");
+  const keyA = downloadCacheKey({ ...base, lockfile: lockA });
+  const keyB = downloadCacheKey({ ...base, lockfile: lockB });
+  assert.notEqual(keyA, keyB);
+  assert.match(keyA, /lock[0-9a-f]{12}$/u);
+  // 同一输入必须稳定，否则每次 run 都 miss。
+  assert.equal(
+    keyA,
+    downloadCacheKey({
+      ...base,
+      lockfile: lockfileFingerprint("lockfile: electron-builder 26.8.1\n"),
+    }),
+  );
+  // 锁文件摘要叠加在原有隔离之上，不能替代平台/目标架构隔离。
+  assert.notEqual(keyA, downloadCacheKey({ ...base, targetArch: "x64", lockfile: lockA }));
+  assert.notEqual(keyA, downloadCacheKey({ ...base, runnerOs: "macos", lockfile: lockA }));
+  assert.throws(() => lockfileFingerprint(""));
+});
+
 test("remote node archive key locks platform, version and archive checksum", async () => {
   const { REMOTE_NODE_VERSION, remoteNodeDistribution } =
     await import("../remote-node-runtime.mjs");
@@ -77,11 +109,14 @@ test("remote node archive key locks platform, version and archive checksum", asy
   );
 });
 
-test("download cache directories match the real per-platform locations", () => {
+test("download cache directories match the real per-platform locations", async () => {
   const home = join("/", "home", "runner");
   const localAppData = join("C:", "Users", "x", "AppData", "Local");
-  // @electron/get 用 env-paths('electron').cache，没有可重定向到工作区路径的环境变量，
-  // 所以必须缓存对应平台真实使用的目录。
+  // @electron/get 用 env-paths('electron', {suffix:''}).cache，没有可重定向到工作区路径的
+  // 环境变量，所以必须缓存对应平台真实使用的目录（Windows 还有一层 Cache）：
+  // - darwin: ~/Library/Caches/<name>
+  // - win32 : <localAppData>/<name>/Cache
+  // - linux : $XDG_CACHE_HOME/<name> 或 ~/.cache/<name>
   assert.equal(
     electronCacheDirectory({ platform: "darwin", home }),
     join(home, "Library", "Caches", "electron"),
@@ -96,9 +131,20 @@ test("download cache directories match the real per-platform locations", () => {
   );
   assert.equal(
     electronCacheDirectory({ platform: "win32", home, localAppData }),
-    join(localAppData, "electron"),
+    join(localAppData, "electron", "Cache"),
   );
-  // electron-builder 的 getCacheDirectory 在 Windows 多一层 Cache。
+  // 期望值不是自说自话：直接核对已安装 env-paths 的 Windows 规则与 @electron/get 的用法。
+  const envPathsSource = await readFile(resolve(root, "node_modules/env-paths/index.js"), "utf8");
+  assert.match(envPathsSource, /cache: path\.join\(localAppData, name, 'Cache'\)/u);
+  const electronGetCache = await readFile(
+    resolve(root, "node_modules/@electron/get/dist/cjs/Cache.js"),
+    "utf8",
+  );
+  assert.match(
+    electronGetCache,
+    /env_paths_1\.default\('electron', \{\s*suffix: '',?\s*\}\)\.cache/u,
+  );
+  // electron-builder 的 getCacheDirectory 同样在 Windows 多一层 Cache。
   assert.equal(
     electronBuilderCacheDirectory({ platform: "win32", home, localAppData }),
     join(localAppData, "electron-builder", "Cache"),
@@ -148,6 +194,7 @@ test("pinned versions come from the packaging package and match the builder conf
 });
 
 test("resolved outputs describe this repository for each runner and target arch", async () => {
+  const lock = lockfileFingerprint(await readFile(resolve(root, "pnpm-lock.yaml"), "utf8"));
   const windows = await resolveCacheOutputs({
     root,
     runnerOs: "Windows",
@@ -159,9 +206,14 @@ test("resolved outputs describe this repository for each runner and target arch"
   assert.match(windows.keys["electron-builder"], /electron-builder-windows-x64-target-arm64/u);
   assert.match(windows.keys.playwright, /playwright-windows-x64/u);
   assert.match(windows.keys["remote-node"], /node-archive-linux-x64/u);
+  // 三个依赖 manifest 的下载物都必须带锁文件摘要；远端 Node 归档有自己的 SHA，不需要。
+  for (const name of ["electron", "electron-builder", "playwright"])
+    assert.ok(windows.keys[name].endsWith(`lock${lock}`), `${name}: ${windows.keys[name]}`);
+  assert.doesNotMatch(windows.keys["remote-node"], /lock[0-9a-f]{12}$/u);
+  // Windows 的真实 Electron zip 缓存目录：<localAppData>/electron/Cache。
   assert.equal(
     windows.dirs.electron,
-    join("C:", "Users", "runner", "AppData", "Local", "electron"),
+    join("C:", "Users", "runner", "AppData", "Local", "electron", "Cache"),
   );
   const linux = await resolveCacheOutputs({ root, runnerOs: "Linux", runnerArch: "X64", env: {} });
   // Playwright 浏览器 = Playwright 版本 + chromium，键里必须体现。
