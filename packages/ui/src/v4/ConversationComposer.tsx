@@ -1,6 +1,5 @@
 import { recordChatError } from "@/lib/diagnostics/chatErrors.js";
 import type { LocalTtftContext } from "@zcode/shared";
-import { isNekPendingInputCancelled } from "@zcode/shared/nek-protocol";
 /* oxlint-disable eslint(max-lines) -- composer 集中收口输入区 wiring（附件/草稿/历史/mention），拆分会打散收口粒度。 */
 import { getLocalTtftObserver } from "@/v4/diagnostics/localTtftObserver.js";
 /**
@@ -59,7 +58,6 @@ import {
   SquareIcon,
   XIcon,
 } from "lucide-react";
-import { toast } from "@/components/ui/toast.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { ChatErrorBanner, shouldSuppressChatErrorBanner } from "@/ChatErrorBanner.js";
 import {
@@ -1343,10 +1341,8 @@ function ConversationComposerImpl({
         rollbackPromptHistory();
         restoreSubmittedDraft();
         if (localTtft) getLocalTtftObserver()?.exclude(localTtft, "failed");
-        // 压缩中暂存的输入被撤回（取消/断线/关闭/超时）：草稿已经回到输入框，明确告知原因。
-        if (isNekPendingInputCancelled(error)) {
-          toast(intl.formatMessage({ id: "chat.composer.deferredSendCancelled" }));
-        }
+        // 待发送输入被撤回（取消/断线/关闭/排队超时）时 SessionPane 已提示并清账，
+        // 这里只负责把草稿恢复回输入框（restoreSubmittedDraft）。
         // 发送失败草稿保留在输入框（不清空），仅记录原因。
         logger.warn(`[v4-composer] 发送失败: ${String(error)}`);
         // ACK 侧失败已由 SessionPane 落定；能走到这里的是 composer 自身链路异常。

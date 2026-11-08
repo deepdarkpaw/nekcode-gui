@@ -200,6 +200,7 @@ import {
 } from "@/v4/chatLoadingVisibility.js";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
 import { isProviderNotReadyError } from "@/lib/chatPrepareError.js";
+import { isNekPendingInputCancelled } from "@zcode/shared/nek-protocol";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import type {
@@ -1281,18 +1282,24 @@ export function SessionPane({
         if (lease?.store) {
           lease.store.settleCommand(envelope.commandId);
         }
-        if (isProviderNotReadyError(error)) {
-          // provider_not_ready 在 Host getClient 前确定性拒绝，CLI 不可能已经
+        // 确定性"从未提交到 CLI"：GUI 侧待发 gate 撤回了这次发送（压缩取消/关闭/断线/
+        // 排队超时），CLI 根本没收到命令。不能留成结果未知，否则恢复查询只会得到
+        // unknown，用户再发一次就重复了。
+        const neverSubmitted = isNekPendingInputCancelled(error);
+        if (isProviderNotReadyError(error) || neverSubmitted) {
+          // provider_not_ready 在 Host getClient 前确定性拒绝，CLI 也不可能已经
           // admission。若继续保留 renderer 恢复账本，重连 query 必然得到 unknown；即使
           // unknown 现已静默清账，也不应为确定性拒绝留下无效的恢复记录。
           pendingCommandRegistry.settle(envelope.sessionId, envelope.commandId);
         }
-        recordV4CommandAck({
-          type,
-          status: "transport-error",
-          reasonCode: String(error),
-          at: Date.now(),
-        });
+        if (!neverSubmitted) {
+          recordV4CommandAck({
+            type,
+            status: "transport-error",
+            reasonCode: String(error),
+            at: Date.now(),
+          });
+        }
 
         throw error;
       }
@@ -2553,6 +2560,12 @@ export function SessionPane({
         }
         return "sent";
       } catch (error) {
+        if (isNekPendingInputCancelled(error)) {
+          // 压缩中暂存的输入被撤回：命令从未到过 CLI，草稿由 Composer 原路径恢复。
+          // 这不是发送失败（不能出红色横幅，也不该记成 transport 故障）。
+          toast(intl.formatMessage({ id: "chat.composer.deferredSendCancelled" }));
+          throw error;
+        }
         const detail = error instanceof Error ? error.message : String(error);
         const runtimeModelUnavailable = detail.includes("provider.notInRegistry");
         // 首发前 switchModelConfig 失败只会抛回 Composer；Composer 为了保留草稿
