@@ -97,7 +97,12 @@ spawn branch is deleted in favor of resume's authoritative lock decision.
   the manual compaction reservation and stop advance the epoch. A batch whose epoch moved
   while its four parallel reads were in flight is discarded and retried (bounded); a stale
   `get_state.isCompacting=false` can never overwrite live compaction state or release the
-  queue early.
+  queue early. When the retry budget is exhausted (or the record closed / the process was
+  replaced while the batch was in flight) the loader throws `NekSnapshotStaleError`
+  instead of reporting success: session open/resume/subscribe surface it as a retryable
+  failure, and the background `agent_settled` refresh catches it, logs, and keeps the live
+  projection. Late responses never call `bindPath`, overwrite `state` or settle the queue
+  for a closed/replaced record.
 - Attachments are untouched until the real ACK: `adoptSentAttachments` and SSH staging
   cleanup still run only after the send resolves, and model/thinking/mode pre-submits plus
   attachment resolution happen inside the gate, never during compaction.
@@ -142,6 +147,8 @@ spawn branch is deleted in favor of resume's authoritative lock decision.
 | Let any same-session request bypass the drain                        | `CI-2`: the 3rd input overtakes queued entries / rejected by CLI           |
 | Drain past a newly started compaction                                | `CI-2`: the second entry is submitted during the new compaction            |
 | Apply a snapshot without the epoch fence                             | `CI-5`: stale `isCompacting=false` releases the pending input early        |
+| Let a snapshot past its retry budget return success                  | `CI-5`: `initialize`/`reload` "succeed" with no state applied              |
+| Apply a snapshot captured for a closed/replaced record               | `CI-5`: the closed session is re-added to the path index                   |
 | Treat pre-submit withdrawal as a generic send failure                | `CI-4`: recovery ledger keeps an unknown command / red send error shown    |
 
 Each change was restored after observing the expected red test, then the full checks

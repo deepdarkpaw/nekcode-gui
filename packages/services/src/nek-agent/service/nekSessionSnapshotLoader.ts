@@ -14,8 +14,38 @@ import { isNekState, type NekSessionPhase, type NekSessionRecord } from "./types
  * 手动压缩预约与停止会推进世代——也就是任何可能改变"能否接纳输入"的事实。
  */
 
-/** 快照在生命周期事件之间最多重取几次；仍陈旧就保留实时事件、不覆盖。 */
+/** 快照在生命周期事件之间最多重取几次；仍不一致就显式失败，绝不冒充成功。 */
 const MAX_SNAPSHOT_ATTEMPTS = 3;
+
+/**
+ * 快照没有落在一致的生命周期/会话上：整批作废，错误可见且可重试。
+ *
+ * 绝不返回"成功"：调用方要么把失败交给用户（创建/恢复/订阅），要么在后台刷新里
+ * catch 后记日志并保留实时投影——但不能把陈旧快照当成已装载。
+ */
+export class NekSnapshotStaleError extends Error {
+  readonly code = "nek.snapshotUnsettled";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "NekSnapshotStaleError";
+  }
+}
+
+/**
+ * 落地前确认快照仍然属于当前记录/进程。
+ *
+ * 关闭会话或更换进程（回收重连、fork）之后到达的响应必须整批丢弃：
+ * 否则会把已关闭的会话重新写进路径索引、覆盖新进程的状态并收口旧队列。
+ */
+function assertSnapshotTarget(record: NekSessionRecord, process: NekRpcProcess): void {
+  if (record.closing)
+    throw new NekSnapshotStaleError(`nek session ${record.key} is closing; snapshot discarded`);
+  if (record.process !== process)
+    throw new NekSnapshotStaleError(
+      `nek session ${record.key} process changed; snapshot discarded`,
+    );
+}
 
 export interface NekSessionSnapshotContext {
   record: NekSessionRecord;
@@ -39,9 +69,11 @@ export async function initializeSessionState(
 ): Promise<void> {
   const { record } = context;
   for (let attempt = 0; attempt < MAX_SNAPSHOT_ATTEMPTS; attempt += 1) {
+    assertSnapshotTarget(record, process);
     const epoch = record.stateEpoch ?? 0;
     const state = await process.client.call({ type: "get_state" });
     if ((record.stateEpoch ?? 0) !== epoch) continue;
+    assertSnapshotTarget(record, process);
     record.state = state;
     record.sessionId = state.sessionId || record.sessionId;
     record.path = state.sessionFile ?? record.path;
@@ -49,9 +81,8 @@ export async function initializeSessionState(
     if (state.isStreaming || state.isCompacting) context.setPhase(record, "running");
     return;
   }
-  context.logger?.warn(
-    "nek session state kept changing while initialising; keeping live events",
-    record.key,
+  throw new NekSnapshotStaleError(
+    `nek session ${record.key} state kept changing during initialise (${MAX_SNAPSHOT_ATTEMPTS} attempts); retry`,
   );
 }
 
@@ -62,6 +93,7 @@ export async function reloadSessionSnapshot(
 ): Promise<void> {
   const { record } = context;
   for (let attempt = 0; attempt < MAX_SNAPSHOT_ATTEMPTS; attempt += 1) {
+    assertSnapshotTarget(record, process);
     const epoch = record.stateEpoch ?? 0;
     const [state, entries, stats, extension] = await Promise.all([
       process.client.call({ type: "get_state" }),
@@ -71,6 +103,8 @@ export async function reloadSessionSnapshot(
     ]);
     // 取快照期间发生了压缩/回合边界：这批事实属于更早的生命周期，丢弃重取。
     if ((record.stateEpoch ?? 0) !== epoch) continue;
+    // 关闭/换进程同样整批作废：迟到的响应不能再落地。
+    assertSnapshotTarget(record, process);
     record.state = state;
     record.sessionId = state.sessionId || record.sessionId;
     record.path = state.sessionFile ?? record.path;
@@ -90,8 +124,7 @@ export async function reloadSessionSnapshot(
     context.settlePendingInputs(record);
     return;
   }
-  context.logger?.warn(
-    "nek snapshot stayed stale across lifecycle events; keeping live projection",
-    record.key,
+  throw new NekSnapshotStaleError(
+    `nek session ${record.key} snapshot stayed unsettled across lifecycle events (${MAX_SNAPSHOT_ATTEMPTS} attempts); retry`,
   );
 }

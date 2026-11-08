@@ -740,6 +740,30 @@ test("晚到的旧快照不能把压缩状态覆盖回 false，也不会提前�
   }
 });
 
+// 关闭会先回收进程（在途 RPC 随之失败），因此"落地前判据"的精确回归在
+// nekSessionSnapshotLoader.test.ts（关闭/换进程两种）；这里只做 service 级不复活检查。
+test("会话关闭后迟到的快照不会把已关闭会话写回索引", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    // agent_settled 触发后台快照；get_entries 挂住，期间关闭会话。
+    const held = holdCommandReplies(process, "get_entries");
+    process.emit({ type: "agent_settled" });
+    await tick();
+    await harness.service.closeSession(sessionKey);
+    held.release();
+    await tick();
+    await tick();
+    // 迟到的响应不能再 bindPath / 重建投影：会话键与路径都查不到。
+    assert.equal(harness.service.getSession("/tmp/session.jsonl"), undefined);
+    assert.deepEqual(harness.service.listOpenSessions("/workspace"), []);
+    held.restore();
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
 test("shares one projector for subscribers and replays a snapshot on resubscribe", async () => {
   const harness = serviceHarness();
   const result = await harness.service.createSession({ cwd: "/workspace" });
