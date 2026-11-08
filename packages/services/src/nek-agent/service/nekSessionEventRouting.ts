@@ -11,6 +11,8 @@ import type { NekSessionPhase, NekSessionRecord } from "./types.js";
  */
 interface NekSessionEventTarget {
   record: NekSessionRecord;
+  /** 推进生命周期世代：异步快照据此判定自己是否已经过时。 */
+  bumpStateEpoch: (record: NekSessionRecord) => void;
   setPhase: (record: NekSessionRecord, phase: NekSessionPhase) => void;
   beginTurn: (sessionKey: string) => void;
   endTurn: (sessionKey: string) => void;
@@ -19,6 +21,14 @@ interface NekSessionEventTarget {
   /** `agent_settled` 后用 get_state 校准事实（失败只记日志，不改状态）。 */
   refreshSnapshot: (record: NekSessionRecord) => void;
 }
+
+/** 会改变"能否接纳输入 / 是否在跑"的事件：必须推进生命周期世代。 */
+const NEK_LIFECYCLE_EVENTS = new Set<NekRpcEvent["type"]>([
+  "agent_start",
+  "agent_settled",
+  "compaction_start",
+  "compaction_end",
+]);
 
 /** 压缩事件是权威事实：到达后预约交接给它，之后只看 `state.isCompacting`。 */
 function applySessionState(record: NekSessionRecord, event: NekRpcEvent): void {
@@ -38,6 +48,7 @@ function applySessionState(record: NekSessionRecord, event: NekRpcEvent): void {
 
 export function applyNekSessionEvent(input: NekSessionEventTarget, event: NekRpcEvent): void {
   const { record } = input;
+  if (NEK_LIFECYCLE_EVENTS.has(event.type)) input.bumpStateEpoch(record);
   applySessionState(record, event);
   switch (event.type) {
     case "agent_start":

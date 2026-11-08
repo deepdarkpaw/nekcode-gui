@@ -13,6 +13,7 @@ import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentSe
 import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
 import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
 import { NekPendingInputCancelledError } from "./nekPendingInputQueue.js";
+import { bumpStateEpoch } from "./nekSessionSnapshotLoader.js";
 import { findNekUserImage, parseNekUserImageRef } from "../projection/nekUserImages.js";
 import { findNekUserFile } from "../projection/nekUserFiles.js";
 import { resolveNekSessionAttachment } from "./nekSessionAttachments.js";
@@ -102,27 +103,40 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
    */
   readonly sendPrompt: Methods["sendPrompt"] = async (input) => {
     const record = this.requireRecord(input.sessionKey);
-    // 压缩期间暂存的输入在收口时可能已经有一轮在跑（前一条待发输入起了新回合）：
-    // 用户那次"发送"默认按排队处理，不把它变成准入错误。
-    const effective =
-      this.pendingInputs.isCompacting(record) && input.streamingBehavior === undefined
+    // 经过 GUI 待发队列的输入在提交时可能已经有一轮在跑（前一条待发输入起了新回合）：
+    // 用户那次"发送"默认按排队投递，不把它变成准入错误；显式投递方式始终优先。
+    const delivery = (queued: boolean) =>
+      queued && input.streamingBehavior === undefined
         ? { ...input, streamingBehavior: "followUp" as const }
         : input;
     return await this.pendingInputs.defer(
       record,
-      async () =>
-        await this.withSession(
-          input.sessionKey,
-          async () => await commands.sendPrompt(this.commandContext(), effective),
-        ),
+      async (queued) => await this.submitAdmittedInput(delivery(queued)),
     );
   };
+
+  /**
+   * 受控内部提交：调用方已经通过 GUI 待发送 gate（压缩中不会走到这里）。
+   *
+   * 适配层必须在 `deferInput` 的回调里用它，而不是再调一次 `sendPrompt`：
+   * 否则外层 defer 与公开入口会形成二次 gate，压缩中重复排队。
+   */
+  async submitAdmittedInput(
+    input: Parameters<Methods["sendPrompt"]>[0],
+  ): Promise<{ disposition: string }> {
+    return await this.withSession(
+      input.sessionKey,
+      async () => await commands.sendPrompt(this.commandContext(), input),
+    );
+  }
   readonly abort: Methods["abort"] = async (sessionKey) => {
+    const record = this.requireRecord(sessionKey);
     // 停止是用户明确取消：压缩中的待发输入不能在他停止之后补发。
     this.pendingInputs.cancel(
-      this.requireRecord(sessionKey),
+      record,
       new NekPendingInputCancelledError("已停止，消息没有发送；草稿已保留，可重试"),
     );
+    bumpStateEpoch(record);
     await this.withSession(
       sessionKey,
       async () => await commands.abort(this.commandContext(), sessionKey),
@@ -161,6 +175,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   readonly compact: Methods["compact"] = async (input) => {
     const record = this.requireWritable(input.sessionKey);
     record.compactReserved = true;
+    bumpStateEpoch(record);
     try {
       return await this.withSession(
         input.sessionKey,
@@ -169,6 +184,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     } catch (error) {
       // 压缩根本没开始：撤掉预约，把待发输入按正常顺序放行，错误照常上报。
       record.compactReserved = false;
+      bumpStateEpoch(record);
       this.pendingInputs.settle(record);
       throw error;
     }

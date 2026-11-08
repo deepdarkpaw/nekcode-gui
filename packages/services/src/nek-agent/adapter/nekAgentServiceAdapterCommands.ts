@@ -232,7 +232,8 @@ async function sendWhenAdmissible(
       payload.attachments,
     );
     const delivery = await prepareDelivery(context.service, sessionKey, payload);
-    const result = await context.service.sendPrompt({
+    // 已经在 gate 内：用受控内部提交，不能再走公开 sendPrompt 的二次排队。
+    const result = await context.service.submitAdmittedInput({
       sessionKey,
       message: readString(payload, "text") ?? "",
       ...attachments,

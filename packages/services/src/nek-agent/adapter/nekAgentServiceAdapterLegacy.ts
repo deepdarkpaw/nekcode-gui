@@ -177,7 +177,8 @@ export function createNekLegacyMethods(
           sessionKey,
           input.attachments,
         );
-        await target.service.sendPrompt({
+        // 已经在 gate 内：受控内部提交，避免公开入口二次排队。
+        await target.service.submitAdmittedInput({
           sessionKey,
           message: input.content,
           ...attachments,

@@ -13,8 +13,13 @@ import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import { NekGuiInteractionBridge } from "./guiInteractionBridge.js";
 import { createProjectTrustPrompt, requestProjectApproval } from "./projectTrustPrompt.js";
-import { isNekState } from "./types.js";
 import { applyNekPoolReclaim, applyNekSessionEvent } from "./nekSessionEventRouting.js";
+import {
+  bumpStateEpoch,
+  initializeSessionState,
+  reloadSessionSnapshot,
+  type NekSessionSnapshotContext,
+} from "./nekSessionSnapshotLoader.js";
 import {
   NekPendingInputCancelledError,
   NekPendingInputController,
@@ -35,11 +40,6 @@ import type {
   NekSessionRecord,
   NekSessionResult,
 } from "./types.js";
-
-/** 压缩期间单会话最多暂存多少条待发送输入。 */
-const PENDING_INPUT_MAX_PER_SESSION = 16;
-/** 单条待发送输入最长等待（10 分钟）：到点可见失败，不让发送 Promise 永久悬挂。 */
-const PENDING_INPUT_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * 会话记录表、进程池接线、事件路由与投影器装载。
@@ -70,8 +70,8 @@ export abstract class NekAgentServiceRuntimeBase {
     this.config = options.runtimeConfig ?? DEFAULT_GUI_RUNTIME_CONFIG;
     this.logger = options.logger;
     this.pendingInputs = new NekPendingInputController({
-      maxPerSession: PENDING_INPUT_MAX_PER_SESSION,
-      timeoutMs: PENDING_INPUT_TIMEOUT_MS,
+      maxPerSession: this.config.nek.pendingInputsPerSession,
+      timeoutMs: this.config.timeouts.pendingInputMs,
       withLease: async (record, run) => await this.withLease(record, run),
       ...(options.logger ? { logger: options.logger } : {}),
     });
@@ -236,6 +236,20 @@ export abstract class NekAgentServiceRuntimeBase {
     return await this.withLease(record, run);
   }
 
+  /** 快照装载需要的上下文：投影器工厂、phase、待发输入收口与路径索引。 */
+  private snapshotContext(record: NekSessionRecord): NekSessionSnapshotContext {
+    return {
+      record,
+      createProjector: (target) => this.createProjector(target),
+      setPhase: (target, phase) => this.setPhase(target, phase),
+      settlePendingInputs: (target) => this.pendingInputs.settle(target),
+      bindPath: (target) => {
+        if (target.path) this.byPath.set(target.path, target);
+      },
+      ...(this.logger ? { logger: this.logger } : {}),
+    };
+  }
+
   protected attachProcess(record: NekSessionRecord, process: NekRpcProcess): void {
     if (record.process === process) return;
     this.detachProcess(record);
@@ -273,42 +287,14 @@ export abstract class NekAgentServiceRuntimeBase {
     record: NekSessionRecord,
     process: NekRpcProcess,
   ): Promise<void> {
-    const state = await process.client.call({ type: "get_state" });
-    record.state = state;
-    record.sessionId = state.sessionId || record.sessionId;
-    record.path = state.sessionFile ?? record.path;
-    if (record.path) this.byPath.set(record.path, record);
-    if (state.isStreaming || state.isCompacting) this.setPhase(record, "running");
+    await initializeSessionState(this.snapshotContext(record), process);
   }
 
-  /** 用 get_entries / get_state / get_session_stats 重建投影器快照。 */
+  /** 用 get_entries / get_state / get_session_stats 重建投影器快照（带生命周期世代 fence）。 */
   protected async refreshProcessSnapshot(record: NekSessionRecord): Promise<void> {
     const process = record.process;
     if (!process) throw new Error(`nek session ${record.key} has no live process`);
-    const [state, entries, stats, extension] = await Promise.all([
-      process.client.call({ type: "get_state" }),
-      process.client.call({ type: "get_entries" }),
-      process.client.call({ type: "get_session_stats" }),
-      process.client.call({ type: "extension_call", method: "nek.get_state" }),
-    ]);
-    record.state = state;
-    record.sessionId = state.sessionId || record.sessionId;
-    record.path = state.sessionFile ?? record.path;
-    if (record.path) this.byPath.set(record.path, record);
-    const nekState = isNekState(extension.result) ? extension.result : undefined;
-    const projector = (record.projector ??= this.createProjector(record));
-    projector.loadSnapshot({
-      entries: entries.entries,
-      leafId: entries.leafId,
-      state,
-      stats,
-      nekState,
-      title: state.sessionName,
-    });
-    projector.flushNow();
-    this.setPhase(record, state.isStreaming || state.isCompacting ? "running" : "idle");
-    // 快照是权威事实：压缩已经收口（或从未开始）时，把 GUI 暂存的输入放行。
-    this.pendingInputs.settle(record);
+    await reloadSessionSnapshot(this.snapshotContext(record), process);
   }
 
   protected createProjector(record: NekSessionRecord): NekConversationProjector {
@@ -353,6 +339,7 @@ export abstract class NekAgentServiceRuntimeBase {
     applyNekSessionEvent(
       {
         record,
+        bumpStateEpoch: (target) => bumpStateEpoch(target),
         setPhase: (target, phase) => this.setPhase(target, phase),
         beginTurn: (sessionKey) => this.pool.beginTurn(sessionKey),
         endTurn: (sessionKey) => this.pool.endTurn(sessionKey),
