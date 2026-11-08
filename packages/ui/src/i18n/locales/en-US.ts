@@ -2938,6 +2938,8 @@ const enUS: Record<string, string> = {
   "nek.status.queue.followUp": "Follow-up",
   "nek.status.queue.consumed": "This message has already been sent and cannot be edited",
   "nek.status.queue.emptyText": "Content cannot be empty; use the delete button to remove it",
+  "nek.status.queue.attachmentsFull":
+    "The composer can hold at most 8 attachments. Queued messages were put back; send or remove some attachments and try again.",
   "nek.status.queue.deleted": "Queued message deleted",
   "nek.status.queue.undoAppends": "Undo will put it at the end of the queue",
   "nek.status.queue.retrieveAll": "Retrieve all to input",

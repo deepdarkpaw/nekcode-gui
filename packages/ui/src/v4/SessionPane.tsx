@@ -91,6 +91,7 @@ import { useDraftModelReadinessGate } from "@/v4/composer/useDraftModelReadiness
 import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { composerAttachmentScopeKey, restoreComposerSessionAttachments } from "@/store/composerAttachmentUploadStore.js";
 import {
   DEFAULT_CONVERSATION_SHARE_DOCK_STATE,
   getConversationShareDockState,
@@ -1538,6 +1539,7 @@ export function SessionPane({
     if (!sessionId) return undefined;
     if (nekStatusCallbacks) return nekStatusCallbacks;
     return createNekPaneStatusCallbacks({
+      composerScopeKey: composerAttachmentScopeKey(workspacePath, workspaceIdentity, sessionId),
       stopSubagent: subagentFeed.onStop,
       focusSubagent: handleFocusNekSubagent,
       openPlan: handleOpenNekPlan,
@@ -1545,6 +1547,9 @@ export function SessionPane({
       canJumpToTodo: canJumpToNekTodo,
       getComposerText,
       setComposerText,
+      restoreComposerAttachments: (attachments) => restoreComposerSessionAttachments(
+        composerAttachmentScopeKey(workspacePath, workspaceIdentity, sessionId), attachments, true,
+      ),
       focusComposerAtEnd,
     });
   }, [
@@ -1558,6 +1563,8 @@ export function SessionPane({
     sessionId,
     setComposerText,
     subagentFeed,
+    workspacePath,
+    workspaceIdentity,
   ]);
   const handleAddSelectionToCurrentTask = useCallback(
     (reference: ConversationSelectionReference) => {

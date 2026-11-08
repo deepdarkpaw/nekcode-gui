@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import { useAsyncAction } from "@/hooks/useAsyncAction.js";
 import { useUndoToast } from "@/components/ui/undo-toast.js";
 import { toast } from "@/components/ui/toast.js";
@@ -15,6 +16,7 @@ import {
   mergeQueuedIntoDraft,
   planQueueEdit,
   queueItemTargets,
+  queuedInputAt,
   resolveQueueEditKey,
   type QueueContents,
   type QueueEdit,
@@ -23,10 +25,12 @@ import {
 
 export interface QueueBarControllerProps {
   sessionKey: string;
+  composerScopeKey?: string;
   clearQueue: () => Promise<QueueContents>;
   requeue: (queue: QueueContents) => Promise<void>;
   getComposerText: () => string;
   setComposerText: (text: string) => void;
+  restoreComposerAttachments?: (attachments: readonly AttachmentRef[]) => boolean;
   focusComposerAtEnd: () => void;
 }
 
@@ -71,10 +75,12 @@ function operationKey(operation: QueueTarget): string {
 
 export function useQueueBarController({
   sessionKey,
+  composerScopeKey,
   clearQueue,
   requeue,
   getComposerText,
   setComposerText,
+  restoreComposerAttachments,
   focusComposerAtEnd,
 }: QueueBarControllerProps): QueueBarController {
   const showUndo = useUndoToast();
@@ -83,6 +89,16 @@ export function useQueueBarController({
   const [editing, setEditing] = useState<QueueBarEditing | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const activeOperationRef = useRef<QueueTarget | null>(null);
+  const scopeKey = composerScopeKey ?? sessionKey;
+  const scopeRef = useRef({ scopeKey });
+  if (scopeRef.current.scopeKey !== scopeKey) scopeRef.current = { scopeKey };
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const operationAction = useAsyncAction(
     async ({ target, operation }: { target: QueueTarget; operation: QueueEdit }) => {
       const actual = await clearQueue();
@@ -98,7 +114,14 @@ export function useQueueBarController({
           message: `${intl.formatMessage({ id: "nek.status.queue.deleted" })} · ${intl.formatMessage({ id: "nek.status.queue.undoAppends" })}`,
           durationMs: 5_000,
           onUndo: () => {
-            void requeue(appendQueueItem(result.requeue, target.kind, target.text));
+            void requeue(
+              appendQueueItem(
+                result.requeue,
+                target.kind,
+                target.text,
+                queuedInputAt(actual, target),
+              ),
+            );
           },
         });
       } else {
@@ -119,7 +142,25 @@ export function useQueueBarController({
   );
   const retrieveAction = useAsyncAction(
     async () => {
+      const owner = scopeRef.current;
       const actual = await clearQueue();
+      if (!mountedRef.current || scopeRef.current !== owner) {
+        await requeue(actual);
+        return;
+      }
+      const files = [...(actual.inputs?.steering ?? []), ...(actual.inputs?.followUp ?? [])]
+        .flatMap((input) => input.attachments ?? [])
+        .map((file) => ({
+          ref: file.path,
+          fileName: file.fileName,
+          mime: file.mimeType,
+          bytes: file.sizeBytes,
+        }));
+      if (files.length && !restoreComposerAttachments?.(files)) {
+        // 草稿放不下时先放回权威队列；不能只取回正文却把已接纳的文件遗失。
+        await requeue(actual);
+        throw new Error(intl.formatMessage({ id: "nek.status.queue.attachmentsFull" }));
+      }
       setComposerText(mergeQueuedIntoDraft(actual, getComposerText()));
       focusComposerAtEnd();
     },

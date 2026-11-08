@@ -16,6 +16,7 @@ import type {
   NekThinkingLevel,
 } from "./gui-rpc.js";
 import type { NekMentionTargetInfo } from "./mentions.js";
+import type { NekStatusQueue } from "./status.js";
 import type {
   NekAgentMessage,
   NekImageContent,
@@ -181,7 +182,7 @@ export type NekSessionRpcCommand =
       attachments?: NekPromptAttachment[];
     }
   | { id?: string; type: "abort" }
-  | { id?: string; type: "clear_queue" }
+  | { id?: string; type: "clear_queue"; includeAttachments?: boolean }
   | { id?: string; type: "new_session"; parentSession?: string }
   // State
   | { id?: string; type: "get_state" }
@@ -263,7 +264,7 @@ export interface NekRpcResponseDataMap {
   steer: { disposition: NekQueuedInputDisposition };
   follow_up: { disposition: NekQueuedInputDisposition };
   abort: undefined;
-  clear_queue: { steering: string[]; followUp: string[] };
+  clear_queue: NekStatusQueue;
   new_session: { cancelled: boolean };
   get_state: NekRpcSessionState;
   set_model: NekModel;

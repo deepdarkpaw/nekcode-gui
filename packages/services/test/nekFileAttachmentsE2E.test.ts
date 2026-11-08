@@ -209,13 +209,16 @@ test(
         piVersion: "source",
         node: { path: process.execPath, version: process.version },
         launch: {
-          args: [
-            "--import",
-            pathToFileURL(
-              join(worktree, "packages/coding-agent/src/experimental/source-resolver.ts"),
-            ).href,
-            join(worktree, "packages/coding-agent/src/cli.ts"),
-          ],
+          args:
+            process.env.NEK_RPC_USE_BUNDLE === "1"
+              ? [join(worktree, "packages/coding-agent/dist/bundle/cli.js")]
+              : [
+                  "--import",
+                  pathToFileURL(
+                    join(worktree, "packages/coding-agent/src/experimental/source-resolver.ts"),
+                  ).href,
+                  join(worktree, "packages/coding-agent/src/cli.ts"),
+                ],
         },
         agentDir,
         sessionDir: join(agentDir, "sessions"),
@@ -277,8 +280,28 @@ test(
           },
         },
       });
+      await adapter.sendNekConversationCommandV4({
+        target: { workspacePath: project },
+        envelope: {
+          commandId: "queued-files",
+          clientId: "test",
+          sessionId: created.sessionId,
+          type: "sendText",
+          issuedAt: 2,
+          payload: { text: "queued document", requestedDelivery: "queue", attachments: [refs[0]!] },
+        },
+      });
+      const taken = await adapter.clearNekQueue(target);
+      assert.deepEqual(taken.followUp, ["queued document"]);
+      const queuedFile = taken.inputs?.followUp[0]?.attachments?.[0];
+      assert.equal(queuedFile?.fileName, "report.pdf");
+      assert.ok(queuedFile?.path.startsWith(join(agentDir, "attachments")));
       await rm(logPath);
       await rm(staging, { recursive: true, force: true });
+      // Retrieving/editing a queued input must not turn persistent remote files back into host upload sources.
+      await adapter.requeueNekQueue({ ...target, queue: taken });
+      const retaken = await adapter.clearNekQueue(target);
+      assert.deepEqual(retaken.inputs, taken.inputs);
       release();
       await waitFor(() => finalResult || mockError !== undefined);
       if (mockError) throw mockError;

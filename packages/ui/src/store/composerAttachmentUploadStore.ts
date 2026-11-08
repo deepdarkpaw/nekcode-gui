@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { nanoid } from "nanoid";
+import { MAX_CHAT_ATTACHMENTS } from "@/lib/chatAttachments.js";
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import type { ChatComposerAttachment } from "@/lib/chatAttachments.js";
@@ -63,6 +65,57 @@ export function exposeComposerAttachmentScopeKeyForE2E(scopeKey: string): void {
   if (window.__zcodeComposerAttachmentUploadStoreE2E) {
     window.__zcodeCurrentComposerAttachmentScopeKeyE2E = scopeKey;
   }
+}
+
+/** 同一工作区身份与会话共用一个草稿附件 owner，远端路径不参与本机路径猜测。 */
+export function composerAttachmentScopeKey(
+  workspacePath: string,
+  workspaceIdentity: string | undefined,
+  scopeId: string,
+): string {
+  return `${workspaceIdentity?.trim() || workspacePath}\u0000${scopeId}`;
+}
+
+/** 权威队列的稳定引用回到草稿；不上传、不接管为 host 文件，不覆盖用户已有附件。 */
+export function restoreComposerSessionAttachments(
+  scopeKey: string,
+  refs: readonly AttachmentRef[],
+  append = false,
+): boolean {
+  if (!refs.length) return true;
+  const current = readComposerAttachmentScope(scopeKey);
+  if (!append && current.length) return false;
+  const existing = new Set(current.map((item) => item.attachmentRef?.ref));
+  const incoming = append
+    ? refs.filter((ref) => {
+        if (existing.has(ref.ref)) return false;
+        existing.add(ref.ref);
+        return true;
+      })
+    : [...refs];
+  if (current.length + incoming.length > MAX_CHAT_ATTACHMENTS) return false;
+  const items: ComposerAttachmentUploadItem[] = incoming.map((attachmentRef) => {
+    const id = nanoid();
+    return {
+      id,
+      filename: attachmentRef.fileName,
+      mimeType: attachmentRef.mime,
+      sizeBytes: attachmentRef.bytes,
+      referenceOwnership: "session",
+      uploadStatus: "ready",
+      uploadProgress: 100,
+      attachmentRef: { ...attachmentRef },
+      operationId: `session-owned-${id}`,
+      autoRetryCount: 0,
+      runtimeRebuildRetryCount: 0,
+      staged: false,
+      adopted: true,
+      showComplete: false,
+      localZeroCopy: false,
+    };
+  });
+  updateComposerAttachmentScope(scopeKey, () => [...current, ...items]);
+  return true;
 }
 
 export function readComposerAttachmentScope(scopeKey: string): ComposerAttachmentUploadItem[] {

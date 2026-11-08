@@ -1621,6 +1621,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/services/src/nek-agent/service/nekAgentServiceRuntimeMethods.ts",
   "packages/services/src/nek-agent/service/nekAgentServiceWiring.ts",
   "packages/services/src/nek-agent/service/nekAgentSessionResume.ts",
+  "packages/services/src/nek-agent/service/nekQueueCommands.ts",
   "packages/services/src/nek-agent/service/nekSessionAttachments.ts",
   "packages/services/src/nek-agent/service/nekUnusedSessionCleanup.ts",
   "packages/services/src/nek-agent/service/projectTrustPrompt.ts",

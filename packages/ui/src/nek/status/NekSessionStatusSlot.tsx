@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import { NekCompactionBannerView } from "./NekCompactionBannerView.js";
 import { NekQueueBarView } from "./NekQueueBarView.js";
 import { NekRetryBannerView } from "./NekRetryBannerView.js";
@@ -14,6 +15,7 @@ import { useNekStatusStore } from "./store.js";
  * 见 `statusFeed/statusActions.ts`，pane 不转发。
  */
 export interface NekSessionStatusCallbacks {
+  composerScopeKey?: string;
   onStopSubagent: (id: string) => Promise<void>;
   onFocusSubagent: (id: string) => void;
   onOpenPlan: (path: string) => Promise<void> | void;
@@ -21,6 +23,7 @@ export interface NekSessionStatusCallbacks {
   canJumpToTodo: (id: string) => boolean;
   getComposerText: () => string;
   setComposerText: (text: string) => void;
+  restoreComposerAttachments?: (attachments: readonly AttachmentRef[]) => boolean;
   focusComposerAtEnd: () => void;
 }
 
@@ -75,10 +78,12 @@ export function NekSessionStatusSlot({ sessionKey, callbacks }: NekSessionStatus
       />
       <NekQueueBarView
         sessionKey={sessionKey}
+        composerScopeKey={callbacks.composerScopeKey}
         clearQueue={statusActions.clearQueue}
         requeue={statusActions.requeue}
         getComposerText={callbacks.getComposerText}
         setComposerText={callbacks.setComposerText}
+        restoreComposerAttachments={callbacks.restoreComposerAttachments}
         focusComposerAtEnd={callbacks.focusComposerAtEnd}
       />
       <NekUsageIndicatorView sessionKey={sessionKey} onCompact={statusActions.compact} />

@@ -9,6 +9,7 @@ import type { NekExtensionEvent } from "./gui-rpc.js";
 import type { NekState } from "./gui-extension-api.js";
 import type { NekSessionStats } from "./rpc.js";
 import type { NekAgentSessionEvent } from "./rpc-events.js";
+import type { NekStoredAttachment } from "./rpc-messages.js";
 
 export const NEK_STATUS_FRAME_MAX_TODOS = 100;
 export const NEK_STATUS_FRAME_MAX_PLANS = 50;
@@ -18,10 +19,17 @@ export const NEK_STATUS_FRAME_MAX_TEXT = 8_192;
 /** 一次补齐最多快照多少个会话；与 renderer status store 的会话上限同值。 */
 export const NEK_STATUS_FRAME_MAX_SNAPSHOT_SESSIONS = 20;
 
-/** nek 一次 `clear_queue` 的返回值形状（取回与清空共用同一次 RPC）。 */
+/** 从权威队列撤回的一条输入；路径指向 nek 的持久副本，不属于 host 上传源。 */
+export interface NekQueuedInput {
+  text: string;
+  attachments?: NekStoredAttachment[];
+}
+
+/** nek 一次 `clear_queue` 的返回值；inputs 与两个正文数组严格按索引对齐。 */
 export interface NekStatusQueue {
   steering: string[];
   followUp: string[];
+  inputs?: { steering: NekQueuedInput[]; followUp: NekQueuedInput[] };
 }
 
 /**

@@ -13,7 +13,6 @@ import type {
   NekSessionEntry,
   NekSessionStats,
   NekSessionTreeNode,
-  NekStatusQueue,
   NekStatusSnapshot,
   NekSubagentRecord,
   NekThinkingLevel,
@@ -22,6 +21,7 @@ import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 import { collectPersistedSubagentRecords } from "../projection/nekSubagentRecords.js";
 import { isNekState, type NekMode, type NekPromptInput, type NekThoughtLevel } from "./types.js";
+export { clearQueue, retrieveQueue, requeueQueue } from "./nekQueueCommands.js";
 
 export interface NekAgentCommandTarget {
   client: NekRpcClient;
@@ -105,40 +105,6 @@ export async function abortBash(
   sessionKey: string,
 ): Promise<void> {
   await context.writableTarget(sessionKey).client.call({ type: "abort_bash" });
-}
-
-export async function clearQueue(
-  context: NekAgentCommandContext,
-  sessionKey: string,
-): Promise<{ steering: string[]; followUp: string[] }> {
-  return await context.writableTarget(sessionKey).client.call({ type: "clear_queue" });
-}
-
-/**
- * 取回排队输入：nek 只有 `clear_queue`（返回并清空），没有只读的 peek 命令，
- * 因此取回与清空共用同一次 RPC，调用方拿到的就是队列内容。
- */
-export async function retrieveQueue(
-  context: NekAgentCommandContext,
-  sessionKey: string,
-): Promise<{ steering: string[]; followUp: string[] }> {
-  return await clearQueue(context, sessionKey);
-}
-
-/**
- * 重新入队：nek 没有"整体恢复队列"命令，只能按原 kind 逐条送回 `steer` / `follow_up`。
- *
- * 单条失败即中断并把错误抛给调用方：队列已经在上一步被 `clear_queue` 清空，
- * 中途静默继续会丢掉剩余的排队消息。
- */
-export async function requeueQueue(
-  context: NekAgentCommandContext,
-  sessionKey: string,
-  queue: NekStatusQueue,
-): Promise<void> {
-  const target = context.writableTarget(sessionKey);
-  for (const message of queue.steering) await target.client.call({ type: "steer", message });
-  for (const message of queue.followUp) await target.client.call({ type: "follow_up", message });
 }
 
 /** 取消自动重试；nek 用 `abort_retry` 单独收口，不会中止当前回合。 */

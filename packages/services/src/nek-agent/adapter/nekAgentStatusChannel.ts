@@ -26,6 +26,7 @@ import {
   type NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
 import { isNekSubagentRecord } from "../projection/nekSubagentRecords.js";
+import { readNekStoredAttachments } from "../projection/nekUserFiles.js";
 import { isNekState, type NekAgentServiceEvent, type NekSession } from "../service/types.js";
 import { workspaceKey } from "./frameHelpers.js";
 import type { NekWorkspaceTarget } from "./types.js";
@@ -96,9 +97,47 @@ export function boundNekStatusSnapshot(snapshot: NekStatusSnapshot): NekStatusSn
   return { ...snapshot, state: boundNekStatusState(snapshot.state) };
 }
 
-/** `clear_queue` 的回包也要有界，否则一次异常队列就能把 store 撑爆。 */
+/** 撤回结果不能像状态预览一样截断；CLI 在撤回前按同一预算拒绝超限输入。 */
 export function boundNekStatusQueue(queue: NekStatusQueue): NekStatusQueue {
-  return { steering: boundList(queue.steering), followUp: boundList(queue.followUp) };
+  for (const kind of ["steering", "followUp"] as const) {
+    if (
+      !Array.isArray(queue[kind]) ||
+      queue[kind].length > 200 ||
+      queue[kind].some((text) => typeof text !== "string" || Buffer.byteLength(text) > 64 * 1024)
+    )
+      throw new Error("Invalid nek queue recovery result");
+  }
+  if (queue.inputs === undefined)
+    return { steering: [...queue.steering], followUp: [...queue.followUp] };
+  if (!queue.inputs || typeof queue.inputs !== "object")
+    throw new Error("Invalid nek attachment queue result");
+  // 撤回结果已经离开权威队列，不能像状态预览一样裁剪后丢掉附件或正文。
+  const inputs = { steering: [], followUp: [] } as NonNullable<NekStatusQueue["inputs"]>;
+  for (const kind of ["steering", "followUp"] as const) {
+    const items = queue.inputs[kind];
+    if (!Array.isArray(items) || items.length > 200 || items.length !== queue[kind].length)
+      throw new Error("Invalid nek attachment queue result");
+    inputs[kind] = items.map((item, index) => {
+      if (
+        typeof item?.text !== "string" ||
+        item.text !== queue[kind][index] ||
+        Buffer.byteLength(item.text) > 64 * 1024
+      )
+        throw new Error("Invalid nek attachment queue text");
+      const files =
+        item.attachments === undefined
+          ? undefined
+          : readNekStoredAttachments({
+              customType: "nek.attachments",
+              display: false,
+              details: { version: 1, attachments: item.attachments },
+            });
+      if (files?.some((file) => file.path.length > 4096))
+        throw new Error("nek queue attachment path is too long");
+      return { text: item.text, ...(files?.length ? { attachments: files } : {}) };
+    });
+  }
+  return { steering: [...queue.steering], followUp: [...queue.followUp], inputs };
 }
 
 function projectExtensionEvent(event: NekExtensionEvent): NekExtensionEvent | null {

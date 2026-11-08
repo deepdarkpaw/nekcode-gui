@@ -1,7 +1,6 @@
-export interface QueueContents {
-  steering: string[];
-  followUp: string[];
-}
+import type { NekQueuedInput, NekStatusQueue } from "@zcode/shared/nek-protocol";
+
+export type QueueContents = NekStatusQueue;
 
 export type QueueKind = "steering" | "followUp";
 
@@ -18,7 +17,27 @@ export type QueueEditResult =
   | { ok: false; reason: "consumed"; requeue: QueueContents };
 
 function cloneQueue(queue: QueueContents): QueueContents {
-  return { steering: [...queue.steering], followUp: [...queue.followUp] };
+  return {
+    steering: [...queue.steering],
+    followUp: [...queue.followUp],
+    ...(queue.inputs
+      ? {
+          inputs: {
+            steering: queue.inputs.steering.map((item) => ({ ...item })),
+            followUp: queue.inputs.followUp.map((item) => ({ ...item })),
+          },
+        }
+      : {}),
+  };
+}
+
+/** 目标正文可重复；用 kind + 同文 occurrence 取回原附件，不按正文 hash 合并。 */
+export function queuedInputAt(
+  queue: QueueContents,
+  target: QueueTarget,
+): NekQueuedInput | undefined {
+  const index = findOccurrence(queue[target.kind], target);
+  return index < 0 ? undefined : queue.inputs?.[target.kind][index];
 }
 
 function findOccurrence(items: readonly string[], target: QueueTarget): number {
@@ -55,8 +74,14 @@ export function planQueueEdit(
   if (index < 0) return { ok: false, reason: "consumed", requeue };
   if (operation.type === "delete") {
     items.splice(index, 1);
+    requeue.inputs?.[target.kind].splice(index, 1);
   } else {
     items[index] = operation.text;
+    if (requeue.inputs)
+      requeue.inputs[target.kind][index] = {
+        ...requeue.inputs[target.kind][index]!,
+        text: operation.text,
+      };
   }
   return { ok: true, requeue };
 }
@@ -66,15 +91,28 @@ export function appendQueueItem(
   queue: QueueContents,
   kind: QueueKind,
   text: string,
+  input?: NekQueuedInput,
 ): QueueContents {
-  return { ...cloneQueue(queue), [kind]: [...queue[kind], text] };
+  const next = cloneQueue(queue);
+  if (!next.inputs && input?.attachments?.length)
+    next.inputs = {
+      steering: queue.steering.map((value) => ({ text: value })),
+      followUp: queue.followUp.map((value) => ({ text: value })),
+    };
+  next[kind].push(text);
+  next.inputs?.[kind].push({ ...input, text });
+  return next;
 }
 
 export function queueItemTargets(queue: QueueContents): QueueTarget[] {
-  return [
-    ...queue.steering.map((text, occurrence) => ({ kind: "steering" as const, text, occurrence })),
-    ...queue.followUp.map((text, occurrence) => ({ kind: "followUp" as const, text, occurrence })),
-  ];
+  return (["steering", "followUp"] as const).flatMap((kind) => {
+    const counts = new Map<string, number>();
+    return queue[kind].map((text) => {
+      const occurrence = counts.get(text) ?? 0;
+      counts.set(text, occurrence + 1);
+      return { kind, text, occurrence };
+    });
+  });
 }
 
 export interface QueueKeyInput {

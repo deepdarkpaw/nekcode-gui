@@ -2786,6 +2786,8 @@ const zhCN: Record<string, string> = {
   "nek.status.queue.followUp": "排队",
   "nek.status.queue.consumed": "这条消息已经发出，无法修改",
   "nek.status.queue.emptyText": "内容不能为空；要删除请用删除按钮",
+  "nek.status.queue.attachmentsFull":
+    "输入框最多容纳 8 个附件，排队消息已放回；请先发送或移除部分附件后重试。",
   "nek.status.queue.deleted": "已删除排队消息",
   "nek.status.queue.undoAppends": "撤销后会放到队列末尾",
   "nek.status.queue.retrieveAll": "全部取回到输入框",

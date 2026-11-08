@@ -8,9 +8,12 @@
  *   把 pane 的真实实现装成回调对象，`SessionPane` 因此不需要写一串 `?? async () => undefined`
  *   的空实现。
  */
+import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionStatusCallbacks } from "./NekSessionStatusSlot.js";
 
 export interface NekPaneStatusCallbackSources {
+  /** workspace identity + session 的草稿范围；异步取回不能跨远端回填。 */
+  composerScopeKey?: string;
   /** 子代理停止（`stopSubagent`），来自 `useNekSubagentFeed`。 */
   stopSubagent: (id: string) => Promise<void>;
   /** 定位到对话里的子代理（打开对应子会话）。 */
@@ -25,6 +28,8 @@ export interface NekPaneStatusCallbackSources {
   getComposerText: () => string;
   /** 替换输入框文本（队列取回）。 */
   setComposerText: (text: string) => void;
+  /** 队列文件回到当前会话的附件 owner；拒绝时保持队列内容可重试。 */
+  restoreComposerAttachments?: (attachments: readonly AttachmentRef[]) => boolean;
   /** 把焦点移到输入框末尾。 */
   focusComposerAtEnd: () => void;
 }
@@ -33,6 +38,7 @@ export function createNekPaneStatusCallbacks(
   sources: NekPaneStatusCallbackSources,
 ): NekSessionStatusCallbacks {
   return {
+    ...(sources.composerScopeKey ? { composerScopeKey: sources.composerScopeKey } : {}),
     onStopSubagent: async (id) => await sources.stopSubagent(id),
     onFocusSubagent: sources.focusSubagent,
     onOpenPlan: sources.openPlan,
@@ -40,6 +46,9 @@ export function createNekPaneStatusCallbacks(
     canJumpToTodo: sources.canJumpToTodo,
     getComposerText: sources.getComposerText,
     setComposerText: sources.setComposerText,
+    ...(sources.restoreComposerAttachments
+      ? { restoreComposerAttachments: sources.restoreComposerAttachments }
+      : {}),
     focusComposerAtEnd: sources.focusComposerAtEnd,
   };
 }

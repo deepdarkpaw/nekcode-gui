@@ -97,9 +97,10 @@ function createNekAgentStatusMethods(
       boundNekStatusQueue(await service.clearQueue(await sessionKeyOf(params))),
     requeueNekQueue: async (params): Promise<void> => {
       const sessionKey = await sessionKeyOf(params);
+      const queue = params.queue.inputs ? boundNekStatusQueue(params.queue) : params.queue;
       await service.runSessionCommand(
         sessionKey,
-        async (context) => await commands.requeueQueue(context, sessionKey, params.queue),
+        async (context) => await commands.requeueQueue(context, sessionKey, queue),
       );
     },
     abortNekRetry: async (params): Promise<void> => {

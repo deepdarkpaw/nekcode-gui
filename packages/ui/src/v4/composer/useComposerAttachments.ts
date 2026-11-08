@@ -1,7 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- 附件采集、分 scope 上传调度和生命周期必须在同一 hook 中原子收口。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast.js";
-import { nanoid } from "nanoid";
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import {
@@ -30,6 +29,8 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import {
   exposeComposerAttachmentScopeKeyForE2E,
+  composerAttachmentScopeKey as buildScopeKey,
+  restoreComposerSessionAttachments,
   readComposerAttachmentScope,
   updateComposerAttachmentScope,
   useComposerAttachmentUploadStore,
@@ -124,14 +125,6 @@ async function selectAttachmentLocalPaths(
     ? await platform.selectFiles()
     : await platform.selectFile().then((selectedPath) => (selectedPath ? [selectedPath] : []));
   return selectedPaths.filter((path) => path.trim().length > 0);
-}
-
-function buildScopeKey(
-  workspacePath: string,
-  workspaceIdentity: string | undefined,
-  scopeId: string,
-): string {
-  return `${workspaceIdentity?.trim() || workspacePath}\u0000${scopeId}`;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -952,35 +945,11 @@ export function useComposerAttachments(
 
   const restoreSessionOwnedAttachments = useCallback(
     (attachmentRefs: readonly AttachmentRef[]): boolean => {
-      if (attachmentRefs.length === 0) return true;
-      if (readComposerAttachmentScope(scopeKey).length > 0) return false;
-      const restored: ComposerAttachmentUploadItem[] = attachmentRefs.map((attachmentRef) => {
-        const id = nanoid();
-        return {
-          id,
-          filename: attachmentRef.fileName,
-          mimeType: attachmentRef.mime,
-          sizeBytes: attachmentRef.bytes,
-          referenceOwnership: "session",
-          uploadStatus: "ready",
-          uploadProgress: 100,
-          attachmentRef: { ...attachmentRef },
-          operationId: `session-owned-${id}`,
-          autoRetryCount: 0,
-          runtimeRebuildRetryCount: 0,
-          staged: false,
-          adopted: true,
-          showComplete: false,
-          localZeroCopy: false,
-        };
-      });
-      // queue 中的 AttachmentRef 已在首次发送时由 session 接管；若按普通
-      // composer 文件重建，会在撤回后重复 upload/adopt，并在 runtime restart 时误清引用。
-      commitScope(scopeKey, () => restored);
+      if (!restoreComposerSessionAttachments(scopeKey, attachmentRefs)) return false;
       setAttachmentError(null);
       return true;
     },
-    [commitScope, scopeKey],
+    [scopeKey],
   );
 
   const getAttachmentRefs = useCallback(

@@ -11,16 +11,14 @@ import type {
   NekRpcSlashCommand,
   NekSessionEntry,
   NekSessionStats,
+  NekStatusQueue,
   NekSessionTreeNode,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekConversationListener, NekMode, NekPromptInput, NekThoughtLevel } from "./types.js";
 
 /** 排队输入的快照：nek 的 `clear_queue` 边返回边清空，没有只读 peek。 */
-export interface NekQueueSnapshot {
-  steering: string[];
-  followUp: string[];
-}
+export type NekQueueSnapshot = NekStatusQueue;
 
 /**
  * `NekAgentService` 的命令面：每条命令对应一次 nek 会话进程 RPC。
