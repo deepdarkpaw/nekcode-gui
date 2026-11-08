@@ -138,6 +138,9 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
   const { toolCall } = toolCallNode;
   const normalizedToolName = normalizeZCodeToolName(toolCall.toolName);
   const isDirectoryListing = normalizedToolName === "ls";
+  const isWebSearch = normalizedToolName === "web_search";
+  const webOutput = isWebSearch ? toolCall.output || errorText : undefined;
+  const hasContent = isDirectoryListing || Boolean(webOutput);
   const isAstSearch = normalizedToolName === "ast_grep";
   const searchPrimaryText = isAstSearch
     ? getAstSearchPrimaryText(toolCall.input)
@@ -153,7 +156,7 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
         toolId={toolCall.toolId}
         icon={SEARCH_TOOL_ICON}
         showIcon={context.showIcon !== false}
-        canToggle={isDirectoryListing}
+        canToggle={hasContent}
         kindLabel={
           context.kindLabelOverride ??
           getSearchKindLabel(intl, { isAstSearch, isDirectoryListing, isRunning })
@@ -168,12 +171,13 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
         isRunning={isRunning}
         title={toolCall.title}
         renderContent={
-          isDirectoryListing
+          hasContent
             ? () => (
                 <ToolCallBody
                   toolCall={toolCall}
-                  displayModel={context.displayModel}
-                  childToolList={context.childToolList}
+                  displayModel={isWebSearch ? { ...context.displayModel, showInput: false, showOutput: false } : context.displayModel}
+                  inlinePreviewOverride={webOutput ? { type: "text", source: { type: "text", title: toolCall.toolName ?? "web_search", content: webOutput, language: "markdown" } } : undefined}
+                  childToolList={isWebSearch ? null : context.childToolList}
                   workspacePath={context.workspacePath}
                   theme={context.theme}
                   codePreviewSettings={context.codePreviewSettings}

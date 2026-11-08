@@ -133,6 +133,33 @@ function assistantTextRow(rowId: number) {
   };
 }
 
+it.each(["", " \n\t"])("CLI-R1: blank assistant blocks (%j) do not split main-turn edits", (text) => {
+  const start = 10_000 + text.length * 100;
+  const rows = [edit(start), { ...assistantTextRow(start + 1), text }, edit(start + 2), { ...assistantTextRow(start + 3), text }, edit(start + 4)];
+  const items = buildAssistantWorkRenderItems(rows, visibility);
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const units = buildConversationTurnRenderUnits([
+    { ...base(0), kind: "userInput", text: "Update PRD", attachments: [] }, ...rows,
+  ], { sessionPhase: "completedSuccess" });
+  expect(units[0]!.assistantWorkRows.map((row) => row.rowId)).toEqual([start, start + 2, start + 4]);
+  const ui = render(<ConversationTurnGroup unit={units[0]!} context={context} />, { wrapper });
+  expect(screen.getAllByText("PRD.md")).toHaveLength(1);
+  expect(screen.getByLabelText("+3")).toBeTruthy();
+  fireEvent.click(screen.getByText("PRD.md"));
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+});
+
+it("CLI-R2: inputText-only reads separated by empty streamed text share one file summary", () => {
+  const first = { ...readTool(10), input: undefined, inputText: JSON.stringify({ path: "/project/PRD.md", offset: 1, limit: 10 }) };
+  const second = { ...readTool(12), input: undefined, inputText: JSON.stringify({ path: "/project/PRD.md", offset: 11, limit: 10 }) };
+  const rows = [first, { ...assistantTextRow(11), text: "", state: "streaming" as const }, second];
+  expect(buildAssistantWorkRenderItems(rows, visibility).map((item) => item.kind)).toEqual(["readGroup"]);
+  render(view(rows), { wrapper });
+  expect(screen.getAllByText("读取")).toHaveLength(1);
+  fireEvent.click(screen.getByText("读取"));
+  expect(screen.getAllByText("PRD.md").length).toBeGreaterThan(0);
+});
+
 it("CG1: same-file operation counts are accumulated once, excluding failed/cancelled/running calls", () => {
   const rows = [edit(1), edit(2), edit(3, "error"), edit(4, "cancelled"), edit(5, "running")];
   const group = buildFileChangeGroup(rows.map(toolCallRowToLegacyNode), "/project");

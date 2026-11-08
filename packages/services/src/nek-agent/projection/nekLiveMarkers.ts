@@ -66,6 +66,8 @@ export function applyCompactionStart(
       ...ctx.store.state.control,
       stopTargetKind: "compact",
       canStop: true,
+      stopState: "stoppable",
+      activeWorks: [...ctx.store.state.control.activeWorks.filter((work) => work.kind !== "compact"), { kind: "compact", startedAt: ctx.now() }],
     },
   });
 }
@@ -140,6 +142,8 @@ export function applyCompactionEnd(
       ...ctx.store.state.control,
       stopTargetKind: turnStillRunning ? "assistant" : "unknown",
       canStop: turnStillRunning,
+      stopState: turnStillRunning ? "stoppable" : "idle",
+      activeWorks: ctx.store.state.control.activeWorks.filter((work) => work.kind !== "compact"),
     },
   });
 }

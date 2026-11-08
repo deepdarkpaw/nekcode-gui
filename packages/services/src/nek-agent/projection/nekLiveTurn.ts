@@ -145,6 +145,8 @@ export function applyTurnLifecycleEvent(ctx: NekLiveContext, event: NekRpcEvent)
     return true;
   }
   if (event.type === "agent_settled") {
+    const compactionWork = ctx.store.state.control.activeWorks.filter((work) => work.kind === "compact");
+    const compacting = compactionWork.length > 0;
     closeTurn(
       ctx,
       ctx.turn?.lastStopReason === "aborted" ? "completedInterrupted" : "completedSuccess",
@@ -154,10 +156,10 @@ export function applyTurnLifecycleEvent(ctx: NekLiveContext, event: NekRpcEvent)
         ...ctx.store.state.control,
         phase: "completedSuccess",
         sessionEnded: false,
-        canStop: false,
-        stopState: "idle",
-        stopTargetKind: "unknown",
-        activeWorks: [],
+        canStop: compacting,
+        stopState: compacting ? "stoppable" : "idle",
+        stopTargetKind: compacting ? "compact" : "unknown",
+        activeWorks: compactionWork,
         apiRetry: null,
       },
     });

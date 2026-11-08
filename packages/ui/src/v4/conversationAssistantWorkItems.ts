@@ -8,6 +8,7 @@ import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
 import {
   isConversationReasoningRowVisible,
+  isEmptyConversationTextRow,
   type ConversationReasoningVisibility,
 } from "@/v4/conversationRowContext.js";
 import type { AssistantWorkRow } from "@/v4/conversationTurnRenderUnits.js";
@@ -104,7 +105,7 @@ const isPlainExploreRow = (row: AssistantWorkRow): row is ToolCallRow =>
 function readToolPath(row: ToolCallRow): string | undefined {
   const display = row.output?.display;
   if (display?.kind === "file_diff") return display.filePath;
-  const input = row.input;
+  const input = row.input ?? toolCallRowToLegacyNode(row).toolCall.input;
   if (!isRecord(input)) return undefined;
   return TOOL_PATH_INPUT_FIELDS.map((field) => input[field]).find(
     (value): value is string => typeof value === "string" && value.trim().length > 0,
@@ -361,6 +362,7 @@ export function buildAssistantWorkRenderItems(
   // 仍会占据数组位置，把紧贴的两条同类工具误判成被隔开；隐藏 reasoning 与无 UI 的 marker
   // 同理。先统一剔除暂不可见行，再做配对、聚合和尾部判断。
   const preparedRows = rows.filter((row) => {
+    if (isEmptyConversationTextRow(row)) return false;
     if (
       row.kind === "reasoning" &&
       !isConversationReasoningRowVisible(row.rowId, reasoningVisibility)

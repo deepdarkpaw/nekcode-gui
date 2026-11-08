@@ -217,6 +217,46 @@ test("settings: nested merge, null deletes the key, no null is ever persisted", 
   assert.equal(afterDelete.compaction.content.toolResultMaxChars, 4000);
 });
 
+test("web search: defaults match nek and merged writes require an explicit provider", async () => {
+  const harness = createHarness();
+  const initial = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(initial.defaults.webSearch, { provider: "tavily", numResults: 8 });
+  for (const webSearch of [{ apiKey: "$SEARCH_API_KEY" }, { endpoint: "https://search.example/search" }, { provider: "unknown" }, { provider: "tavily", numResults: 21 }, { provider: "exa", numResults: 0 }, { numResults: 1.5 }]) {
+    await expectNekError(() => harness.api.patchSettings(LOCAL, "global", { webSearch } as never, { revision: initial.revision }), "validation");
+    assert.equal(harness.local.files.has(SETTINGS_PATH), false);
+  }
+  await harness.api.patchSettings(LOCAL, "global", { webSearch: { provider: "tavily", apiKey: "$TAVILY_API_KEY", numResults: 20, customSearchFlag: true } } as never, { revision: initial.revision });
+  const next = await harness.api.readSettings(LOCAL, "global");
+  await harness.api.patchSettings(LOCAL, "global", { webSearch: { numResults: 8 } }, { revision: next.revision });
+  const final = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(final.values.webSearch, { provider: "tavily", apiKey: "$TAVILY_API_KEY", numResults: 8, customSearchFlag: true });
+  await expectNekError(() => harness.api.patchSettings(LOCAL, "global", { webSearch: { provider: null } } as never, { revision: final.revision }), "validation");
+  assert.deepEqual((await harness.api.readSettings(LOCAL, "global")).values.webSearch, final.values.webSearch);
+  await harness.api.dispose();
+});
+
+test("web search: remote settings and probe keep credentials on the target host", async () => {
+  const harness = createHarness();
+  const read = await harness.api.readSettings(REMOTE, "global");
+  await harness.api.patchSettings(REMOTE, "global", { webSearch: { provider: "exa", apiKey: "$REMOTE_SEARCH_KEY", numResults: 8 } }, { revision: read.revision });
+  assert.deepEqual((readJson(harness.remote, read.path) as { webSearch: unknown }).webSearch, { provider: "exa", apiKey: "$REMOTE_SEARCH_KEY", numResults: 8 });
+  assert.equal(harness.local.files.has(SETTINGS_PATH), false);
+  assert.equal((await harness.api.testWebSearch(REMOTE, "fixture query")).ok, true);
+  assert.deepEqual(harness.control.commands.findLast((command) => command.type === "test_web_search"), { type: "test_web_search", query: "fixture query" });
+  await harness.api.dispose();
+});
+
+test("web search: project keys can inherit an explicit global provider", async () => {
+  const harness = createHarness({ localFiles: { [SETTINGS_PATH]: JSON.stringify({ webSearch: { provider: "tavily" } }) } });
+  const read = await harness.api.readSettings(LOCAL, "project", PROJECT);
+  await harness.api.patchSettings(LOCAL, "project", { webSearch: { apiKey: "$PROJECT_SEARCH_KEY" } }, { revision: read.revision, cwd: PROJECT });
+  const result = await harness.api.readSettings(LOCAL, "project", PROJECT);
+  assert.equal(result.effective.webSearch?.provider, "tavily");
+  assert.equal(result.effective.webSearch?.apiKey, "$PROJECT_SEARCH_KEY");
+  assert.equal(result.diagnostics.length, 0);
+  await harness.api.dispose();
+});
+
 test("settings: a concurrent nek write inside the lock is not overwritten", async () => {
   const harness = createHarness({
     localFiles: { [SETTINGS_PATH]: JSON.stringify({ theme: "dark" }) },

@@ -408,6 +408,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
       capabilities: process.guiInfo.capabilities,
       projector: record.projector,
       phase: record.phase,
+      isCompacting: record.state?.isCompacting === true,
       setPhase: (phase) => this.setPhase(record, phase),
     };
   }

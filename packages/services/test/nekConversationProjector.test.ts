@@ -431,6 +431,11 @@ test("compaction running -> success stays on one marker row", () => {
   assert.equal(runningCompacts[0]?.marker.origin, "auto");
   assert.equal(started.control.stopTargetKind, "compact");
   assert.equal(started.control.canStop, true);
+  assert.equal(started.inputRouting.mode, "enqueue");
+  assert.equal(started.inputRouting.reasonCode, "compactingAcceptsFutureInput");
+  assert.equal(started.availability.compact.allowed, false);
+  assert.equal(started.availability.sendQueuedNow.allowed, false);
+  assert.equal(started.control.activeWorks.some((work) => work.kind === "compact"), true);
   const compactRowId = runningCompacts[0]?.rowId;
 
   projector.handleEvent({

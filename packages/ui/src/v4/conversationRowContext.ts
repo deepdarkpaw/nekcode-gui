@@ -13,6 +13,7 @@ import type {
 } from "@/lib/workspaceSidePane.js";
 import type {
   CommandAck,
+  ConversationRow,
   ConversationRowTarget,
   TurnHeaderRow,
   V4ConversationFileChangesResult,
@@ -107,6 +108,11 @@ export interface ConversationFileChangesRequestOptions {
   cachePolicy: "in-flight" | "terminal";
   /** rewind 会在同一 logEpoch 内切换 active/reverted，终态缓存必须按该语义状态隔离。 */
   fileChangesState?: ConversationFileChangesState;
+}
+
+/** Provider text/thinking placeholders have no visible body and cannot split tool stages. */
+export function isEmptyConversationTextRow(row: ConversationRow): boolean {
+  return (row.kind === "assistantText" || row.kind === "reasoning") && row.text.trim().length === 0;
 }
 
 export type ConversationReasoningVisibility = Pick<

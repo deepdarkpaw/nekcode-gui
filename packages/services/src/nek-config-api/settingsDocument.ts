@@ -41,6 +41,8 @@ export interface PatchSettingsArgs {
   patch: Record<string, unknown>;
   /** 读取时拿到的 revision。 */
   expectedRevision: string;
+  /** Cross-field validation runs on the final document while its existing lock is held. */
+  validate?: (merged: Record<string, unknown>) => void;
 }
 
 /**
@@ -66,6 +68,7 @@ export async function patchSettingsDocument(
     const parsed =
       current === undefined || current.trim() === "" ? {} : parseJsonMapping(path, current);
     const merged = applySettingsPatch(parsed, patch);
+    args.validate?.(merged);
     next = `${JSON.stringify(merged, null, 2)}\n`;
     return next;
   });

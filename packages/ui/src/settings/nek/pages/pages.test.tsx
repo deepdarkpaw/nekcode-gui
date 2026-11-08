@@ -104,6 +104,46 @@ describe("ProvidersPage", () => {
 });
 
 describe("ToolsPage", () => {
+  it("shows Tavily defaults and persists the provider together with a key", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    expect((await screen.findByLabelText("搜索服务商")).textContent).toContain("Tavily");
+    expect((screen.getByLabelText("结果数") as HTMLInputElement).value).toBe("8");
+    const key = screen.getByLabelText("搜索 API Key");
+    fireEvent.change(key, { target: { value: "$TAVILY_API_KEY" } });
+    await act(async () => { fireEvent.blur(key); });
+    await waitFor(() => expect(env.config.machines.get("local")?.settings.value.webSearch).toMatchObject({ provider: "tavily", apiKey: "$TAVILY_API_KEY" }));
+  });
+
+  it("switches to Exa without inventing a shared endpoint or moving credentials", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
+    await waitFor(() => expect(env.config.machines.get("local")?.settings.value.webSearch?.provider).toBe("exa"));
+    expect(env.config.machines.get("local")?.settings.value.webSearch?.endpoint).toBeUndefined();
+    expect(screen.getByText("Exa 可不填密钥；可用额度由 Exa 服务决定。")).toBeTruthy();
+  });
+
+  it("does not send a configured Tavily key to Exa on a provider switch", async () => {
+    env.config.machines.get("local")!.settings.value.webSearch = { provider: "tavily", apiKey: "$TAVILY_API_KEY" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
+    await screen.findAllByText(/请先清空 API Key/);
+    expect(env.config.machines.get("local")?.settings.value.webSearch).toEqual({ provider: "tavily", apiKey: "$TAVILY_API_KEY" });
+  });
+
+  it("requires an explicit provider for ambiguous existing keys rather than guessing", async () => {
+    env.config.machines.get("local")!.settings.value.webSearch = { apiKey: "$SEARCH_API_KEY" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    expect((screen.getByRole("button", { name: "测试搜索" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
+    await waitFor(() => expect(env.config.machines.get("local")?.settings.value.webSearch).toEqual({ provider: "exa", apiKey: "$SEARCH_API_KEY" }));
+  });
+
   it("writes +/- deltas and rolls back a switch when saving fails", async () => {
     render(<ToolsPage />, { wrapper: env.wrapper });
     const webSwitch = await screen.findByRole("switch", { name: "启用联网搜索" });

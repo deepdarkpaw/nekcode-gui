@@ -155,6 +155,8 @@ export interface NekCompactionContentSettings {
   protectedToolResults?: number;
 }
 
+export const NEK_WEB_SEARCH_PROVIDERS = ["tavily", "exa"] as const;
+
 export interface NekSettingsView {
   defaultProvider?: string;
   defaultModel?: string;
@@ -181,7 +183,7 @@ export interface NekSettingsView {
     maxAgentDelayMs?: number;
     provider?: { timeoutMs?: number; maxRetries?: number; maxRetryDelayMs?: number };
   };
-  webSearch?: { endpoint?: string; apiKey?: string; numResults?: number };
+  webSearch?: { provider?: (typeof NEK_WEB_SEARCH_PROVIDERS)[number]; endpoint?: string; apiKey?: string; numResults?: number };
   httpProxy?: string;
   httpIdleTimeoutMs?: number;
   transport?: string;

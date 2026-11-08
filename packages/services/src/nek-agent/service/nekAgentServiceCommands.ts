@@ -28,6 +28,7 @@ export interface NekAgentCommandTarget {
   capabilities?: NekGuiInfo["capabilities"];
   projector?: NekConversationProjector;
   phase: "idle" | "running" | "waiting_input" | "error" | "locked";
+  isCompacting?: boolean;
   setPhase: (phase: "idle" | "running" | "waiting_input" | "error" | "locked") => void;
 }
 
@@ -56,6 +57,7 @@ export async function sendPrompt(
     ...(images ? { images } : {}),
     ...(attachments ? { attachments } : {}),
   };
+  if (target.isCompacting) return await target.client.call({ type: "follow_up", ...content });
   if (target.phase === "running" || target.phase === "waiting_input") {
     if (!input.streamingBehavior)
       throw new Error("streamingBehavior is required while nek is running");
@@ -72,6 +74,8 @@ export async function sendPrompt(
   const result = await target.client.call({
     type: "prompt",
     ...content,
+    // nek makes admission atomic: maintenance/a run can begin after our last observed event.
+    streamingBehavior: input.streamingBehavior === "steer" ? "steer" : "followUp",
   });
   if (result.disposition === "started") target.setPhase("running");
   return result;

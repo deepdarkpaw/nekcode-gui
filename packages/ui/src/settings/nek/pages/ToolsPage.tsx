@@ -1,6 +1,6 @@
 /**
  * 工具与联网：内置工具勾选（写 `defaultTools` 的 `+name/-name`）；shell 路径与命令前缀；
- * 联网搜索开关（`-web_search`）、Exa API Key、自定义 endpoint（高级）、结果数、测试搜索。
+ * 联网搜索开关（`-web_search`）、Tavily/Exa、API Key、自定义 endpoint（高级）、结果数、测试搜索。
  *
  * 工具清单来自 `listBuiltinTools()`（host 侧的 nek 镜像），不在界面里硬编码。
  */
@@ -15,6 +15,7 @@ import {
   SettingAdvancedGroup,
   SettingRow,
   SettingSection,
+  SettingSelectField,
   SettingSwitchField,
 } from "@/components/ui/setting-fields.js";
 import { SettingNumberField, SettingTextField } from "@/components/ui/setting-text-field.js";
@@ -158,11 +159,20 @@ function WebSearchSection({
   const web = settings.data?.values.webSearch ?? {};
   const defaults = settings.data?.defaults.webSearch ?? {};
   const on = enabled.has(WEB_SEARCH_TOOL);
-  const writeWeb = (patch: {
+  const hasProvider = web.provider === "tavily" || web.provider === "exa";
+  const needsProvider = !hasProvider && (web.provider !== undefined || web.apiKey !== undefined || web.endpoint !== undefined);
+  const provider = web.provider === "exa" ? "exa" : "tavily";
+  const endpointDefault = provider === "exa" ? "https://mcp.exa.ai/mcp" : "https://api.tavily.com/search";
+  const writeWeb = async (patch: {
+    provider?: "tavily" | "exa";
     endpoint?: string | null;
     apiKey?: string | null;
     numResults?: number | null;
-  }) => settings.patch(nestedSettingsPatch({ webSearch: patch }));
+  }) => {
+    if (needsProvider && !patch.provider) throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
+    await settings.patch(nestedSettingsPatch({ webSearch: { provider, ...patch } }));
+    setResult(null);
+  };
   return (
     <SettingSection
       title={intl.formatMessage({ id: "settings.nek.web.title" })}
@@ -174,9 +184,22 @@ function WebSearchSection({
         value={on}
         onCommit={(next) => setTool(WEB_SEARCH_TOOL, next)}
       />
+      <SettingSelectField
+        label={intl.formatMessage({ id: "settings.nek.web.provider" })}
+        description={intl.formatMessage({ id: needsProvider ? "settings.nek.web.providerRequired" : "settings.nek.web.providerHint" })}
+        value={needsProvider ? "" : provider}
+        options={[{ value: "tavily", label: "Tavily" }, { value: "exa", label: "Exa" }]}
+        onCommit={async (next) => {
+          if (next !== "tavily" && next !== "exa") throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
+          if (hasProvider && next !== provider && (web.apiKey || web.endpoint)) {
+            throw new Error(intl.formatMessage({ id: "settings.nek.web.clearBeforeSwitch" }));
+          }
+          await writeWeb({ provider: next });
+        }}
+      />
       <SecretSettingField
         label={intl.formatMessage({ id: "settings.nek.web.apiKey" })}
-        description={intl.formatMessage({ id: "settings.nek.web.apiKeyHint" })}
+        description={intl.formatMessage({ id: provider === "tavily" ? "settings.nek.web.tavilyApiKeyHint" : "settings.nek.web.apiKeyHint" })}
         value={web.apiKey ?? ""}
         placeholder={intl.formatMessage({ id: "settings.nek.web.apiKeyPlaceholder" })}
         onCommit={(apiKey) => writeWeb({ apiKey: apiKey || null })}
@@ -185,9 +208,9 @@ function WebSearchSection({
         label={intl.formatMessage({ id: "settings.nek.web.numResults" })}
         integer
         min={1}
-        max={25}
+        max={20}
         unit={intl.formatMessage({ id: "settings.nek.unit.count" })}
-        value={web.numResults ?? defaults.numResults ?? 5}
+        value={web.numResults ?? defaults.numResults ?? 8}
         defaultValue={defaults.numResults}
         onCommit={(value) => writeWeb({ numResults: value === defaults.numResults ? null : value })}
       />
@@ -198,8 +221,8 @@ function WebSearchSection({
         <AsyncButton
           variant="outline"
           icon={<SearchIcon />}
-          disabled={!on}
-          disabledReason={intl.formatMessage({ id: "settings.nek.web.testDisabled" })}
+          disabled={!on || needsProvider}
+          disabledReason={intl.formatMessage({ id: needsProvider ? "settings.nek.web.providerRequired" : "settings.nek.web.testDisabled" })}
           onClick={async () => {
             setResult(null);
             const outcome = await api.testWebSearch(target, "nek coding agent");
@@ -219,8 +242,9 @@ function WebSearchSection({
         <SettingTextField
           label={intl.formatMessage({ id: "settings.nek.web.endpoint" })}
           description={intl.formatMessage({ id: "settings.nek.web.endpointHint" })}
-          value={web.endpoint ?? defaults.endpoint ?? ""}
-          defaultValue={defaults.endpoint}
+          value={web.endpoint ?? ""}
+          placeholder={endpointDefault}
+          defaultValue=""
           inputClassName="w-72 font-mono"
           validate={(value) =>
             value === "" || /^https?:\/\//.test(value)
@@ -229,7 +253,7 @@ function WebSearchSection({
           }
           onCommit={(endpoint) =>
             writeWeb({
-              endpoint: endpoint === "" || endpoint === defaults.endpoint ? null : endpoint,
+              endpoint: endpoint === "" || endpoint === endpointDefault ? null : endpoint,
             })
           }
         />

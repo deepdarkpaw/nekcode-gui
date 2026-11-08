@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NEK_WEB_SEARCH_PROVIDERS } from "@zcode/shared/nek-protocol";
 
 /**
  * nek 配置文件的 zod 镜像。
@@ -130,9 +131,10 @@ export const nekRetrySettingsSchema = loose({
 });
 
 export const nekWebSearchSettingsSchema = loose({
+  provider: z.enum(NEK_WEB_SEARCH_PROVIDERS).optional(),
   endpoint: z.string().optional(),
   apiKey: z.string().optional(),
-  numResults: z.number().optional(),
+  numResults: z.number().int().min(1).max(20).optional(),
 });
 
 export const nekSettingsFileSchema = loose({

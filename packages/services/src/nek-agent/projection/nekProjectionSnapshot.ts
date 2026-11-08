@@ -186,14 +186,15 @@ export function buildControlState(
 
 const ALLOWED: ActionAvailability = { allowed: true };
 
-export function buildAvailability(): SessionActionAvailability {
+export function buildAvailability(compacting = false): SessionActionAvailability {
+  const compactLock = compacting ? { allowed: false as const, reasonCode: "compactOperationLock" } : ALLOWED;
   return {
-    fork: ALLOWED,
-    compact: ALLOWED,
+    fork: compactLock,
+    compact: compactLock,
     switchModelConfig: ALLOWED,
     setFollowupMode: ALLOWED,
     queueEdit: ALLOWED,
-    sendQueuedNow: ALLOWED,
+    sendQueuedNow: compactLock,
     pauseGoal: ALLOWED,
     resumeGoal: ALLOWED,
   };
@@ -203,6 +204,7 @@ export function buildAvailability(): SessionActionAvailability {
 export function buildControlProjection(
   control: SessionControl,
 ): Pick<ConversationSnapshot, "availability" | "inputRouting"> {
+  const compacting = control.activeWorks.some((work) => work.kind === "compact");
   return {
     availability: control.readOnly
       ? (Object.fromEntries(
@@ -211,10 +213,12 @@ export function buildControlProjection(
             { allowed: false, reasonCode: "guard.sessionLocked" },
           ]),
         ) as SessionActionAvailability)
-      : buildAvailability(),
+      : buildAvailability(compacting),
     inputRouting: control.readOnly
       ? { mode: "reject", reasonCode: "guard.sessionLocked" }
-      : { mode: "startNow" },
+      : compacting
+        ? { mode: "enqueue", reasonCode: "compactingAcceptsFutureInput" }
+        : { mode: "startNow" },
   };
 }
 

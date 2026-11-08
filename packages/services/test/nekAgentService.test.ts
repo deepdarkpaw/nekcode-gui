@@ -106,6 +106,7 @@ function fakeProcess(
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let exited = false;
   let streaming = false;
+  let compacting = false;
   let snapshotLocked = true;
   let input = "";
   stdin.on("data", (chunk: Buffer) => {
@@ -136,7 +137,7 @@ function fakeProcess(
           data = {};
         }
       } else if (command.type === "get_state") {
-        data = state(sessionFile, streaming);
+        data = { ...state(sessionFile, streaming), isCompacting: compacting };
       } else if (command.type === "get_entries") {
         data = { entries: [], leafId: null, hasMore: command.limit !== undefined };
       } else if (command.type === "get_session_stats") {
@@ -234,7 +235,14 @@ function fakeProcess(
     setSnapshotLocked: (locked) => {
       snapshotLocked = locked;
     },
-    emit: (record) => stdout.write(`${JSON.stringify(record)}\n`),
+    emit: (record) => {
+      if (typeof record === "object" && record !== null && "type" in record) {
+        if (record.type === "agent_start" || record.type === "agent_settled") streaming = record.type === "agent_start";
+        if (record.type === "compaction_start") compacting = true;
+        if (record.type === "compaction_end") compacting = "willRetry" in record && record.willRetry === true && !("aborted" in record && record.aborted === true);
+      }
+      stdout.write(`${JSON.stringify(record)}\n`);
+    },
     exit: (info = {}) => emitExit({ code: info.code ?? 1, signal: info.signal ?? null, ...info }),
   };
 }
@@ -377,6 +385,28 @@ test("chooses prompt while idle and steer/follow_up while running, then aborts",
     ],
   );
   await harness.service.dispose();
+});
+
+test("compaction accepts future input as follow-up even after the previous agent settles", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    process.emit({ type: "agent_settled", outcome: "aborted" });
+    const result = await harness.service.sendPrompt({ sessionKey, message: "after compact", streamingBehavior: "steer" });
+    assert.equal(result.disposition, "queued");
+    assert.equal(process.commands.at(-1)?.type, "follow_up");
+    const target = harness.service.commandContext().target(sessionKey);
+    assert.equal(target.isCompacting, true);
+    assert.equal(target.projector?.snapshot().inputRouting.mode, "enqueue");
+    assert.equal(target.projector?.snapshot().availability.compact.allowed, false);
+    process.emit({ type: "compaction_end", reason: "manual", aborted: false, willRetry: false, result: { tokensBefore: 100 } });
+    await harness.service.sendPrompt({ sessionKey, message: "next idle input" });
+    const prompt = process.commands.at(-1);
+    assert.equal(prompt?.type, "prompt");
+    assert.equal(prompt?.type === "prompt" && prompt.streamingBehavior, "followUp");
+  } finally { await harness.service.dispose(); }
 });
 
 test("shares one projector for subscribers and replays a snapshot on resubscribe", async () => {

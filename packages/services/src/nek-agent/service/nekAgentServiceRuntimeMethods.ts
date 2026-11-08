@@ -278,7 +278,7 @@ export abstract class NekAgentServiceRuntimeBase {
     record.sessionId = state.sessionId || record.sessionId;
     record.path = state.sessionFile ?? record.path;
     if (record.path) this.byPath.set(record.path, record);
-    if (state.isStreaming) this.setPhase(record, "running");
+    if (state.isStreaming || state.isCompacting) this.setPhase(record, "running");
   }
 
   /** 用 get_entries / get_state / get_session_stats 重建投影器快照。 */
@@ -306,7 +306,7 @@ export abstract class NekAgentServiceRuntimeBase {
       title: state.sessionName,
     });
     projector.flushNow();
-    this.setPhase(record, state.isStreaming ? "running" : "idle");
+    this.setPhase(record, state.isStreaming || state.isCompacting ? "running" : "idle");
   }
 
   protected createProjector(record: NekSessionRecord): NekConversationProjector {
@@ -347,6 +347,12 @@ export abstract class NekAgentServiceRuntimeBase {
   }
 
   protected handleEvent(record: NekSessionRecord, event: NekRpcEvent): void {
+    if (record.state) {
+      if (event.type === "agent_start" || event.type === "agent_settled")
+        record.state = { ...record.state, isStreaming: event.type === "agent_start" };
+      if (event.type === "compaction_start" || event.type === "compaction_end")
+        record.state = { ...record.state, isCompacting: event.type === "compaction_start" || (event.willRetry === true && !event.aborted) };
+    }
     record.projector?.handleEvent(event);
     this.emit({ type: "rpc_event", session: this.publicSession(record), event });
     switch (event.type) {
@@ -354,9 +360,16 @@ export abstract class NekAgentServiceRuntimeBase {
         this.pool.beginTurn(record.key);
         this.setPhase(record, "running");
         break;
+      case "compaction_start":
+        this.setPhase(record, "running");
+        break;
+      case "compaction_end":
+        if (!record.state?.isCompacting)
+          this.setPhase(record, record.state?.isStreaming ? "running" : "idle");
+        break;
       case "agent_settled":
         this.pool.endTurn(record.key);
-        this.setPhase(record, "idle");
+        this.setPhase(record, record.state?.isCompacting ? "running" : "idle");
         void this.refreshProcessSnapshot(record).catch((error) => {
           this.logger?.warn("failed to refresh nek snapshot after agent_settled", error);
         });
@@ -370,7 +383,7 @@ export abstract class NekAgentServiceRuntimeBase {
         break;
       case "extension_ui_cancel":
         if (record.phase === "waiting_input")
-          this.setPhase(record, record.state?.isStreaming ? "running" : "idle");
+          this.setPhase(record, record.state?.isStreaming || record.state?.isCompacting ? "running" : "idle");
         break;
       default:
         break;

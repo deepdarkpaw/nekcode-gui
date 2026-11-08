@@ -39,7 +39,7 @@ export const MOCK_DEFAULT_SETTINGS: NekSettingsView = {
     maxAgentDelayMs: 60000,
     provider: { timeoutMs: 600000, maxRetries: 2, maxRetryDelayMs: 60000 },
   },
-  webSearch: { endpoint: "https://api.exa.ai", numResults: 5 },
+  webSearch: { provider: "tavily", numResults: 8 },
   httpIdleTimeoutMs: 300000,
   transport: "auto",
   steeringMode: "one-at-a-time",

@@ -3,7 +3,7 @@
  * 最终校验以后端（zod 镜像 nek TypeBox schema）为准，失败时以 `validation` 错误返回。
  */
 import { z } from "zod";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { NEK_THINKING_LEVELS, NEK_WEB_SEARCH_PROVIDERS } from "@zcode/shared/nek-protocol";
 
 const thinkingLevel = z.enum(NEK_THINKING_LEVELS as [string, ...string[]]);
 const positiveInt = z.number().int().nonnegative();
@@ -64,9 +64,14 @@ const settingsSchema = z
       .partial()
       .loose(),
     webSearch: z
-      .object({ endpoint: z.string(), apiKey: z.string(), numResults: positiveInt })
+      .object({ provider: z.enum(NEK_WEB_SEARCH_PROVIDERS), endpoint: z.string(), apiKey: z.string(), numResults: z.number().int().min(1).max(20) })
       .partial()
-      .loose(),
+      .loose()
+      .superRefine((web, context) => {
+        if (web.provider === undefined && (web.apiKey !== undefined || web.endpoint !== undefined)) {
+          context.addIssue({ code: "custom", path: ["provider"], message: "Select tavily or exa explicitly before configuring a key or endpoint" });
+        }
+      }),
     httpProxy: z.string(),
     httpIdleTimeoutMs: positiveInt,
     transport: z.enum(["sse", "websocket", "websocket-cached", "auto"]),

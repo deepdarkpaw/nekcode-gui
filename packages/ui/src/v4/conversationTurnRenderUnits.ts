@@ -8,6 +8,7 @@ import type {
   UserInputRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { ConversationTurnRenderUnitCache } from "./conversationTurnRenderUnitCache.js";
+import { isEmptyConversationTextRow } from "./conversationRowContext.js";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
 import {
   buildConversationTurnWorkSegments,
@@ -100,11 +101,7 @@ function isHookInvocationRow(row: ConversationRow): row is HookInvocationRow {
 }
 
 function isVisibleAssistantWorkRow(row: AssistantWorkRow): boolean {
-  if (row.kind === "reasoning" && row.text.trim().length === 0) {
-    // reasoning_start/reasoning_end 可能形成空的终态 block；只在共享
-    // render-unit 边界裁掉它，避免 completed 状态绕过 streaming renderer 的空行过滤。
-    return false;
-  }
+  if (isEmptyConversationTextRow(row)) return false;
   // EnterPlanMode 只是内部模式切换边界，把它当普通工具放进“已工作”，
   // 会显示一条没有用户价值的“工具调用已执行”。只在 render unit 过滤，不改写协议投影，
   // 以保留 desktop continuous / web remote replayable 共用的运行态与恢复语义。

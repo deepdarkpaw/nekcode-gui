@@ -55,7 +55,7 @@ export const NEK_SETTINGS_DEFAULTS: NekSettingsView = {
   },
   branchSummary: { reserveTokens: 16384, skipPrompt: false },
   retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, maxAgentDelayMs: 60000 },
-  webSearch: { endpoint: "https://mcp.exa.ai/mcp", numResults: 8 },
+  webSearch: { provider: "tavily", numResults: 8 },
   httpIdleTimeoutMs: 300_000,
   transport: "auto",
   steeringMode: "one-at-a-time",

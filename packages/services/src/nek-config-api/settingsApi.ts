@@ -57,6 +57,17 @@ export function validateSettingsPatch(record: Record<string, unknown>): void {
   throw validationError("invalid settings patch", fieldErrorsOf(validated.issues));
 }
 
+/** A provider must be explicit when a key/endpoint is present, exactly as nek requires. */
+function validateMergedSettings(record: Record<string, unknown>): void {
+  validateSettingsPatch(record);
+  const web = toSettingsView(record).webSearch;
+  if (web?.provider === undefined && (web?.apiKey !== undefined || web?.endpoint !== undefined)) {
+    throw validationError("Select a web search provider explicitly before setting its API key or endpoint", {
+      "webSearch.provider": "Required when webSearch.apiKey or webSearch.endpoint is configured",
+    });
+  }
+}
+
 export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup {
   const defaultsRecord = NEK_SETTINGS_DEFAULTS as unknown as Record<string, unknown>;
 
@@ -84,7 +95,10 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       };
       const global = await readScope("global");
       const project = await readScope("project");
-      const effective = mergeDeep(mergeDeep(defaultsRecord, global), project);
+      const explicit = mergeDeep(global, project);
+      try { validateMergedSettings(explicit); }
+      catch (error) { diagnostics.push(diagnostic(path, error instanceof Error ? error.message : String(error))); }
+      const effective = mergeDeep(defaultsRecord, explicit);
       const values: NekSettingsView = document.values;
       return {
         path,
@@ -104,11 +118,15 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       }
       const record = settingsPatchToRecord(patch as Record<string, unknown>);
       validateSettingsPatch(record);
+      const inherited = scope === "project"
+        ? (await readSettingsDocument(context.executor, settingsPath(context.layout, "global"))).raw
+        : {};
       const patched = await patchSettingsDocument({
         executor: context.executor,
         path: settingsPath(context.layout, scope, options.cwd),
         patch: record,
         expectedRevision: options.revision,
+        validate: (merged) => validateMergedSettings(mergeDeep(inherited, merged)),
       });
       runtime.publishWrite(target, [patched]);
       return { revision: patched.revision };
