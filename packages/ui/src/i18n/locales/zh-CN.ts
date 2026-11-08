@@ -3415,6 +3415,10 @@ const zhCN: Record<string, string> = {
     "已配置密钥或地址，请先明确选择 Tavily 或 Exa，不会自动猜测服务商。",
   "settings.nek.web.clearBeforeSwitch":
     "请先清空 API Key 和自定义地址再切换，避免把现有凭据发送给其他服务商。",
+  "settings.nek.web.providerUnsupported":
+    "目标 nek {version} 不支持 Tavily 服务商，请先把它更新到 {minVersion} 或更高版本；旧版本会忽略该选择并使用 Exa。",
+  "settings.nek.web.providerUnsupportedUnknown":
+    "无法确定目标 nek 版本，Tavily 需要 {minVersion} 或更高版本；请先确认并更新目标 CLI。",
   "settings.nek.web.apiKey": "搜索 API Key",
   "settings.nek.web.apiKeyHint": "Exa 可不填密钥；可用额度由 Exa 服务决定。",
   "settings.nek.web.tavilyApiKeyHint":

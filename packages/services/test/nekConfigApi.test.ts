@@ -435,6 +435,216 @@ test("web search: project overrides merge with the global provider instead of re
   await harness.api.dispose();
 });
 
+test("web search: empty endpoint/apiKey values are rejected like nek rejects them", async () => {
+  const harness = createHarness();
+  const read = await harness.api.readSettings(LOCAL, "global");
+  // nek 对 endpoint/apiKey 的要求是 trim() 后非空：空串和纯空白都会让会话启动失败。
+  for (const webSearch of [
+    { provider: "tavily", apiKey: "" },
+    { provider: "tavily", apiKey: "   " },
+    { provider: "exa", endpoint: "" },
+    { provider: "exa", endpoint: "  " },
+  ]) {
+    const error = await expectNekError(
+      () =>
+        harness.api.patchSettings(LOCAL, "global", { webSearch } as never, {
+          revision: read.revision,
+        }),
+      "validation",
+    );
+    assert.ok(
+      error.fieldErrors?.["webSearch.apiKey"] ?? error.fieldErrors?.["webSearch.endpoint"],
+      `${JSON.stringify(webSearch)} must be attributed to the credential field`,
+    );
+    assert.equal(harness.local.files.has(SETTINGS_PATH), false);
+  }
+  await harness.api.dispose();
+});
+
+test("web search: stored empty credentials are diagnosed and can be repaired", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [SETTINGS_PATH]: JSON.stringify({ webSearch: { provider: "exa", apiKey: "  " } }),
+    },
+  });
+  const read = await harness.api.readSettings(LOCAL, "global");
+  assert.equal(read.diagnostics.length, 1);
+  assert.match(read.diagnostics[0]?.message ?? "", /webSearch\.apiKey/);
+
+  // 现存空值不能连带拒绝无关写入……
+  await harness.api.patchSettings(LOCAL, "global", { theme: "dark" }, { revision: read.revision });
+  const after = await harness.api.readSettings(LOCAL, "global");
+  const written = readJson(harness.local, SETTINGS_PATH) as {
+    theme?: string;
+    webSearch: Record<string, unknown>;
+  };
+  assert.equal(written.theme, "dark");
+  assert.equal(
+    written.webSearch.apiKey,
+    "  ",
+    "the GUI never rewrites the stored value on its own",
+  );
+
+  // ……清掉它就是修复。
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { apiKey: null } },
+    { revision: after.revision },
+  );
+  const repaired = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(repaired.values.webSearch, { provider: "exa" });
+  assert.deepEqual(repaired.diagnostics, []);
+  await harness.api.dispose();
+});
+
+test("web search: a legacy key does not let new credentials in without a provider", async () => {
+  const harness = createHarness({
+    localFiles: { [SETTINGS_PATH]: JSON.stringify({ webSearch: { apiKey: "$OLD_KEY" } }) },
+  });
+  const read = await harness.api.readSettings(LOCAL, "global");
+  // 旧歧义不是新非法写入的通行证：换 key / 新增 endpoint 仍然需要显式 provider。
+  for (const webSearch of [
+    { apiKey: "$NEW_KEY" },
+    { endpoint: "https://search.example/mcp" },
+    { apiKey: "$OLD_KEY", endpoint: "https://search.example/mcp" },
+  ]) {
+    const error = await expectNekError(
+      () =>
+        harness.api.patchSettings(LOCAL, "global", { webSearch } as never, {
+          revision: read.revision,
+        }),
+      "validation",
+    );
+    assert.ok(error.fieldErrors?.["webSearch.provider"]);
+  }
+  assert.deepEqual(readJson(harness.local, SETTINGS_PATH), { webSearch: { apiKey: "$OLD_KEY" } });
+
+  // 逐步修复：先改无关的结果数，再清掉旧 key，每一步都合法。
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { numResults: 4 } },
+    { revision: read.revision },
+  );
+  const afterNum = await harness.api.readSettings(LOCAL, "global");
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { apiKey: null } },
+    { revision: afterNum.revision },
+  );
+  const repaired = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(repaired.values.webSearch, { numResults: 4 });
+  assert.deepEqual(repaired.diagnostics, []);
+  await harness.api.dispose();
+});
+
+test("web search: an old target refuses new Tavily configuration but keeps Exa writable", async () => {
+  const harness = createHarness({ nekVersion: "0.4.3" });
+  const read = await harness.api.readSettings(LOCAL, "global");
+  const error = await expectNekError(
+    () =>
+      harness.api.patchSettings(
+        LOCAL,
+        "global",
+        { webSearch: { provider: "tavily", apiKey: "$TAVILY_KEY" } },
+        { revision: read.revision },
+      ),
+    "validation",
+  );
+  assert.match(error.message, /0\.5\.0-beta\.1/);
+  assert.ok(error.fieldErrors?.["webSearch.provider"]);
+  assert.equal(harness.local.files.has(SETTINGS_PATH), false);
+
+  // 旧 nek 忽略 provider、永远走 Exa：显式 Exa 在旧目标上照写，不会被静默改写。
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { provider: "exa", apiKey: "$EXA_KEY" } },
+    { revision: read.revision },
+  );
+  assert.deepEqual((readJson(harness.local, SETTINGS_PATH) as { webSearch: unknown }).webSearch, {
+    provider: "exa",
+    apiKey: "$EXA_KEY",
+  });
+  await harness.api.dispose();
+});
+
+test("web search: an old target keeps an existing Tavily config but refuses new keys", async () => {
+  const harness = createHarness({
+    nekVersion: "0.4.3",
+    localFiles: {
+      [SETTINGS_PATH]: JSON.stringify({ webSearch: { provider: "tavily", apiKey: "$OLD_TAVILY" } }),
+    },
+  });
+  const read = await harness.api.readSettings(LOCAL, "global");
+  // 与版本无关的字段照常保存：旧 Tavily 配置原样留着，不替用户改写。
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { numResults: 5 } },
+    { revision: read.revision },
+  );
+  const afterNum = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(afterNum.values.webSearch, {
+    provider: "tavily",
+    apiKey: "$OLD_TAVILY",
+    numResults: 5,
+  });
+
+  // 换 Tavily 的 key 等于把它交给 Exa：拒绝。
+  await expectNekError(
+    () =>
+      harness.api.patchSettings(
+        LOCAL,
+        "global",
+        { webSearch: { apiKey: "$NEW_TAVILY" } },
+        { revision: afterNum.revision },
+      ),
+    "validation",
+  );
+  // 清理（删除凭据）始终允许。
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { apiKey: null } },
+    { revision: afterNum.revision },
+  );
+  const cleaned = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(cleaned.values.webSearch, { provider: "tavily", numResults: 5 });
+  await harness.api.dispose();
+});
+
+test("web search: an unknown target version cannot pose as Tavily support", async () => {
+  const harness = createHarness({ nekVersion: null });
+  const read = await harness.api.readSettings(LOCAL, "global");
+  const error = await expectNekError(
+    () =>
+      harness.api.patchSettings(
+        LOCAL,
+        "global",
+        { webSearch: { provider: "tavily", apiKey: "$TAVILY_KEY" } },
+        { revision: read.revision },
+      ),
+    "validation",
+  );
+  assert.match(error.message, /version unknown/);
+  assert.equal(harness.local.files.has(SETTINGS_PATH), false);
+
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { provider: "exa", apiKey: "$EXA_KEY" } },
+    { revision: read.revision },
+  );
+  assert.deepEqual((readJson(harness.local, SETTINGS_PATH) as { webSearch: unknown }).webSearch, {
+    provider: "exa",
+    apiKey: "$EXA_KEY",
+  });
+  await harness.api.dispose();
+});
+
 test("settings: a concurrent nek write inside the lock is not overwritten", async () => {
   const harness = createHarness({
     localFiles: { [SETTINGS_PATH]: JSON.stringify({ theme: "dark" }) },

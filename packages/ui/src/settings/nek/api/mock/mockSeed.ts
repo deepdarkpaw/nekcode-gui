@@ -13,6 +13,8 @@ import { mockFile, type MockMachine } from "./mockMachine.js";
 export const MOCK_REMOTE_CONNECTED = "conn-dev-box";
 export const MOCK_REMOTE_DISCONNECTED = "conn-gpu-server";
 export const MOCK_PROJECT_CWD = "/home/me/projects/nekcode-gui";
+/** mock 目标上的 nek 版本：与当前 CLI 对齐（`webSearch.provider` 需要 0.5.0-beta.1）。 */
+export const MOCK_NEK_VERSION = "0.5.0-beta.1";
 
 export const MOCK_DEFAULT_SETTINGS: NekSettingsView = {
   defaultThinkingLevel: "medium",
@@ -207,7 +209,7 @@ function baseMachine(
       detail,
       connected,
       nek: connected
-        ? { state: "ready", version: "0.4.0", agentDir }
+        ? { state: "ready", version: MOCK_NEK_VERSION, agentDir }
         : { state: "unknown", message: "not connected" },
     },
     agentDir,

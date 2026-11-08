@@ -130,10 +130,18 @@ export const nekRetrySettingsSchema = loose({
   provider: nekOpaqueJsonSchema.optional(),
 });
 
+/**
+ * nek `getWebSearchSettings()` 要求 endpoint/apiKey 存在时 `trim()` 后非空，
+ * 空串同样让会话启动失败。这里只判空、不 trim：密钥原样落盘。
+ */
+const nekNonEmptyStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, "expected a nonempty string");
+
 export const nekWebSearchSettingsSchema = loose({
   provider: z.enum(NEK_WEB_SEARCH_PROVIDERS).optional(),
-  endpoint: z.string().optional(),
-  apiKey: z.string().optional(),
+  endpoint: nekNonEmptyStringSchema.optional(),
+  apiKey: nekNonEmptyStringSchema.optional(),
   numResults: z.number().int().min(1).max(20).optional(),
 });
 

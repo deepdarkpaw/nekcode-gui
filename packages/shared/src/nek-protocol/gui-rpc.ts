@@ -26,6 +26,22 @@ export function isNekGuiVersionSupported(version: unknown): boolean {
   return comparison !== null && comparison >= 0;
 }
 
+/**
+ * `webSearch.provider`（显式 Tavily/Exa 选择）从 nek 0.5.0-beta.1 开始生效。
+ *
+ * 更早的 nek 完全不读这个字段，web_search 永远走 Exa；把 Tavily 的凭据写过去，
+ * 旧版本会在下一次搜索时把 Tavily key 发给 Exa，所以版本门禁只针对这一项能力，
+ * 不抬高 GUI 的全局最低版本（0.4.3 的其它配置照常可写）。
+ */
+export const NEK_WEB_SEARCH_PROVIDER_MIN_VERSION = "0.5.0-beta.1";
+
+/** 目标 nek 是否实现了显式搜索服务商；版本未知/不可解析一律按不支持处理。 */
+export function isNekWebSearchProviderSupported(version: unknown): boolean {
+  if (typeof version !== "string") return false;
+  const comparison = compareSemverVersions(version, NEK_WEB_SEARCH_PROVIDER_MIN_VERSION);
+  return comparison !== null && comparison >= 0;
+}
+
 /** nek 的思考等级（与 `@earendil-works/pi-ai` 的 ModelThinkingLevel 一致）。 */
 export type NekThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 

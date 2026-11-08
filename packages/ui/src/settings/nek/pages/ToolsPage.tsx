@@ -6,7 +6,11 @@
  */
 import { useState } from "react";
 import { RefreshCwIcon, SearchIcon } from "lucide-react";
-import type { NekBuiltinTool } from "@zcode/shared/nek-protocol";
+import type { NekBuiltinTool, NekWebSearchProvider } from "@zcode/shared/nek-protocol";
+import {
+  isNekWebSearchProviderSupported,
+  NEK_WEB_SEARCH_PROVIDER_MIN_VERSION,
+} from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
@@ -148,7 +152,7 @@ function ShellSection({ settings }: { settings: NekSettingsDocument }) {
  * nek 只认 tavily/exa；旧版本界面写下的 `endpoint`/`apiKey` 没有 provider，
  * 这时下拉保持空值并要求用户显式选择，绝不按默认值猜。
  */
-function asSearchProvider(value: unknown): "tavily" | "exa" | undefined {
+function asSearchProvider(value: unknown): NekWebSearchProvider | undefined {
   return value === "tavily" || value === "exa" ? value : undefined;
 }
 
@@ -161,7 +165,7 @@ function WebSearchSection({
 }) {
   const { intl } = useZCodeIntl();
   const api = useNekConfigApi();
-  const { target } = useNekTarget();
+  const { target, targetInfo } = useNekTarget();
   const { enabled, setTool } = useToolsWriter(settings, tools);
   const [result, setResult] = useState<string | null>(null);
   const web = settings.data?.values.webSearch ?? {};
@@ -170,8 +174,22 @@ function WebSearchSection({
   const defaults = settings.data?.defaults.webSearch ?? {};
   const on = enabled.has(WEB_SEARCH_TOOL);
   const explicitProvider = asSearchProvider(web.provider);
-  const provider =
-    asSearchProvider(effective.provider) ?? asSearchProvider(defaults.provider) ?? "tavily";
+  // 旧 nek（<0.5.0-beta.1）不读 provider、永远走 Exa：那里显示 Tavily 就是在骗用户。
+  const nekVersion = targetInfo?.nek.state === "ready" ? targetInfo.nek.version : undefined;
+  const tavilySupported = isNekWebSearchProviderSupported(nekVersion);
+  const provider: NekWebSearchProvider = tavilySupported
+    ? (asSearchProvider(effective.provider) ?? asSearchProvider(defaults.provider) ?? "tavily")
+    : (explicitProvider ?? "exa");
+  const tavilyBlocked = !tavilySupported;
+  const unsupportedMessage = nekVersion
+    ? intl.formatMessage(
+        { id: "settings.nek.web.providerUnsupported" },
+        { version: nekVersion, minVersion: NEK_WEB_SEARCH_PROVIDER_MIN_VERSION },
+      )
+    : intl.formatMessage(
+        { id: "settings.nek.web.providerUnsupportedUnknown" },
+        { minVersion: NEK_WEB_SEARCH_PROVIDER_MIN_VERSION },
+      );
   const hasCredentials = Boolean(web.apiKey || web.endpoint);
   const needsProvider =
     explicitProvider === undefined &&
@@ -179,7 +197,7 @@ function WebSearchSection({
   const endpointDefault =
     provider === "exa" ? "https://mcp.exa.ai/mcp" : "https://api.tavily.com/search";
   const writeWeb = async (patch: {
-    provider?: "tavily" | "exa";
+    provider?: NekWebSearchProvider;
     endpoint?: string | null;
     apiKey?: string | null;
     numResults?: number | null;
@@ -189,6 +207,12 @@ function WebSearchSection({
     if (needsProvider && !patch.provider && !reducesAmbiguity) {
       throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
     }
+    // 目标版本不认 provider 时，Tavily 的凭据会被静默忽略并发给 Exa：只放行清理。
+    const writesTavilyCredentials =
+      (patch.provider ?? provider) === "tavily" &&
+      (patch.apiKey != null || patch.endpoint != null) &&
+      !reducesAmbiguity;
+    if (tavilyBlocked && writesTavilyCredentials) throw new Error(unsupportedMessage);
     // 删掉凭据时不能顺手补一个 provider：那等于替用户猜服务商。
     const webPatch = needsProvider && !patch.provider ? patch : { provider, ...patch };
     await settings.patch(nestedSettingsPatch({ webSearch: webPatch }));
@@ -207,9 +231,15 @@ function WebSearchSection({
       />
       <SettingSelectField
         label={intl.formatMessage({ id: "settings.nek.web.provider" })}
-        description={intl.formatMessage({
-          id: needsProvider ? "settings.nek.web.providerRequired" : "settings.nek.web.providerHint",
-        })}
+        description={
+          tavilyBlocked
+            ? unsupportedMessage
+            : intl.formatMessage({
+                id: needsProvider
+                  ? "settings.nek.web.providerRequired"
+                  : "settings.nek.web.providerHint",
+              })
+        }
         value={needsProvider ? "" : provider}
         options={[
           { value: "tavily", label: "Tavily" },
@@ -218,6 +248,8 @@ function WebSearchSection({
         onCommit={async (next) => {
           if (next !== "tavily" && next !== "exa")
             throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
+          // 目标 nek 太旧：写下的 Tavily 选择会被忽略，还会把 key 交给 Exa。
+          if (next === "tavily" && tavilyBlocked) throw new Error(unsupportedMessage);
           // 已有凭据时不换服务商：把 Tavily 的 key 悄悄发给 Exa 是数据泄露，
           // 自动删掉用户填的 key 同样不行，只能要求先手动清空。
           if (!needsProvider && next !== provider && hasCredentials) {
@@ -255,12 +287,14 @@ function WebSearchSection({
         <AsyncButton
           variant="outline"
           icon={<SearchIcon />}
-          disabled={!on || needsProvider}
-          disabledReason={intl.formatMessage({
-            id: needsProvider
-              ? "settings.nek.web.providerRequired"
-              : "settings.nek.web.testDisabled",
-          })}
+          disabled={!on || needsProvider || (tavilyBlocked && provider === "tavily")}
+          disabledReason={
+            needsProvider
+              ? intl.formatMessage({ id: "settings.nek.web.providerRequired" })
+              : tavilyBlocked && provider === "tavily"
+                ? unsupportedMessage
+                : intl.formatMessage({ id: "settings.nek.web.testDisabled" })
+          }
           onClick={async () => {
             setResult(null);
             const outcome = await api.testWebSearch(target, "nek coding agent");

@@ -12,6 +12,10 @@ import { NEK_THINKING_LEVELS, NEK_WEB_SEARCH_PROVIDERS } from "@zcode/shared/nek
 const thinkingLevel = z.enum(NEK_THINKING_LEVELS as [string, ...string[]]);
 const positiveInt = z.number().int().nonnegative();
 const queueMode = z.enum(["all", "one-at-a-time"]);
+/** nek 对 endpoint/apiKey 的要求：存在时 `trim()` 后必须非空；这里只判空，不改写内容。 */
+const nonEmptyText = z.string().refine((value) => value.trim().length > 0, {
+  message: "expected a nonempty string",
+});
 
 const settingsSchema = z
   .object({
@@ -70,8 +74,8 @@ const settingsSchema = z
     webSearch: z
       .object({
         provider: z.enum(NEK_WEB_SEARCH_PROVIDERS),
-        endpoint: z.string(),
-        apiKey: z.string(),
+        endpoint: nonEmptyText,
+        apiKey: nonEmptyText,
         numResults: z.number().int().min(1).max(20),
       })
       .partial()

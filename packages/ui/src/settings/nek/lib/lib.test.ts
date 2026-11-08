@@ -292,12 +292,26 @@ describe("rawSettingsSchema", () => {
       { numResults: 21 },
       { numResults: 1.5 },
       { apiKey: 42 },
+      // nek 要求 apiKey/endpoint 存在时 trim() 后非空：空串和纯空白都不能落盘。
+      { provider: "tavily", apiKey: "" },
+      { provider: "tavily", apiKey: "   " },
+      { provider: "exa", endpoint: "" },
+      { provider: "exa", endpoint: "  " },
     ]) {
       expect(validateRawSettings(JSON.stringify({ webSearch }))).toMatchObject({
         ok: false,
         kind: "schema",
       });
     }
+  });
+
+  it("keeps the key verbatim instead of trimming it", () => {
+    const apiKey = "  $PROJECT_SEARCH_KEY  ";
+    const result = validateRawSettings(JSON.stringify({ webSearch: { provider: "exa", apiKey } }));
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error("expected the raw settings to validate");
+    // 校验只判空，不改写内容：密钥原样交给后端。
+    expect((result.value.webSearch as { apiKey: string }).apiKey).toBe(apiKey);
   });
 
   it("leaves the provider/credential pairing to the merge-time check", () => {
