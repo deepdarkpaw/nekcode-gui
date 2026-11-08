@@ -72,7 +72,10 @@ function renderContext(toolCallValue: TaskChatToolCall): ToolCallBlockRenderCont
   };
 }
 
-function show(toolCallValue: TaskChatToolCall, blockProps: { depth?: number; onOpenBrowserUrl?: (url: string) => void } = {}) {
+function show(
+  toolCallValue: TaskChatToolCall,
+  blockProps: { depth?: number; onOpenBrowserUrl?: (url: string) => void } = {},
+) {
   return render(
     <ZCodeIntlProvider initialLocale="zh-CN">
       <TooltipProvider>
@@ -88,16 +91,35 @@ function show(toolCallValue: TaskChatToolCall, blockProps: { depth?: number; onO
 
 it("web_search exposes expandable source links without raw parameters", async () => {
   const opened: string[] = [];
-  const ui = show(toolCall("web_search", {
-    input: { query: "fixture query", numResults: 1 },
-    output: "1. [Source documentation](https://example.com/docs)\nSearch excerpt from the CLI.",
-  }), { onOpenBrowserUrl: (url) => opened.push(url) });
+  const ui = show(
+    toolCall("web_search", {
+      input: { query: "fixture query", numResults: 1 },
+      output: "1. [Source documentation](https://example.com/docs)\nSearch excerpt from the CLI.",
+    }),
+    { onOpenBrowserUrl: (url) => opened.push(url) },
+  );
   fireEvent.click(screen.getByText(/fixture query/));
-  const link = await screen.findByRole("link", { name: "Source documentation" });
+  // Markdown 外链渲染成按钮：点击走 shell 的安全 URL 分流（onOpenBrowserUrl），
+  // 不是渲染器自己新开的浏览器路径。
+  const link = await screen.findByRole("button", { name: "Source documentation" });
   fireEvent.click(link);
   expect(opened).toEqual(["https://example.com/docs"]);
   expect(ui.container.textContent).toContain("Search excerpt from the CLI.");
   expect(ui.container.textContent).not.toContain("numResults");
+  expect(ui.container.textContent).not.toContain('fixture query"');
+});
+
+it("keeps non-string web_search output out of the markdown preview", () => {
+  const ui = show(
+    toolCall("web_search", {
+      input: { query: "structured query" },
+      output: { results: [{ title: "structured result" }] },
+    }),
+  );
+  // 结构化输出没有 Markdown 可渲染，不能把它塞进 Markdown 渲染器当正文。
+  expect(screen.getByText(/structured query/)).toBeDefined();
+  expect(ui.container.textContent).not.toContain("[object Object]");
+  expect(ui.container.textContent).not.toContain("structured result");
 });
 
 describe("nek tool identity coverage", () => {

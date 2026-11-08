@@ -183,7 +183,12 @@ export interface NekSettingsView {
     maxAgentDelayMs?: number;
     provider?: { timeoutMs?: number; maxRetries?: number; maxRetryDelayMs?: number };
   };
-  webSearch?: { provider?: (typeof NEK_WEB_SEARCH_PROVIDERS)[number]; endpoint?: string; apiKey?: string; numResults?: number };
+  webSearch?: {
+    provider?: (typeof NEK_WEB_SEARCH_PROVIDERS)[number];
+    endpoint?: string;
+    apiKey?: string;
+    numResults?: number;
+  };
   httpProxy?: string;
   httpIdleTimeoutMs?: number;
   transport?: string;

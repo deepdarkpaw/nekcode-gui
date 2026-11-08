@@ -57,15 +57,34 @@ export function validateSettingsPatch(record: Record<string, unknown>): void {
   throw validationError("invalid settings patch", fieldErrorsOf(validated.issues));
 }
 
-/** A provider must be explicit when a key/endpoint is present, exactly as nek requires. */
-function validateMergedSettings(record: Record<string, unknown>): void {
-  validateSettingsPatch(record);
+/**
+ * nek 的 web_search 只要出现 apiKey/endpoint 就必须有显式 provider（否则会话启动失败），
+ * 但这条规则是**跨字段、跨作用域**的：项目层的 key 可以继承全局的 provider。
+ *
+ * 所以校验放在合并后的结果上，并且只在"这次写入新引入了非法组合"时失败：
+ * 历史配置里已经存在 apiKey 没有 provider 时，改主题、改模型这些无关字段不能被连带拒绝，
+ * 否则用户必须先跑去修联网搜索才能保存任何设置。空字符串/null 视为未配置。
+ */
+function hasWebSearchProviderIssue(record: Record<string, unknown>): boolean {
   const web = toSettingsView(record).webSearch;
-  if (web?.provider === undefined && (web?.apiKey !== undefined || web?.endpoint !== undefined)) {
-    throw validationError("Select a web search provider explicitly before setting its API key or endpoint", {
-      "webSearch.provider": "Required when webSearch.apiKey or webSearch.endpoint is configured",
-    });
-  }
+  return web?.provider === undefined && Boolean(web?.apiKey || web?.endpoint);
+}
+
+function webSearchProviderError(): Error {
+  return validationError(
+    "Select a web search provider explicitly before setting its API key or endpoint",
+    { "webSearch.provider": "Required when webSearch.apiKey or webSearch.endpoint is configured" },
+  );
+}
+
+/** 补丁前的合并结果已经非法时不再重复报错；新引入的非法组合仍然拒绝写入。 */
+function validateWebSearchMerge(
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): void {
+  if (!hasWebSearchProviderIssue(next)) return;
+  if (hasWebSearchProviderIssue(previous)) return;
+  throw webSearchProviderError();
 }
 
 export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup {
@@ -96,8 +115,9 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       const global = await readScope("global");
       const project = await readScope("project");
       const explicit = mergeDeep(global, project);
-      try { validateMergedSettings(explicit); }
-      catch (error) { diagnostics.push(diagnostic(path, error instanceof Error ? error.message : String(error))); }
+      if (hasWebSearchProviderIssue(explicit)) {
+        diagnostics.push(diagnostic(path, webSearchProviderError().message));
+      }
       const effective = mergeDeep(defaultsRecord, explicit);
       const values: NekSettingsView = document.values;
       return {
@@ -118,15 +138,18 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       }
       const record = settingsPatchToRecord(patch as Record<string, unknown>);
       validateSettingsPatch(record);
-      const inherited = scope === "project"
-        ? (await readSettingsDocument(context.executor, settingsPath(context.layout, "global"))).raw
-        : {};
+      const inherited =
+        scope === "project"
+          ? (await readSettingsDocument(context.executor, settingsPath(context.layout, "global")))
+              .raw
+          : {};
       const patched = await patchSettingsDocument({
         executor: context.executor,
         path: settingsPath(context.layout, scope, options.cwd),
         patch: record,
         expectedRevision: options.revision,
-        validate: (merged) => validateMergedSettings(mergeDeep(inherited, merged)),
+        validate: (merged, previous) =>
+          validateWebSearchMerge(mergeDeep(inherited, previous), mergeDeep(inherited, merged)),
       });
       runtime.publishWrite(target, [patched]);
       return { revision: patched.revision };

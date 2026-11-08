@@ -3603,16 +3603,22 @@ const enUS: Record<string, string> = {
   "settings.nek.web.enabled": "Enable web search",
   "settings.nek.web.enabledHint": "Writes -web_search when off.",
   "settings.nek.web.provider": "Search provider",
-  "settings.nek.web.providerHint": "Tavily is the default. Clear the API key and custom endpoint before switching providers.",
-  "settings.nek.web.providerRequired": "A key or endpoint is configured. Select Tavily or Exa explicitly; the provider is never guessed.",
-  "settings.nek.web.clearBeforeSwitch": "Clear the API key and custom endpoint first to avoid sending existing credentials to another provider.",
+  "settings.nek.web.providerHint":
+    "Tavily is the default. Clear the API key and custom endpoint before switching providers.",
+  "settings.nek.web.providerRequired":
+    "A key or endpoint is configured. Select Tavily or Exa explicitly; the provider is never guessed.",
+  "settings.nek.web.clearBeforeSwitch":
+    "Clear the API key and custom endpoint first to avoid sending existing credentials to another provider.",
   "settings.nek.web.apiKey": "Search API key",
-  "settings.nek.web.apiKeyHint": "Exa can be used without a key; availability and quota are determined by Exa.",
-  "settings.nek.web.tavilyApiKeyHint": "Tavily requires a key. $TAVILY_API_KEY is resolved by nek on the target machine.",
+  "settings.nek.web.apiKeyHint":
+    "Exa can be used without a key; availability and quota are determined by Exa.",
+  "settings.nek.web.tavilyApiKeyHint":
+    "Tavily requires a key. $TAVILY_API_KEY is resolved by nek on the target machine.",
   "settings.nek.web.apiKeyPlaceholder": "API key or $ENV_VARIABLE",
   "settings.nek.web.numResults": "Results",
   "settings.nek.web.endpoint": "Custom endpoint",
-  "settings.nek.web.endpointHint": "Leave empty for the selected provider's default endpoint. Custom endpoints must support that provider's API.",
+  "settings.nek.web.endpointHint":
+    "Leave empty for the selected provider's default endpoint. Custom endpoints must support that provider's API.",
   "settings.nek.web.test": "Test search",
   "settings.nek.web.testHint": "Runs one search with the current settings.",
   "settings.nek.web.testRun": "Test search",

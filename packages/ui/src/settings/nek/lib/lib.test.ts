@@ -277,12 +277,37 @@ describe("settingsPatch", () => {
 });
 
 describe("rawSettingsSchema", () => {
-  it("matches nek web-search providers, result bounds and explicit credential ownership", () => {
-    for (const webSearch of [{ provider: "tavily", apiKey: "$TAVILY_API_KEY", numResults: 20 }, { provider: "exa", numResults: 1 }, {}]) {
+  it("matches nek web-search providers and result bounds", () => {
+    for (const webSearch of [
+      { provider: "tavily", apiKey: "$TAVILY_API_KEY", numResults: 20 },
+      { provider: "exa", numResults: 1 },
+      {},
+    ]) {
       expect(validateRawSettings(JSON.stringify({ webSearch }))).toMatchObject({ ok: true });
     }
-    for (const webSearch of [{ provider: "unknown" }, { apiKey: "$SEARCH_KEY" }, { endpoint: "https://search.example/search" }, { numResults: 0 }, { numResults: 21 }, { numResults: 1.5 }]) {
-      expect(validateRawSettings(JSON.stringify({ webSearch }))).toMatchObject({ ok: false, kind: "schema" });
+    for (const webSearch of [
+      { provider: "unknown" },
+      { provider: "brave", numResults: 8 },
+      { numResults: 0 },
+      { numResults: 21 },
+      { numResults: 1.5 },
+      { apiKey: 42 },
+    ]) {
+      expect(validateRawSettings(JSON.stringify({ webSearch }))).toMatchObject({
+        ok: false,
+        kind: "schema",
+      });
+    }
+  });
+
+  it("leaves the provider/credential pairing to the merge-time check", () => {
+    // 单个作用域的文件看不到另一个作用域的 provider：项目只写 key、全局写 provider 是合法的，
+    // 所以这里不能拒绝；"有 key 就必须有 provider" 由后端在合并后判定。
+    for (const webSearch of [
+      { apiKey: "$PROJECT_SEARCH_KEY" },
+      { endpoint: "https://mcp.exa.ai/mcp" },
+    ]) {
+      expect(validateRawSettings(JSON.stringify({ webSearch }))).toMatchObject({ ok: true });
     }
   });
 

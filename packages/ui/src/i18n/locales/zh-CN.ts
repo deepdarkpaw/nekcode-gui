@@ -3411,11 +3411,14 @@ const zhCN: Record<string, string> = {
   "settings.nek.web.enabledHint": "关闭时写入 -web_search。",
   "settings.nek.web.provider": "搜索服务商",
   "settings.nek.web.providerHint": "默认使用 Tavily；切换服务商前请先清空 API Key 和自定义地址。",
-  "settings.nek.web.providerRequired": "已配置密钥或地址，请先明确选择 Tavily 或 Exa，不会自动猜测服务商。",
-  "settings.nek.web.clearBeforeSwitch": "请先清空 API Key 和自定义地址再切换，避免把现有凭据发送给其他服务商。",
+  "settings.nek.web.providerRequired":
+    "已配置密钥或地址，请先明确选择 Tavily 或 Exa，不会自动猜测服务商。",
+  "settings.nek.web.clearBeforeSwitch":
+    "请先清空 API Key 和自定义地址再切换，避免把现有凭据发送给其他服务商。",
   "settings.nek.web.apiKey": "搜索 API Key",
   "settings.nek.web.apiKeyHint": "Exa 可不填密钥；可用额度由 Exa 服务决定。",
-  "settings.nek.web.tavilyApiKeyHint": "Tavily 需要 API Key；支持 $TAVILY_API_KEY，由目标机器上的 nek 解析。",
+  "settings.nek.web.tavilyApiKeyHint":
+    "Tavily 需要 API Key；支持 $TAVILY_API_KEY，由目标机器上的 nek 解析。",
   "settings.nek.web.apiKeyPlaceholder": "API Key 或 $ENV_VARIABLE",
   "settings.nek.web.numResults": "结果数",
   "settings.nek.web.endpoint": "自定义 endpoint",

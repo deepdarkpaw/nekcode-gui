@@ -1,6 +1,10 @@
 /**
  * 原始 JSON 编辑的保存前校验：只校验 GUI 认识的键的类型；未知键原样保留。
  * 最终校验以后端（zod 镜像 nek TypeBox schema）为准，失败时以 `validation` 错误返回。
+ *
+ * `webSearch.provider` 只能在这里查"值是不是 tavily/exa"、"numResults 是否 1–20"：
+ * "写了 key/endpoint 就必须有 provider" 是跨作用域的规则（项目层的 key 可以继承全局的
+ * provider），单个作用域的文件看不全，交给后端合并后再判定。
  */
 import { z } from "zod";
 import { NEK_THINKING_LEVELS, NEK_WEB_SEARCH_PROVIDERS } from "@zcode/shared/nek-protocol";
@@ -64,14 +68,14 @@ const settingsSchema = z
       .partial()
       .loose(),
     webSearch: z
-      .object({ provider: z.enum(NEK_WEB_SEARCH_PROVIDERS), endpoint: z.string(), apiKey: z.string(), numResults: z.number().int().min(1).max(20) })
+      .object({
+        provider: z.enum(NEK_WEB_SEARCH_PROVIDERS),
+        endpoint: z.string(),
+        apiKey: z.string(),
+        numResults: z.number().int().min(1).max(20),
+      })
       .partial()
-      .loose()
-      .superRefine((web, context) => {
-        if (web.provider === undefined && (web.apiKey !== undefined || web.endpoint !== undefined)) {
-          context.addIssue({ code: "custom", path: ["provider"], message: "Select tavily or exa explicitly before configuring a key or endpoint" });
-        }
-      }),
+      .loose(),
     httpProxy: z.string(),
     httpIdleTimeoutMs: positiveInt,
     transport: z.enum(["sse", "websocket", "websocket-cached", "auto"]),
