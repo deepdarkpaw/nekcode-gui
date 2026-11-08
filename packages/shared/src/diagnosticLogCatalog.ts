@@ -748,6 +748,7 @@ export const diagnosticMessages: readonly string[] = [
   "failed to end nek stdin",
   "failed to forward attachment connection flow state",
   "failed to forward session message delivery result:",
+  "failed to list targets while resolving the nek version",
   "failed to persist status snapshot",
   "failed to persist stop-failed state after supervisor startup failure",
   "failed to persist stopped state after supervisor startup failure",

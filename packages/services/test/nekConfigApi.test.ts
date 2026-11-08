@@ -661,6 +661,61 @@ test("web search: an unknown target version cannot pose as Tavily support", asyn
   await harness.api.dispose();
 });
 
+const webSearchCommands = (harness: { control: { commands: Array<{ type: string }> } }) =>
+  harness.control.commands.filter((command) => command.type === "test_web_search");
+
+test("web search: probing refuses an explicit Tavily config on an old or unknown target", async () => {
+  for (const nekVersion of ["0.4.3", null]) {
+    const harness = createHarness({
+      nekVersion,
+      localFiles: {
+        [SETTINGS_PATH]: JSON.stringify({
+          webSearch: { provider: "tavily", apiKey: "$TAVILY_API_KEY" },
+        }),
+      },
+    });
+    const error = await expectNekError(
+      () => harness.api.testWebSearch(LOCAL, "fixture query"),
+      "validation",
+    );
+    assert.match(error.message, /0\.5\.0-beta\.1/);
+    assert.ok(error.fieldErrors?.["webSearch.provider"]);
+    // 连控制进程都没有起：没有任何 test_web_search 命令，也就不会把 key 发出去。
+    assert.deepEqual(webSearchCommands(harness), []);
+    await harness.api.dispose();
+  }
+});
+
+test("web search: probing an explicit Exa config still runs on an old target", async () => {
+  const harness = createHarness({
+    nekVersion: "0.4.3",
+    localFiles: {
+      [SETTINGS_PATH]: JSON.stringify({ webSearch: { provider: "exa", apiKey: "$EXA_API_KEY" } }),
+    },
+  });
+  assert.equal((await harness.api.testWebSearch(LOCAL, "fixture query")).ok, true);
+  // 探测只带 query，凭据由目标机器上的 nek 自己解析。
+  assert.deepEqual(webSearchCommands(harness), [
+    { type: "test_web_search", query: "fixture query" },
+  ]);
+  await harness.api.dispose();
+});
+
+test("web search: probing sends the query once on a target that supports providers", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [SETTINGS_PATH]: JSON.stringify({
+        webSearch: { provider: "tavily", apiKey: "$TAVILY_API_KEY" },
+      }),
+    },
+  });
+  assert.equal((await harness.api.testWebSearch(LOCAL, "fixture query")).ok, true);
+  assert.deepEqual(webSearchCommands(harness), [
+    { type: "test_web_search", query: "fixture query" },
+  ]);
+  await harness.api.dispose();
+});
+
 test("settings: a concurrent nek write inside the lock is not overwritten", async () => {
   const harness = createHarness({
     localFiles: { [SETTINGS_PATH]: JSON.stringify({ theme: "dark" }) },

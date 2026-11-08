@@ -8,6 +8,7 @@ import { useState } from "react";
 import { RefreshCwIcon, SearchIcon } from "lucide-react";
 import type { NekBuiltinTool, NekWebSearchProvider } from "@zcode/shared/nek-protocol";
 import {
+  isNekVersionKnown,
   isNekWebSearchProviderSupported,
   NEK_WEB_SEARCH_PROVIDER_MIN_VERSION,
 } from "@zcode/shared/nek-protocol";
@@ -177,11 +178,13 @@ function WebSearchSection({
   // 旧 nek（<0.5.0-beta.1）不读 provider、永远走 Exa：那里显示 Tavily 就是在骗用户。
   const nekVersion = targetInfo?.nek.state === "ready" ? targetInfo.nek.version : undefined;
   const tavilySupported = isNekWebSearchProviderSupported(nekVersion);
-  const provider: NekWebSearchProvider = tavilySupported
+  // 已知旧版本走 Exa 是版本事实；版本未知时连这条事实都没有，只能让用户自己选。
+  const versionKnown = isNekVersionKnown(nekVersion);
+  const provider: NekWebSearchProvider | undefined = tavilySupported
     ? (asSearchProvider(effective.provider) ?? asSearchProvider(defaults.provider) ?? "tavily")
-    : (explicitProvider ?? "exa");
+    : (explicitProvider ?? (versionKnown ? "exa" : undefined));
   const tavilyBlocked = !tavilySupported;
-  const unsupportedMessage = nekVersion
+  const unsupportedMessage = versionKnown
     ? intl.formatMessage(
         { id: "settings.nek.web.providerUnsupported" },
         { version: nekVersion, minVersion: NEK_WEB_SEARCH_PROVIDER_MIN_VERSION },
@@ -194,8 +197,20 @@ function WebSearchSection({
   const needsProvider =
     explicitProvider === undefined &&
     (web.provider !== undefined || Boolean(web.apiKey) || Boolean(web.endpoint));
+  /** 版本未知且没有显式选择：既不显示 Tavily 也不默认 Exa，先让用户选或更新目标。 */
+  const providerUndetermined = provider === undefined;
+  const selectEmpty = needsProvider || providerUndetermined;
+  const providerDescription = needsProvider
+    ? intl.formatMessage({ id: "settings.nek.web.providerRequired" })
+    : tavilyBlocked
+      ? unsupportedMessage
+      : intl.formatMessage({ id: "settings.nek.web.providerHint" });
   const endpointDefault =
-    provider === "exa" ? "https://mcp.exa.ai/mcp" : "https://api.tavily.com/search";
+    provider === "exa"
+      ? "https://mcp.exa.ai/mcp"
+      : provider === "tavily"
+        ? "https://api.tavily.com/search"
+        : "";
   const writeWeb = async (patch: {
     provider?: NekWebSearchProvider;
     endpoint?: string | null;
@@ -207,14 +222,20 @@ function WebSearchSection({
     if (needsProvider && !patch.provider && !reducesAmbiguity) {
       throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
     }
+    // 目标版本未知时不能替用户把凭据配成某个服务商：先显式选一个（Exa 全版本可用）再存。
+    const writesCredentials =
+      (patch.apiKey !== undefined && patch.apiKey !== null) ||
+      (patch.endpoint !== undefined && patch.endpoint !== null);
+    if (providerUndetermined && writesCredentials && !reducesAmbiguity) {
+      throw new Error(unsupportedMessage);
+    }
     // 目标版本不认 provider 时，Tavily 的凭据会被静默忽略并发给 Exa：只放行清理。
     const writesTavilyCredentials =
-      (patch.provider ?? provider) === "tavily" &&
-      (patch.apiKey != null || patch.endpoint != null) &&
-      !reducesAmbiguity;
+      (patch.provider ?? provider) === "tavily" && writesCredentials && !reducesAmbiguity;
     if (tavilyBlocked && writesTavilyCredentials) throw new Error(unsupportedMessage);
-    // 删掉凭据时不能顺手补一个 provider：那等于替用户猜服务商。
-    const webPatch = needsProvider && !patch.provider ? patch : { provider, ...patch };
+    // 删掉凭据 / 版本未知时不能顺手补一个 provider：那等于替用户猜服务商。
+    const pinnedProvider = needsProvider ? patch.provider : (patch.provider ?? provider);
+    const webPatch = pinnedProvider === undefined ? patch : { provider: pinnedProvider, ...patch };
     await settings.patch(nestedSettingsPatch({ webSearch: webPatch }));
     setResult(null);
   };
@@ -231,16 +252,8 @@ function WebSearchSection({
       />
       <SettingSelectField
         label={intl.formatMessage({ id: "settings.nek.web.provider" })}
-        description={
-          tavilyBlocked
-            ? unsupportedMessage
-            : intl.formatMessage({
-                id: needsProvider
-                  ? "settings.nek.web.providerRequired"
-                  : "settings.nek.web.providerHint",
-              })
-        }
-        value={needsProvider ? "" : provider}
+        description={providerDescription}
+        value={selectEmpty ? "" : provider}
         options={[
           { value: "tavily", label: "Tavily" },
           { value: "exa", label: "Exa" },
@@ -264,7 +277,9 @@ function WebSearchSection({
           id:
             provider === "tavily"
               ? "settings.nek.web.tavilyApiKeyHint"
-              : "settings.nek.web.apiKeyHint",
+              : provider === "exa"
+                ? "settings.nek.web.apiKeyHint"
+                : "settings.nek.web.apiKeyHintUnset",
         })}
         value={web.apiKey ?? ""}
         placeholder={intl.formatMessage({ id: "settings.nek.web.apiKeyPlaceholder" })}
@@ -287,10 +302,10 @@ function WebSearchSection({
         <AsyncButton
           variant="outline"
           icon={<SearchIcon />}
-          disabled={!on || needsProvider || (tavilyBlocked && provider === "tavily")}
+          disabled={!on || selectEmpty || (tavilyBlocked && provider === "tavily")}
           disabledReason={
-            needsProvider
-              ? intl.formatMessage({ id: "settings.nek.web.providerRequired" })
+            selectEmpty
+              ? providerDescription
               : tavilyBlocked && provider === "tavily"
                 ? unsupportedMessage
                 : intl.formatMessage({ id: "settings.nek.web.testDisabled" })

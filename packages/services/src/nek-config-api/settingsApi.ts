@@ -153,9 +153,41 @@ function credentialsChanged(previous: WebSearchState, next: WebSearchState): boo
 }
 
 /** 目标 nek 的搜索能力（版本门禁只看这一项，不抬高 GUI 的全局最低版本）。 */
-interface WebSearchCapabilities {
+export interface WebSearchCapabilities {
   tavily: boolean;
   nekVersion: string | undefined;
+}
+
+/** 读一次目标版本，得到搜索能力；未安装/不兼容/未知/不可解析一律按"不支持 Tavily"。 */
+export async function resolveWebSearchCapabilities(
+  runtime: NekConfigRuntime,
+  target: NekConfigTarget,
+): Promise<WebSearchCapabilities> {
+  const nekVersion = await runtime.targetNekVersion(target);
+  return { tavily: isNekWebSearchProviderSupported(nekVersion), nekVersion };
+}
+
+function tavilyVersionMessage(capabilities: WebSearchCapabilities): string {
+  return `Tavily web search requires nek ${NEK_WEB_SEARCH_PROVIDER_MIN_VERSION} or newer on the target${
+    capabilities.nekVersion ? ` (found ${capabilities.nekVersion})` : " (version unknown)"
+  }`;
+}
+
+/**
+ * `test_web_search` 的前置检查。
+ *
+ * 探测由目标机器上的 nek 自己读配置执行，GUI 只发 query。旧 nek 忽略 provider 并永远走
+ * Exa，所以对"显式 Tavily"的配置做探测等于让旧 CLI 把 Tavily key 发给 Exa —— 即使界面
+ * 已经挡住入口，直接调 API 也不能绕过。这里只读配置里的 provider 字段，不解析凭据、
+ * 不发探测请求；显式 Exa（全版本可用）照常放行。
+ */
+export function assertWebSearchProbeSupported(
+  settings: Record<string, unknown>,
+  capabilities: WebSearchCapabilities,
+): void {
+  if (capabilities.tavily) return;
+  if (webSearchState(settings).provider !== "tavily") return;
+  throw webSearchError(["invalidProvider"], tavilyVersionMessage(capabilities));
 }
 
 /**
@@ -190,12 +222,7 @@ function validateWebSearchMerge(
     const introducesTavily = after.provider === "tavily" && before.provider !== "tavily";
     const editsTavilyCredentials = after.provider === "tavily" && credentialsChanged(before, after);
     if (introducesTavily || editsTavilyCredentials) {
-      throw webSearchError(
-        ["invalidProvider"],
-        `Tavily web search requires nek ${NEK_WEB_SEARCH_PROVIDER_MIN_VERSION} or newer on the target${
-          capabilities.nekVersion ? ` (found ${capabilities.nekVersion})` : " (version unknown)"
-        }`,
-      );
+      throw webSearchError(["invalidProvider"], tavilyVersionMessage(capabilities));
     }
   }
 }
@@ -263,8 +290,7 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       // 普通设置的补丁不该为了一次能力判断多跑一趟。
       let capabilities: WebSearchCapabilities = { tavily: true, nekVersion: undefined };
       if ("webSearch" in record) {
-        const nekVersion = await runtime.targetNekVersion(target);
-        capabilities = { tavily: isNekWebSearchProviderSupported(nekVersion), nekVersion };
+        capabilities = await resolveWebSearchCapabilities(runtime, target);
       }
       const patched = await patchSettingsDocument({
         executor: context.executor,
