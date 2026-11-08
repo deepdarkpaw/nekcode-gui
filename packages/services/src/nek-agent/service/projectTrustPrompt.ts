@@ -15,6 +15,25 @@ import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekTrustPrompt } from "./types.js";
 
+/**
+ * 启动前确定项目信任：注入的判定优先；否则按 `defaultProjectTrust` 或渲染层确认。
+ * 确认后立刻按 nek 的规则落盘（`set_project_trust`），下次（含终端 `/trust`）不再询问。
+ */
+export async function requestProjectApproval(input: {
+  cwd: string;
+  askProjectTrust: NekTrustPrompt | undefined;
+  ensureControl: () => Promise<{ client: NekRpcClient }>;
+  assertCanAsk: () => void;
+}): Promise<boolean> {
+  if (!input.askProjectTrust) throw new Error(`project trust decision required for ${input.cwd}`);
+  return await resolveProjectApprovalThroughControl({
+    cwd: input.cwd,
+    askProjectTrust: input.askProjectTrust,
+    ensureControl: input.ensureControl,
+    assertCanAsk: input.assertCanAsk,
+  });
+}
+
 /** 一个目录的信任状态：已记录决定就直接用，没记录才需要问。 */
 type NekProjectTrustDecision = "trusted" | "denied" | "ask";
 
@@ -83,7 +102,7 @@ interface ResolveProjectApprovalOptions {
   assertCanAsk?: () => void;
 }
 
-export async function resolveProjectApprovalThroughControl(
+async function resolveProjectApprovalThroughControl(
   options: ResolveProjectApprovalOptions,
 ): Promise<boolean> {
   const { cwd } = options;

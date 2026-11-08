@@ -145,7 +145,9 @@ export function applyTurnLifecycleEvent(ctx: NekLiveContext, event: NekRpcEvent)
     return true;
   }
   if (event.type === "agent_settled") {
-    const compactionWork = ctx.store.state.control.activeWorks.filter((work) => work.kind === "compact");
+    const compactionWork = ctx.store.state.control.activeWorks.filter(
+      (work) => work.kind === "compact",
+    );
     const compacting = compactionWork.length > 0;
     closeTurn(
       ctx,

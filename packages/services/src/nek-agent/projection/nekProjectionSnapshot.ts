@@ -12,6 +12,7 @@ import type {
   SessionUsageState,
   SubagentProjectionState,
 } from "@zcode/shared/zcode-protocol-v4";
+import { NEK_COMPACTING_INPUT_REASON } from "@zcode/shared/nek-protocol";
 import type {
   NekAssistantMessage,
   NekPlanSummary,
@@ -187,7 +188,9 @@ export function buildControlState(
 const ALLOWED: ActionAvailability = { allowed: true };
 
 export function buildAvailability(compacting = false): SessionActionAvailability {
-  const compactLock = compacting ? { allowed: false as const, reasonCode: "compactOperationLock" } : ALLOWED;
+  const compactLock = compacting
+    ? { allowed: false as const, reasonCode: "compactOperationLock" }
+    : ALLOWED;
   return {
     fork: compactLock,
     compact: compactLock,
@@ -217,7 +220,7 @@ export function buildControlProjection(
     inputRouting: control.readOnly
       ? { mode: "reject", reasonCode: "guard.sessionLocked" }
       : compacting
-        ? { mode: "enqueue", reasonCode: "compactingAcceptsFutureInput" }
+        ? { mode: "enqueue", reasonCode: NEK_COMPACTING_INPUT_REASON }
         : { mode: "startNow" },
   };
 }

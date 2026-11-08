@@ -35,6 +35,14 @@ export interface NekSessionRecord {
   state?: NekRpcSessionState;
   snapshot?: NekSessionSnapshot;
   phase: NekSessionPhase;
+  /**
+   * GUI 侧压缩预约：`compact` 请求发出到 CLI 的 `compaction_start` 之间按压缩处理。
+   *
+   * 预约只影响输入接纳（压缩中不把消息发给 CLI），在首个 await 之前就置位，
+   * 避免同一 tick 的下一条输入抢跑到 CLI；`compaction_start` 到达后由
+   * `state.isCompacting` 接管。
+   */
+  compactReserved?: boolean;
   readonly: boolean;
   /** 只读快照的占用者，人类可读；nek 不报持有者时为 `"nek"`。 */
   lockedBy?: string;
@@ -52,6 +60,8 @@ export interface NekSession {
   cwd: string;
   phase: NekSessionPhase;
   readonly: boolean;
+  /** 压缩进行中（含 GUI 预约）：输入由 GUI 暂存，压缩收口后再提交。 */
+  isCompacting?: boolean;
   lockedBy?: string;
   lockHolder?: NekSessionLockHolder;
   processId?: number;

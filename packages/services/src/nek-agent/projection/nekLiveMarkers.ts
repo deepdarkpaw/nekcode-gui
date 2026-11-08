@@ -67,7 +67,10 @@ export function applyCompactionStart(
       stopTargetKind: "compact",
       canStop: true,
       stopState: "stoppable",
-      activeWorks: [...ctx.store.state.control.activeWorks.filter((work) => work.kind !== "compact"), { kind: "compact", startedAt: ctx.now() }],
+      activeWorks: [
+        ...ctx.store.state.control.activeWorks.filter((work) => work.kind !== "compact"),
+        { kind: "compact", startedAt: ctx.now() },
+      ],
     },
   });
 }

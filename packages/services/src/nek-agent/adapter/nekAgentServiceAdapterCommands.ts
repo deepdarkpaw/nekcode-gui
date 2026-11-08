@@ -75,36 +75,18 @@ export async function sendConversationCommand(
     case "forkUserMessage":
       return await forkUserMessage(context, input.target, binding, envelope);
     case "sendText": {
-      await applySelection(context.service, binding.sessionKey, payload);
-      const attachments = await toNekPromptAttachments(
-        context.service,
-        binding.sessionKey,
-        payload.attachments,
-      );
-      const delivery = await prepareDelivery(context.service, binding.sessionKey, payload);
-      const result = await context.service.sendPrompt({
-        sessionKey: binding.sessionKey,
-        message: readString(payload, "text") ?? "",
-        ...attachments,
-        streamingBehavior: delivery,
-      });
+      const result = await sendWhenAdmissible(context, binding.sessionKey, payload);
       return acceptedCommand(envelope, revision, {
         type: "inputAccepted",
-        delivery: acceptedDelivery(result.disposition, delivery),
+        delivery: acceptedDelivery(result.disposition, result.delivery),
         inputId: envelope.commandId,
       });
     }
     case "sendGoalCommand": {
-      await applySelection(context.service, binding.sessionKey, payload);
-      const delivery = await prepareDelivery(context.service, binding.sessionKey, payload);
-      const result = await context.service.sendPrompt({
-        sessionKey: binding.sessionKey,
-        message: readString(payload, "text") ?? "",
-        streamingBehavior: delivery,
-      });
+      const result = await sendWhenAdmissible(context, binding.sessionKey, payload);
       return acceptedCommand(envelope, revision, {
         type: "inputAccepted",
-        delivery: acceptedDelivery(result.disposition, delivery),
+        delivery: acceptedDelivery(result.disposition, result.delivery),
         inputId: envelope.commandId,
       });
     }
@@ -224,8 +206,40 @@ async function prepareDelivery(
 ): Promise<StreamingBehavior> {
   const requested = readString(payload, "requestedDelivery");
   if (requested === "queue") return "follow_up";
-  if (requested === "startNow" && isBusy(service, sessionKey)) await service.abort(sessionKey);
+  // 压缩中不能 stop：停掉压缩等于丢掉这次压缩。压缩期间的整段发送本来就被
+  // service 挂起到压缩收口之后，因此这里再兜一次，避免 stop 打到压缩上。
+  if (requested === "startNow" && isBusy(service, sessionKey) && !service.isCompacting(sessionKey))
+    await service.abort(sessionKey);
   return "steer";
+}
+
+/**
+ * 发送前准备 + 发送：压缩进行中整体挂起到压缩收口之后。
+ *
+ * 顺序不能换：预提交模型/思考/模式与附件解析都要在 nek 真正接纳之前发生，
+ * 但也不能发生在压缩期间（配置写入会被压缩拒绝或错写到下一轮）。
+ */
+async function sendWhenAdmissible(
+  context: NekCommandContext,
+  sessionKey: string,
+  payload: Record<string, unknown>,
+): Promise<{ disposition: string; delivery: StreamingBehavior }> {
+  return await context.service.deferInput(sessionKey, async () => {
+    await applySelection(context.service, sessionKey, payload);
+    const attachments = await toNekPromptAttachments(
+      context.service,
+      sessionKey,
+      payload.attachments,
+    );
+    const delivery = await prepareDelivery(context.service, sessionKey, payload);
+    const result = await context.service.sendPrompt({
+      sessionKey,
+      message: readString(payload, "text") ?? "",
+      ...attachments,
+      streamingBehavior: delivery,
+    });
+    return { disposition: result.disposition, delivery };
+  });
 }
 
 function acceptedDelivery(

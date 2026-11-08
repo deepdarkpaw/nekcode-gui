@@ -31,7 +31,9 @@ for (const level of ["max", "xhigh", "off"]) {
         [
           { type: "set_model", provider: "CPA", modelId: "claude-opus-5-5" },
           { type: "set_thinking_level", level },
-          { type: "prompt", message: "hello" },
+          // 空闲首发也带 streamingBehavior：GUI 观察到 idle 之后 nek 仍可能已开跑，
+          // 缺省会因此被拒绝；nek 空闲时忽略该字段。
+          { type: "prompt", message: "hello", streamingBehavior: "followUp" },
         ],
       );
     } finally {

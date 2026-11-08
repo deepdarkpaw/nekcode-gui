@@ -163,22 +163,25 @@ export function createNekLegacyMethods(
     generateWorkspaceText: () => unsupported("generateWorkspaceText"),
     async sendPrompt(input) {
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
-      if (input.modelSelection) {
-        await target.service.setModel({
+      // 压缩进行中整段挂起：配置预提交与附件解析都等压缩收口后再做。
+      await target.service.deferInput(sessionKey, async () => {
+        if (input.modelSelection) {
+          await target.service.setModel({
+            sessionKey,
+            provider: input.modelSelection.providerId,
+            modelId: input.modelSelection.modelId,
+          });
+        }
+        const attachments = await toNekPromptAttachments(
+          target.service,
           sessionKey,
-          provider: input.modelSelection.providerId,
-          modelId: input.modelSelection.modelId,
+          input.attachments,
+        );
+        await target.service.sendPrompt({
+          sessionKey,
+          message: input.content,
+          ...attachments,
         });
-      }
-      const attachments = await toNekPromptAttachments(
-        target.service,
-        sessionKey,
-        input.attachments,
-      );
-      await target.service.sendPrompt({
-        sessionKey,
-        message: input.content,
-        ...attachments,
       });
       return {
         sessionId: input.sessionId,

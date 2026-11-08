@@ -98,6 +98,7 @@ function fakeProcess(
     trusted: null,
     defaultProjectTrust: "ask",
   },
+  initialCompacting = false,
 ): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -106,7 +107,7 @@ function fakeProcess(
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let exited = false;
   let streaming = false;
-  let compacting = false;
+  let compacting = initialCompacting;
   let snapshotLocked = true;
   let input = "";
   stdin.on("data", (chunk: Buffer) => {
@@ -237,9 +238,14 @@ function fakeProcess(
     },
     emit: (record) => {
       if (typeof record === "object" && record !== null && "type" in record) {
-        if (record.type === "agent_start" || record.type === "agent_settled") streaming = record.type === "agent_start";
+        if (record.type === "agent_start" || record.type === "agent_settled")
+          streaming = record.type === "agent_start";
         if (record.type === "compaction_start") compacting = true;
-        if (record.type === "compaction_end") compacting = "willRetry" in record && record.willRetry === true && !("aborted" in record && record.aborted === true);
+        if (record.type === "compaction_end")
+          compacting =
+            "willRetry" in record &&
+            record.willRetry === true &&
+            !("aborted" in record && record.aborted === true);
       }
       stdout.write(`${JSON.stringify(record)}\n`);
     },
@@ -252,6 +258,8 @@ function serviceHarness(
   lockHolder?: NekSessionSnapshot["lockedBy"],
   askProjectTrust: () => boolean = () => true,
   projectTrust?: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" },
+  /** 会话进程 get_state 一开始就报告压缩中（快照恢复场景）。 */
+  initialCompacting = false,
 ) {
   const control = fakeProcess("control", "/tmp/session.jsonl", undefined, lockHolder, projectTrust);
   const sessions: FakeProcess[] = [];
@@ -267,6 +275,9 @@ function serviceHarness(
         "session",
         options.sessionPath ?? "/tmp/session.jsonl",
         options.extensionUi,
+        undefined,
+        undefined,
+        initialCompacting,
       );
       sessions.push(process);
       return process.process;
@@ -387,26 +398,228 @@ test("chooses prompt while idle and steer/follow_up while running, then aborts",
   await harness.service.dispose();
 });
 
-test("compaction accepts future input as follow-up even after the previous agent settles", async () => {
+const COMPACTION_END = {
+  type: "compaction_end" as const,
+  reason: "manual" as const,
+  aborted: false,
+  willRetry: false,
+  result: { tokensBefore: 100 },
+};
+
+/** 等一轮事件循环：压缩事件与待发输入入队都要跨 tick 才能观察到真实交错。 */
+const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+/** 发送类命令（压缩期间必须一次都没有）。 */
+function sendCommands(process: FakeProcess): string[] {
+  return process.commands
+    .map((command) => command.type)
+    .filter((type) => type === "prompt" || type === "steer" || type === "follow_up");
+}
+
+test("压缩期间 GUI 暂存输入：0 次 prompt/steer/follow_up，收口后恰好一次", async () => {
   const harness = serviceHarness();
   try {
     const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
     const process = harness.sessions[0]!;
     process.emit({ type: "compaction_start", reason: "manual" });
     process.emit({ type: "agent_settled", outcome: "aborted" });
-    const result = await harness.service.sendPrompt({ sessionKey, message: "after compact", streamingBehavior: "steer" });
-    assert.equal(result.disposition, "queued");
-    assert.equal(process.commands.at(-1)?.type, "follow_up");
-    const target = harness.service.commandContext().target(sessionKey);
-    assert.equal(target.isCompacting, true);
-    assert.equal(target.projector?.snapshot().inputRouting.mode, "enqueue");
-    assert.equal(target.projector?.snapshot().availability.compact.allowed, false);
-    process.emit({ type: "compaction_end", reason: "manual", aborted: false, willRetry: false, result: { tokensBefore: 100 } });
-    await harness.service.sendPrompt({ sessionKey, message: "next idle input" });
+
+    let settled = false;
+    const sending = harness.service
+      .sendPrompt({ sessionKey, message: "after compact", streamingBehavior: "steer" })
+      .finally(() => {
+        settled = true;
+      });
+    // 压缩是状态事实，不是发送错误：发送仍在 GUI 手里，CLI 一条命令都不该收到。
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(settled, false);
+    assert.deepEqual(sendCommands(process), []);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 1);
+    assert.equal(harness.service.getSession(sessionKey)?.isCompacting, true);
+    const snapshot = harness.service.conversationSnapshot(sessionKey);
+    assert.equal(snapshot.inputRouting.mode, "enqueue");
+    assert.equal(snapshot.inputRouting.reasonCode, "compactingAcceptsFutureInput");
+    assert.equal(snapshot.availability.compact.allowed, false);
+
+    process.emit(COMPACTION_END);
+    assert.equal((await sending).disposition, "started");
+    assert.deepEqual(sendCommands(process), ["prompt"]);
     const prompt = process.commands.at(-1);
-    assert.equal(prompt?.type, "prompt");
-    assert.equal(prompt?.type === "prompt" && prompt.streamingBehavior, "followUp");
-  } finally { await harness.service.dispose(); }
+    assert.equal(prompt?.type === "prompt" && prompt.message, "after compact");
+    assert.equal(harness.service.pendingInputCount(sessionKey), 0);
+    assert.equal(harness.service.getSession(sessionKey)?.isCompacting, undefined);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("同一 scope 的待发送输入按提交顺序各提交一次", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const first = harness.service.sendPrompt({ sessionKey, message: "first" });
+    const second = harness.service.sendPrompt({ sessionKey, message: "second" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(sendCommands(process), []);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 2);
+
+    process.emit(COMPACTION_END);
+    await Promise.all([first, second]);
+    // 第一条起新一轮，第二条按 GUI 默认投递（follow_up）排在这一轮之后：顺序不变、各一次。
+    assert.deepEqual(sendCommands(process), ["prompt", "follow_up"]);
+    const messages = process.commands
+      .map((command) => ("message" in command ? command.message : undefined))
+      .filter((message) => message === "first" || message === "second");
+    assert.deepEqual(messages, ["first", "second"]);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("手动压缩在首个 await 之前预约压缩中，同 tick 的输入不会抢跑", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    // 不 await：compact 的第一个 await 之前就已经把会话按压缩处理。
+    const compacting = harness.service.compact({ sessionKey });
+    const sending = harness.service.sendPrompt({ sessionKey, message: "queued by reservation" });
+    await compacting;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(sendCommands(process), []);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 1);
+
+    process.emit({ type: "compaction_start", reason: "manual" });
+    process.emit(COMPACTION_END);
+    assert.equal((await sending).disposition, "started");
+    assert.deepEqual(sendCommands(process), ["prompt"]);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("压缩失败的 compact 请求撤掉预约并把待发输入正常发出去", async () => {
+  const harness = serviceHarness();
+  const service = harness.service;
+  try {
+    const { sessionKey } = await service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    // CLI 拒绝这次压缩：预约必须撤销，待发输入不能永远挂着。
+    const originalCall = process.process.client.call.bind(process.process.client);
+    process.process.client.call = (async (command: NekRpcCommand) => {
+      if (command.type === "compact") throw new Error("compact rejected");
+      return await originalCall(command);
+    }) as typeof process.process.client.call;
+    await assert.rejects(service.compact({ sessionKey }), /compact rejected/u);
+    assert.equal(service.isCompacting(sessionKey), false);
+    process.process.client.call = originalCall as typeof process.process.client.call;
+
+    await service.sendPrompt({ sessionKey, message: "after failed compact" });
+    assert.deepEqual(sendCommands(process), ["prompt"]);
+  } finally {
+    await service.dispose();
+  }
+});
+
+test("get_state 已报告压缩中时打开会话，输入仍然先进 GUI 待发", async () => {
+  const harness = serviceHarness(undefined, undefined, () => true, undefined, true);
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    // 快照（get_state.isCompacting）就是权威事实：没有 compaction_start 事件也不能发给 CLI。
+    assert.equal(harness.service.getSession(sessionKey)?.isCompacting, true);
+    const sending = harness.service.sendPrompt({ sessionKey, message: "snapshot recovery" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(sendCommands(process), []);
+
+    process.emit(COMPACTION_END);
+    await sending;
+    assert.deepEqual(sendCommands(process), ["prompt"]);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("压缩结束事件的 aborted 会撤回待发输入，绝不迟到补发", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const sending = harness.service.sendPrompt({ sessionKey, message: "cancelled" });
+    await tick();
+    process.emit({ ...COMPACTION_END, aborted: true });
+    await assert.rejects(sending, (error: Error) => error.name === "NekPendingInputCancelledError");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(sendCommands(process), []);
+    assert.equal(harness.service.pendingInputCount(sessionKey), 0);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("停止命令撤回待发输入：可见失败，草稿可重试且不会补发", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const sending = harness.service.sendPrompt({ sessionKey, message: "stop me" });
+    await tick();
+    await harness.service.abort(sessionKey);
+    await assert.rejects(sending, (error: Error) => error.name === "NekPendingInputCancelledError");
+    process.emit({ ...COMPACTION_END, aborted: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(sendCommands(process), []);
+  } finally {
+    await harness.service.dispose();
+  }
+});
+
+test("压缩中断线或关闭会话时待发输入可见失败，不会回填到新会话", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const sending = harness.service.sendPrompt({ sessionKey, message: "lost on exit" });
+    await tick();
+    process.exit({ code: 1 });
+    await assert.rejects(sending, (error: Error) => error.name === "NekPendingInputCancelledError");
+    assert.deepEqual(sendCommands(process), []);
+  } finally {
+    await harness.service.dispose();
+  }
+
+  const closing = serviceHarness();
+  try {
+    const { sessionKey } = await closing.service.createSession({ cwd: "/workspace" });
+    closing.sessions[0]!.emit({ type: "compaction_start", reason: "manual" });
+    const sending = closing.service.sendPrompt({ sessionKey, message: "lost on close" });
+    await tick();
+    await closing.service.closeSession(sessionKey);
+    await assert.rejects(sending, (error: Error) => error.name === "NekPendingInputCancelledError");
+  } finally {
+    await closing.service.dispose();
+  }
+});
+
+test("压缩失败（非取消）仍按序提交：压缩本身不是发送错误", async () => {
+  const harness = serviceHarness();
+  try {
+    const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
+    const process = harness.sessions[0]!;
+    process.emit({ type: "compaction_start", reason: "manual" });
+    const sending = harness.service.sendPrompt({ sessionKey, message: "after failed compaction" });
+    await tick();
+    process.emit({ ...COMPACTION_END, errorMessage: "summariser failed" });
+    await sending;
+    assert.deepEqual(sendCommands(process), ["prompt"]);
+  } finally {
+    await harness.service.dispose();
+  }
 });
 
 test("shares one projector for subscribers and replays a snapshot on resubscribe", async () => {

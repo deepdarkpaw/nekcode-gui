@@ -41,7 +41,12 @@ export interface NekAgentCommandContext {
   control: () => Promise<NekRpcClient>;
 }
 
-/** 空闲发 `prompt`；运行中按 `streamingBehavior` 发 `steer` 或 `follow_up`。 */
+/**
+ * 空闲发 `prompt`；运行中按 `streamingBehavior` 发 `steer` 或 `follow_up`。
+ *
+ * 压缩是另一条准入路径：压缩期间 `NekAgentService` 根本不调用这里（GUI 先暂存输入），
+ * 因此这里不存在"压缩中硬发 follow_up"的分支。
+ */
 export async function sendPrompt(
   context: NekAgentCommandContext,
   input: NekPromptInput,
@@ -57,7 +62,6 @@ export async function sendPrompt(
     ...(images ? { images } : {}),
     ...(attachments ? { attachments } : {}),
   };
-  if (target.isCompacting) return await target.client.call({ type: "follow_up", ...content });
   if (target.phase === "running" || target.phase === "waiting_input") {
     if (!input.streamingBehavior)
       throw new Error("streamingBehavior is required while nek is running");

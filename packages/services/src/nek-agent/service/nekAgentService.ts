@@ -12,6 +12,7 @@ import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
 import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
 import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
+import { NekPendingInputCancelledError } from "./nekPendingInputQueue.js";
 import { findNekUserImage, parseNekUserImageRef } from "../projection/nekUserImages.js";
 import { findNekUserFile } from "../projection/nekUserFiles.js";
 import { resolveNekSessionAttachment } from "./nekSessionAttachments.js";
@@ -93,15 +94,85 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   }
 
   // ---- 输入 ----
-  readonly sendPrompt: Methods["sendPrompt"] = this.forInput(commands.sendPrompt);
-  readonly abort: Methods["abort"] = this.forKey(commands.abort);
+  /**
+   * 发送输入。压缩进行中 GUI 自己暂存（不发给 CLI），压缩收口后按提交顺序提交。
+   *
+   * 只有 nek 真正接纳（RPC 返回）才把 ownership 交给 CLI；压缩本身不是发送错误，
+   * 压缩被取消/断线/关闭时这次发送可见失败，草稿回到输入框。
+   */
+  readonly sendPrompt: Methods["sendPrompt"] = async (input) => {
+    const record = this.requireRecord(input.sessionKey);
+    // 压缩期间暂存的输入在收口时可能已经有一轮在跑（前一条待发输入起了新回合）：
+    // 用户那次"发送"默认按排队处理，不把它变成准入错误。
+    const effective =
+      this.pendingInputs.isCompacting(record) && input.streamingBehavior === undefined
+        ? { ...input, streamingBehavior: "followUp" as const }
+        : input;
+    return await this.pendingInputs.defer(
+      record,
+      async () =>
+        await this.withSession(
+          input.sessionKey,
+          async () => await commands.sendPrompt(this.commandContext(), effective),
+        ),
+    );
+  };
+  readonly abort: Methods["abort"] = async (sessionKey) => {
+    // 停止是用户明确取消：压缩中的待发输入不能在他停止之后补发。
+    this.pendingInputs.cancel(
+      this.requireRecord(sessionKey),
+      new NekPendingInputCancelledError("已停止，消息没有发送；草稿已保留，可重试"),
+    );
+    await this.withSession(
+      sessionKey,
+      async () => await commands.abort(this.commandContext(), sessionKey),
+    );
+  };
   readonly bash: Methods["bash"] = this.forInput(commands.bash);
   readonly abortBash: Methods["abortBash"] = this.forKey(commands.abortBash);
   readonly clearQueue: Methods["clearQueue"] = this.forKey(commands.clearQueue);
   readonly retrieveQueue: Methods["retrieveQueue"] = this.forKey(commands.retrieveQueue);
 
+  /**
+   * 压缩进行中把一段"发送前准备 + 发送"整体挂起，压缩收口后按提交顺序执行；否则立即执行。
+   *
+   * 适配层用它避免压缩期间预提交 setModel/thinking/mode：这些配置写入要么被 nek 拒绝，
+   * 要么把本次输入框的选择错写到另一半；附件解析也留到真正接纳之前。
+   */
+  async deferInput<T>(sessionKey: string, run: () => Promise<T>): Promise<T> {
+    return await this.pendingInputs.defer(this.requireRecord(sessionKey), run);
+  }
+
+  /** 会话是否在压缩（含 GUI 预约）；适配层据此判断能否预提交配置。 */
+  isCompacting(sessionKey: string): boolean {
+    return this.pendingInputs.isCompacting(this.requireRecord(sessionKey));
+  }
+
+  /** 该会话还有多少条 GUI 暂存的待发送输入（压缩中）；诊断与状态展示用。 */
+  pendingInputCount(sessionKey: string): number {
+    return this.pendingInputs.pendingCount(sessionKey);
+  }
+
   // ---- 会话操作 ----
-  readonly compact: Methods["compact"] = this.forInput(commands.compact);
+  /**
+   * 手动压缩。GUI 在首个 await 之前就预约"压缩中"：同一 tick 里随后提交的输入
+   * 会进 GUI 待发队列，而不是抢跑到 CLI 打乱这次压缩。
+   */
+  readonly compact: Methods["compact"] = async (input) => {
+    const record = this.requireWritable(input.sessionKey);
+    record.compactReserved = true;
+    try {
+      return await this.withSession(
+        input.sessionKey,
+        async () => await commands.compact(this.commandContext(), input),
+      );
+    } catch (error) {
+      // 压缩根本没开始：撤掉预约，把待发输入按正常顺序放行，错误照常上报。
+      record.compactReserved = false;
+      this.pendingInputs.settle(record);
+      throw error;
+    }
+  };
   readonly setModel: Methods["setModel"] = this.forInput(commands.setModel, "config");
   readonly cycleModel: Methods["cycleModel"] = this.forKey(commands.cycleModel, "config");
   readonly setThinkingLevel: Methods["setThinkingLevel"] = this.forInput(
@@ -381,6 +452,10 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
 
   async dispose(): Promise<void> {
     if (this.disposed) return;
+    // 待发送输入随服务一起结束：可见失败，绝不在下次启动时补发。
+    this.pendingInputs.cancelAll(
+      new NekPendingInputCancelledError("nek agent service has been disposed"),
+    );
     await deleteUnusedCreatedSessions([...this.sessions.values()], {
       deleteSession: async (input) => await this.deleteSession(input),
       ...(this.logger ? { logger: this.logger } : {}),
@@ -408,7 +483,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
       capabilities: process.guiInfo.capabilities,
       projector: record.projector,
       phase: record.phase,
-      isCompacting: record.state?.isCompacting === true,
+      isCompacting: this.pendingInputs.isCompacting(record),
       setPhase: (phase) => this.setPhase(record, phase),
     };
   }

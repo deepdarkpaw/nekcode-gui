@@ -6,6 +6,7 @@
  */
 import type { GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import type { NekInteractionScope, NekSessionSnapshot } from "@zcode/shared/nek-protocol";
+import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import { NekConversationProjector } from "../nekConversationProjector.js";
 import type { NekRpcClientOptions } from "../nekRpcClient.js";
 import { NekProcessPool } from "../nekProcessPool.js";
@@ -56,6 +57,48 @@ export function createNekAgentProcessPool(
   });
 }
 
+/** RPC client 的超时与缓冲上限：长命令单独放宽，其余共用一条命令预算。 */
+export function buildNekClientOptions(input: {
+  config: GuiRuntimeConfig;
+  scope: NekInteractionScope;
+  extensionUi: NekExtensionUiHandler;
+}): Omit<NekRpcClientOptions, "logger"> {
+  const timeouts: Record<string, number> = {
+    prompt: input.config.timeouts.promptPreflightMs,
+    default: input.config.timeouts.commandMs,
+  };
+  for (const command of NEK_LONG_RUNNING_COMMANDS)
+    timeouts[command] = input.config.timeouts.longRunningMs;
+  return {
+    defaultTimeoutMs: input.config.timeouts.commandMs,
+    timeouts,
+    closeGraceMs: input.config.timeouts.shutdownGraceMs,
+    maxLineBytes: input.config.nek.maxLineMb * 1024 * 1024,
+    stderrMaxBytes: input.config.nek.stderrBufferKb * 1024,
+    extensionUi: input.extensionUi,
+  };
+}
+
+/** 会话进程：注入的工厂优先，否则按 guiInfo 起一个 nek RPC 进程。 */
+export async function launchNekSessionProcess(input: {
+  options: NekAgentServiceOptions;
+  request: NekSessionProcessCreateOptions;
+  clientOptions: Omit<NekRpcClientOptions, "logger">;
+  logger: NekAgentServiceOptions["logger"];
+}): Promise<NekRpcProcess> {
+  if (input.options.createSessionProcess)
+    return await input.options.createSessionProcess(input.request);
+  if (!input.options.guiInfo) throw new Error("nek guiInfo or createSessionProcess is required");
+  return createNekRpcProcess({
+    guiInfo: input.options.guiInfo,
+    cwd: input.request.cwd,
+    sessionPath: input.request.sessionPath,
+    approve: input.request.approve,
+    client: input.clientOptions,
+    logger: input.logger,
+  });
+}
+
 /** 投影器：流式合并频率与事件窗口上限都来自 GUI 运行参数。 */
 export function createNekConversationProjector(options: {
   config: GuiRuntimeConfig;
@@ -74,7 +117,7 @@ export function createNekConversationProjector(options: {
 }
 
 /** 需要长超时的命令：这些命令等的是整轮工作（压缩、登录、拉模型、测试），不是一次握手。 */
-export const NEK_LONG_RUNNING_COMMANDS = [
+const NEK_LONG_RUNNING_COMMANDS = [
   "compact",
   "export_session",
   "share_session",

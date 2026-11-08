@@ -9,18 +9,21 @@ import type {
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js";
 import type { NekProcessPool, NekProcessPoolEvent } from "../nekProcessPool.js";
-import { createNekRpcProcess, type NekRpcProcess } from "../nekRpcProcess.js";
+import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import { NekGuiInteractionBridge } from "./guiInteractionBridge.js";
-import {
-  createProjectTrustPrompt,
-  resolveProjectApprovalThroughControl,
-} from "./projectTrustPrompt.js";
+import { createProjectTrustPrompt, requestProjectApproval } from "./projectTrustPrompt.js";
 import { isNekState } from "./types.js";
+import { applyNekPoolReclaim, applyNekSessionEvent } from "./nekSessionEventRouting.js";
 import {
-  NEK_LONG_RUNNING_COMMANDS,
+  NekPendingInputCancelledError,
+  NekPendingInputController,
+} from "./nekPendingInputQueue.js";
+import {
+  buildNekClientOptions,
   createNekAgentProcessPool,
   createNekConversationProjector,
+  launchNekSessionProcess,
   nekLockLabel,
 } from "./nekAgentServiceWiring.js";
 import type {
@@ -32,6 +35,11 @@ import type {
   NekSessionRecord,
   NekSessionResult,
 } from "./types.js";
+
+/** 压缩期间单会话最多暂存多少条待发送输入。 */
+const PENDING_INPUT_MAX_PER_SESSION = 16;
+/** 单条待发送输入最长等待（10 分钟）：到点可见失败，不让发送 Promise 永久悬挂。 */
+const PENDING_INPUT_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * 会话记录表、进程池接线、事件路由与投影器装载。
@@ -50,6 +58,8 @@ export abstract class NekAgentServiceRuntimeBase {
   protected readonly defaultCwd: string;
   protected readonly pool: NekProcessPool<NekRpcProcess>;
   protected readonly pendingCreates = new Map<string, NekSessionProcessCreateOptions>();
+  /** 压缩期间 GUI 暂存的待发送输入：本层是唯一 owner。 */
+  protected readonly pendingInputs: NekPendingInputController;
   protected readonly sessions = new Map<string, NekSessionRecord>();
   protected readonly byPath = new Map<string, NekSessionRecord>();
   protected readonly listeners = new Set<(event: NekAgentServiceEvent) => void>();
@@ -59,6 +69,12 @@ export abstract class NekAgentServiceRuntimeBase {
   constructor(options: NekAgentServiceOptions) {
     this.config = options.runtimeConfig ?? DEFAULT_GUI_RUNTIME_CONFIG;
     this.logger = options.logger;
+    this.pendingInputs = new NekPendingInputController({
+      maxPerSession: PENDING_INPUT_MAX_PER_SESSION,
+      timeoutMs: PENDING_INPUT_TIMEOUT_MS,
+      withLease: async (record, run) => await this.withLease(record, run),
+      ...(options.logger ? { logger: options.logger } : {}),
+    });
     this.defaultCwd = options.cwd ?? process.cwd();
     this.customExtensionUi = options.extensionUi;
     this.interactions = new NekGuiInteractionBridge({
@@ -116,43 +132,27 @@ export abstract class NekAgentServiceRuntimeBase {
     request: NekSessionProcessCreateOptions,
     options: NekAgentServiceOptions,
   ): Promise<NekRpcProcess> {
-    if (options.createSessionProcess) return await options.createSessionProcess(request);
-    if (!options.guiInfo) throw new Error("nek guiInfo or createSessionProcess is required");
-    return createNekRpcProcess({
-      guiInfo: options.guiInfo,
-      cwd: request.cwd,
-      sessionPath: request.sessionPath,
-      approve: request.approve,
-      client: this.clientOptions({ workspacePath: request.cwd, sessionKey: request.sessionKey }),
+    return await launchNekSessionProcess({
+      options,
+      request,
+      clientOptions: this.clientOptions({
+        workspacePath: request.cwd,
+        sessionKey: request.sessionKey,
+      }),
       logger: this.logger,
     });
   }
 
   protected clientOptions(scope: NekInteractionScope): Omit<NekRpcClientOptions, "logger"> {
-    const timeouts: Record<string, number> = {
-      prompt: this.config.timeouts.promptPreflightMs,
-      default: this.config.timeouts.commandMs,
-    };
-    for (const command of NEK_LONG_RUNNING_COMMANDS)
-      timeouts[command] = this.config.timeouts.longRunningMs;
-    return {
-      defaultTimeoutMs: this.config.timeouts.commandMs,
-      timeouts,
-      closeGraceMs: this.config.timeouts.shutdownGraceMs,
-      maxLineBytes: this.config.nek.maxLineMb * 1024 * 1024,
-      stderrMaxBytes: this.config.nek.stderrBufferKb * 1024,
+    return buildNekClientOptions({
+      config: this.config,
+      scope,
       extensionUi: this.extensionUiFor(scope),
-    };
+    });
   }
 
-  /**
-   * 启动前确定项目信任：已记录的决定直接采用，没有记录时按 `defaultProjectTrust`
-   * 或渲染层的确认结果决定；确认后立刻按 nek 的规则落盘（`set_project_trust`），
-   * 下次（含终端 `/trust`）不再询问。
-   */
   protected async resolveProjectApproval(cwd: string): Promise<boolean> {
-    if (!this.askProjectTrust) throw new Error(`project trust decision required for ${cwd}`);
-    return await resolveProjectApprovalThroughControl({
+    return await requestProjectApproval({
       cwd,
       askProjectTrust: this.askProjectTrust,
       ensureControl: async () => await this.pool.ensureControl(),
@@ -307,6 +307,8 @@ export abstract class NekAgentServiceRuntimeBase {
     });
     projector.flushNow();
     this.setPhase(record, state.isStreaming || state.isCompacting ? "running" : "idle");
+    // 快照是权威事实：压缩已经收口（或从未开始）时，把 GUI 暂存的输入放行。
+    this.pendingInputs.settle(record);
   }
 
   protected createProjector(record: NekSessionRecord): NekConversationProjector {
@@ -347,51 +349,33 @@ export abstract class NekAgentServiceRuntimeBase {
   }
 
   protected handleEvent(record: NekSessionRecord, event: NekRpcEvent): void {
-    if (record.state) {
-      if (event.type === "agent_start" || event.type === "agent_settled")
-        record.state = { ...record.state, isStreaming: event.type === "agent_start" };
-      if (event.type === "compaction_start" || event.type === "compaction_end")
-        record.state = { ...record.state, isCompacting: event.type === "compaction_start" || (event.willRetry === true && !event.aborted) };
-    }
+    // 顺序固定：先状态机、再投影、最后广播；快照重建读的是同一份 record.state。
+    applyNekSessionEvent(
+      {
+        record,
+        setPhase: (target, phase) => this.setPhase(target, phase),
+        beginTurn: (sessionKey) => this.pool.beginTurn(sessionKey),
+        endTurn: (sessionKey) => this.pool.endTurn(sessionKey),
+        settlePendingInputs: (target) => this.pendingInputs.settle(target),
+        cancelPendingInputs: (target, reason) => this.pendingInputs.cancel(target, reason),
+        refreshSnapshot: (target) =>
+          void this.refreshProcessSnapshot(target).catch((error) => {
+            this.logger?.warn("failed to refresh nek snapshot after agent_settled", error);
+          }),
+      },
+      event,
+    );
     record.projector?.handleEvent(event);
     this.emit({ type: "rpc_event", session: this.publicSession(record), event });
-    switch (event.type) {
-      case "agent_start":
-        this.pool.beginTurn(record.key);
-        this.setPhase(record, "running");
-        break;
-      case "compaction_start":
-        this.setPhase(record, "running");
-        break;
-      case "compaction_end":
-        if (!record.state?.isCompacting)
-          this.setPhase(record, record.state?.isStreaming ? "running" : "idle");
-        break;
-      case "agent_settled":
-        this.pool.endTurn(record.key);
-        this.setPhase(record, record.state?.isCompacting ? "running" : "idle");
-        void this.refreshProcessSnapshot(record).catch((error) => {
-          this.logger?.warn("failed to refresh nek snapshot after agent_settled", error);
-        });
-        break;
-      case "extension_ui_request":
-        if (
-          event.method === "structured" ||
-          ["select", "confirm", "input", "editor"].includes(event.method)
-        )
-          this.setPhase(record, "waiting_input");
-        break;
-      case "extension_ui_cancel":
-        if (record.phase === "waiting_input")
-          this.setPhase(record, record.state?.isStreaming || record.state?.isCompacting ? "running" : "idle");
-        break;
-      default:
-        break;
-    }
   }
 
   protected handleProcessExit(record: NekSessionRecord, exit: NekRpcProcessExit): void {
     if (record.closing || this.disposed) return;
+    // 断线后待发送输入既不能静默丢，也不能等重连后补发：可见失败，草稿由界面恢复。
+    this.pendingInputs.cancel(
+      record,
+      new NekPendingInputCancelledError("nek 进程已断开，消息没有发送；草稿已保留，可重试"),
+    );
     this.detachProcess(record);
     this.interactions.cancelScope({ workspacePath: record.cwd, sessionKey: record.key });
     this.setPhase(record, "error");
@@ -443,12 +427,13 @@ export abstract class NekAgentServiceRuntimeBase {
 
   /** 池回收空闲/容量牺牲的进程不是崩溃：静默断开，下次使用时重连。 */
   protected handlePoolEvent(event: NekProcessPoolEvent): void {
-    if (event.type !== "session_reclaimed") return;
-    if (event.reason === "dispose" || event.reason === "crashed") return;
-    const record = this.sessions.get(event.sessionKey);
-    if (!record) return;
-    this.detachProcess(record);
-    this.setPhase(record, "idle");
+    applyNekPoolReclaim({
+      event,
+      record: event.type === "session_reclaimed" ? this.sessions.get(event.sessionKey) : undefined,
+      detachProcess: (record) => this.detachProcess(record),
+      setPhase: (record, phase) => this.setPhase(record, phase),
+      cancelPendingInputs: (record, reason) => this.pendingInputs.cancel(record, reason),
+    });
   }
 
   protected publicSession(record: NekSessionRecord): NekSession {
@@ -459,6 +444,7 @@ export abstract class NekAgentServiceRuntimeBase {
       cwd: record.cwd,
       phase: record.phase,
       readonly: record.readonly,
+      ...(this.pendingInputs.isCompacting(record) ? { isCompacting: true } : {}),
       ...(record.lockedBy ? { lockedBy: record.lockedBy } : {}),
       ...(record.lockHolder ? { lockHolder: record.lockHolder } : {}),
       ...(record.process?.pid ? { processId: record.process.pid } : {}),
@@ -473,6 +459,10 @@ export abstract class NekAgentServiceRuntimeBase {
   }
 
   protected removeRecord(record: NekSessionRecord): void {
+    this.pendingInputs.cancel(
+      record,
+      new NekPendingInputCancelledError("会话已关闭，消息没有发送；草稿已保留，可重试"),
+    );
     this.sessions.delete(record.key);
     if (record.path && this.byPath.get(record.path) === record) this.byPath.delete(record.path);
     this.interactions.cancelScope({ workspacePath: record.cwd, sessionKey: record.key });
