@@ -41,8 +41,14 @@ export interface PatchSettingsArgs {
   patch: Record<string, unknown>;
   /** 读取时拿到的 revision。 */
   expectedRevision: string;
-  /** Cross-field validation runs on the final document while its existing lock is held. */
-  validate?: (merged: Record<string, unknown>) => void;
+  /**
+   * 跨字段校验：在锁内、拿到合并结果之后执行，抛错即放弃写入。
+   *
+   * `previous` 是补丁前的文档内容：nek 的 settings 分成 global/project 两层，
+   * 只有把补丁前的状态一起给出，调用方才能只拒绝"这次写入新引入"的非法组合，
+   * 而不是把文件里早已存在的问题算到无关字段的补丁头上。
+   */
+  validate?: (merged: Record<string, unknown>, previous: Record<string, unknown>) => void;
 }
 
 /**
@@ -68,7 +74,7 @@ export async function patchSettingsDocument(
     const parsed =
       current === undefined || current.trim() === "" ? {} : parseJsonMapping(path, current);
     const merged = applySettingsPatch(parsed, patch);
-    args.validate?.(merged);
+    args.validate?.(merged, parsed);
     next = `${JSON.stringify(merged, null, 2)}\n`;
     return next;
   });

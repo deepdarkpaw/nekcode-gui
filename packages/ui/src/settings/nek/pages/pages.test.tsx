@@ -110,8 +110,15 @@ describe("ToolsPage", () => {
     expect((screen.getByLabelText("结果数") as HTMLInputElement).value).toBe("8");
     const key = screen.getByLabelText("搜索 API Key");
     fireEvent.change(key, { target: { value: "$TAVILY_API_KEY" } });
-    await act(async () => { fireEvent.blur(key); });
-    await waitFor(() => expect(env.config.machines.get("local")?.settings.value.webSearch).toMatchObject({ provider: "tavily", apiKey: "$TAVILY_API_KEY" }));
+    await act(async () => {
+      fireEvent.blur(key);
+    });
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.webSearch).toMatchObject({
+        provider: "tavily",
+        apiKey: "$TAVILY_API_KEY",
+      }),
+    );
   });
 
   it("switches to Exa without inventing a shared endpoint or moving credentials", async () => {
@@ -119,29 +126,103 @@ describe("ToolsPage", () => {
     const provider = await screen.findByLabelText("搜索服务商");
     fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
-    await waitFor(() => expect(env.config.machines.get("local")?.settings.value.webSearch?.provider).toBe("exa"));
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.webSearch?.provider).toBe("exa"),
+    );
     expect(env.config.machines.get("local")?.settings.value.webSearch?.endpoint).toBeUndefined();
     expect(screen.getByText("Exa 可不填密钥；可用额度由 Exa 服务决定。")).toBeTruthy();
   });
 
   it("does not send a configured Tavily key to Exa on a provider switch", async () => {
-    env.config.machines.get("local")!.settings.value.webSearch = { provider: "tavily", apiKey: "$TAVILY_API_KEY" };
+    env.config.machines.get("local")!.settings.value.webSearch = {
+      provider: "tavily",
+      apiKey: "$TAVILY_API_KEY",
+    };
     render(<ToolsPage />, { wrapper: env.wrapper });
     const provider = await screen.findByLabelText("搜索服务商");
     fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
     await screen.findAllByText(/请先清空 API Key/);
-    expect(env.config.machines.get("local")?.settings.value.webSearch).toEqual({ provider: "tavily", apiKey: "$TAVILY_API_KEY" });
+    expect(env.config.machines.get("local")?.settings.value.webSearch).toEqual({
+      provider: "tavily",
+      apiKey: "$TAVILY_API_KEY",
+    });
   });
 
   it("requires an explicit provider for ambiguous existing keys rather than guessing", async () => {
     env.config.machines.get("local")!.settings.value.webSearch = { apiKey: "$SEARCH_API_KEY" };
     render(<ToolsPage />, { wrapper: env.wrapper });
     const provider = await screen.findByLabelText("搜索服务商");
-    expect((screen.getByRole("button", { name: "测试搜索" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "测试搜索" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
     fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
-    await waitFor(() => expect(env.config.machines.get("local")?.settings.value.webSearch).toEqual({ provider: "exa", apiKey: "$SEARCH_API_KEY" }));
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.webSearch).toEqual({
+        provider: "exa",
+        apiKey: "$SEARCH_API_KEY",
+      }),
+    );
+  });
+
+  it("refuses to save a new key while the legacy key still has no provider", async () => {
+    env.config.machines.get("local")!.settings.value.webSearch = { apiKey: "$SEARCH_API_KEY" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const key = await screen.findByLabelText("搜索 API Key");
+    fireEvent.change(key, { target: { value: "$OTHER_KEY" } });
+    await act(async () => {
+      fireEvent.blur(key);
+    });
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((alert) => /不会自动猜测服务商/.test(alert.textContent ?? ""))).toBe(true);
+    expect(env.config.machines.get("local")!.settings.value.webSearch).toEqual({
+      apiKey: "$SEARCH_API_KEY",
+    });
+  });
+
+  it("lets the user clear a legacy key without guessing a provider", async () => {
+    env.config.machines.get("local")!.settings.value.webSearch = { apiKey: "$SEARCH_API_KEY" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const key = await screen.findByLabelText("搜索 API Key");
+    fireEvent.change(key, { target: { value: "" } });
+    await act(async () => {
+      fireEvent.blur(key);
+    });
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.webSearch).toBeUndefined(),
+    );
+    // 清空 = 删键（`null` 只表示删除，不会落盘）：这里不能顺手补一个 provider 猜测值。
+    expect(env.config.machines.get("local")?.settings.value.webSearch?.provider).toBeUndefined();
+  });
+
+  it("clamps the result count to nek's 1-20 range before writing", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const input = (await screen.findByLabelText("结果数")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "21" } });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+    expect(await screen.findByText("不能大于 20")).toBeDefined();
+    expect(env.config.machines.get("local")?.settings.value.webSearch?.numResults).toBeUndefined();
+  });
+
+  it("shows each provider's default endpoint as a placeholder without writing it", async () => {
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "高级" }));
+    const endpoint = (await screen.findByLabelText("自定义 endpoint")) as HTMLInputElement;
+    expect(endpoint.value).toBe("");
+    expect(endpoint.placeholder).toBe("https://api.tavily.com/search");
+    const provider = screen.getByLabelText("搜索服务商");
+    fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
+    await waitFor(() =>
+      expect(env.config.machines.get("local")?.settings.value.webSearch?.provider).toBe("exa"),
+    );
+    expect((screen.getByLabelText("自定义 endpoint") as HTMLInputElement).placeholder).toBe(
+      "https://mcp.exa.ai/mcp",
+    );
+    expect(env.config.machines.get("local")?.settings.value.webSearch?.endpoint).toBeUndefined();
   });
 
   it("writes +/- deltas and rolls back a switch when saving fails", async () => {

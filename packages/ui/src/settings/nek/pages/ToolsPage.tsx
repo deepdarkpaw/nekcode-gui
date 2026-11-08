@@ -144,6 +144,14 @@ function ShellSection({ settings }: { settings: NekSettingsDocument }) {
   );
 }
 
+/**
+ * nek 只认 tavily/exa；旧版本界面写下的 `endpoint`/`apiKey` 没有 provider，
+ * 这时下拉保持空值并要求用户显式选择，绝不按默认值猜。
+ */
+function asSearchProvider(value: unknown): "tavily" | "exa" | undefined {
+  return value === "tavily" || value === "exa" ? value : undefined;
+}
+
 function WebSearchSection({
   settings,
   tools,
@@ -157,20 +165,33 @@ function WebSearchSection({
   const { enabled, setTool } = useToolsWriter(settings, tools);
   const [result, setResult] = useState<string | null>(null);
   const web = settings.data?.values.webSearch ?? {};
+  // 服务商的有效值来自默认值（Tavily），凭据只可能是用户写进本作用域的文件。
+  const effective = settings.data?.effective.webSearch ?? {};
   const defaults = settings.data?.defaults.webSearch ?? {};
   const on = enabled.has(WEB_SEARCH_TOOL);
-  const hasProvider = web.provider === "tavily" || web.provider === "exa";
-  const needsProvider = !hasProvider && (web.provider !== undefined || web.apiKey !== undefined || web.endpoint !== undefined);
-  const provider = web.provider === "exa" ? "exa" : "tavily";
-  const endpointDefault = provider === "exa" ? "https://mcp.exa.ai/mcp" : "https://api.tavily.com/search";
+  const explicitProvider = asSearchProvider(web.provider);
+  const provider =
+    asSearchProvider(effective.provider) ?? asSearchProvider(defaults.provider) ?? "tavily";
+  const hasCredentials = Boolean(web.apiKey || web.endpoint);
+  const needsProvider =
+    explicitProvider === undefined &&
+    (web.provider !== undefined || Boolean(web.apiKey) || Boolean(web.endpoint));
+  const endpointDefault =
+    provider === "exa" ? "https://mcp.exa.ai/mcp" : "https://api.tavily.com/search";
   const writeWeb = async (patch: {
     provider?: "tavily" | "exa";
     endpoint?: string | null;
     apiKey?: string | null;
     numResults?: number | null;
   }) => {
-    if (needsProvider && !patch.provider) throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
-    await settings.patch(nestedSettingsPatch({ webSearch: { provider, ...patch } }));
+    // 歧义配置下只有"选择 provider"和"清空 key/endpoint"能写：前者修好它，后者只会减少歧义。
+    const reducesAmbiguity = patch.apiKey === null || patch.endpoint === null;
+    if (needsProvider && !patch.provider && !reducesAmbiguity) {
+      throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
+    }
+    // 删掉凭据时不能顺手补一个 provider：那等于替用户猜服务商。
+    const webPatch = needsProvider && !patch.provider ? patch : { provider, ...patch };
+    await settings.patch(nestedSettingsPatch({ webSearch: webPatch }));
     setResult(null);
   };
   return (
@@ -186,12 +207,20 @@ function WebSearchSection({
       />
       <SettingSelectField
         label={intl.formatMessage({ id: "settings.nek.web.provider" })}
-        description={intl.formatMessage({ id: needsProvider ? "settings.nek.web.providerRequired" : "settings.nek.web.providerHint" })}
+        description={intl.formatMessage({
+          id: needsProvider ? "settings.nek.web.providerRequired" : "settings.nek.web.providerHint",
+        })}
         value={needsProvider ? "" : provider}
-        options={[{ value: "tavily", label: "Tavily" }, { value: "exa", label: "Exa" }]}
+        options={[
+          { value: "tavily", label: "Tavily" },
+          { value: "exa", label: "Exa" },
+        ]}
         onCommit={async (next) => {
-          if (next !== "tavily" && next !== "exa") throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
-          if (hasProvider && next !== provider && (web.apiKey || web.endpoint)) {
+          if (next !== "tavily" && next !== "exa")
+            throw new Error(intl.formatMessage({ id: "settings.nek.web.providerRequired" }));
+          // 已有凭据时不换服务商：把 Tavily 的 key 悄悄发给 Exa 是数据泄露，
+          // 自动删掉用户填的 key 同样不行，只能要求先手动清空。
+          if (!needsProvider && next !== provider && hasCredentials) {
             throw new Error(intl.formatMessage({ id: "settings.nek.web.clearBeforeSwitch" }));
           }
           await writeWeb({ provider: next });
@@ -199,7 +228,12 @@ function WebSearchSection({
       />
       <SecretSettingField
         label={intl.formatMessage({ id: "settings.nek.web.apiKey" })}
-        description={intl.formatMessage({ id: provider === "tavily" ? "settings.nek.web.tavilyApiKeyHint" : "settings.nek.web.apiKeyHint" })}
+        description={intl.formatMessage({
+          id:
+            provider === "tavily"
+              ? "settings.nek.web.tavilyApiKeyHint"
+              : "settings.nek.web.apiKeyHint",
+        })}
         value={web.apiKey ?? ""}
         placeholder={intl.formatMessage({ id: "settings.nek.web.apiKeyPlaceholder" })}
         onCommit={(apiKey) => writeWeb({ apiKey: apiKey || null })}
@@ -222,7 +256,11 @@ function WebSearchSection({
           variant="outline"
           icon={<SearchIcon />}
           disabled={!on || needsProvider}
-          disabledReason={intl.formatMessage({ id: needsProvider ? "settings.nek.web.providerRequired" : "settings.nek.web.testDisabled" })}
+          disabledReason={intl.formatMessage({
+            id: needsProvider
+              ? "settings.nek.web.providerRequired"
+              : "settings.nek.web.testDisabled",
+          })}
           onClick={async () => {
             setResult(null);
             const outcome = await api.testWebSearch(target, "nek coding agent");

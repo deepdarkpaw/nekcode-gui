@@ -6,6 +6,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { ToolLayout } from "../ToolLayout.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
+import type { ToolDisplayModel, ToolInlinePreview } from "@/lib/toolDisplay.js";
 
 const SEARCH_TOOL_ICON = <SearchIcon className="size-4 shrink-0 text-foreground-subtle" />;
 
@@ -132,6 +133,26 @@ export function getSearchPrimaryText(intl: IntlLike, input: unknown, toolName?: 
   return intl.formatMessage({ id: "chat.toolCall.search.find" });
 }
 
+/**
+ * web_search 交给模型的输出本来就是 Markdown（编号来源列表 + 摘要），
+ * 直接按 Markdown 渲染才能点开来源；结构化输出仍走通用 Result，不做二次猜测。
+ */
+function webSearchMarkdown(output: unknown): string | null {
+  return typeof output === "string" && output.trim().length > 0 ? output : null;
+}
+
+/** 正文已经是结果本身，通用 Parameters/Result 只会把同一段内容再摊一遍。 */
+function webSearchDisplayModel(model: ToolDisplayModel): ToolDisplayModel {
+  return { ...model, showInput: false, showOutput: false };
+}
+
+function webSearchInlinePreview(output: string, title: string): ToolInlinePreview {
+  return {
+    type: "text",
+    source: { type: "text", title, content: output, language: "markdown" },
+  };
+}
+
 export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCallNode, isRunning, statusLabel, errorText } = context;
@@ -139,8 +160,8 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
   const normalizedToolName = normalizeZCodeToolName(toolCall.toolName);
   const isDirectoryListing = normalizedToolName === "ls";
   const isWebSearch = normalizedToolName === "web_search";
-  const webOutput = isWebSearch ? toolCall.output || errorText : undefined;
-  const hasContent = isDirectoryListing || Boolean(webOutput);
+  const webOutput = isWebSearch ? webSearchMarkdown(toolCall.output) : null;
+  const hasContent = isDirectoryListing || webOutput !== null;
   const isAstSearch = normalizedToolName === "ast_grep";
   const searchPrimaryText = isAstSearch
     ? getAstSearchPrimaryText(toolCall.input)
@@ -175,8 +196,14 @@ export function SearchToolCallBlock(context: ToolCallBlockRenderContext) {
             ? () => (
                 <ToolCallBody
                   toolCall={toolCall}
-                  displayModel={isWebSearch ? { ...context.displayModel, showInput: false, showOutput: false } : context.displayModel}
-                  inlinePreviewOverride={webOutput ? { type: "text", source: { type: "text", title: toolCall.toolName ?? "web_search", content: webOutput, language: "markdown" } } : undefined}
+                  displayModel={
+                    webOutput ? webSearchDisplayModel(context.displayModel) : context.displayModel
+                  }
+                  inlinePreviewOverride={
+                    webOutput
+                      ? webSearchInlinePreview(webOutput, toolCall.toolName ?? "web_search")
+                      : undefined
+                  }
                   childToolList={isWebSearch ? null : context.childToolList}
                   workspacePath={context.workspacePath}
                   theme={context.theme}

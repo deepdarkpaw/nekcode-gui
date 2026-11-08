@@ -221,39 +221,217 @@ test("web search: defaults match nek and merged writes require an explicit provi
   const harness = createHarness();
   const initial = await harness.api.readSettings(LOCAL, "global");
   assert.deepEqual(initial.defaults.webSearch, { provider: "tavily", numResults: 8 });
-  for (const webSearch of [{ apiKey: "$SEARCH_API_KEY" }, { endpoint: "https://search.example/search" }, { provider: "unknown" }, { provider: "tavily", numResults: 21 }, { provider: "exa", numResults: 0 }, { numResults: 1.5 }]) {
-    await expectNekError(() => harness.api.patchSettings(LOCAL, "global", { webSearch } as never, { revision: initial.revision }), "validation");
+  for (const webSearch of [
+    { apiKey: "$SEARCH_API_KEY" },
+    { endpoint: "https://search.example/search" },
+    { provider: "unknown" },
+    { provider: "tavily", numResults: 21 },
+    { provider: "exa", numResults: 0 },
+    { numResults: 1.5 },
+  ]) {
+    await expectNekError(
+      () =>
+        harness.api.patchSettings(LOCAL, "global", { webSearch } as never, {
+          revision: initial.revision,
+        }),
+      "validation",
+    );
     assert.equal(harness.local.files.has(SETTINGS_PATH), false);
   }
-  await harness.api.patchSettings(LOCAL, "global", { webSearch: { provider: "tavily", apiKey: "$TAVILY_API_KEY", numResults: 20, customSearchFlag: true } } as never, { revision: initial.revision });
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    {
+      webSearch: {
+        provider: "tavily",
+        apiKey: "$TAVILY_API_KEY",
+        numResults: 20,
+        customSearchFlag: true,
+      },
+    } as never,
+    { revision: initial.revision },
+  );
+  // 文件里已经有 provider 时只改 key 是合法的：不需要每次都重复写 provider。
   const next = await harness.api.readSettings(LOCAL, "global");
-  await harness.api.patchSettings(LOCAL, "global", { webSearch: { numResults: 8 } }, { revision: next.revision });
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { apiKey: "$TAVILY_ROTATED" } },
+    { revision: next.revision },
+  );
+  const rotated = await harness.api.readSettings(LOCAL, "global");
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { numResults: 8 } },
+    { revision: rotated.revision },
+  );
   const final = await harness.api.readSettings(LOCAL, "global");
-  assert.deepEqual(final.values.webSearch, { provider: "tavily", apiKey: "$TAVILY_API_KEY", numResults: 8, customSearchFlag: true });
-  await expectNekError(() => harness.api.patchSettings(LOCAL, "global", { webSearch: { provider: null } } as never, { revision: final.revision }), "validation");
-  assert.deepEqual((await harness.api.readSettings(LOCAL, "global")).values.webSearch, final.values.webSearch);
+  assert.deepEqual(final.values.webSearch, {
+    provider: "tavily",
+    apiKey: "$TAVILY_ROTATED",
+    numResults: 8,
+    customSearchFlag: true,
+  });
+  await expectNekError(
+    () =>
+      harness.api.patchSettings(LOCAL, "global", { webSearch: { provider: null } } as never, {
+        revision: final.revision,
+      }),
+    "validation",
+  );
+  assert.deepEqual(
+    (await harness.api.readSettings(LOCAL, "global")).values.webSearch,
+    final.values.webSearch,
+  );
   await harness.api.dispose();
 });
 
 test("web search: remote settings and probe keep credentials on the target host", async () => {
   const harness = createHarness();
   const read = await harness.api.readSettings(REMOTE, "global");
-  await harness.api.patchSettings(REMOTE, "global", { webSearch: { provider: "exa", apiKey: "$REMOTE_SEARCH_KEY", numResults: 8 } }, { revision: read.revision });
-  assert.deepEqual((readJson(harness.remote, read.path) as { webSearch: unknown }).webSearch, { provider: "exa", apiKey: "$REMOTE_SEARCH_KEY", numResults: 8 });
+  await harness.api.patchSettings(
+    REMOTE,
+    "global",
+    { webSearch: { provider: "exa", apiKey: "$REMOTE_SEARCH_KEY", numResults: 8 } },
+    { revision: read.revision },
+  );
+  assert.deepEqual((readJson(harness.remote, read.path) as { webSearch: unknown }).webSearch, {
+    provider: "exa",
+    apiKey: "$REMOTE_SEARCH_KEY",
+    numResults: 8,
+  });
   assert.equal(harness.local.files.has(SETTINGS_PATH), false);
   assert.equal((await harness.api.testWebSearch(REMOTE, "fixture query")).ok, true);
-  assert.deepEqual(harness.control.commands.findLast((command) => command.type === "test_web_search"), { type: "test_web_search", query: "fixture query" });
+  assert.deepEqual(
+    harness.control.commands.findLast((command) => command.type === "test_web_search"),
+    { type: "test_web_search", query: "fixture query" },
+  );
   await harness.api.dispose();
 });
 
 test("web search: project keys can inherit an explicit global provider", async () => {
-  const harness = createHarness({ localFiles: { [SETTINGS_PATH]: JSON.stringify({ webSearch: { provider: "tavily" } }) } });
+  const harness = createHarness({
+    localFiles: { [SETTINGS_PATH]: JSON.stringify({ webSearch: { provider: "tavily" } }) },
+  });
   const read = await harness.api.readSettings(LOCAL, "project", PROJECT);
-  await harness.api.patchSettings(LOCAL, "project", { webSearch: { apiKey: "$PROJECT_SEARCH_KEY" } }, { revision: read.revision, cwd: PROJECT });
+  await harness.api.patchSettings(
+    LOCAL,
+    "project",
+    { webSearch: { apiKey: "$PROJECT_SEARCH_KEY" } },
+    { revision: read.revision, cwd: PROJECT },
+  );
   const result = await harness.api.readSettings(LOCAL, "project", PROJECT);
   assert.equal(result.effective.webSearch?.provider, "tavily");
   assert.equal(result.effective.webSearch?.apiKey, "$PROJECT_SEARCH_KEY");
   assert.equal(result.diagnostics.length, 0);
+  await harness.api.dispose();
+});
+
+test("web search: a key without any provider is rejected even across scopes", async () => {
+  const harness = createHarness();
+  const global = await harness.api.readSettings(LOCAL, "global");
+  const project = await harness.api.readSettings(LOCAL, "project", PROJECT);
+  // 项目层只写 key、全局也没有 provider：合并后仍然非法，必须在落盘前失败。
+  const error = await expectNekError(
+    () =>
+      harness.api.patchSettings(
+        LOCAL,
+        "project",
+        { webSearch: { apiKey: "$PROJECT_KEY" } },
+        { revision: project.revision, cwd: PROJECT },
+      ),
+    "validation",
+  );
+  assert.ok(error.fieldErrors?.["webSearch.provider"]);
+  assert.equal(harness.local.files.has(join(PROJECT_DIR, "settings.json")), false);
+  // 全局层同样不能只写 endpoint。
+  await expectNekError(
+    () =>
+      harness.api.patchSettings(
+        LOCAL,
+        "global",
+        { webSearch: { endpoint: "https://search.example/mcp" } },
+        { revision: global.revision },
+      ),
+    "validation",
+  );
+  assert.equal(harness.local.files.has(SETTINGS_PATH), false);
+  await harness.api.dispose();
+});
+
+test("web search: a legacy key without a provider is diagnosed but does not block other edits", async () => {
+  // 旧版界面写过 key 且没有 provider：nek 会拒绝启动，但用户仍要能改别的设置。
+  const harness = createHarness({
+    localFiles: {
+      [SETTINGS_PATH]: JSON.stringify({ webSearch: { apiKey: "$LEGACY_SEARCH_KEY" } }),
+    },
+  });
+  const read = await harness.api.readSettings(LOCAL, "global");
+  assert.equal(read.diagnostics.length, 1);
+  assert.match(read.diagnostics[0]?.message ?? "", /provider/);
+
+  await harness.api.patchSettings(LOCAL, "global", { theme: "dark" }, { revision: read.revision });
+  const afterGlobal = readJson(harness.local, SETTINGS_PATH) as Record<string, unknown> & {
+    webSearch: Record<string, unknown>;
+  };
+  assert.equal(afterGlobal.theme, "dark");
+  assert.equal(
+    afterGlobal.webSearch.apiKey,
+    "$LEGACY_SEARCH_KEY",
+    "the legacy key is never dropped or rewritten",
+  );
+
+  // 项目作用域也一样：全局的旧瑕疵不能连带拒绝项目写入。
+  const project = await harness.api.readSettings(LOCAL, "project", PROJECT);
+  await harness.api.patchSettings(
+    LOCAL,
+    "project",
+    { theme: "light" },
+    { revision: project.revision, cwd: PROJECT },
+  );
+  assert.equal(
+    (readJson(harness.local, join(PROJECT_DIR, "settings.json")) as Record<string, unknown>).theme,
+    "light",
+  );
+
+  // 修好它只需要显式选一个 provider：key 原样保留，不猜服务商也不删凭据。
+  const current = await harness.api.readSettings(LOCAL, "global");
+  await harness.api.patchSettings(
+    LOCAL,
+    "global",
+    { webSearch: { provider: "exa" } },
+    { revision: current.revision },
+  );
+  const repaired = await harness.api.readSettings(LOCAL, "global");
+  assert.deepEqual(repaired.values.webSearch, { apiKey: "$LEGACY_SEARCH_KEY", provider: "exa" });
+  assert.deepEqual(repaired.diagnostics, []);
+  await harness.api.dispose();
+});
+
+test("web search: project overrides merge with the global provider instead of repeating it", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [SETTINGS_PATH]: JSON.stringify({
+        webSearch: { provider: "exa", apiKey: "$GLOBAL_EXA_KEY", numResults: 4 },
+      }),
+    },
+  });
+  const project = await harness.api.readSettings(LOCAL, "project", PROJECT);
+  await harness.api.patchSettings(
+    LOCAL,
+    "project",
+    { webSearch: { numResults: 12 } },
+    { revision: project.revision, cwd: PROJECT },
+  );
+  const merged = await harness.api.readSettings(LOCAL, "project", PROJECT);
+  assert.deepEqual(merged.effective.webSearch, {
+    provider: "exa",
+    apiKey: "$GLOBAL_EXA_KEY",
+    numResults: 12,
+  });
+  assert.deepEqual(merged.values.webSearch, { numResults: 12 });
+  assert.deepEqual(merged.diagnostics, []);
   await harness.api.dispose();
 });
 
