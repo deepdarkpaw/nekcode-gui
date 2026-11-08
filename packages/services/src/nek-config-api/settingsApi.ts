@@ -153,7 +153,7 @@ function credentialsChanged(previous: WebSearchState, next: WebSearchState): boo
 }
 
 /** 目标 nek 的搜索能力（版本门禁只看这一项，不抬高 GUI 的全局最低版本）。 */
-export interface WebSearchCapabilities {
+interface WebSearchCapabilities {
   tavily: boolean;
   nekVersion: string | undefined;
 }

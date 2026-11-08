@@ -14,7 +14,7 @@ export const MOCK_REMOTE_CONNECTED = "conn-dev-box";
 export const MOCK_REMOTE_DISCONNECTED = "conn-gpu-server";
 export const MOCK_PROJECT_CWD = "/home/me/projects/nekcode-gui";
 /** mock 目标上的 nek 版本：与当前 CLI 对齐（`webSearch.provider` 需要 0.5.0-beta.1）。 */
-export const MOCK_NEK_VERSION = "0.5.0-beta.1";
+const MOCK_NEK_VERSION = "0.5.0-beta.1";
 
 export const MOCK_DEFAULT_SETTINGS: NekSettingsView = {
   defaultThinkingLevel: "medium",
