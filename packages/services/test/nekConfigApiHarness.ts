@@ -193,9 +193,17 @@ export interface HarnessOptions {
   autoReload?: boolean;
   pollSeconds?: number;
   forwardLoginPorts?: NekConfigApiOptions["forwardLoginPorts"];
+  /** 目标机器上的 nek 版本；`null` 表示版本未知（不能当成最新版）。 */
+  nekVersion?: string | null;
 }
 
 export function createHarness(options: HarnessOptions = {}): Harness {
+  const nekVersion = options.nekVersion === undefined ? "0.5.0-beta.1" : options.nekVersion;
+  const nekState = (agentDir: string, connected: boolean): NekConfigTargetInfo["nek"] => {
+    if (!connected) return { state: "unknown", message: "not connected" };
+    if (nekVersion === null) return { state: "unknown", message: "version not detected" };
+    return { state: "ready", version: nekVersion, agentDir };
+  };
   const local = createMemoryNekConfigHostExecutor({
     home: HOME,
     agentDir: AGENT_DIR,
@@ -233,14 +241,14 @@ export function createHarness(options: HarnessOptions = {}): Harness {
         hostname: "memory-local",
         label: "Local",
         connected,
-        nek: { state: "ready", version: "0.3.2", agentDir: AGENT_DIR },
+        nek: nekState(AGENT_DIR, connected),
       },
       {
         target: REMOTE,
         hostname: "memory-remote",
         label: "remote",
         connected,
-        nek: { state: "ready", version: "0.3.2", agentDir: REMOTE_AGENT_DIR },
+        nek: nekState(REMOTE_AGENT_DIR, connected),
       },
     ],
   };

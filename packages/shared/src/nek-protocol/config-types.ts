@@ -157,6 +157,9 @@ export interface NekCompactionContentSettings {
 
 export const NEK_WEB_SEARCH_PROVIDERS = ["tavily", "exa"] as const;
 
+/** nek `webSearch.provider` 的取值（0.5.0-beta.1 起生效，旧版本忽略该字段）。 */
+export type NekWebSearchProvider = (typeof NEK_WEB_SEARCH_PROVIDERS)[number];
+
 export interface NekSettingsView {
   defaultProvider?: string;
   defaultModel?: string;
@@ -184,7 +187,7 @@ export interface NekSettingsView {
     provider?: { timeoutMs?: number; maxRetries?: number; maxRetryDelayMs?: number };
   };
   webSearch?: {
-    provider?: (typeof NEK_WEB_SEARCH_PROVIDERS)[number];
+    provider?: NekWebSearchProvider;
     endpoint?: string;
     apiKey?: string;
     numResults?: number;

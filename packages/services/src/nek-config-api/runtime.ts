@@ -184,6 +184,26 @@ export class NekConfigRuntime {
     return this.options.sessions?.sessions(target) ?? [];
   }
 
+  /**
+   * 目标 nek 的版本（来自 host 的目标表）。
+   *
+   * 未安装 / 不兼容 / 状态未知都返回 `undefined`：调用方必须把"版本未知"当成
+   * "不能证明支持"，而不是当成最新版本。目标表本身取不到时也不吞错以外的东西——
+   * 失败一律返回 `undefined`，能力门禁随之落到保守的一侧。
+   */
+  async targetNekVersion(target: NekConfigTarget): Promise<string | undefined> {
+    const key = targetKeyOf(target);
+    let targets: NekConfigTargetInfo[];
+    try {
+      targets = await this.options.hosts.listTargets();
+    } catch (error) {
+      this.options.logger?.warn("failed to list targets while resolving the nek version", error);
+      return undefined;
+    }
+    const info = targets.find((entry) => targetKeyOf(entry.target) === key);
+    return info?.nek.state === "ready" ? info.nek.version : undefined;
+  }
+
   /** 监视配置目录；`fs.watch`（本机）或轮询（远程）。 */
   watch(
     target: NekConfigTarget,

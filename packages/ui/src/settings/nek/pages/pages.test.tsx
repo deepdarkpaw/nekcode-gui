@@ -25,6 +25,13 @@ async function selectProvider(name: RegExp) {
   fireEvent.click(await screen.findByRole("option", { name }));
 }
 
+/** 把本机目标的 nek 版本改成指定值（模拟还没升级的目标机器）。 */
+function setLocalNekVersion(version: string) {
+  const machine = env.config.machines.get("local")!;
+  machine.info.nek = { state: "ready", version, agentDir: machine.agentDir };
+  return machine;
+}
+
 describe("ProvidersPage", () => {
   it("lists providers and shows the model table of the selection", async () => {
     render(<ProvidersPage />, { wrapper: env.wrapper });
@@ -223,6 +230,92 @@ describe("ToolsPage", () => {
       "https://mcp.exa.ai/mcp",
     );
     expect(env.config.machines.get("local")?.settings.value.webSearch?.endpoint).toBeUndefined();
+  });
+
+  it("shows Exa on a target whose nek predates search providers and refuses Tavily", async () => {
+    const machine = setLocalNekVersion("0.4.3");
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    // 旧 nek 不读 provider、永远走 Exa：界面不能显示成 Tavily。
+    expect(provider.textContent).toContain("Exa");
+    expect(screen.getAllByText(/不支持 Tavily 服务商/).length).toBeGreaterThan(0);
+
+    fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Tavily" }));
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((alert) => /不支持 Tavily 服务商/.test(alert.textContent ?? ""))).toBe(true);
+    expect(machine.settings.value.webSearch).toBeUndefined();
+  });
+
+  it("writes Exa, never Tavily, for keys typed on an old target", async () => {
+    const machine = setLocalNekVersion("0.4.3");
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const key = await screen.findByLabelText("搜索 API Key");
+    fireEvent.change(key, { target: { value: "$EXA_KEY" } });
+    await act(async () => {
+      fireEvent.blur(key);
+    });
+    await waitFor(() =>
+      expect(machine.settings.value.webSearch).toEqual({ provider: "exa", apiKey: "$EXA_KEY" }),
+    );
+  });
+
+  it("keeps a stored Tavily config visible on an old target but blocks testing it", async () => {
+    const machine = setLocalNekVersion("0.4.3");
+    machine.settings.value.webSearch = { provider: "tavily", apiKey: "$TAVILY_API_KEY" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    // 文件里写了什么就显示什么，但明确告诉用户这台目标会忽略它。
+    expect(provider.textContent).toContain("Tavily");
+    expect(screen.getAllByText(/不支持 Tavily 服务商/).length).toBeGreaterThan(0);
+    expect((screen.getByRole("button", { name: "测试搜索" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("refuses to save a new key for a stored Tavily config on an old target", async () => {
+    const machine = setLocalNekVersion("0.4.3");
+    machine.settings.value.webSearch = { provider: "tavily", apiKey: "$TAVILY_API_KEY" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const key = await screen.findByLabelText("搜索 API Key");
+    fireEvent.change(key, { target: { value: "$NEW_TAVILY_KEY" } });
+    await act(async () => {
+      fireEvent.blur(key);
+    });
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((alert) => /不支持 Tavily 服务商/.test(alert.textContent ?? ""))).toBe(true);
+    expect(machine.settings.value.webSearch).toEqual({
+      provider: "tavily",
+      apiKey: "$TAVILY_API_KEY",
+    });
+  });
+
+  it("deletes the stored endpoint on clear instead of writing an empty string", async () => {
+    const machine = env.config.machines.get("local")!;
+    machine.settings.value.webSearch = {
+      provider: "tavily",
+      endpoint: "https://search.example/mcp",
+    };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "高级" }));
+    const endpoint = (await screen.findByLabelText("自定义 endpoint")) as HTMLInputElement;
+    expect(endpoint.value).toBe("https://search.example/mcp");
+    fireEvent.change(endpoint, { target: { value: "   " } });
+    await act(async () => {
+      fireEvent.blur(endpoint);
+    });
+    // nek 会 trim() 后判空并拒绝启动：清空只能写成删除（null），不能落一个空串。
+    await waitFor(() => expect(machine.settings.value.webSearch?.endpoint).toBeUndefined());
+    expect(machine.settings.value.webSearch).toEqual({ provider: "tavily" });
+  });
+
+  it("treats an unknown target version as unsupported instead of assuming Tavily", async () => {
+    const machine = env.config.machines.get("local")!;
+    machine.info.nek = { state: "unknown", message: "version not detected" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    expect(provider.textContent).toContain("Exa");
+    expect(screen.getAllByText(/无法确定目标 nek 版本/).length).toBeGreaterThan(0);
   });
 
   it("writes +/- deltas and rolls back a switch when saving fails", async () => {

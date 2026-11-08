@@ -3614,6 +3614,10 @@ const enUS: Record<string, string> = {
     "A key or endpoint is configured. Select Tavily or Exa explicitly; the provider is never guessed.",
   "settings.nek.web.clearBeforeSwitch":
     "Clear the API key and custom endpoint first to avoid sending existing credentials to another provider.",
+  "settings.nek.web.providerUnsupported":
+    "nek {version} on this target does not support the Tavily provider. Update it to {minVersion} or newer; older versions ignore this choice and use Exa.",
+  "settings.nek.web.providerUnsupportedUnknown":
+    "The target nek version cannot be determined. Tavily requires {minVersion} or newer; check and update the target CLI first.",
   "settings.nek.web.apiKey": "Search API key",
   "settings.nek.web.apiKeyHint":
     "Exa can be used without a key; availability and quota are determined by Exa.",
