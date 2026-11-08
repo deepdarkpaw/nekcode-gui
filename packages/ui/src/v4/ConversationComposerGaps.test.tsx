@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { useCallback, useState, type ComponentProps, type PropsWithChildren } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AttachmentRef, ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import { NEK_COMPACTING_INPUT_REASON } from "@zcode/shared/nek-protocol";
 import {
   updateComposerAttachmentScope,
   useComposerAttachmentUploadStore,
@@ -11,7 +12,10 @@ import type { V4ComposerDraft } from "./composer/composerDraftStore.js";
 import type { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
-import { ConversationComposer } from "./ConversationComposer.js";
+import {
+  ConversationComposer,
+  type ConversationComposerSendResult,
+} from "./ConversationComposer.js";
 
 vi.mock("@/hooks/usePlatform.js", () => ({
   usePlatform: () => ({}),
@@ -172,6 +176,7 @@ function pastedChips(): number {
 function renderWithDraftOwner(
   workspacePath: string,
   onSendText: ComponentProps<typeof ConversationComposer>["onSendText"],
+  snapshotOverride: ConversationSnapshot = snapshot,
 ) {
   const owner: { draft?: V4ComposerDraft } = {};
   // 生产中这些回调引用稳定；每次渲染新建会让 scope 恢复 effect 反复重放草稿。
@@ -198,7 +203,7 @@ function renderWithDraftOwner(
     );
     return (
       <ConversationComposer
-        snapshot={snapshot}
+        snapshot={snapshotOverride}
         sessionId="child"
         workspacePath={workspacePath}
         composerDraft={draft}
@@ -294,4 +299,90 @@ it("makes the locked composer visibly read-only and blocks even a stale editor s
   fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" }));
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(onSendText).not.toHaveBeenCalled();
+});
+
+/** 压缩中的投影：inputRouting=enqueue(compactingAcceptsFutureInput)，compress 正在跑。 */
+const compactingSnapshot: ConversationSnapshot = {
+  ...snapshot,
+  control: {
+    ...snapshot.control,
+    phase: "running",
+    canStop: true,
+    stopState: "stoppable",
+    stopTargetKind: "compact",
+    activeWorks: [{ kind: "compact", startedAt: 1 }],
+  },
+  availability: {
+    ...snapshot.availability,
+    compact: { allowed: false, reasonCode: "compactOperationLock" },
+    sendQueuedNow: { allowed: false, reasonCode: "compactOperationLock" },
+  },
+  inputRouting: { mode: "enqueue", reasonCode: NEK_COMPACTING_INPUT_REASON },
+};
+
+function editorValue(): string {
+  return (screen.getByRole("textbox", { name: "Editor" }) as HTMLTextAreaElement).value;
+}
+
+it("压缩中提交：等待提示可见、不是错误，ACK 之前不 adopt 附件也不清输入", async () => {
+  const gate = Promise.withResolvers<ConversationComposerSendResult>();
+  const onSendText = vi.fn(
+    async (_text: string, _options?: { attachments?: AttachmentRef[] }) => await gate.promise,
+  );
+  renderWithDraftOwner("/project-compaction-pending", onSendText, compactingSnapshot);
+  await waitFor(() => expect(pastedChips()).toBe(1));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" }));
+  });
+  await waitFor(() => expect(onSendText).toHaveBeenCalledTimes(1));
+  expect(onSendText.mock.calls[0]?.[1]).toMatchObject({ attachments: [pasted] });
+
+  // 等待压缩收口：提示可见、发送键说的是"压缩完成后发送"，不是错误态。
+  expect(screen.getByTestId("v4-composer-compaction-send-pending")).toBeTruthy();
+  // 投影仍是"压缩中接受未来输入"：文案由 compactionSendState 单测覆盖，这里只认渲染出的等待态。
+  expect(screen.queryByRole("alert")).toBeNull();
+  // 正文还在输入框里，附件既没 adopt 也没清理（真实 ACK 才是移交边界）。
+  expect(editorValue()).toBe("describe it");
+  expect(pastedChips()).toBe(1);
+  // 等待期间不能重复提交。
+  fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(onSendText).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    gate.resolve("sent");
+  });
+  await waitFor(() => expect(pastedChips()).toBe(0));
+  expect(editorValue()).toBe("");
+  expect(screen.queryByTestId("v4-composer-compaction-send-pending")).toBeNull();
+});
+
+it("压缩中提交被撤回（按 name 的取消）：草稿与附件回原样，不出现发送失败", async () => {
+  const gate = Promise.withResolvers<ConversationComposerSendResult>();
+  const onSendText = vi.fn(
+    async (_text: string, _options?: { attachments?: AttachmentRef[] }) => await gate.promise,
+  );
+  const owner = renderWithDraftOwner(
+    "/project-compaction-cancelled",
+    onSendText,
+    compactingSnapshot,
+  );
+  await waitFor(() => expect(pastedChips()).toBe(1));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" }));
+  });
+  await waitFor(() => expect(onSendText).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    const error = new Error("压缩已取消，消息没有发送；草稿已保留，可重试");
+    error.name = "NekPendingInputCancelledError";
+    gate.reject(error);
+  });
+  // 草稿整体回到提交前的样子（正文 + 附件），没有 adopt、没有红色错误。
+  await waitFor(() => expect(owner.draft?.text).toBe("describe it"));
+  expect(owner.draft?.attachments).toEqual([pasted]);
+  expect(editorValue()).toBe("describe it");
+  expect(pastedChips()).toBe(1);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByTestId("v4-composer-compaction-send-pending")).toBeNull();
+  expect(onSendText).toHaveBeenCalledTimes(1);
 });
