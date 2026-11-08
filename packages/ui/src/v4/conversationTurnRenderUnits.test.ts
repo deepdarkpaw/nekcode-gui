@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AssistantTextRow,
   ConversationRow,
+  ReasoningRow,
   SessionPhase,
   ToolCallRow,
   TurnHeaderRow,
@@ -66,6 +67,42 @@ function fixture() {
     expect(result).toEqual(buildConversationTurnRenderUnits(rows, options));
     return result;
   };
+}
+
+/** provider 在 tool call 前后下发的空白正文占位：可见性为零，但不是分组边界。 */
+function blankText(
+  rowId: number,
+  turnId: string,
+  text: string,
+  state: AssistantTextRow["state"],
+): AssistantTextRow {
+  return {
+    kind: "assistantText",
+    rowId,
+    turnId,
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    text,
+    state,
+  };
+}
+
+/** reasoning_start/reasoning_end 可能留下空的终态 thinking 块，同样不可见。 */
+function blankReasoning(rowId: number, turnId: string): ReasoningRow {
+  return {
+    kind: "reasoning",
+    rowId,
+    turnId,
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    text: "  ",
+    state: "complete",
+  };
+}
+
+/** 保留 turn(id) 的权威 header/user，替换掉它自带的最终正文。 */
+function withoutAssistantText(rows: readonly ConversationRow[]): ConversationRow[] {
+  return rows.filter((row) => row.kind !== "assistantText");
 }
 
 describe("conversation turn render cache", () => {
@@ -244,5 +281,94 @@ describe("conversation turn render cache", () => {
       }
       build(rows, { nowMs: 100000 + step * 1000 });
     }
+  });
+});
+
+describe("blank provider placeholders", () => {
+  it("drops empty streamed text/thinking from work rows without dropping the turn", () => {
+    const build = fixture();
+    const rows = [
+      ...withoutAssistantText(turn(0, true)),
+      toolRow(10, "turn-0"),
+      blankText(11, "turn-0", "", "streaming"),
+      blankReasoning(12, "turn-0"),
+    ];
+    const units = build(rows, { nowMs: 5000 });
+    expect(units).toHaveLength(1);
+    const unit = units[0]!;
+    expect(unit.isRunning).toBe(true);
+    expect(unit.assistantWorkRows.map((row) => row.rowId)).toEqual([10]);
+    expect(unit.renderRows.some((row) => row.rowId === 11)).toBe(false);
+    expect(unit.renderRows.some((row) => row.rowId === 12)).toBe(false);
+    expect(unit.assistantTextRows).toEqual([]);
+    expect(unit.latestAssistantTextRow).toBeUndefined();
+    expect(unit.flowItems.map((item) => item.kind)).toEqual(["userInput", "assistantHistory"]);
+  });
+
+  it("never treats a blank block as the completed reply of a historical turn", () => {
+    const build = fixture();
+    const rows = [
+      ...withoutAssistantText(turn(0)),
+      toolRow(10, "turn-0"),
+      blankText(11, "turn-0", "  \n", "complete"),
+    ];
+    const unit = build(rows)[0]!;
+    expect(unit.isRunning).toBe(false);
+    expect(unit.latestAssistantTextRow).toBeUndefined();
+    expect(unit.assistantTextRows).toEqual([]);
+    expect(unit.assistantWorkRows.map((row) => row.rowId)).toEqual([10]);
+    expect(unit.workStatus?.state).toBe("completed");
+    // 没有最终正文的历史轮仍默认展开「已工作」，空占位不能把它折叠掉。
+    expect(unit.assistantHistoryDefaultOpen).toBe(true);
+  });
+
+  it("re-splits adjacency and invalidates the cache once the placeholder gains a body", () => {
+    const build = fixture();
+    const host = withoutAssistantText(turn(0, true));
+    const first = build(
+      [
+        ...host,
+        toolRow(10, "turn-0"),
+        blankText(11, "turn-0", "", "streaming"),
+        toolRow(12, "turn-0"),
+      ],
+      { nowMs: 5000 },
+    );
+    expect(first[0]!.assistantWorkRows.map((row) => row.rowId)).toEqual([10, 12]);
+    expect(first[0]!.assistantHistoryRows.map((row) => row.rowId)).toEqual([10, 12]);
+
+    const second = build(
+      [
+        ...host,
+        toolRow(10, "turn-0"),
+        blankText(11, "turn-0", "note", "complete"),
+        toolRow(12, "turn-0"),
+      ],
+      { nowMs: 5000 },
+    );
+    expect(second[0]).not.toBe(first[0]);
+    expect(second[0]!.assistantWorkRows.map((row) => row.rowId)).toEqual([10, 11, 12]);
+    expect(second[0]!.assistantHistoryRows.map((row) => row.rowId)).toEqual([10, 11, 12]);
+  });
+
+  it("keeps a real reply as the visible boundary after blank placeholders", () => {
+    const build = fixture();
+    const rows = [
+      ...withoutAssistantText(turn(0)),
+      toolRow(10, "turn-0"),
+      blankText(11, "turn-0", "", "complete"),
+      toolRow(12, "turn-0"),
+      blankText(13, "turn-0", "answer", "complete"),
+    ];
+    const unit = build(rows)[0]!;
+    expect(unit.assistantWorkRows.map((row) => row.rowId)).toEqual([10, 12, 13]);
+    expect(unit.latestAssistantTextRow?.rowId).toBe(13);
+    expect(unit.flowItems.map((item) => item.kind)).toEqual([
+      "userInput",
+      "assistantHistory",
+      "assistantText",
+    ]);
+    expect(unit.assistantHistoryRows.map((row) => row.rowId)).toEqual([10, 12]);
+    expect(unit.renderRows.some((row) => row.rowId === 11)).toBe(false);
   });
 });

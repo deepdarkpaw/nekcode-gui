@@ -3,10 +3,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, expect, it } from "vitest";
 import type {
+  ConversationRow,
   ReasoningRow,
   TimelineMarkerPayload,
   TimelineMarkerRow,
   ToolCallRow,
+  TurnHeaderRow,
+  UserInputRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
@@ -16,6 +19,7 @@ import { buildConversationTurnRenderUnits } from "./conversationTurnRenderUnits.
 import { ConversationTurnGroup } from "./ConversationTurnGroup.js";
 import { buildFileChangeGroup } from "@/ToolCallBlocks/fileChangeGroup.js";
 import { toolCallRowToLegacyNode } from "./toolCallRowAdapter.js";
+import { ConversationShareReadonlyTimeline } from "./ConversationShareReadonlyTimeline.js";
 
 const visibility = { messageStreamShowReasoning: true };
 const context = {
@@ -133,31 +137,429 @@ function assistantTextRow(rowId: number) {
   };
 }
 
-it.each(["", " \n\t"])("CLI-R1: blank assistant blocks (%j) do not split main-turn edits", (text) => {
-  const start = 10_000 + text.length * 100;
-  const rows = [edit(start), { ...assistantTextRow(start + 1), text }, edit(start + 2), { ...assistantTextRow(start + 3), text }, edit(start + 4)];
-  const items = buildAssistantWorkRenderItems(rows, visibility);
-  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
-  const units = buildConversationTurnRenderUnits([
-    { ...base(0), kind: "userInput", text: "Update PRD", attachments: [] }, ...rows,
-  ], { sessionPhase: "completedSuccess" });
-  expect(units[0]!.assistantWorkRows.map((row) => row.rowId)).toEqual([start, start + 2, start + 4]);
-  const ui = render(<ConversationTurnGroup unit={units[0]!} context={context} />, { wrapper });
-  expect(screen.getAllByText("PRD.md")).toHaveLength(1);
-  expect(screen.getByLabelText("+3")).toBeTruthy();
-  fireEvent.click(screen.getByText("PRD.md"));
-  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
-});
+/** provider 在连续 tool call 之间下发的空白正文占位（可见性为零，但仍然是协议行）。 */
+function blankStreamedText(rowId: number, text = "") {
+  return { ...assistantTextRow(rowId), text, state: "streaming" as const };
+}
+
+/** 真实主轮 flow：turnHeader + userInput 在前，工具行按投影顺序跟在后面。 */
+function mainTurnRows(
+  start: number,
+  workRows: readonly ConversationRow[],
+  running = false,
+): ConversationRow[] {
+  const header: TurnHeaderRow = {
+    ...base(start),
+    kind: "turnHeader",
+    origin: "userInput",
+    executionKind: "agent",
+    state: running ? "running" : "completedSuccess",
+    startedAt: start * 1000,
+    ...(running ? {} : { endedAt: start * 1000 + 500 }),
+  };
+  const user: UserInputRow = {
+    ...base(start + 1),
+    kind: "userInput",
+    text: "Update queued-input",
+    attachments: [],
+    origin: "realUser",
+  };
+  return [header, user, ...workRows];
+}
+
+it.each(["", " \n\t"])(
+  "CLI-R1: blank assistant blocks (%j) do not split main-turn edits",
+  (text) => {
+    const start = 10_000 + text.length * 100;
+    const rows = [
+      edit(start),
+      { ...assistantTextRow(start + 1), text },
+      edit(start + 2),
+      { ...assistantTextRow(start + 3), text },
+      edit(start + 4),
+    ];
+    const items = buildAssistantWorkRenderItems(rows, visibility);
+    expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+    const units = buildConversationTurnRenderUnits(
+      [
+        { ...base(0), kind: "userInput", text: "Update PRD", attachments: [], origin: "realUser" },
+        ...rows,
+      ],
+      { sessionPhase: "completedSuccess" },
+    );
+    expect(units[0]!.assistantWorkRows.map((row) => row.rowId)).toEqual([
+      start,
+      start + 2,
+      start + 4,
+    ]);
+    const ui = render(<ConversationTurnGroup unit={units[0]!} context={context} />, { wrapper });
+    expect(screen.getAllByText("PRD.md")).toHaveLength(1);
+    expect(screen.getByLabelText("+3")).toBeTruthy();
+    fireEvent.click(screen.getByText("PRD.md"));
+    expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+  },
+);
 
 it("CLI-R2: inputText-only reads separated by empty streamed text share one file summary", () => {
-  const first = { ...readTool(10), input: undefined, inputText: JSON.stringify({ path: "/project/PRD.md", offset: 1, limit: 10 }) };
-  const second = { ...readTool(12), input: undefined, inputText: JSON.stringify({ path: "/project/PRD.md", offset: 11, limit: 10 }) };
+  const first = {
+    ...readTool(10),
+    input: undefined,
+    inputText: JSON.stringify({ path: "/project/PRD.md", offset: 1, limit: 10 }),
+  };
+  const second = {
+    ...readTool(12),
+    input: undefined,
+    inputText: JSON.stringify({ path: "/project/PRD.md", offset: 11, limit: 10 }),
+  };
   const rows = [first, { ...assistantTextRow(11), text: "", state: "streaming" as const }, second];
-  expect(buildAssistantWorkRenderItems(rows, visibility).map((item) => item.kind)).toEqual(["readGroup"]);
+  expect(buildAssistantWorkRenderItems(rows, visibility).map((item) => item.kind)).toEqual([
+    "readGroup",
+  ]);
   render(view(rows), { wrapper });
   expect(screen.getAllByText("读取")).toHaveLength(1);
   fireEvent.click(screen.getByText("读取"));
   expect(screen.getAllByText("PRD.md").length).toBeGreaterThan(0);
+});
+
+it("CLI-R3: a live main turn keeps one changes container as blank text and new calls stream in", () => {
+  const work = [
+    edit(20_000),
+    blankStreamedText(20_001),
+    edit(20_002),
+    blankStreamedText(20_003),
+    edit(20_004),
+  ];
+  const units = buildConversationTurnRenderUnits(mainTurnRows(20_100, work, true), {
+    nowMs: 20_200_000,
+  });
+  expect(units).toHaveLength(1);
+  const unit = units[0]!;
+  expect(unit.isRunning).toBe(true);
+  expect(unit.workSegments).toHaveLength(1);
+  expect(unit.assistantWorkRows.map((row) => row.rowId)).toEqual([20_000, 20_002, 20_004]);
+
+  const items = buildAssistantWorkRenderItems(unit.assistantWorkRows, visibility, {
+    stageTailIsRunning: true,
+  });
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const group = items[0]!;
+  expect(group.key).toBe("changes:20000");
+  expect(group.kind === "changesGroup" && group.node.toolCall.status).toBe("in_progress");
+  const children = group.kind === "changesGroup" ? group.node.childToolCalls : [];
+  // 每条调用只进容器一次，统计也只按一次成功计入。
+  expect(children).toHaveLength(3);
+  expect(buildFileChangeGroup(children, "/project").totals).toMatchObject({
+    completed: 3,
+    added: 3,
+    removed: 3,
+  });
+
+  const ui = render(<ConversationTurnGroup unit={unit} context={context} />, { wrapper });
+  expect(screen.getAllByText("PRD.md")).toHaveLength(1);
+  expect(screen.getByLabelText("+3")).toBeTruthy();
+  // 可见行仍带 row anchor，且协议行对象不被改写（聚合只做展示层）。
+  expect(ui.container.querySelector('[data-row-id="20000"]')).toBeTruthy();
+  expect(unit.assistantWorkRows[0]).toBe(work[0]);
+  fireEvent.click(screen.getByText("PRD.md"));
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+
+  // 实时增量：再来一条编辑 + 空白占位，首个子调用的 key 必须不变。
+  const grown = buildConversationTurnRenderUnits(
+    mainTurnRows(20_100, [...work, blankStreamedText(20_005), edit(20_006)], true),
+    { nowMs: 20_200_000 },
+  );
+  expect(
+    buildAssistantWorkRenderItems(grown[0]!.assistantWorkRows, visibility, {
+      stageTailIsRunning: true,
+    }).map((item) => item.key),
+  ).toEqual(["changes:20000"]);
+  ui.rerender(<ConversationTurnGroup unit={grown[0]!} context={context} />);
+  expect(ui.container.querySelectorAll("[data-changes-group]")).toHaveLength(1);
+  // 同一 first-call identity：用户展开的状态随新调用保留，没有被重建成收起壳。
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+  expect(ui.container.textContent).toContain("累计 4 次成功操作");
+});
+
+it("CLI-R4: blank text that later gains a body re-splits without losing the first-call key", () => {
+  const before = [
+    edit(21_000),
+    edit(21_002),
+    blankStreamedText(21_003),
+    edit(21_004),
+    edit(21_006),
+  ];
+  expect(buildAssistantWorkRenderItems(before, visibility).map((item) => item.key)).toEqual([
+    "changes:21000",
+  ]);
+  const unit = buildConversationTurnRenderUnits(mainTurnRows(21_100, before, true), {
+    nowMs: 21_200_000,
+  })[0]!;
+  const ui = render(<ConversationTurnGroup unit={unit} context={context} />, { wrapper });
+  fireEvent.click(screen.getByText("PRD.md"));
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+
+  // 同一行后来真的有正文：它现在是真的可见边界，聚合必须重新切段。
+  const after = [
+    edit(21_000),
+    edit(21_002),
+    { ...assistantTextRow(21_003), text: "now a real note" },
+    edit(21_004),
+    edit(21_006),
+  ];
+  const items = buildAssistantWorkRenderItems(after, visibility);
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup", "row", "changesGroup"]);
+  expect(items.map((item) => item.key)).toEqual(["changes:21000", "row:21003", "changes:21004"]);
+  const grown = buildConversationTurnRenderUnits(mainTurnRows(21_100, after, true), {
+    nowMs: 21_200_000,
+  })[0]!;
+  ui.rerender(<ConversationTurnGroup unit={grown} context={context} />);
+  expect(ui.container.textContent).toContain("now a real note");
+  expect(ui.container.querySelectorAll("[data-changes-group]")).toHaveLength(2);
+  // 首组 key 未变，展开状态保留；新出现的第二组仍是默认收起。
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+});
+
+it("CLI-R5: completed main turn hides blank blocks while keeping the real reply", () => {
+  const withReply = buildConversationTurnRenderUnits(
+    mainTurnRows(22_100, [
+      edit(22_000),
+      { ...assistantTextRow(22_001), text: "" },
+      edit(22_002),
+      { ...assistantTextRow(22_003), text: "Done" },
+    ]),
+    { sessionPhase: "completedSuccess" },
+  )[0]!;
+  expect(withReply.latestAssistantTextRow?.rowId).toBe(22_003);
+  expect(withReply.assistantWorkRows.map((row) => row.rowId)).toEqual([22_000, 22_002, 22_003]);
+  expect(withReply.renderRows.some((row) => row.rowId === 22_001)).toBe(false);
+  const ui = render(<ConversationTurnGroup unit={withReply} context={context} />, { wrapper });
+  expect(ui.container.textContent).toContain("Done");
+  expect(ui.container.querySelector('[data-row-id="22001"]')).toBeNull();
+
+  // 历史完成态：最后一次可见内容是工具行时「已工作」默认展开，空占位不制造空洞。
+  cleanup();
+  const toolTail = buildConversationTurnRenderUnits(
+    mainTurnRows(22_200, [
+      edit(22_010),
+      { ...assistantTextRow(22_011), text: " \n\t" },
+      edit(22_012),
+    ]),
+    { sessionPhase: "completedSuccess" },
+  )[0]!;
+  expect(toolTail.assistantWorkRows.map((row) => row.rowId)).toEqual([22_010, 22_012]);
+  const tailUi = render(<ConversationTurnGroup unit={toolTail} context={context} />, { wrapper });
+  expect(screen.getAllByText("PRD.md")).toHaveLength(1);
+  expect(screen.getByLabelText("+2")).toBeTruthy();
+  expect(tailUi.container.querySelector('[data-row-id="22011"]')).toBeNull();
+});
+
+it("CLI-R6: inputText-only reads keep offset/limit and merge streamed partial arguments", () => {
+  const complete = {
+    ...readTool(23_000),
+    input: undefined,
+    inputText: JSON.stringify({ path: "/project/PRD.md", offset: 1, limit: 40 }),
+  };
+  const second = {
+    ...readTool(23_002),
+    input: undefined,
+    inputText: JSON.stringify({ path: "/project/PRD.md", offset: 41, limit: 40 }),
+  };
+  // 流式半截 JSON：只解析出 path，仍必须与同文件读取聚合，而不是退化成两条孤立行。
+  const partial = {
+    ...readTool(23_004),
+    input: undefined,
+    status: "inputStreaming" as const,
+    inputText: '{"path": "/project/PRD.md", "offset": 81, "limit": 40',
+  };
+  const work = [complete, blankStreamedText(23_001), second, blankStreamedText(23_003), partial];
+  const unit = buildConversationTurnRenderUnits(mainTurnRows(23_100, work, true), {
+    nowMs: 23_200_000,
+  })[0]!;
+
+  const items = buildAssistantWorkRenderItems(unit.assistantWorkRows, visibility, {
+    stageTailIsRunning: true,
+  });
+  expect(items.map((item) => item.kind)).toEqual(["readGroup"]);
+  const group = items[0]!;
+  expect(group.kind === "readGroup" && group.rows.map((row) => row.rowId)).toEqual([
+    23_000, 23_002, 23_004,
+  ]);
+  expect(group.kind === "readGroup" && group.node.toolCall.input).toEqual({
+    path: "/project/PRD.md",
+  });
+  const children = group.kind === "readGroup" ? group.node.childToolCalls : [];
+  expect(children.map((child) => child.toolCall.input)).toEqual([
+    { path: "/project/PRD.md", offset: 1, limit: 40 },
+    { path: "/project/PRD.md", offset: 41, limit: 40 },
+    { path: "/project/PRD.md" },
+  ]);
+  // 协议行不被改写：原始 inputText（含 offset/limit）仍留在 row 上。
+  expect(group.kind === "readGroup" && group.rows.map((row) => row.inputText)).toEqual([
+    complete.inputText,
+    second.inputText,
+    partial.inputText,
+  ]);
+
+  const ui = render(<ConversationTurnGroup unit={unit} context={context} />, { wrapper });
+  expect(screen.getAllByText("读取")).toHaveLength(1);
+  fireEvent.click(screen.getByText("读取"));
+  expect(ui.container.querySelectorAll("[data-read-group] [data-tool-call-id]")).toHaveLength(3);
+});
+
+it("CLI-R6b: a lone inputText-only read still resolves its file", () => {
+  const unit = buildConversationTurnRenderUnits(
+    mainTurnRows(23_300, [
+      {
+        ...readTool(23_400),
+        input: undefined,
+        inputText: JSON.stringify({ path: "/project/ARD.md", offset: 5, limit: 20 }),
+      },
+    ]),
+    { sessionPhase: "completedSuccess" },
+  )[0]!;
+  render(<ConversationTurnGroup unit={unit} context={context} />, { wrapper });
+  expect(screen.getByText("ARD.md")).toBeTruthy();
+});
+
+it("CLI-R7: blank placeholders never merge work across visible thinking or real text", () => {
+  const acrossThinking = buildAssistantWorkRenderItems(
+    [
+      edit(24_000),
+      blankStreamedText(24_001),
+      reasoning(24_002),
+      blankStreamedText(24_003),
+      edit(24_004),
+    ],
+    visibility,
+  );
+  expect(acrossThinking.map((item) => item.kind)).toEqual(["row", "row", "row"]);
+  expect(toolCallItemIds(acrossThinking)).toEqual(["edit-24000", "edit-24004"]);
+
+  const acrossText = buildAssistantWorkRenderItems(
+    [edit(24_010), blankStreamedText(24_011), assistantTextRow(24_012), edit(24_013)],
+    visibility,
+  );
+  expect(toolCallItemIds(acrossText)).toEqual(["edit-24010", "edit-24013"]);
+  expect(acrossText.every((item) => item.kind !== "changesGroup")).toBe(true);
+
+  // 空的 thinking 块同样是不可见占位：它不能切断写聚合，也不能渲染成空「思考」项。
+  const emptyThinking = buildAssistantWorkRenderItems(
+    [edit(24_020), { ...reasoning(24_021), text: "  " }, edit(24_022)],
+    visibility,
+  );
+  expect(emptyThinking.map((item) => item.kind)).toEqual(["changesGroup"]);
+  expect(toolCallItemIds(emptyThinking)).toEqual([]);
+});
+
+it("CLI-R8: readonly share and child-session turns reuse the same grouping entry", () => {
+  // 只读分享入口的调用形状（ReadonlyAssistantWorkItems）：正文/思考常显、不做改动聚合。
+  const shareRows = [
+    {
+      ...readTool(25_000),
+      input: undefined,
+      inputText: JSON.stringify({ path: "/project/PRD.md" }),
+    },
+    blankStreamedText(25_001),
+    {
+      ...readTool(25_002),
+      input: undefined,
+      inputText: JSON.stringify({ path: "/project/PRD.md" }),
+    },
+  ];
+  expect(
+    buildAssistantWorkRenderItems(
+      shareRows,
+      { messageStreamShowReasoning: true },
+      {
+        stageTailIsRunning: true,
+        enableExploreGrouping: true,
+        enableTerminalGrouping: true,
+        enableChangesGrouping: false,
+      },
+    ).map((item) => item.kind),
+  ).toEqual(["readGroup"]);
+
+  // 子会话/侧边会话走同一个 ConversationTimeline + render unit：turnId 不影响聚合语义。
+  const childRows = mainTurnRows(25_300, [
+    edit(25_100),
+    blankStreamedText(25_101),
+    edit(25_102),
+  ]).map((row) => ({ ...row, turnId: "child-session" }));
+  const childUnit = buildConversationTurnRenderUnits(childRows, {
+    sessionPhase: "completedSuccess",
+  })[0]!;
+  expect(childUnit.assistantWorkRows.map((row) => row.rowId)).toEqual([25_100, 25_102]);
+  expect(
+    buildAssistantWorkRenderItems(childUnit.assistantWorkRows, visibility).map((item) => item.key),
+  ).toEqual(["changes:25100"]);
+  render(<ConversationTurnGroup unit={childUnit} context={context} />, { wrapper });
+  expect(screen.getAllByText("PRD.md")).toHaveLength(1);
+  expect(screen.getByLabelText("+2")).toBeTruthy();
+});
+
+it("CLI-R8b: the readonly share timeline renders one read group for blank-separated reads", () => {
+  const readRow = (rowId: number) => ({
+    ...readTool(rowId),
+    input: undefined,
+    inputText: JSON.stringify({ path: "/project/PRD.md", offset: rowId, limit: 10 }),
+  });
+  const rows: ConversationRow[] = [
+    {
+      ...base(40_000),
+      kind: "userInput",
+      text: "show the file",
+      attachments: [],
+      origin: "realUser",
+    },
+    readRow(40_001),
+    { ...assistantTextRow(40_002), text: "", state: "complete" as const },
+    readRow(40_003),
+  ];
+  render(
+    <ConversationShareReadonlyTimeline rows={rows} locale="zh-CN" workspacePath="/project" />,
+    {
+      wrapper,
+    },
+  );
+  expect(
+    document.querySelectorAll('[data-conversation-share-work-group="readGroup"]'),
+  ).toHaveLength(1);
+  expect(screen.getAllByText("读取")).toHaveLength(1);
+  fireEvent.click(screen.getByText("读取"));
+  expect(
+    document.querySelectorAll(
+      '[data-conversation-share-work-group="readGroup"] [data-conversation-share-row-kind="toolCall"]',
+    ),
+  ).toHaveLength(2);
+});
+
+it("CLI-R9: one container counts mixed statuses once, and only successes as success", () => {
+  const rows = [
+    edit(26_000),
+    blankStreamedText(26_001),
+    edit(26_002, "error"),
+    edit(26_003, "cancelled"),
+    edit(26_004, "running"),
+  ];
+  const items = buildAssistantWorkRenderItems(rows, visibility, { stageTailIsRunning: true });
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const group = items[0]!;
+  const children = group.kind === "changesGroup" ? group.node.childToolCalls : [];
+  // 每条调用只进容器一次，空白占位不产生第 5 条。
+  expect(children.map((child) => child.toolCall.toolId)).toEqual([
+    "edit-26000",
+    "edit-26002",
+    "edit-26003",
+    "edit-26004",
+  ]);
+  expect(buildFileChangeGroup(children, "/project").totals).toMatchObject({
+    completed: 1,
+    failed: 1,
+    cancelled: 1,
+    running: 1,
+    added: 1,
+    removed: 1,
+  });
 });
 
 it("CG1: same-file operation counts are accumulated once, excluding failed/cancelled/running calls", () => {
