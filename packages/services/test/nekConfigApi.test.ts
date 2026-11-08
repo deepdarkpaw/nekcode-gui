@@ -3,6 +3,7 @@ import os from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { NekMcpServerConfig, NekProviderWrite } from "@zcode/shared/nek-protocol";
+import { isNekWebSearchProviderSupported } from "@zcode/shared/nek-protocol";
 import {
   createLocalNekConfigTargetHost,
   createMemoryNekConfigHostExecutor,
@@ -433,6 +434,21 @@ test("web search: project overrides merge with the global provider instead of re
   assert.deepEqual(merged.values.webSearch, { numResults: 12 });
   assert.deepEqual(merged.diagnostics, []);
   await harness.api.dispose();
+});
+
+test("web search: the provider capability gate follows nek's semver rules", () => {
+  for (const version of ["0.5.0-beta.1", "0.5.0-beta.2", "0.5.0", "0.6.3", "1.0.0", "0.5"]) {
+    assert.equal(isNekWebSearchProviderSupported(version), true, `${version} supports providers`);
+  }
+  // `parseSemver` 会把 "0.5" 补成 0.5.0（服务端简写格式），所以它算支持；
+  // 真正要守住的是：更早的版本、更早的预发布、以及无法解析的版本都不能冒充支持。
+  for (const version of ["0.4.3", "0.5.0-alpha.1", "", "  ", "not-a-version", undefined, null]) {
+    assert.equal(
+      isNekWebSearchProviderSupported(version),
+      false,
+      `${String(version)} must not count as supporting providers`,
+    );
+  }
 });
 
 test("web search: empty endpoint/apiKey values are rejected like nek rejects them", async () => {
