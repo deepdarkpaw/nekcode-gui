@@ -23,6 +23,9 @@ import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import type { NekModel } from "@zcode/shared/nek-protocol";
 import type { NekConfigRuntime } from "./runtime.js";
 import { validationError } from "./errors.js";
+import { assertWebSearchProbeSupported, resolveWebSearchCapabilities } from "./settingsApi.js";
+import { readSettingsDocument } from "./settingsDocument.js";
+import { settingsPath } from "./paths.js";
 
 export type ProviderSource = { providerId: string; draft?: NekProviderDraft };
 
@@ -148,6 +151,18 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
     },
 
     testWebSearch: async (target, query) => {
+      // 探测由目标上的 nek 自己读配置执行：旧 nek 会把显式 Tavily 静默当成 Exa 并发出
+      // Tavily key。先按目标现有配置与版本做一次前置检查，不合规就在起控制进程之前失败，
+      // 既不发探测请求，也不去解析密钥值。
+      const context = runtime.target(target);
+      const settings = await readSettingsDocument(
+        context.executor,
+        settingsPath(context.layout, "global"),
+      );
+      assertWebSearchProbeSupported(
+        settings.raw,
+        await resolveWebSearchCapabilities(runtime, target),
+      );
       const control = await runtime.control(target);
       return await control.call({ type: "test_web_search", query });
     },

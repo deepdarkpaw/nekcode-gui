@@ -42,6 +42,18 @@ export function isNekWebSearchProviderSupported(version: unknown): boolean {
   return comparison !== null && comparison >= 0;
 }
 
+/**
+ * 目标版本是否已知且可比较。
+ *
+ * "未知版本"（未安装、状态未知、字符串解析不了）只能当作"能力无法证明"，
+ * 不能替代任何默认值：0.4.3 会忽略 `webSearch.provider`、永远走 Exa 是版本事实，
+ * 但未知版本连这条事实都不成立，界面必须让用户显式选择而不是默认成 Exa。
+ */
+export function isNekVersionKnown(version: unknown): version is string {
+  if (typeof version !== "string") return false;
+  return compareSemverVersions(version, NEK_WEB_SEARCH_PROVIDER_MIN_VERSION) !== null;
+}
+
 /** nek 的思考等级（与 `@earendil-works/pi-ai` 的 ModelThinkingLevel 一致）。 */
 export type NekThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 

@@ -309,13 +309,51 @@ describe("ToolsPage", () => {
     expect(machine.settings.value.webSearch).toEqual({ provider: "tavily" });
   });
 
-  it("treats an unknown target version as unsupported instead of assuming Tavily", async () => {
+  it("does not fall back to Exa when the target version is unknown", async () => {
     const machine = env.config.machines.get("local")!;
     machine.info.nek = { state: "unknown", message: "version not detected" };
     render(<ToolsPage />, { wrapper: env.wrapper });
     const provider = await screen.findByLabelText("搜索服务商");
-    expect(provider.textContent).toContain("Exa");
+    // 版本未知不是"旧版本"：既不能说 Tavily，也不能替用户认定 Exa。
+    expect((provider.textContent ?? "").trim()).toBe("");
     expect(screen.getAllByText(/无法确定目标 nek 版本/).length).toBeGreaterThan(0);
+    expect((screen.getByRole("button", { name: "测试搜索" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("refuses to store a key on an unknown-version target until a provider is chosen", async () => {
+    const machine = env.config.machines.get("local")!;
+    machine.info.nek = { state: "unknown", message: "version not detected" };
+    render(<ToolsPage />, { wrapper: env.wrapper });
+    const provider = await screen.findByLabelText("搜索服务商");
+    const key = await screen.findByLabelText("搜索 API Key");
+    fireEvent.change(key, { target: { value: "$EXA_API_KEY" } });
+    await act(async () => {
+      fireEvent.blur(key);
+    });
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((alert) => /无法确定目标 nek 版本/.test(alert.textContent ?? ""))).toBe(
+      true,
+    );
+    // 不能把用户键入的 key 默默记成某个服务商的配置。
+    expect(machine.settings.value.webSearch).toBeUndefined();
+
+    // 显式选 Exa（全版本可用的选择）之后才允许保存。
+    fireEvent.keyDown(provider, { key: "Enter", code: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Exa" }));
+    await waitFor(() => expect(machine.settings.value.webSearch).toEqual({ provider: "exa" }));
+    const keyAfterChoice = await screen.findByLabelText("搜索 API Key");
+    fireEvent.change(keyAfterChoice, { target: { value: "$EXA_API_KEY" } });
+    await act(async () => {
+      fireEvent.blur(keyAfterChoice);
+    });
+    await waitFor(() =>
+      expect(machine.settings.value.webSearch).toEqual({
+        provider: "exa",
+        apiKey: "$EXA_API_KEY",
+      }),
+    );
   });
 
   it("writes +/- deltas and rolls back a switch when saving fails", async () => {

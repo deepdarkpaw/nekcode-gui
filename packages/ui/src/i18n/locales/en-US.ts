@@ -3612,7 +3612,9 @@ const enUS: Record<string, string> = {
   "settings.nek.web.providerUnsupported":
     "nek {version} on this target does not support the Tavily provider. Update it to {minVersion} or newer; older versions ignore this choice and use Exa.",
   "settings.nek.web.providerUnsupportedUnknown":
-    "The target nek version cannot be determined. Tavily requires {minVersion} or newer; check and update the target CLI first.",
+    "The target nek version cannot be determined. Select a search provider explicitly (Exa works on every version) or update/re-detect the target CLI; Tavily requires {minVersion} or newer.",
+  "settings.nek.web.apiKeyHintUnset":
+    "Select a search provider before entering a key; the key is only ever sent to the selected provider.",
   "settings.nek.web.apiKey": "Search API key",
   "settings.nek.web.apiKeyHint":
     "Exa can be used without a key; availability and quota are determined by Exa.",
