@@ -34,6 +34,8 @@ env:
   NEKCODE_UPDATE_REPO: ${{ github.event.repository.name }}
 
 jobs:
+  # 静态门禁：只做版本/类型/规则/结构检查，不跑任何测试或浏览器。
+  # 测试与打包都从它下面拆了出去（见 tests / browser-checks），checks 不再是最慢的那条。
   checks:
     name: Checks
     runs-on: ubuntu-24.04
@@ -68,32 +70,106 @@ jobs:
       - name: Unused code and dependencies
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm gate:knip
-      - name: Vitest suites
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        # 这批测试用 vitest，覆盖远控分片/重传/ack、adapter 出站响应等回归场景；
-        # 此前 CI 只跑了 scripts/ci 与包级 node:test，这些套件一直没进门禁。
-        # workspace 包的 exports 指向 src，套件不依赖构建产物，因此放在构建步骤之后、Release tests 之前。
-        # UI 留白套件依赖 @ alias 与 SSR JSX，单独使用受控配置；任一命令失败即门禁失败。
-        run: |
-          pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnRenderUnits.test.ts
-          pnpm vitest run --dir packages/client/src
-          pnpm vitest run --dir packages/server/src
-          pnpm vitest run --dir packages/desktop/src --exclude '**/ipcSignalFanout.test.ts'
-          pnpm vitest run packages/desktop/scripts/build-metadata.test.ts scripts/rolling-app-version.test.ts
-          pnpm --filter @zcode/ui exec vitest run src
-          node --import tsx --test packages/services/test/*.test.ts
-          node --import tsx --test packages/shared/test/*.test.ts packages/shared/src/node/*.test.ts packages/desktop/src/preload/ipcSignalFanout.test.ts
-      - name: Release tests
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: node --test --test-isolation=none scripts/ci/*.test.mjs
+      # 逐个校验工作流：除 schema 外，action-validator 还会检查 paths/paths-ignore 的
+      # glob 能否匹配到仓库文件，新增工作流的触发过滤不会被写错还静默通过。
       - name: Validate workflow syntax
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: npx --yes @action-validator/cli .github/workflows/desktop.yml
-      - name: Conversation navigator regressions
+        run: |
+          for workflow in .github/workflows/*.yml; do
+            npx --yes @action-validator/cli "$workflow"
+          done
+
+  # 测试车道：原本全部串在 checks 里，一条慢命令就拖住整段门禁。
+  # 拆成互不等待的并行 job（fail-fast: false）：一条车道失败不影响其它车道出结果，
+  # 每条命令与拆分前的串行命令一一对应（见 scripts/ci/desktop-workflow.test.mjs）。
+  tests:
+    name: Tests (${{ matrix.lane.id }})
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - id: ui
+            # 完整 UI 套件，其中已包含原先单跑的
+            # src/v4/conversationTurnRenderUnits.test.ts 与 conversationTurnNavigatorPreview.test.ts；
+            # 下面的校验步骤在 CI 里证明这一点，而不是靠注释假设。
+            commands: |
+              pnpm --filter @zcode/ui exec vitest run src
+          - id: services
+            commands: |
+              node --import tsx --test packages/services/test/*.test.ts
+          - id: workspace
+            # 协议/客户端/服务端/桌面与 shared。ipcSignalFanout 只从 node:test 入口跑，
+            # 因此 --dir packages/desktop/src 仍按原有 --exclude 排除它，保持单一覆盖。
+            commands: |
+              pnpm vitest run --dir packages/client/src
+              pnpm vitest run --dir packages/server/src
+              pnpm vitest run --dir packages/desktop/src --exclude '**/ipcSignalFanout.test.ts'
+              pnpm vitest run packages/desktop/scripts/build-metadata.test.ts scripts/rolling-app-version.test.ts
+              node --import tsx --test packages/shared/test/*.test.ts packages/shared/src/node/*.test.ts packages/desktop/src/preload/ipcSignalFanout.test.ts
+          - id: scripts-ci
+            # scripts/ci 的 freshness 测试会临时改写源文件再恢复；单独一条车道，
+            # 避免与其它并行车道互相干扰。
+            commands: |
+              node --test --test-isolation=none scripts/ci/*.test.mjs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+        id: setup
+      # 用 vitest list 收集到的文件清单断言完整 UI 套件确实包含那两条曾单跑的定点套件：
+      # 有人调整 include/exclude 把覆盖弄丢时，这里立刻失败。
+      - name: Verify full UI suite still owns the pinpoint suites
+        if: ${{ !cancelled() && matrix.lane.id == 'ui' && steps.setup.outcome == 'success' }}
+        run: |
+          listing="$RUNNER_TEMP/ui-vitest-files.txt"
+          pnpm --filter @zcode/ui exec vitest list src | sed 's/ > .*//' | sort -u > "$listing"
+          for suite in \
+            src/v4/conversationTurnNavigatorPreview.test.ts \
+            src/v4/conversationTurnRenderUnits.test.ts; do
+            grep -qxF "$suite" "$listing" ||
+              { echo "::error::full UI suite does not collect $suite"; exit 1; }
+          done
+      - name: Run lane tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: pnpm vitest run --config packages/ui/vitest.config.ts packages/ui/src/v4/conversationTurnNavigatorPreview.test.ts
+        run: ${{ matrix.lane.commands }}
+
+  # 浏览器冒烟：一次构建 + 一次 Playwright 安装后串行执行。
+  # 这些脚本共用端口与浏览器 profile，同一 runner 上并行会互相抢端口，所以串行、不拆矩阵。
+  browser-checks:
+    name: Browser smoke checks
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      # 显式指定浏览器目录：缓存路径与安装目标必须指向同一处，不依赖 $HOME 下的默认值。
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+        id: setup
+      # 缓存只省下载：命中后仍然执行 install（浏览器完整性由 Playwright 自己校验）
+      # 与全部冒烟脚本，不因为 cache-hit 跳过任何验证步骤。
+      - name: Resolve download cache keys
+        id: cache-keys
+        run: node scripts/ci/ci-cache-keys.mjs
+      - name: Restore Playwright browser download cache
+        id: playwright-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ steps.cache-keys.outputs.playwright-key }}
       - name: Install browser for remote form checks
         run: pnpm exec playwright-core install --with-deps chromium
+      - name: Build desktop renderer for local configuration checks
+        run: pnpm --filter @zcode/desktop build:no-runtime-assets
       - name: Remote form browser checks
         run: node scripts/ci/remote-form-smoke.mjs
       - name: Conversation navigator browser checks
@@ -101,21 +177,26 @@ jobs:
       - name: Imported conversation browser checks
         run: node scripts/ci/local-share-context-smoke.mjs
       - name: Local configuration browser checks
-        run: |
-          pnpm --filter @zcode/desktop build:no-runtime-assets
-          node scripts/ci/session-local-errors-smoke.mjs
-          node scripts/ci/local-onboarding-smoke.mjs
+        run: node scripts/ci/session-local-errors-smoke.mjs
+      - name: Local onboarding browser checks
+        run: node scripts/ci/local-onboarding-smoke.mjs
       - name: Model setup without official purchases
         run: node scripts/ci/no-official-purchase-smoke.mjs
       - name: Local preferences without official accounts
         run: node scripts/ci/local-preferences-smoke.mjs
       - name: Startup without official account restoration
-        run: |
-          node scripts/ci/root-startup-smoke.mjs
+        run: node scripts/ci/root-startup-smoke.mjs
       - name: Conversation file browser checks
         run: |
           node scripts/ci/conversation-export-smoke.mjs
           node scripts/ci/conversation-import-smoke.mjs
+      # PR 只恢复不写入：可执行的下载物只从 main/tag 作用域（已合并代码）产生。
+      - name: Save Playwright browser download cache
+        if: ${{ !cancelled() && success() && github.event_name != 'pull_request' && steps.playwright-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ steps.cache-keys.outputs.playwright-key }}
 
   remote-assets:
     name: Bundled Linux remote runtime
@@ -130,10 +211,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
+        id: setup
+      - name: Resolve download cache keys
+        id: cache-keys
+        run: node scripts/ci/ci-cache-keys.mjs
+      # 只缓存 Node 官方归档（.cache/remote-node）。脚本每次使用都重算 SHA256，
+      # 缓存损坏会直接失败可见；生成的 bundled-remote-assets 不缓存，仍由本次源码产出。
+      - name: Restore remote Node archive cache
+        id: remote-node-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .cache/remote-node
+          key: ${{ steps.cache-keys.outputs.remote-node-key }}
       - name: Build remote components from source
         run: pnpm prepare:remote-assets
       - name: Verify native remote runtime
         run: node scripts/ci/remote-assets-smoke.mjs
+      - name: Save remote Node archive cache
+        if: ${{ !cancelled() && success() && github.event_name != 'pull_request' && steps.remote-node-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .cache/remote-node
+          key: ${{ steps.cache-keys.outputs.remote-node-key }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bundled-remote-linux-x64
@@ -179,6 +278,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
+        id: setup
+      # Electron runtime zip 与 electron-builder 工具链都是纯下载物。缓存键含 OS、
+      # runner 架构、目标架构、版本与 Node+pnpm，交叉构建不会串用别的架构的二进制。
+      - name: Resolve download cache keys and directories
+        id: cache-keys
+        run: node scripts/ci/ci-cache-keys.mjs --target-arch "$ZCODE_TARGET_ARCH"
+      - name: Restore Electron runtime download cache
+        id: electron-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-key }}
+      - name: Restore electron-builder toolchain download cache
+        id: electron-builder-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-builder-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-builder-key }}
       - name: Resolve signing configuration
         shell: bash
         env:
@@ -226,6 +343,10 @@ jobs:
       - name: Build workspace and desktop
         run: pnpm build:bootstrap
       - name: Package and verify desktop
+        # ELECTRON_BUILDER_CACHE 指到被缓存的那个目录：缓存路径与打包实际读写的路径
+        # 由同一个 output 提供，不会一处命中、另一处重新下载。
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ steps.cache-keys.outputs.electron-builder-dir }}
         run: pnpm bundle:desktop -- --os "$ZCODE_TARGET_OS" --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
       - name: Packaged startup smoke
         # x64 Windows runner 不能执行 arm64 交叉产物；该目标仍执行原有静态打包校验。
@@ -237,6 +358,19 @@ jobs:
         run: node scripts/acceptance/packaged-smoke.mjs
       - name: Collect installers
         run: node scripts/ci/desktop-release.mjs collect "$ZCODE_TARGET_OS" "$ZCODE_TARGET_ARCH"
+      # 缓存写入放在打包与收集成功之后：失败的 run 不会把半成品写进缓存。
+      - name: Save Electron runtime download cache
+        if: ${{ !cancelled() && success() && github.event_name != 'pull_request' && steps.electron-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-key }}
+      - name: Save electron-builder toolchain download cache
+        if: ${{ !cancelled() && success() && github.event_name != 'pull_request' && steps.electron-builder-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-builder-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-builder-key }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: desktop-production-${{ matrix.target.platform }}-${{ matrix.target.arch }}
@@ -285,6 +419,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
+        id: setup
+      - name: Resolve download cache keys and directories
+        id: cache-keys
+        run: node scripts/ci/ci-cache-keys.mjs --target-arch "$ZCODE_TARGET_ARCH"
+      - name: Restore Electron runtime download cache
+        id: electron-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-key }}
+      - name: Restore electron-builder toolchain download cache
+        id: electron-builder-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-builder-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-builder-key }}
       - name: Resolve signing configuration
         shell: bash
         env:
@@ -324,6 +474,8 @@ jobs:
       - name: Build workspace and desktop
         run: pnpm build:bootstrap
       - name: Package and verify desktop
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ steps.cache-keys.outputs.electron-builder-dir }}
         run: pnpm bundle:desktop -- --os mac --arch "$ZCODE_TARGET_ARCH" --skip-prepare --skip-build
       - name: Packaged startup smoke
         env:
@@ -337,6 +489,18 @@ jobs:
           node scripts/acceptance/packaged-smoke.mjs --app "${apps[0]}"
       - name: Collect installers
         run: node scripts/ci/desktop-release.mjs collect mac "$ZCODE_TARGET_ARCH"
+      - name: Save Electron runtime download cache
+        if: ${{ !cancelled() && success() && github.event_name != 'pull_request' && steps.electron-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-key }}
+      - name: Save electron-builder toolchain download cache
+        if: ${{ !cancelled() && success() && github.event_name != 'pull_request' && steps.electron-builder-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ steps.cache-keys.outputs.electron-builder-dir }}
+          key: ${{ steps.cache-keys.outputs.electron-builder-key }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: desktop-production-mac-${{ matrix.target.arch }}
@@ -356,9 +520,11 @@ jobs:
 
   release:
     name: Release
-    # macOS 打包默认跳过；release 仍要等它（needs），但允许 skipped。
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.build.result == 'success' && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') }}
-    needs: [checks, build, build-macos]
+    # 发布必须等全部必需 lane 成功：静态门禁、四条测试车道、浏览器冒烟、两个平台打包。
+    # macOS 打包默认跳过，release 仍要等它（needs），但允许 skipped；
+    # 任一必需 job 失败或取消都满足不了这里的 success 判定，绝不 publish。
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.tests.result == 'success' && needs.browser-checks.result == 'success' && needs.build.result == 'success' && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') }}
+    needs: [checks, tests, browser-checks, build, build-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

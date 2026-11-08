@@ -1,18 +1,23 @@
-# 使用一个基础镜像，例如 Ubuntu
+# 仅测试用的 SSH 远端：Ubuntu 22.04 + openssh-server。
+# root/dev 弱口令只为本地与 CI 验证远程链路，镜像不发布、不可用于任何真实主机。
 FROM ubuntu:22.04
 
-# 安装 openssh-server
-RUN apt-get update && apt-get install -y openssh-server
+# 稳定的依赖层单独成层并合并成一次 apt 调用：系统包没变时 BuildKit 直接复用，
+# 后续口令/用户配置变化不会让 apt 重新执行。--no-install-recommends 控制体积，
+# 装完清掉 apt 索引，避免把包列表写进镜像。
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server \
+  && rm -rf /var/lib/apt/lists/*
 
-# 创建 ssh 目录
-RUN mkdir /var/run/sshd
+# sshd 运行目录（Ubuntu 镜像里 /run 是空的，缺它 sshd 直接退出）。
+RUN mkdir -p /var/run/sshd
 
-# 设置 root 密码并允许 root 密码登录（仅用于测试）
-RUN echo 'root:root' | chpasswd
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
+# 允许 root 口令登录（仅测试）。CI 只把这些端口绑到 127.0.0.1，不暴露到公网。
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+  && printf '%s\n' 'PasswordAuthentication yes' >> /etc/ssh/sshd_config \
+  && echo 'root:root' | chpasswd
 
-# 创建 dev 用户
+# 普通用户 dev/dev，用来覆盖非 root 登录路径。
 RUN useradd -m -s /bin/bash dev && echo 'dev:dev' | chpasswd
 
 # 不清理环境变量，防止 ssh 登录时报错

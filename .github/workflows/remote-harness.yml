@@ -1,0 +1,85 @@
+name: Remote harness image
+
+# 这个工作流只服务 harness/remote 的测试 SSH 镜像，和桌面打包/发布完全解耦：
+# 桌面链路里没有任何 docker build，镜像也不参与发布资产。
+on:
+  pull_request:
+    paths:
+      - harness/remote/**
+      - .github/workflows/remote-harness.yml
+  push:
+    branches: [main]
+    paths:
+      - harness/remote/**
+      - .github/workflows/remote-harness.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-harness-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # cache-from 与 cache-to 都引用这一个 scope：名字只在这里定义，两侧不可能写歪。
+  NEKCODE_REMOTE_HARNESS_CACHE_SCOPE: remote-harness-ubuntu-22-04
+  NEKCODE_REMOTE_HARNESS_IMAGE: nekcode-remote-harness:ci
+
+jobs:
+  image:
+    name: Build sshd harness image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # BuildKit builder：层缓存走 GitHub Actions cache（type=gha），不自建缓存协议。
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build image with GitHub Actions layer cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: harness/remote
+          file: harness/remote/Dockerfile
+          # 只把产物 load 进本地镜像库给下面的健康验证用：测试镜像从不 push、不发布。
+          load: true
+          push: false
+          tags: ${{ env.NEKCODE_REMOTE_HARNESS_IMAGE }}
+          # 缓存命中只省 apt 下载与层构建；缓存缺失/损坏时照常冷构建，失败会如实让 job 变红。
+          cache-from: type=gha,scope=${{ env.NEKCODE_REMOTE_HARNESS_CACHE_SCOPE }}
+          cache-to: type=gha,scope=${{ env.NEKCODE_REMOTE_HARNESS_CACHE_SCOPE }},mode=max
+      # 真正跑起来验证：容器里的 sshd 能用一次性密钥登录，且镜像本身没夹带任何 authorized_keys。
+      - name: Verify container sshd end to end
+        run: |
+          set -euo pipefail
+          name=nekcode-remote-harness-ci
+          key="$RUNNER_TEMP/harness_id_ed25519"
+          banner="$RUNNER_TEMP/harness_whoami.txt"
+          cleanup() {
+            docker rm -f "$name" >/dev/null 2>&1 || true
+            rm -f "$key" "$key.pub" "$banner"
+          }
+          trap cleanup EXIT
+          # 只绑 127.0.0.1，随机宿主端口：镜像里的弱口令不会暴露到可达地址。
+          docker run -d --name "$name" -p 127.0.0.1:0:22 "$NEKCODE_REMOTE_HARNESS_IMAGE"
+          # 镜像不得自带 authorized_keys（不把任何测试凭据固化进镜像层）。
+          docker exec "$name" test ! -e /root/.ssh/authorized_keys
+          ssh-keygen -t ed25519 -N '' -q -f "$key"
+          docker exec -i "$name" sh -c \
+            'mkdir -p /root/.ssh && chmod 700 /root/.ssh && cat >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' \
+            < "$key.pub"
+          port=$(docker port "$name" 22/tcp | awk -F: '{print $NF}')
+          # 等 sshd 真正能登录：最多 30 秒，超时按失败处理而不是静默跳过。
+          for attempt in $(seq 1 30); do
+            if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+              -i "$key" -p "$port" root@127.0.0.1 'id -un' > "$banner" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          test "$(cat "$banner")" = root
+          # 口令登录策略仍按镜像约定存在（root/dev 弱口令只用于测试）。
+          docker exec "$name" sh -c \
+            'grep -qx "PermitRootLogin yes" /etc/ssh/sshd_config && grep -qx "PasswordAuthentication yes" /etc/ssh/sshd_config'
+          echo "::notice::harness sshd 验证通过：root 密钥登录成功，口令登录策略已配置，容器已清理"

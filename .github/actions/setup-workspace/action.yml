@@ -21,7 +21,10 @@ runs:
         cache: ${{ inputs.install-dependencies == 'true' && 'pnpm' || '' }}
         cache-dependency-path: pnpm-lock.yaml
         package-manager-cache: false
+    # 缓存（上面的 setup-node pnpm store 缓存）只省下载：安装步骤在命中缓存时同样执行。
+    # --prefer-offline 让 pnpm 优先用 store 里已校验的包，只有缺失时才访问 registry；
+    # --frozen-lockfile 保证安装结果与 pnpm-lock.yaml 完全一致，锁文件不同步直接失败。
     - name: Install dependencies
       if: inputs.install-dependencies == 'true'
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: pnpm install --frozen-lockfile --prefer-offline

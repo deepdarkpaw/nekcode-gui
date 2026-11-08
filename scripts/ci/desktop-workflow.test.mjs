@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
@@ -9,7 +9,9 @@ import { desktopProductIdentities } from "../../packages/desktop/scripts/desktop
 
 // 直接解析真实工作流（公开入口），断言 job 条件与 needs 图语义，
 // 而不是复制一份手写函数；工作流文件是唯一事实来源。
-const workflowPath = resolve(import.meta.dirname, "../../.github/workflows/desktop.yml");
+const root = resolve(import.meta.dirname, "../..");
+const workflowPath = resolve(root, ".github/workflows/desktop.yml");
+const setupActionPath = resolve(root, ".github/actions/setup-workspace/action.yml");
 
 async function loadJobs() {
   const document = parse(await readFile(workflowPath, "utf8"));
@@ -23,14 +25,30 @@ async function loadWorkflow() {
 const uses = (job, prefix) =>
   job.steps.filter((step) => String(step.uses ?? "").startsWith(prefix));
 
+const runSteps = (job) => job.steps.filter((step) => typeof step.run === "string");
+
+/** job 真正执行的命令：step.run 加上矩阵车道携带的命令块。 */
+const runCommands = (job) => [
+  ...runSteps(job).map((step) => String(step.run)),
+  ...(job.strategy?.matrix?.lane ?? []).map((lane) => String(lane.commands ?? "")),
+];
+
+/** 覆盖集合：把指定 job 的全部命令并成一段文本。 */
+const allCommands = (jobs, ids) => ids.flatMap((id) => runCommands(jobs[id])).join("\n");
+
+/** 整个工作流的命令文本（含并行车道）。 */
+const allRuns = (jobs) => Object.values(jobs).flatMap(runCommands).join("\n");
+
 test("desktop workflow is valid YAML with the expected jobs", async () => {
   const jobs = await loadJobs();
   assert.deepEqual(Object.keys(jobs).sort(), [
+    "browser-checks",
     "build",
     "build-macos",
     "checks",
     "release",
     "remote-assets",
+    "tests",
   ]);
 });
 
@@ -86,16 +104,33 @@ test("build consumes real assets, not checks success, and never silently falls b
 
 test("parallel packaging preserves coverage commands, full targets and current-run artifact ownership", async () => {
   const jobs = await loadJobs();
-  const commands = jobs.checks.steps.map((step) => step.run ?? "").join("\n");
+  // 每条原命令在并行结构里只能平移、不能删：checks 负责静态门禁，tests 车道负责测试，
+  // browser-checks 负责浏览器冒烟。
+  const commands = await allCommands(jobs, ["checks", "tests", "browser-checks"]);
   for (const command of [
     "pnpm typecheck",
     "pnpm gate:lint",
     "pnpm gate:format",
     "pnpm gate:knip",
     "pnpm architecture:check",
-    "pnpm vitest run",
+    "pnpm vitest run --dir packages/client/src",
+    "pnpm vitest run --dir packages/server/src",
+    "pnpm vitest run --dir packages/desktop/src --exclude '**/ipcSignalFanout.test.ts'",
+    "pnpm vitest run packages/desktop/scripts/build-metadata.test.ts scripts/rolling-app-version.test.ts",
+    "pnpm --filter @zcode/ui exec vitest run src",
+    "node --import tsx --test packages/services/test/*.test.ts",
+    "node --import tsx --test packages/shared/test/*.test.ts packages/shared/src/node/*.test.ts packages/desktop/src/preload/ipcSignalFanout.test.ts",
     "node --test --test-isolation=none scripts/ci/*.test.mjs",
     "node scripts/ci/remote-form-smoke.mjs",
+    "node scripts/ci/conversation-navigator-smoke.mjs",
+    "node scripts/ci/local-share-context-smoke.mjs",
+    "node scripts/ci/session-local-errors-smoke.mjs",
+    "node scripts/ci/local-onboarding-smoke.mjs",
+    "node scripts/ci/no-official-purchase-smoke.mjs",
+    "node scripts/ci/local-preferences-smoke.mjs",
+    "node scripts/ci/root-startup-smoke.mjs",
+    "node scripts/ci/conversation-export-smoke.mjs",
+    "node scripts/ci/conversation-import-smoke.mjs",
   ]) {
     assert.ok(commands.includes(command), `missing coverage command: ${command}`);
   }
@@ -106,12 +141,12 @@ test("parallel packaging preserves coverage commands, full targets and current-r
       assert.equal(download.with?.["run-id"], undefined);
       assert.equal(download.with?.repository, undefined);
     }
-    const commands = job.steps.map((step) => step.run ?? "");
-    const verify = commands.indexOf("node scripts/bundle-remote-assets.mjs verify");
-    const prepare = commands.indexOf("pnpm prepare:desktop-runtime");
-    const build = commands.indexOf("pnpm build:bootstrap");
+    const jobCommands = job.steps.map((step) => step.run ?? "");
+    const verify = jobCommands.indexOf("node scripts/bundle-remote-assets.mjs verify");
+    const prepare = jobCommands.indexOf("pnpm prepare:desktop-runtime");
+    const build = jobCommands.indexOf("pnpm build:bootstrap");
     assert.ok(verify >= 0 && prepare > verify && build > prepare);
-    assert.ok(commands.some((command) => command.includes("--skip-prepare --skip-build")));
+    assert.ok(jobCommands.some((command) => command.includes("--skip-prepare --skip-build")));
   }
 });
 
@@ -303,12 +338,13 @@ test("signing runs only when certificate secrets exist and says so when it canno
 test("release still requires checks success before publishing", async () => {
   const jobs = await loadJobs();
   const release = jobs.release;
-  // needs 仍列出全部打包 job；macOS 默认跳过，所以 if 条件显式允许 build-macos 为 skipped。
-  assert.deepEqual(release.needs, ["checks", "build", "build-macos"]);
+  // needs 列出全部必需 lane：静态门禁、四条测试车道（单个 matrix job）、浏览器冒烟、打包 job。
+  // macOS 默认跳过，所以 if 条件显式允许 build-macos 为 skipped。
+  assert.deepEqual(release.needs, ["checks", "tests", "browser-checks", "build", "build-macos"]);
   assert.match(release.if, /github\.event_name == 'push'/);
   assert.match(release.if, /github\.ref_type == 'tag'/);
-  assert.match(release.if, /needs\.checks\.result == 'success'/);
-  assert.match(release.if, /needs\.build\.result == 'success'/);
+  for (const id of ["checks", "tests", "browser-checks", "build"])
+    assert.match(release.if, new RegExp(`needs\\.${id}\\.result == 'success'`), id);
   assert.match(release.if, /needs\.build-macos\.result == 'skipped'/);
   assert.equal(release["continue-on-error"], undefined);
 });
@@ -326,6 +362,8 @@ test("release condition allows skipped macOS but never bypasses failed or cancel
         needs: Object.fromEntries(
           Object.entries({
             checks: "success",
+            tests: "success",
+            "browser-checks": "success",
             build: "success",
             "build-macos": "skipped",
             ...results,
@@ -337,9 +375,10 @@ test("release condition allows skipped macOS but never bypasses failed or cancel
     );
   assert.equal(evaluate(), true);
   assert.equal(evaluate({ "build-macos": "success" }), true);
+  // 新增的测试/浏览器 lane 与原有门禁同等重要：任何失败或取消都不能 publish。
   for (const result of ["failure", "cancelled", "skipped"]) {
-    assert.equal(evaluate({ checks: result }), false);
-    assert.equal(evaluate({ build: result }), false);
+    for (const id of ["checks", "tests", "browser-checks", "build"])
+      assert.equal(evaluate({ [id]: result }), false, `${id} ${result}`);
   }
   assert.equal(evaluate({ "build-macos": "failure" }), false);
   assert.equal(evaluate({ "build-macos": "cancelled" }), false);
@@ -356,4 +395,294 @@ test("macOS packaging is opt-in so a Windows-only release does not pay for it", 
   assert.match(jobs["build-macos"].if, /inputs\.build_macos/);
   const workflow = await loadWorkflow();
   assert.equal(workflow.on.workflow_dispatch.inputs.build_macos.default, false);
+});
+
+// ===== 并行化与缓存接线（checks / tests / browser-checks 与下载缓存） =====
+test("parallel lanes have no serial dependency on each other", async () => {
+  const jobs = await loadJobs();
+  // 静态门禁、测试车道、浏览器冒烟、远端资产都只依赖 checkout + setup-workspace，
+  // 谁也不等谁：任一条慢 lane 不再拖住其它 job。
+  for (const id of ["checks", "tests", "browser-checks", "remote-assets"])
+    assert.equal(jobs[id].needs, undefined, `${id} must not wait for another job`);
+  // 打包仍只等真实资产产出（与拆分前一致）。
+  for (const id of ["build", "build-macos"]) assert.deepEqual(jobs[id].needs, "remote-assets");
+  // 发布等全部必需 lane。
+  assert.deepEqual(jobs.release.needs, [
+    "checks",
+    "tests",
+    "browser-checks",
+    "build",
+    "build-macos",
+  ]);
+});
+
+test("tests job splits into four independent lanes that all report results", async () => {
+  const { tests } = await loadJobs();
+  // fail-fast: false 才能在一次 run 里看到所有车道的真实结果，而不是第一条失败就取消其它。
+  assert.equal(tests.strategy["fail-fast"], false);
+  const lanes = tests.strategy.matrix.lane;
+  assert.deepEqual(
+    lanes.map((lane) => lane.id),
+    ["ui", "services", "workspace", "scripts-ci"],
+  );
+  for (const lane of lanes) {
+    assert.ok(String(lane.commands ?? "").trim().length > 0, `lane ${lane.id} has no commands`);
+    assert.doesNotMatch(String(lane.commands), /continue-on-error|\|\|\s*true/u);
+  }
+  // 车道命令通过单个 step 执行，命令文本住在 matrix 里：不允许每条 lane 复制一份 step。
+  const laneSteps = runSteps(tests).filter((step) => String(step.run).includes("matrix.lane"));
+  assert.deepEqual(
+    laneSteps.map((step) => String(step.run).trim()),
+    ["${{ matrix.lane.commands }}"],
+  );
+  // 每个 step 仍然只在 setup 成功、未取消时执行：不引入 always()/success() 改写语义。
+  for (const step of runSteps(tests)) assert.equal(step["continue-on-error"], undefined, step.name);
+});
+
+test("checks keeps only static gates and no longer runs suites or browsers", async () => {
+  const { checks } = await loadJobs();
+  const commands = runSteps(checks)
+    .map((step) => String(step.run))
+    .join("\n");
+  for (const forbidden of [
+    "vitest",
+    "node --test",
+    "node --import tsx --test",
+    "playwright",
+    "-smoke.mjs",
+    "build:no-runtime-assets",
+  ])
+    assert.ok(!commands.includes(forbidden), `checks must not run ${forbidden}`);
+  // 静态门禁本身一条都不能少。
+  for (const command of [
+    "node scripts/ci/desktop-release.mjs check-version",
+    "pnpm typecheck",
+    "pnpm gate:lint",
+    "pnpm gate:format",
+    "pnpm architecture:check",
+    "pnpm gate:knip",
+    "npx --yes @action-validator/cli",
+  ])
+    assert.ok(commands.includes(command), `checks missing ${command}`);
+});
+
+test("every original suite is still run exactly once after the split", async () => {
+  const jobs = await loadJobs();
+  const commands = allRuns(jobs);
+  const count = (needle) => commands.split(needle).length - 1;
+  for (const suite of [
+    "pnpm vitest run --dir packages/client/src",
+    "pnpm vitest run --dir packages/server/src",
+    "pnpm vitest run --dir packages/desktop/src --exclude '**/ipcSignalFanout.test.ts'",
+    "pnpm vitest run packages/desktop/scripts/build-metadata.test.ts scripts/rolling-app-version.test.ts",
+    "pnpm --filter @zcode/ui exec vitest run src",
+    "node --import tsx --test packages/services/test/*.test.ts",
+    "node --test --test-isolation=none scripts/ci/*.test.mjs",
+  ]) {
+    assert.equal(count(suite), 1, `${suite} must run exactly once`);
+  }
+  // 曾经单跑、实际被完整 UI 套件覆盖的两条命令已收敛，不再重复跑一遍回归。
+  // （覆盖校验 step 里出现的文件名不算命令，这里只看 vitest 的实际调用。）
+  assert.doesNotMatch(commands, /vitest run --config packages\/ui\/vitest\.config\.ts/u);
+});
+
+test("full UI suite provably owns the collapsed pinpoint suites", async () => {
+  const { tests } = await loadJobs();
+  const uiLane = tests.strategy.matrix.lane.find((lane) => lane.id === "ui");
+  assert.equal(String(uiLane.commands).trim(), "pnpm --filter @zcode/ui exec vitest run src");
+  // CI 里有一条显式校验：用 vitest list 收集真实文件清单，断言两条定点套件都在其中。
+  const proof = runSteps(tests).find((step) => String(step.name).includes("pinpoint suites"));
+  assert.ok(proof, "missing UI suite coverage proof step");
+  assert.equal(
+    proof.if,
+    "${{ !cancelled() && matrix.lane.id == 'ui' && steps.setup.outcome == 'success' }}",
+  );
+  for (const suite of [
+    "src/v4/conversationTurnNavigatorPreview.test.ts",
+    "src/v4/conversationTurnRenderUnits.test.ts",
+  ])
+    assert.ok(String(proof.run).includes(suite), `proof must check ${suite}`);
+  assert.match(String(proof.run), /vitest list src/u);
+  assert.match(String(proof.run), /exit 1/u);
+  // 静态侧同样成立：两条套件确实在 packages/ui/src 下，且 UI vitest 配置没有把它们排除。
+  const uiSources = await readdir(resolve(root, "packages/ui/src/v4"));
+  for (const file of [
+    "conversationTurnNavigatorPreview.test.ts",
+    "conversationTurnRenderUnits.test.ts",
+  ])
+    assert.ok(uiSources.includes(file), `${file} must exist in packages/ui/src/v4`);
+  const uiConfig = await readFile(resolve(root, "packages/ui/vitest.config.ts"), "utf8");
+  assert.doesNotMatch(uiConfig, /\b(exclude|include)\s*:/u);
+});
+
+test("browser smokes stay serial in one job with a single build", async () => {
+  const { "browser-checks": browser } = await loadJobs();
+  assert.equal(browser.needs, undefined);
+  assert.equal(browser.strategy, undefined, "browser smokes must not be split into a matrix");
+  const commands = runSteps(browser)
+    .map((step) => String(step.run))
+    .join("\n");
+  // 只在冒烟前构建一次（原先把 build 夹在两条冒烟之间，构建成本被重复摊在串行链上）。
+  assert.equal(commands.split("build:no-runtime-assets").length - 1, 1);
+  for (const smoke of [
+    "remote-form-smoke.mjs",
+    "conversation-navigator-smoke.mjs",
+    "local-share-context-smoke.mjs",
+    "session-local-errors-smoke.mjs",
+    "local-onboarding-smoke.mjs",
+    "no-official-purchase-smoke.mjs",
+    "local-preferences-smoke.mjs",
+    "root-startup-smoke.mjs",
+    "conversation-export-smoke.mjs",
+    "conversation-import-smoke.mjs",
+  ])
+    assert.equal(commands.split(smoke).length - 1, 1, `${smoke} must run once`);
+  // 构建必须在全部冒烟之前，Playwright 安装在构建之前。
+  const runs = runSteps(browser).map((step) => String(step.run));
+  const install = runs.findIndex((command) => command.includes("playwright-core install"));
+  const build = runs.findIndex((command) => command.includes("build:no-runtime-assets"));
+  const firstSmoke = runs.findIndex((command) => command.includes("-smoke.mjs"));
+  assert.ok(install >= 0 && build > install && firstSmoke > build);
+});
+
+test("no job hides a regression behind continue-on-error or success masking", async () => {
+  const jobs = await loadJobs();
+  for (const [id, job] of Object.entries(jobs)) {
+    assert.equal(job["continue-on-error"], undefined, `${id} job must not continue on error`);
+    for (const step of runSteps(job)) {
+      assert.equal(step["continue-on-error"], undefined, `${id}: ${step.name}`);
+      assert.doesNotMatch(String(step.run), /\|\|\s*true\s*$|;\s*exit 0\b/u, `${id}: ${step.name}`);
+    }
+  }
+});
+
+test("every job that runs tests or browsers installs dependencies first", async () => {
+  const jobs = await loadJobs();
+  for (const id of ["checks", "tests", "browser-checks", "remote-assets", "release"]) {
+    const setup = jobs[id].steps.findIndex((step) =>
+      String(step.uses ?? "").includes("./.github/actions/setup-workspace"),
+    );
+    assert.ok(setup >= 0, `${id} must setup the workspace`);
+    // setup-workspace 默认安装依赖：缓存命中也不会退回“只恢复不安装”。
+    assert.equal(jobs[id].steps[setup].with?.["install-dependencies"], undefined);
+  }
+});
+
+test("workflow restores every download cache before use and saves it after", async () => {
+  const jobs = await loadJobs();
+  const expectations = [
+    { job: "browser-checks", name: "playwright", consumer: "playwright-core install" },
+    { job: "remote-assets", name: "remote-node", consumer: "pnpm prepare:remote-assets" },
+    { job: "build", name: "electron", consumer: "pnpm bundle:desktop" },
+    { job: "build", name: "electron-builder", consumer: "pnpm bundle:desktop" },
+    { job: "build-macos", name: "electron", consumer: "pnpm bundle:desktop" },
+    { job: "build-macos", name: "electron-builder", consumer: "pnpm bundle:desktop" },
+  ];
+  for (const { job: id, name, consumer } of expectations) {
+    const job = jobs[id];
+    const restores = job.steps.filter(
+      (step) =>
+        step.uses === "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" &&
+        step.with?.key === `\${{ steps.cache-keys.outputs.${name}-key }}`,
+    );
+    const saves = job.steps.filter(
+      (step) =>
+        step.uses === "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" &&
+        step.with?.key === `\${{ steps.cache-keys.outputs.${name}-key }}`,
+    );
+    assert.equal(restores.length, 1, `${id} must restore ${name} once`);
+    assert.equal(saves.length, 1, `${id} must save ${name} once`);
+    // 路径必须一致：restore 与 save 指向同一目录，否则缓存永远不命中。
+    assert.equal(saves[0].with.path, restores[0].with.path, `${id} ${name} path mismatch`);
+    // 顺序：恢复 -> 使用缓存的步骤 -> 写入（失败不写缓存，且绝不会 cache-hit 就跳过使用步骤）。
+    const index = (predicate) => job.steps.findIndex(predicate);
+    const restoreAt = index((step) => step === restores[0]);
+    const saveAt = index((step) => step === saves[0]);
+    const useAt = index((step) => String(step.run ?? "").includes(consumer));
+    assert.ok(
+      restoreAt < useAt && useAt < saveAt,
+      `${id} ${name} order ${restoreAt}/${useAt}/${saveAt}`,
+    );
+    // PR 只恢复不写入；命中主键时也不必重复上传。
+    const saveIf = String(saves[0].if);
+    assert.match(saveIf, /github\.event_name != 'pull_request'/u);
+    assert.match(saveIf, /cache-hit != 'true'/u);
+    assert.match(saveIf, /!cancelled\(\)/u);
+    assert.match(saveIf, /success\(\)/u);
+    // 缓存命中同样执行安装与校验：除了 cache/save 自身（命中主键就不必再上传），
+    // 没有任何 step 用 cache-hit 作为跳过条件。
+    for (const step of job.steps) {
+      if (String(step.uses ?? "").startsWith("actions/cache/save")) continue;
+      assert.doesNotMatch(String(step.if ?? ""), /cache-hit/u, `${id}: ${step.name}`);
+    }
+  }
+});
+
+test("cached directories are download inputs only, never build output or credentials", async () => {
+  const jobs = await loadJobs();
+  const forbidden = [
+    /node_modules/u,
+    /(^|\/)dist(\/|$)/u,
+    /bundled-/u,
+    /release-assets/u,
+    /\.ssh/u,
+    /\.p12/u,
+    /\.pfx/u,
+    /CSC_/u,
+  ];
+  const cachedPaths = Object.values(jobs)
+    .flatMap((job) => job.steps)
+    .filter((step) => String(step.uses ?? "").startsWith("actions/cache/"))
+    .map((step) => String(step.with?.path ?? ""));
+  assert.ok(cachedPaths.length >= 6, "expected the download caches to be wired");
+  for (const path of cachedPaths)
+    for (const pattern of forbidden)
+      assert.doesNotMatch(path, pattern, `cache path must not hold ${pattern}: ${path}`);
+  // Playwright 目录由 PLAYWRIGHT_BROWSERS_PATH 显式指定，缓存路径与安装目标同源。
+  assert.equal(
+    jobs["browser-checks"].env.PLAYWRIGHT_BROWSERS_PATH,
+    "${{ github.workspace }}/.cache/ms-playwright",
+  );
+  // electron-builder 打包时读写的目录就是被缓存的目录（同一个 helper output）。
+  for (const id of ["build", "build-macos"]) {
+    const pack = jobs[id].steps.find((step) =>
+      String(step.run ?? "").includes("pnpm bundle:desktop"),
+    );
+    assert.equal(
+      pack.env.ELECTRON_BUILDER_CACHE,
+      "${{ steps.cache-keys.outputs.electron-builder-dir }}",
+    );
+  }
+});
+
+test("dependency install still runs on a store cache hit", async () => {
+  const action = parse(await readFile(setupActionPath, "utf8"));
+  const install = action.runs.steps.find((step) => step.name === "Install dependencies");
+  assert.ok(install, "setup-workspace must install dependencies");
+  assert.equal(install.run, "pnpm install --frozen-lockfile --prefer-offline");
+  // 安装步骤只由输入控制，不看缓存命中状态。
+  assert.equal(install.if, "inputs.install-dependencies == 'true'");
+  assert.equal(install["continue-on-error"], undefined);
+  const setupNode = action.runs.steps.find((step) =>
+    String(step.uses).startsWith("actions/setup-node"),
+  );
+  // pnpm store 缓存仍由 setup-node 自己管理 lockfile 指纹。
+  assert.equal(
+    setupNode.with.cache,
+    "${{ inputs.install-dependencies == 'true' && 'pnpm' || '' }}",
+  );
+  assert.equal(setupNode.with["cache-dependency-path"], "pnpm-lock.yaml");
+  // setup-node/pnpm 仍钉在完整 SHA 上。
+  for (const step of action.runs.steps)
+    if (step.uses) assert.match(step.uses, /@[0-9a-f]{40}$/u, step.uses);
+});
+
+test("every third-party action in the desktop workflow is pinned to a commit", async () => {
+  const jobs = await loadJobs();
+  for (const [id, job] of Object.entries(jobs))
+    for (const step of job.steps) {
+      const uses = String(step.uses ?? "");
+      if (!uses || uses.startsWith("./")) continue;
+      assert.match(uses, /@[0-9a-f]{40}$/u, `${id}: ${uses}`);
+    }
 });
