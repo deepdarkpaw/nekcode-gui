@@ -1,5 +1,6 @@
 import { recordChatError } from "@/lib/diagnostics/chatErrors.js";
 import type { LocalTtftContext } from "@zcode/shared";
+import { isNekPendingInputCancelled } from "@zcode/shared/nek-protocol";
 /* oxlint-disable eslint(max-lines) -- composer 集中收口输入区 wiring（附件/草稿/历史/mention），拆分会打散收口粒度。 */
 import { getLocalTtftObserver } from "@/v4/diagnostics/localTtftObserver.js";
 /**
@@ -58,6 +59,7 @@ import {
   SquareIcon,
   XIcon,
 } from "lucide-react";
+import { toast } from "@/components/ui/toast.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { ChatErrorBanner, shouldSuppressChatErrorBanner } from "@/ChatErrorBanner.js";
 import {
@@ -134,6 +136,10 @@ import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
+import {
+  isCompactingInputRouting,
+  resolveComposerSendLabelId,
+} from "@/v4/composer/compactionSendState.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import {
   createLargePasteBlock,
@@ -1100,6 +1106,8 @@ function ConversationComposerImpl({
   // V4 重构时把 guide 当成“不可提交”状态，导致按钮和 Enter 同时失效；
   // guide 是 CLI 已授权的 busy 输入路由，是否最终 steer 或回退 queue 由命令层裁决。
   const routingAllowsSend = draftMode || (snapshot !== null && mode !== "reject");
+  // 压缩中提交的输入由 GUI 暂存：发送 Promise 会一直等到压缩收口，界面必须说明为什么还在转圈。
+  const awaitingCompactionSend = pending && isCompactingInputRouting(snapshot?.inputRouting);
   const attachmentsReady = !attachmentsApi.hasUnreadyAttachments;
   const canSend =
     !disabled &&
@@ -1335,6 +1343,10 @@ function ConversationComposerImpl({
         rollbackPromptHistory();
         restoreSubmittedDraft();
         if (localTtft) getLocalTtftObserver()?.exclude(localTtft, "failed");
+        // 压缩中暂存的输入被撤回（取消/断线/关闭/超时）：草稿已经回到输入框，明确告知原因。
+        if (isNekPendingInputCancelled(error)) {
+          toast(intl.formatMessage({ id: "chat.composer.deferredSendCancelled" }));
+        }
         // 发送失败草稿保留在输入框（不清空），仅记录原因。
         logger.warn(`[v4-composer] 发送失败: ${String(error)}`);
         // ACK 侧失败已由 SessionPane 落定；能走到这里的是 composer 自身链路异常。
@@ -1358,6 +1370,7 @@ function ConversationComposerImpl({
       removeCodeCommentContext,
       removeConversationSelectionReference,
       sessionId,
+      intl,
       commitPasteBlocks,
       snapshotDraftOfEditor,
       updateText,
@@ -1514,7 +1527,7 @@ function ConversationComposerImpl({
     }),
   });
   const sendTooltipTitle = intl.formatMessage({
-    id: mode === "enqueue" ? "chat.queue.enqueue" : "chat.send",
+    id: resolveComposerSendLabelId(snapshot?.inputRouting),
   });
   const modifierTooltip = resolveFollowupModifierTooltip({
     enabled: modifiedEnterReversesDelivery,
@@ -2130,6 +2143,16 @@ function ConversationComposerImpl({
           <p className="flex items-start gap-2 p-3 text-ui-base text-warning">
             <InfoIcon className="mt-0.5 size-4 shrink-0" />
             <span>{attachmentsApi.attachmentError}</span>
+          </p>
+        ) : null}
+        {awaitingCompactionSend ? (
+          // 不是错误也不是 CLI 队列：这次发送还在 GUI 手里，等压缩收口后自动提交。
+          <p
+            data-testid="v4-composer-compaction-send-pending"
+            className="flex items-start gap-2 p-3 text-ui-base text-foreground-subtle"
+          >
+            <Spinner className="mt-0.5 size-4 shrink-0" />
+            <span>{intl.formatMessage({ id: "chat.composer.compactionSendPending" })}</span>
           </p>
         ) : null}
       </div>

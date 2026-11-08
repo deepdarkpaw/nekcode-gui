@@ -2808,6 +2808,11 @@ const enUS: Record<string, string> = {
   "chat.attachments.upload.runtimeRestarted":
     "The runtime restarted and invalidated this attachment",
   "chat.composer.draftRuntimeRebuilding": "Rebuilding session, please wait",
+  "chat.composer.sendAfterCompaction": "Send after compaction",
+  "chat.composer.compactionSendPending":
+    "Waiting for compaction to finish; the message sends automatically afterwards",
+  "chat.composer.deferredSendCancelled":
+    "Compaction did not finish, so the message was not sent. Your draft is kept — you can retry.",
   "chat.attachments.upload.remoteMaterializationRequired":
     "This remote attachment could not be staged, so its local path was not sent.",
   "chat.attachments.upload.retry": "Retry upload",
