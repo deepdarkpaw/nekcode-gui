@@ -103,6 +103,16 @@ spawn branch is deleted in favor of resume's authoritative lock decision.
   failure, and the background `agent_settled` refresh catches it, logs, and keeps the live
   projection. Late responses never call `bindPath`, overwrite `state` or settle the queue
   for a closed/replaced record.
+- **CI-6 — Compaction end is terminal:** every `compaction_end` releases the compaction
+  reservation/state, including `willRetry=true`. That flag means the original model
+  request will resume after successful overflow compaction; it does not extend the
+  compaction lease. Deferred inputs drain through the existing gate immediately, and
+  inputs during resumed thinking go to CLI `steer` / `follow_up` without waiting for
+  `agent_settled`. A subsequent `compaction_start` acquires a new lease and pauses the
+  remaining FIFO as before. The renderer clears its compaction indicator and marks
+  usage stale on the same end event; the primary run can remain running independently.
+  Cancellation/error reporting, attachment ownership, bounded waiting, and snapshot
+  epoch fencing are unchanged. No second queue, timer fallback, or CLI change is added.
 - Attachments are untouched until the real ACK: `adoptSentAttachments` and SSH staging
   cleanup still run only after the send resolves, and model/thinking/mode pre-submits plus
   attachment resolution happen inside the gate, never during compaction.

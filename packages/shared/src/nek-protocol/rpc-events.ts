@@ -101,6 +101,7 @@ export type NekAgentSessionEvent =
       reason: "manual" | "threshold" | "overflow";
       result?: unknown;
       aborted: boolean;
+      /** The original model request will retry after compaction; compaction itself has ended. */
       willRetry: boolean;
       errorMessage?: string;
     }

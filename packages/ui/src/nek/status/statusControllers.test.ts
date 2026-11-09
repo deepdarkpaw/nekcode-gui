@@ -125,6 +125,32 @@ describe("retry, compaction, and usage controllers", () => {
     expect(useNekStatusStore.getState().sessions.s?.compaction).toBeNull();
   });
 
+  it("CP-3/CI-6: hides compaction and its cancel action while the model resumes thinking", () => {
+    const store = useNekStatusStore.getState();
+    store.consumeEvent("s", { type: "agent_start" }, 0);
+    store.consumeEvent("s", { type: "compaction_start", reason: "overflow" }, 1);
+    const { result } = renderHook(
+      () => useCompactionController({ sessionKey: "s", abortCompaction: vi.fn() }),
+      { wrapper: intlWrapper },
+    );
+    expect(result.current.view.visible).toBe(true);
+    act(() => {
+      store.consumeEvent(
+        "s",
+        { type: "compaction_end", reason: "overflow", aborted: false, willRetry: true },
+        2,
+      );
+      store.consumeEvent("s", { type: "agent_start" }, 3);
+    });
+    expect(result.current.view.visible).toBe(false);
+    expect(result.current.actions.cancelCompaction.visible).toBe(false);
+    expect(useNekStatusStore.getState().sessions.s?.running).toBe(true);
+    act(() => {
+      store.consumeEvent("s", { type: "compaction_start", reason: "overflow" }, 4);
+    });
+    expect(result.current.view.visible).toBe(true);
+  });
+
   it("US-1/US-2/US-3/US-4/US-5: formats empty, ready, stale, and threshold views", () => {
     const onCompact = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(

@@ -38,8 +38,8 @@ function applySessionState(record: NekSessionRecord, event: NekRpcEvent): void {
     if (event.type === "compaction_start" || event.type === "compaction_end")
       record.state = {
         ...record.state,
-        isCompacting:
-          event.type === "compaction_start" || (event.willRetry === true && !event.aborted),
+        /** willRetry resumes the original model request after compaction; the compaction lease has ended. */
+        isCompacting: event.type === "compaction_start",
       };
   }
   if (event.type === "compaction_start" || event.type === "compaction_end")

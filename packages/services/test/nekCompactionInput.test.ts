@@ -77,6 +77,67 @@ test("压缩期间 sendText 一条命令都不发，收口后按序提交一次"
   }
 });
 
+for (const delivery of ["guide", "queue"] as const) {
+  test(`CI-6: overflow compaction end releases ${delivery} before the resumed run settles`, async () => {
+    const h = harness();
+    try {
+      await h.adapter.subscribeConversationV4(params);
+      const session = h.sessions[0]!;
+      session.emit({ type: "agent_start" });
+      session.emit({ type: "compaction_start", reason: "overflow" });
+      const send = (text: string) =>
+        h.adapter.sendNekConversationCommandV4({
+          target,
+          envelope: {
+            ...command,
+            commandId: text,
+            payload: {
+              text,
+              requestedDelivery: delivery,
+              modelSelection: {
+                providerId: "acme",
+                modelId: "acme-1",
+                options: { reasoningLevel: "high" },
+              },
+              planEnabled: false,
+            },
+          },
+        });
+      const deferred = send("during-compaction");
+      void deferred.catch(() => undefined);
+      await tick();
+      assert.deepEqual(sentTypes(session.commands), []);
+      assert.equal(
+        session.commands.some((item) => item.type === "set_model"),
+        false,
+      );
+
+      session.emit({ ...compactionEnd, reason: "overflow", willRetry: true });
+      session.emit({ type: "agent_start" });
+      await tick();
+      const expected = delivery === "guide" ? "steer" : "follow_up";
+      // No agent_settled: compaction has ended even though the original model request is still running.
+      assert.deepEqual(sentTypes(session.commands), [expected]);
+      assert.equal((await deferred).status, "accepted");
+      assert.equal((await send("during-resumed-thinking")).status, "accepted");
+      assert.deepEqual(sentTypes(session.commands), [expected, expected]);
+      assert.deepEqual(
+        session.commands.flatMap((item) => ("message" in item ? [item.message] : [])),
+        ["during-compaction", "during-resumed-thinking"],
+      );
+      const snapshot = await h.adapter.readNekSession(params);
+      assert.equal(snapshot.inputRouting.reasonCode, undefined);
+      assert.equal(snapshot.control.phase, "running");
+      assert.equal(
+        snapshot.control.activeWorks.some((work) => work.kind === "compact"),
+        false,
+      );
+    } finally {
+      await h.adapter.dispose();
+    }
+  });
+}
+
 test("压缩中连发两条：顺序不变、各提交一次", async () => {
   const h = harness();
   try {

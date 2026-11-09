@@ -154,7 +154,7 @@ describe("retry and compaction reducers", () => {
     });
   });
 
-  it("CP-3: abort emits a notice, retry keeps running, and success marks stats stale", () => {
+  it("CP-3: abort emits a notice and compaction end clears the indicator even when the model retries", () => {
     let current = reduceNekStatusEvent(
       createNekSessionStatus(0),
       "s",
@@ -169,13 +169,15 @@ describe("retry and compaction reducers", () => {
       "s",
       {
         type: "compaction_end",
-        reason: "manual",
+        reason: "overflow",
         aborted: false,
         willRetry: true,
       },
       2,
     );
-    expect(retrying.state.compaction?.phase).toBe("running");
+    expect(retrying.state.compaction).toBeNull();
+    expect(retrying.state.statsStale).toBe(true);
+    expect(retrying.output.needsStatsRefresh).toBe(true);
     const aborted = reduceNekStatusEvent(
       current,
       "s",

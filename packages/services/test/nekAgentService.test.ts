@@ -241,11 +241,7 @@ function fakeProcess(
         if (record.type === "agent_start" || record.type === "agent_settled")
           streaming = record.type === "agent_start";
         if (record.type === "compaction_start") compacting = true;
-        if (record.type === "compaction_end")
-          compacting =
-            "willRetry" in record &&
-            record.willRetry === true &&
-            !("aborted" in record && record.aborted === true);
+        if (record.type === "compaction_end") compacting = false;
       }
       stdout.write(`${JSON.stringify(record)}\n`);
     },

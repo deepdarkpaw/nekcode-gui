@@ -148,7 +148,7 @@ export function reduceCompactionEvent(
           noticeId: notice.id,
         };
       }
-      if (event.errorMessage && !event.willRetry) {
+      if (event.errorMessage) {
         return {
           state: updateTimestamp(
             { ...state, compaction: { phase: "failed", message: event.errorMessage } },
@@ -156,7 +156,7 @@ export function reduceCompactionEvent(
           ),
         };
       }
-      if (event.willRetry) return { state };
+      /** willRetry belongs to the resumed model request, not to the completed compaction. */
       return {
         state: updateTimestamp({ ...state, compaction: null, statsStale: true }, now),
       };

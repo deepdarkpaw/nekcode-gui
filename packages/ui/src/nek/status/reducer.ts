@@ -232,7 +232,7 @@ export function reduceNekStatusEvent(
     case "compaction_start":
     case "compaction_end": {
       const result = reduceCompactionEvent(state, event, sessionKey, now);
-      if (event.type === "compaction_end" && !event.willRetry) {
+      if (event.type === "compaction_end") {
         const refreshed = withStatsRefresh(result.state, now);
         return {
           state: refreshed.state,
