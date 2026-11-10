@@ -14,6 +14,7 @@ import {
   providerWriteFromDraft,
   requestDraftFromDraft,
 } from "./providerDraft.js";
+import { modelConfigFromDraft, modelDraftFrom, validateModelDraft } from "./modelDraft.js";
 import { ProvidersPage } from "./ProvidersPage.js";
 
 const gateway: NekProviderConfig = {
@@ -61,6 +62,28 @@ describe("provider endpoint summary", () => {
     expect(providerWriteFromDraft({ ...draft, api: "openai-completions" }).api).toBe(
       "openai-completions",
     );
+  });
+});
+
+describe("model endpoint editing", () => {
+  const translate = (id: string) => id;
+
+  it("requires a model endpoint when the provider endpoint is unset", () => {
+    const model = { id: "claude-fable-5-2" };
+    const draft = modelDraftFrom(model, undefined);
+    expect(validateModelDraft(draft, new Set(), translate, "").api).toBe(
+      "settings.nek.modelEditor.error.apiRequired",
+    );
+    const configured = { ...draft, api: "anthropic-messages" };
+    expect(validateModelDraft(configured, new Set(), translate, "").api).toBeUndefined();
+    expect(modelConfigFromDraft(configured, model).api).toBe("anthropic-messages");
+  });
+
+  it("removes a model endpoint when inheriting a provider endpoint", () => {
+    const model = { id: "chat-model", api: "anthropic-messages" };
+    const draft = { ...modelDraftFrom(model, undefined), api: "" };
+    expect(validateModelDraft(draft, new Set(), translate, "openai-responses").api).toBeUndefined();
+    expect(modelConfigFromDraft(draft, model)).not.toHaveProperty("api");
   });
 });
 

@@ -244,6 +244,11 @@ describe("fetchedModels", () => {
     expect(modelConfigFromRow(row!).thinkingLevelMap).toMatchObject({ minimal: null, max: null });
   });
 
+  it("keeps a catalog model endpoint when adding a fetched model", () => {
+    const [row] = mergeFetchedModels([{ id: "gpt-4.1" }], catalog, new Set());
+    expect(modelConfigFromRow(row!).api).toBe("openai-responses");
+  });
+
   it("classifies 401/403/404", () => {
     expect(classifyFetchError({ ok: false, endpoint: "", status: 403, message: "" })).toBe("auth");
     expect(classifyFetchError({ ok: false, endpoint: "", status: 404, message: "" })).toBe(

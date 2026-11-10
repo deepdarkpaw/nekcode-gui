@@ -3298,6 +3298,10 @@ const zhCN: Record<string, string> = {
   "settings.nek.modelEditor.id": "模型 ID",
   "settings.nek.modelEditor.name": "显示名称",
   "settings.nek.modelEditor.nameHint": "留空则显示 ID。",
+  "settings.nek.modelEditor.api": "模型端点",
+  "settings.nek.modelEditor.apiInherit": "继承服务商",
+  "settings.nek.modelEditor.apiHint": "默认继承服务商端点；需要时可为此模型单独选择端点。",
+  "settings.nek.modelEditor.apiRequiredHint": "服务商未设置端点，必须为此模型明确选择端点。",
   "settings.nek.modelEditor.contextWindow": "上下文窗口",
   "settings.nek.modelEditor.maxTokens": "最大输出",
   "settings.nek.modelEditor.tokensHint":
@@ -3321,6 +3325,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.modelEditor.cost.cacheWrite": "缓存写入",
   "settings.nek.modelEditor.error.idRequired": "请填写模型 ID",
   "settings.nek.modelEditor.error.idDuplicate": "该服务商下已有同名模型",
+  "settings.nek.modelEditor.error.apiRequired": "请选择模型端点，或先为服务商设置端点",
   "settings.nek.modelEditor.error.tokens": "请输入正整数，可用 k / M 后缀",
   "settings.nek.modelEditor.error.maxExceedsContext": "最大输出不能超过上下文窗口",
   "settings.nek.modelEditor.error.defaultLevel": "默认思考等级必须是已勾选的等级",

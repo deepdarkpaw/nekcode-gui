@@ -3478,6 +3478,12 @@ const enUS: Record<string, string> = {
   "settings.nek.modelEditor.id": "Model ID",
   "settings.nek.modelEditor.name": "Display name",
   "settings.nek.modelEditor.nameHint": "Leave empty to show the ID.",
+  "settings.nek.modelEditor.api": "Model endpoint",
+  "settings.nek.modelEditor.apiInherit": "Inherit provider",
+  "settings.nek.modelEditor.apiHint":
+    "Inherits the provider endpoint by default; choose a per-model endpoint when needed.",
+  "settings.nek.modelEditor.apiRequiredHint":
+    "The provider has no endpoint; choose one explicitly for this model.",
   "settings.nek.modelEditor.contextWindow": "Context window",
   "settings.nek.modelEditor.maxTokens": "Max output",
   "settings.nek.modelEditor.tokensHint":
@@ -3502,6 +3508,8 @@ const enUS: Record<string, string> = {
   "settings.nek.modelEditor.cost.cacheWrite": "Cache write",
   "settings.nek.modelEditor.error.idRequired": "Enter a model ID",
   "settings.nek.modelEditor.error.idDuplicate": "This provider already has a model with this ID",
+  "settings.nek.modelEditor.error.apiRequired":
+    "Choose a model endpoint or set one on the provider first",
   "settings.nek.modelEditor.error.tokens": "Enter a positive number; k / M suffixes allowed",
   "settings.nek.modelEditor.error.maxExceedsContext": "Max output cannot exceed the context window",
   "settings.nek.modelEditor.error.defaultLevel":

@@ -142,7 +142,7 @@ export function availableModels(machine: MockMachine): NekCatalogModel[] {
       provider: provider.id,
       id: model.id,
       name: model.name ?? model.id,
-      api: provider.api,
+      api: model.api ?? provider.api,
       contextWindow: model.contextWindow ?? 128_000,
       maxTokens: model.maxTokens ?? 16_384,
       reasoning: model.reasoning === true,

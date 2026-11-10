@@ -6,8 +6,8 @@ import { useDialogDraft } from "../../components/useDialogDraft.js";
  * 支持思考 + 可用等级勾选（高级：上游原始取值）、默认思考等级、价格（高级）。
  */
 import { useId, useMemo } from "react";
-import type { NekModelConfig, NekThinkingLevel } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import type { NekEndpointApi, NekModelConfig, NekThinkingLevel } from "@zcode/shared/nek-protocol";
+import { NEK_ENDPOINT_APIS, NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import { Input } from "@/components/ui/input.js";
 import { SettingAdvancedGroup } from "@/components/ui/setting-fields.js";
@@ -17,7 +17,7 @@ import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { enabledThinkingLevels } from "../../lib/thinkingLevels.js";
 import { NEK_DEFAULT_CONTEXT_WINDOW, NEK_DEFAULT_MAX_TOKENS } from "../../lib/fetchedModels.js";
 import { Field, invalidProps } from "../../components/Field.js";
-import { TokenCountInput } from "../../components/inputs.js";
+import { Segmented, TokenCountInput } from "../../components/inputs.js";
 import { ThinkingLevelSelect, thinkingLevelLabel } from "../../components/modelControls.js";
 import { NekFormDialog } from "../../components/NekFormDialog.js";
 import {
@@ -27,6 +27,8 @@ import {
   validateModelDraft,
   type ModelDraft,
 } from "./modelDraft.js";
+
+const MODEL_API_INHERIT = "inherit-provider";
 
 function SwitchRow({
   label,
@@ -119,6 +121,7 @@ export function ModelEditorDialog({
   open,
   onOpenChange,
   model,
+  providerApi,
   defaultLevel,
   otherIds,
   onSave,
@@ -128,6 +131,8 @@ export function ModelEditorDialog({
   onOpenChange: (open: boolean) => void;
   /** undefined = 手动添加。 */
   model: NekModelConfig | undefined;
+  /** provider.api；空值表示每个模型必须明确设置 api。 */
+  providerApi: string;
   defaultLevel: NekThinkingLevel | undefined;
   otherIds: ReadonlySet<string>;
   onSave: (draft: ModelDraft) => Promise<void>;
@@ -141,11 +146,24 @@ export function ModelEditorDialog({
   const baseId = useId();
   const initial = useMemo(() => modelDraftFrom(model, defaultLevel), [model, defaultLevel]);
   const [draft, setDraft, resetDraft] = useDialogDraft(open, initial);
-  const errors = validateModelDraft(draft, otherIds, t);
+  const errors = validateModelDraft(draft, otherIds, t, providerApi);
   const update = (patch: Partial<ModelDraft>) => setDraft((current) => ({ ...current, ...patch }));
+  const apiOptions = [
+    ...(providerApi.trim()
+      ? [{ value: MODEL_API_INHERIT, label: t("settings.nek.modelEditor.apiInherit") }]
+      : []),
+    ...NEK_ENDPOINT_APIS.map((api) => ({
+      value: api,
+      label: t(`settings.nek.provider.api.${api}`),
+    })),
+    ...(draft.api && !NEK_ENDPOINT_APIS.includes(draft.api as NekEndpointApi)
+      ? [{ value: draft.api, label: draft.api }]
+      : []),
+  ];
   const ids = {
     id: `${baseId}-id`,
     name: `${baseId}-name`,
+    api: `${baseId}-api`,
     ctx: `${baseId}-ctx`,
     max: `${baseId}-max`,
     level: `${baseId}-level`,
@@ -192,6 +210,24 @@ export function ModelEditorDialog({
               value={draft.name}
               placeholder={draft.id}
               onChange={(event) => update({ name: event.target.value })}
+            />
+          </Field>
+          <Field
+            label={t("settings.nek.modelEditor.api")}
+            htmlFor={ids.api}
+            hint={t(
+              providerApi.trim()
+                ? "settings.nek.modelEditor.apiHint"
+                : "settings.nek.modelEditor.apiRequiredHint",
+            )}
+            error={attempted ? errors.api : undefined}
+          >
+            <Segmented
+              value={draft.api || (providerApi.trim() ? MODEL_API_INHERIT : "")}
+              options={apiOptions}
+              onChange={(api) => update({ api: api === MODEL_API_INHERIT ? "" : api })}
+              ariaLabel={t("settings.nek.modelEditor.api")}
+              id={ids.api}
             />
           </Field>
           <Field

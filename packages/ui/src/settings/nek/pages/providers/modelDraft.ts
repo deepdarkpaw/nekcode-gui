@@ -15,6 +15,8 @@ export type CostField = (typeof COST_FIELDS)[number];
 export interface ModelDraft {
   id: string;
   name: string;
+  /** 空字符串表示继承 provider.api；provider 没有 api 时保存前必须明确选择。 */
+  api: string;
   contextWindow: number | undefined;
   contextValid: boolean;
   maxTokens: number | undefined;
@@ -26,7 +28,13 @@ export interface ModelDraft {
   cost: Record<CostField, string>;
 }
 
-export type ModelDraftField = "id" | "contextWindow" | "maxTokens" | "defaultLevel" | "cost";
+export type ModelDraftField =
+  | "id"
+  | "api"
+  | "contextWindow"
+  | "maxTokens"
+  | "defaultLevel"
+  | "cost";
 export type ModelDraftErrors = Partial<Record<ModelDraftField, string>>;
 
 export function modelDraftFrom(
@@ -36,6 +44,7 @@ export function modelDraftFrom(
   return {
     id: model?.id ?? "",
     name: model?.name ?? "",
+    api: model?.api ?? "",
     contextWindow: model?.contextWindow,
     contextValid: true,
     maxTokens: model?.maxTokens,
@@ -71,6 +80,7 @@ export function validateModelDraft(
   draft: ModelDraft,
   otherIds: ReadonlySet<string>,
   t: Translate,
+  providerApi = "",
 ): ModelDraftErrors {
   const errors: ModelDraftErrors = {};
   const id = draft.id.trim();
@@ -78,6 +88,9 @@ export function validateModelDraft(
     errors.id = t("settings.nek.modelEditor.error.idRequired");
   } else if (otherIds.has(id)) {
     errors.id = t("settings.nek.modelEditor.error.idDuplicate");
+  }
+  if (providerApi.trim() === "" && draft.api.trim() === "") {
+    errors.api = t("settings.nek.modelEditor.error.apiRequired");
   }
   if (!draft.contextValid) {
     errors.contextWindow = t("settings.nek.modelEditor.error.tokens");
@@ -111,6 +124,7 @@ export function modelConfigFromDraft(
     ...original,
     id: draft.id.trim(),
     name: draft.name.trim() || undefined,
+    api: draft.api.trim() || undefined,
     contextWindow: draft.contextWindow,
     maxTokens: draft.maxTokens,
     input: draft.image ? ["text", "image"] : original?.input ? ["text"] : undefined,

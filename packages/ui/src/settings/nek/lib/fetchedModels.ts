@@ -18,6 +18,8 @@ export type MetadataSource = "api" | "catalog" | "default";
 
 export interface FetchedModelRow {
   id: string;
+  /** Catalog API when nek knows a model-specific endpoint. */
+  api?: string;
   name?: string;
   contextWindow: number;
   maxTokens: number;
@@ -40,6 +42,7 @@ function rowFromRemote(
   const source: MetadataSource = hasApiMetadata(remote) ? "api" : catalog ? "catalog" : "default";
   return {
     id: remote.id,
+    api: catalog?.api,
     name: remote.name ?? catalog?.name,
     contextWindow: remote.contextWindow ?? catalog?.contextWindow ?? NEK_DEFAULT_CONTEXT_WINDOW,
     maxTokens: remote.maxTokens ?? catalog?.maxTokens ?? NEK_DEFAULT_MAX_TOKENS,
@@ -74,6 +77,7 @@ export function mergeFetchedModels(
 export function modelConfigFromRow(row: FetchedModelRow): NekModelConfig {
   const config: NekModelConfig = {
     id: row.id,
+    ...(row.api ? { api: row.api } : {}),
     contextWindow: row.contextWindow,
     maxTokens: row.maxTokens,
     input: row.input,
