@@ -106,6 +106,66 @@ test("new conversation firstInput and legacy send use the same target-local atta
   await file.cleanup();
 });
 
+test("GI-1: pasted/path images still use images on nek without the ordinary-file capability", async () => {
+  const root = fileURLToPath(new URL("../../../.tmp/", import.meta.url));
+  await mkdir(root, { recursive: true });
+  const dir = await mkdtemp(join(root, "prompt-image-"));
+  const path = join(dir, "pasted.png");
+  const data =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+  await writeFile(path, Buffer.from(data, "base64"));
+  const h = harness();
+  try {
+    await h.adapter.readNekSession(params);
+    h.sessions[0]!.process.guiInfo = { ...h.sessions[0]!.process.guiInfo, capabilities: undefined };
+    for (const requestedDelivery of [undefined, "guide", "queue"]) {
+      const ack = await h.adapter.sendNekConversationCommandV4({
+        target,
+        envelope: envelope("sendText", {
+          text: "look at this image",
+          attachments: [{ ref: path, fileName: "pasted.png", mime: "image/png" }],
+          requestedDelivery,
+        }),
+      });
+      assert.equal(ack.status, "accepted");
+    }
+    const sent = h.sessions[0]!.commands.filter(
+      (item) => item.type === "prompt" || item.type === "steer" || item.type === "follow_up",
+    );
+    assert.deepEqual(
+      sent.map((item) => item.type),
+      ["prompt", "steer", "follow_up"],
+    );
+    for (const item of sent) {
+      assert.deepEqual(item.images, [{ type: "image", data, mimeType: "image/png" }]);
+      assert.equal(item.attachments, undefined);
+    }
+    const count = sent.length;
+    await assert.rejects(
+      h.adapter.sendNekConversationCommandV4({
+        target,
+        envelope: envelope("sendText", {
+          text: "mixed",
+          attachments: [
+            { ref: path, mime: "image/png" },
+            { ref: "/remote/report.pdf", mime: "application/pdf" },
+          ],
+        }),
+      }),
+      /更新远端 nek/,
+    );
+    assert.equal(
+      h.sessions[0]!.commands.filter(
+        (item) => item.type === "prompt" || item.type === "steer" || item.type === "follow_up",
+      ).length,
+      count,
+    );
+  } finally {
+    await h.adapter.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("missing target capability rejects before RPC; files cannot silently disappear on older remote nek", async () => {
   const h = harness();
   try {

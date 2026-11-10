@@ -29,13 +29,20 @@ export async function toNekPromptAttachments(
     }
     if (ref?.startsWith("nek-file:")) {
       const file = await service.readUserFile(sessionKey, ref);
-      attachments.push({ path: file.path, fileName: file.fileName, mimeType: file.mimeType });
+      if (file.mimeType.toLowerCase().startsWith("image/"))
+        images.push(...((await toNekImages([{ ref: file.path, mime: file.mimeType }])) ?? []));
+      else attachments.push({ path: file.path, fileName: file.fileName, mimeType: file.mimeType });
       continue;
     }
     if (ref) {
       if (!isAbsolute(ref)) throw new Error("附件路径必须是 nek 所在机器的绝对路径");
       const fileName = readString(record, "fileName") ?? readString(record, "filename");
       const mimeType = readString(record, "mime") ?? readString(record, "mimeType");
+      /** 图片始终用既有 images 契约；普通文件路径能力不能拦住原本支持的粘贴/上传图片。 */
+      if (mimeType?.toLowerCase().startsWith("image/")) {
+        images.push(...((await toNekImages([item])) ?? []));
+        continue;
+      }
       attachments.push({
         path: ref,
         ...(fileName ? { fileName } : {}),
