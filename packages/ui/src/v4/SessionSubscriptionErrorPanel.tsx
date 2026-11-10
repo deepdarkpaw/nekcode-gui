@@ -8,7 +8,7 @@ interface SessionSubscriptionErrorPanelProps {
   onReconnect: () => void;
 }
 
-/** 会话订阅失败：本地化标题 + 可选中的原始详情 + 重新连接。原始代码不作为正文。 */
+/** 与上游共用的连接失败布局：实际错误 + 重新连接，不恢复 GUI 已移除的反馈入口。 */
 export function SessionSubscriptionErrorPanel({
   detail,
   onReconnect,
@@ -19,14 +19,9 @@ export function SessionSubscriptionErrorPanel({
       role="alert"
       className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-ui-base"
     >
-      <p className="text-center font-medium text-destructive">
-        {intl.formatMessage({ id: "chat.error.sessionLoadFailed" })}
+      <p className="max-w-full select-text break-words text-center font-mono text-destructive">
+        {detail?.trim() || intl.formatMessage({ id: "chat.error.connectionLost" })}
       </p>
-      {detail ? (
-        <p className="max-w-full select-text break-words text-center font-mono text-ui-sm text-muted-foreground">
-          {detail}
-        </p>
-      ) : null}
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button type="button" data-testid={TID_V4_RETRY_SUBSCRIBE} onClick={onReconnect}>
           {intl.formatMessage({ id: "workspaceSidebar.reconnect" })}

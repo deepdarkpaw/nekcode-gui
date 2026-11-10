@@ -733,6 +733,65 @@ it("RD4: adjacent writes of one file form one changes group", () => {
   expect(group.files[0]?.stats).not.toHaveProperty("reads");
 });
 
+it("GE-1/GE-3: the user's disabled cross-file grouping setting still combines adjacent edits of sizing.rs", () => {
+  const path = "G:/fixture/project/crates/neko-services/src/pipeline/sizing.rs";
+  const rows = [
+    edit(1, "success", path),
+    {
+      ...edit(2, "success", path.replaceAll("/", "\\")),
+      input: undefined,
+      inputText: JSON.stringify({ path, oldText: "a", newText: "b" }),
+    },
+  ];
+  const items = buildAssistantWorkRenderItems(rows, visibility, {
+    enableChangesGrouping: false,
+    workspacePath: "G:/fixture/project",
+  });
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const unit = buildConversationTurnRenderUnits(mainTurnRows(0, rows), {
+    sessionPhase: "completedSuccess",
+  })[0]!;
+  const ui = render(
+    <ConversationTurnGroup
+      unit={unit}
+      context={{ ...context, toolGroupingChangesEnabled: false }}
+    />,
+    { wrapper },
+  );
+  expect(screen.getAllByText("更改")).toHaveLength(1);
+  expect(ui.container.querySelectorAll('[data-tool-call-id="edit-1"]')).toHaveLength(0);
+});
+
+it("GE-3: inputText-only relative and absolute CLI edit paths combine without cross-file grouping", () => {
+  const rows = ["crates/pipeline/sizing.rs", "G:/fixture/project/crates/pipeline/sizing.rs"].map(
+    (path, index) => ({
+      ...edit(index + 1),
+      input: undefined,
+      output: undefined,
+      inputText: JSON.stringify({ path, oldText: "a", newText: "b" }),
+    }),
+  );
+  expect(
+    buildAssistantWorkRenderItems(rows, visibility, {
+      enableChangesGrouping: false,
+      workspacePath: "G:/fixture/project",
+    }).map((item) => item.kind),
+  ).toEqual(["changesGroup"]);
+});
+
+it("GE-2: disabling cross-file grouping keeps different files and real boundaries separate", () => {
+  const options = { enableChangesGrouping: false, workspacePath: "/project" };
+  const rows = [edit(1), edit(2), edit(3, "success", "/other/project/PRD.md"), edit(4)];
+  expect(buildAssistantWorkRenderItems(rows, visibility, options).map((item) => item.kind)).toEqual(
+    ["changesGroup", "row", "row"],
+  );
+  expect(
+    buildAssistantWorkRenderItems([edit(1), reasoning(2), edit(3)], visibility, options).map(
+      (item) => item.kind,
+    ),
+  ).toEqual(["row", "row", "row"]);
+});
+
 it("RD5: a single write keeps its own row and thinking splits writes", () => {
   expect(buildAssistantWorkRenderItems([edit(1)], visibility).map((item) => item.kind)).toEqual([
     "row",

@@ -117,6 +117,31 @@ spawn branch is deleted in favor of resume's authoritative lock decision.
   cleanup still run only after the send resolves, and model/thinking/mode pre-submits plus
   attachment resolution happen inside the gate, never during compaction.
 
+## Stopped work and sidebar projection (GS/GU)
+
+- `agent_settled.outcome` owns the turn terminal state; interrupted/error runs cannot
+  become a successful header. Incomplete foreground tools become cancelled and live
+  reasoning/text becomes interrupted through `settleNekWorkRow`. Backgrounded tools
+  and independently running subagents remain untouched.
+- Entry replay uses the same settlement rule for terminal turns; a persisted call
+  with no result cannot reopen as an indefinitely running search. No result is invented.
+- Sessions-index joins disk metadata with `NekAgentService.listOpenSessions` by session
+  identity at the same workspace. The existing semantic lifecycle invalidation publishes
+  running/idle/error changes, allowing the upstream task-row spinner and project running
+  indicator to consume the canonical index instead of a second runtime store.
+
+## Image and file input ownership (IM)
+
+- **IM-1:** image inputs use the existing CLI `images` blocks on every supported nek
+  version. Absolute execution-target paths and uploaded/pasted images are read through
+  the existing bounded image adapter; they do not require `promptAttachments`.
+- **IM-2:** non-image files use CLI `attachments` and still require
+  `capabilities.promptAttachments=1`. A mixed send is all-or-error, never silently
+  dropping the file or converting binary bytes to prompt text.
+- **IM-3:** persisted `nek-image:` / `nek-file:` refs retain existing session
+  authorization. Source resolution happens inside the same compaction input gate,
+  and staging adoption/removal remains after authoritative CLI acknowledgement.
+
 ## Verification
 
 - `packages/services/test/nekSessionResume.test.ts` exercises the real adapter,

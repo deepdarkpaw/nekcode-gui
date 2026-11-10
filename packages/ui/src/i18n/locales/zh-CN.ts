@@ -985,6 +985,7 @@ const zhCN: Record<string, string> = {
   "workspaceSidebar.searchArchivedTasksPlaceholder": "搜索归档任务...",
   "workspaceSidebar.closeTaskSearch": "关闭任务搜索",
   "workspaceSidebar.remove": "移除",
+  "workspaceSidebar.taskRunning": "有任务正在运行",
   "workspaceSidebar.removeRunningWorkspace.title": "移除运行中的项目？",
   "workspaceSidebar.removeRunningWorkspace.description":
     "该项目还有运行中的对话或 Agent。移除项目会停止并释放相关运行状态，历史任务不会被删除。",
@@ -1478,9 +1479,9 @@ const zhCN: Record<string, string> = {
   "settings.toolGroupingExploreDescription": "将连续的读取和搜索工具聚合为 Explore 分组。",
   "settings.toolGroupingTerminal": "分组终端命令",
   "settings.toolGroupingTerminalDescription": "将连续的非只读 Shell 命令聚合为 Terminal 分组。",
-  "settings.toolGroupingChanges": "分组文件更改",
+  "settings.toolGroupingChanges": "分组跨文件更改",
   "settings.toolGroupingChangesDescription":
-    "将连续的 Write、Edit 和 ApplyPatch 调用聚合为 Changes 分组。",
+    "将不同文件的连续写入聚合为更改分组。同一文件紧邻的编辑始终合并。",
   "settings.zcodeInteractionBehavior": "交互行为",
   "settings.zcodeInteractionBehaviorDescription":
     "在 nek 运行时将后续操作加入队列，或引导至下一轮工具调用后运行。",

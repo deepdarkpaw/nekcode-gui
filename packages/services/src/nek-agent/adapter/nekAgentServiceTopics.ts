@@ -12,8 +12,7 @@ import type {
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
-import type { NekSessionIndexItem } from "../index/types.js";
-import { isListedNekSession } from "./nekSessionListing.js";
+import { projectNekSessionSummary } from "./nekSessionListing.js";
 import type { NekAgentService } from "../service/nekAgentService.js";
 import type { NekAgentServiceEvent, NekAgentServiceOptions } from "../service/types.js";
 import { makeSubscriptionId, makeTopicWireFrames, workspaceKey } from "./frameHelpers.js";
@@ -43,21 +42,6 @@ interface TopicState<T> {
   dirty: boolean;
 }
 const MAX_SUBSCRIPTIONS = 128;
-
-function sessionSummary(item: NekSessionIndexItem, workspaceId: string) {
-  const summary = item.summary;
-  if (!summary || !isListedNekSession(summary)) return undefined;
-  return {
-    sessionId: summary.id,
-    workspaceId,
-    title: summary.name ?? summary.firstMessage,
-    phase: summary.locked ? ("completedInterrupted" as const) : ("completedSuccess" as const),
-    sessionEnded: true,
-    hasBackgroundWork: false,
-    lastActivityAt: Date.parse(summary.modifiedAt),
-    createdAt: Date.parse(summary.createdAt),
-  };
-}
 
 /** Workspace facts refresh on semantic changes, never on individual streaming chunks. */
 export class NekAgentServiceTopics {
@@ -284,12 +268,19 @@ export class NekAgentServiceTopics {
       .then((result) => {
         if (this.disposed || this.indexState.get(key) !== current)
           throw new Error("nek index refresh retired");
+        const liveById = new Map(
+          this.service
+            .listOpenSessions(target.workspacePath)
+            .map((session) => [session.sessionId, session]),
+        );
         const snapshot: SessionsIndexSnapshot = {
           protocolVersion: 1,
           workspaceId: key,
           logEpoch: current.logEpoch,
           sessions: result.items
-            .map((item) => sessionSummary(item, key))
+            .map((item) =>
+              projectNekSessionSummary(item, key, liveById.get(item.summary?.id ?? "")),
+            )
             .filter((item) => item !== undefined),
         };
         if (!isDeepStrictEqual(current.snapshot, snapshot)) {

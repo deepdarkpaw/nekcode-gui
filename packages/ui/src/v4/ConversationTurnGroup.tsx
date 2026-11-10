@@ -219,6 +219,7 @@ function ConversationAssistantWorkItems({
             : {}),
         },
         {
+          workspacePath: context.workspacePath,
           stageTailIsRunning,
           enableExploreGrouping:
             context.toolGroupingExploreEnabled ?? ENABLE_EXPLORE_TOOL_CALL_GROUPING,
@@ -229,6 +230,7 @@ function ConversationAssistantWorkItems({
         },
       ),
     [
+      context.workspacePath,
       context.toolGroupingChangesEnabled,
       context.toolGroupingExploreEnabled,
       context.toolGroupingTerminalEnabled,

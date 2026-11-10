@@ -37,6 +37,32 @@ test("sessions without messages stay out of both session lists", async () => {
   }
 });
 
+test("GU-2: sessions-index publishes live running and stopped phases for the upstream sidebar spinner", async () => {
+  const h = harness();
+  const frames: SessionsIndexTopicWireCandidate[] = [];
+  h.adapter.onDynamicSessionsIndexFrame(target)((frame) => frames.push(frame));
+  const latest = () => {
+    const frame = frames.at(-1);
+    assert.ok(frame?.kind === "complete" && frame.frame.payload.kind === "snapshot");
+    return frame.frame.payload.snapshot.sessions.find((session) => session.sessionId === sessionId);
+  };
+  try {
+    await h.adapter.subscribeConversationV4(params);
+    await h.adapter.subscribeSessionsIndexV4(target);
+    assert.equal(latest()?.phase, "completedSuccess");
+    h.sessions[0]!.emit({ type: "agent_start" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(latest()?.phase, "running");
+    assert.equal(latest()?.sessionEnded, false);
+    h.sessions[0]!.emit({ type: "agent_settled", outcome: "aborted" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.notEqual(latest()?.phase, "running");
+    assert.equal(latest()?.sessionEnded, true);
+  } finally {
+    await h.adapter.dispose();
+  }
+});
+
 // nek 拒绝删除被活进程锁住的会话：必须先关闭会话进程再删除，否则预热会话与已打开任务都删不掉。
 test("deleting an open session closes its process before nek deletes the file", async () => {
   const h = harness();

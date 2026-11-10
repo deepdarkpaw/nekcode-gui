@@ -44,6 +44,8 @@ import {
 } from "@/root/reconnectRemoteWorkspaceHistoryEntry.js";
 import { useRemoteConnectionEntryVisibility } from "@/hooks/useRemoteConnectionEntryVisibility.js";
 import { markRemoteWorkspaceRunningTasksFailed } from "@/lib/remoteWorkspaceSessionRuntime.js";
+import { createDesktopRemoteInteractionApi } from "@/settings/nek/api/ipcClient.js";
+import { projectRemoteWorkspaceConnectionStatus } from "./remoteWorkspaceConnectionStatus.js";
 
 export { reconnectRemoteWorkspaceHistoryEntry };
 
@@ -646,7 +648,36 @@ export function useRemoteWorkspaceHistory({
   const [reconnectingRemoteWorkspaceKeys, setReconnectingRemoteWorkspaceKeys] = useState<string[]>(
     [],
   );
+  const remoteConnectionApi = useMemo(() => createDesktopRemoteInteractionApi(), []);
   const inflightReconnectWorkspaceKeysRef = useRef<Set<string>>(new Set());
+  useEffect(
+    () =>
+      remoteConnectionApi?.onRemoteConnectionStatus((event) => {
+        const patch = projectRemoteWorkspaceConnectionStatus(
+          event,
+          tabStoreApi.getState().tabs,
+          remoteWorkspaceSessionsRef.current,
+          intl.formatMessage({ id: "workspaceSidebar.notConnected" }),
+        );
+        if (!patch) return;
+        setReconnectingRemoteWorkspaceKeys((current) => {
+          const next = new Set(current);
+          for (const key of patch.keys) {
+            if (patch.reconnecting || inflightReconnectWorkspaceKeysRef.current.has(key))
+              next.add(key);
+            else next.delete(key);
+          }
+          return next.size === current.length && current.every((key) => next.has(key))
+            ? current
+            : [...next];
+        });
+        if (patch.entries !== remoteWorkspaceSessionsRef.current) {
+          remoteWorkspaceSessionsRef.current = [...patch.entries];
+          setRemoteWorkspaceSessions([...patch.entries]);
+        }
+      }),
+    [intl, remoteConnectionApi, tabStoreApi],
+  );
   const pendingReconnectRequestIdsRef = useRef<Map<string, string>>(new Map());
   const pendingConnectionTargetsBySessionIdRef = useRef<
     Map<string, Parameters<IPlatformService["connectRemote"]>[0]>
@@ -1048,6 +1079,16 @@ export function useRemoteWorkspaceHistory({
 
   const handleReconnectRemoteWorkspace = useCallback(
     async (workspaceKey: string, options?: ReconnectRemoteWorkspaceOptions) => {
+      if (!canUseRemoteWorkspace) throw new Error("Remote workspace is disabled in this mode");
+      const tab = tabStoreApi
+        .getState()
+        .tabs.find(
+          (item) => isWorkspaceTab(item) && buildWorkspaceSessionKey(item) === workspaceKey,
+        );
+      if (tab && isWorkspaceTab(tab) && tab.remoteSessionId && remoteConnectionApi) {
+        await remoteConnectionApi.retryNow(tab.remoteSessionId);
+        return;
+      }
       await reconnectRemoteWorkspaceByKey({
         workspaceKey,
         canUseRemoteWorkspace,
@@ -1061,7 +1102,7 @@ export function useRemoteWorkspaceHistory({
         },
       });
     },
-    [canUseRemoteWorkspace, runReconnectRemoteWorkspace],
+    [canUseRemoteWorkspace, remoteConnectionApi, runReconnectRemoteWorkspace, tabStoreApi],
   );
 
   const handleOpenRemoteWorkspaceFromHistory = useCallback(

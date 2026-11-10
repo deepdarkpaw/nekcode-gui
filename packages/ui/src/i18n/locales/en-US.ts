@@ -1059,6 +1059,7 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.searchArchivedTasksPlaceholder": "Search archived tasks...",
   "workspaceSidebar.closeTaskSearch": "Close task search",
   "workspaceSidebar.remove": "Remove",
+  "workspaceSidebar.taskRunning": "A task is running",
   "workspaceSidebar.removeRunningWorkspace.title": "Remove a running project?",
   "workspaceSidebar.removeRunningWorkspace.description":
     "This project still has a running chat or Agent. Removing it will stop and release the related runtime state, but task history will not be deleted.",
@@ -1572,9 +1573,9 @@ const enUS: Record<string, string> = {
   "settings.toolGroupingTerminal": "Group terminal commands",
   "settings.toolGroupingTerminalDescription":
     "Group consecutive non-read-only shell commands into a Terminal section.",
-  "settings.toolGroupingChanges": "Group file changes",
+  "settings.toolGroupingChanges": "Group changes across files",
   "settings.toolGroupingChangesDescription":
-    "Group consecutive Write, Edit, and ApplyPatch calls into a Changes section.",
+    "Group consecutive writes across files into a Changes section. Adjacent edits to the same file always combine.",
   "settings.zcodeInteractionBehavior": "Interaction behavior",
   "settings.zcodeInteractionBehaviorDescription":
     "While nek is running, add follow-up actions to the queue or guide them to run after the next tool call.",

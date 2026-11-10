@@ -429,10 +429,7 @@ function RootInner({
     [openSettingsTab],
   );
   const remotePromptHost = (
-    <NekRemotePromptHost
-      connectionId={workspaceShellRemoteSessionId}
-      onOpenKnownHosts={handleOnboardingOpenKnownHosts}
-    />
+    <NekRemotePromptHost onOpenKnownHosts={handleOnboardingOpenKnownHosts} />
   );
   const nekOnboardingModal = (
     <NekOnboardingModal

@@ -11,12 +11,10 @@ import {
 import { NekCredentialPromptDialog } from "./NekCredentialPromptDialog.js";
 import { NekHostKeyChangedDialog } from "./NekHostKeyChangedDialog.js";
 import { NekHostKeyConfirmDialog } from "./NekHostKeyConfirmDialog.js";
-import { NekRemoteStatusBanner } from "./NekRemoteStatusBanner.js";
 import type { ActiveElementInfo } from "./remoteInteraction.js";
 
 export interface NekRemotePromptHostProps {
   api?: IRemoteInteractionHostApi | null;
-  connectionId?: string | null;
   activeElement?: ActiveElementInfo;
   onOpenKnownHosts: (connectionId: string) => Promise<void> | void;
   copyFingerprint?: (fingerprint: string) => Promise<void> | void;
@@ -83,7 +81,6 @@ function PromptDialog({
 
 export function NekRemotePromptHost({
   api: providedApi,
-  connectionId,
   activeElement,
   onOpenKnownHosts,
   copyFingerprint = copyToClipboard,
@@ -105,14 +102,6 @@ export function NekRemotePromptHost({
   if (!api) return null;
   return (
     <>
-      {connectionId ? (
-        <NekRemoteStatusBanner
-          connectionId={connectionId}
-          onStatus={api.onRemoteConnectionStatus}
-          retryNow={api.retryNow}
-          cancelReconnect={api.cancelReconnect}
-        />
-      ) : null}
       {notice ? (
         <button
           type="button"

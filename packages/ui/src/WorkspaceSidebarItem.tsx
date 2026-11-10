@@ -51,6 +51,7 @@ import {
   formatRemoteWorkspaceDisplayLabel,
 } from "@/lib/remoteWorkspaceHistory.js";
 import { TaskList } from "@/TaskList.js";
+import { isTaskListRowActive } from "@/v4/taskListRowActivity.js";
 import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
@@ -222,11 +223,11 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const isRemoteWorkspace = Boolean(
     tab.remoteSessionId || tab.remoteTarget || tab.workspaceIdentity,
   );
-  const isDisconnectedRemoteWorkspace = Boolean(isRemoteWorkspace && !tab.remoteSessionId);
-  const isReconnectPending = Boolean(
-    isDisconnectedRemoteWorkspace && reconnectingRemoteWorkspaceKeys.includes(remoteWorkspaceKey),
-  );
   const remoteWorkspaceError = remoteWorkspaceErrorByWorkspaceKey[remoteWorkspaceKey];
+  const isReconnectPending = reconnectingRemoteWorkspaceKeys.includes(remoteWorkspaceKey);
+  const isDisconnectedRemoteWorkspace = Boolean(
+    isRemoteWorkspace && (!tab.remoteSessionId || isReconnectPending || remoteWorkspaceError),
+  );
   const workspaceSidebarLabel = formatRemoteWorkspaceDisplayLabel(tab.label, tab.remoteTarget);
   const sshWorkspaceTooltipDetails = getSshWorkspaceTooltipDetails(tab);
   const reconnectRuntimeLogs =
@@ -740,6 +741,14 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       <div className="min-w-0 truncate text-ui-base text-foreground-subtle">
         {workspaceSidebarLabel}
       </div>
+      {!isExpanded && taskItems.some(isTaskListRowActive) ? (
+        <span
+          role="img"
+          aria-label={intl.formatMessage({ id: "workspaceSidebar.taskRunning" })}
+          data-workspace-running-indicator="true"
+          className="size-1.5 shrink-0 animate-pulse rounded-full bg-warning motion-reduce:animate-none"
+        />
+      ) : null}
       {!isExpanded && taskListHasUnread ? (
         <span
           aria-hidden="true"

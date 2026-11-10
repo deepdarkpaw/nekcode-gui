@@ -16,13 +16,12 @@ function renderPanel(detail: string | null, onReconnect = vi.fn()) {
 describe("SessionSubscriptionErrorPanel", () => {
   afterEach(cleanup);
 
-  it("leads with a localized title and keeps the fault code as secondary detail", () => {
-    const onReconnect = renderPanel("fault.subscription.recoveryFrameTimedOut");
+  it("GU-1: matches the upstream centered connection error and reconnect action", () => {
+    const onReconnect = renderPanel("Connection lost");
     const alert = screen.getByRole("alert");
-    expect(alert.firstElementChild?.textContent).toBe("无法加载此会话");
-    expect(screen.getByText("fault.subscription.recoveryFrameTimedOut").className).toContain(
-      "text-muted-foreground",
-    );
+    expect(alert.firstElementChild?.textContent).toBe("Connection lost");
+    expect(screen.getByText("Connection lost").className).toContain("font-mono");
+    expect(screen.getByText("Connection lost").className).toContain("text-destructive");
     fireEvent.click(screen.getByRole("button", { name: "重新连接" }));
     expect(onReconnect).toHaveBeenCalledTimes(1);
   });
@@ -30,5 +29,7 @@ describe("SessionSubscriptionErrorPanel", () => {
   it("omits the detail line when the store has no error text", () => {
     renderPanel(null);
     expect(screen.getByRole("alert").querySelectorAll("p")).toHaveLength(1);
+    expect(screen.getByRole("alert").textContent).not.toContain("无法加载此会话");
+    expect(screen.getByRole("alert").textContent).toContain("连接");
   });
 });

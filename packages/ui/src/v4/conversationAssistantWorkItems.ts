@@ -6,6 +6,7 @@ import {
 } from "@/lib/exploreToolCall.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
+import { joinFilePath } from "@/lib/path.js";
 import {
   isConversationReasoningRowVisible,
   isEmptyConversationTextRow,
@@ -37,6 +38,7 @@ export const ENABLE_TERMINAL_TOOL_CALL_GROUPING = true;
 export const ENABLE_CHANGES_TOOL_CALL_GROUPING = true;
 
 interface ConversationAssistantWorkRenderOptions {
+  workspacePath?: string;
   stageTailIsRunning?: boolean;
   enableExploreGrouping?: boolean;
   enableTerminalGrouping?: boolean;
@@ -115,6 +117,16 @@ function readToolPath(row: ToolCallRow): string | undefined {
 /** 同一文件的相对/绝对路径写法必须收敛到可比较形态。 */
 const normalizeComparePath = (path: string): string =>
   path.trim().replaceAll("\\", "/").replace(/^\.\//, "");
+
+/** 写入按工作区完整路径比较，不能把不同目录里同名文件或相同后缀当作同一文件。 */
+function writePathKey(row: ToolCallRow, workspacePath: string | undefined): string | undefined {
+  const path = readToolPath(row);
+  if (!path) return undefined;
+  const key = normalizeComparePath(
+    workspacePath ? joinFilePath(workspacePath, path) : path,
+  ).replaceAll("/./", "/");
+  return /^[a-z]:\//i.test(key) ? key.toLowerCase() : key;
+}
 
 /** 绝对路径 `G:/repo/src/foo.ts` 与相对路径 `src/foo.ts` 指向同一个文件。 */
 const isSameReadFile = (left: string, right: string) =>
@@ -424,12 +436,20 @@ export function buildAssistantWorkRenderItems(
     }
 
     if (isChangesToolCallRow(row)) {
-      const run = takeToolRun(preparedRows, index, isChangesToolCallRow);
+      const path = writePathKey(row, options?.workspacePath);
+      const run = takeToolRun(
+        preparedRows,
+        index,
+        (candidate): candidate is ToolCallRow =>
+          isChangesToolCallRow(candidate) &&
+          (candidate === row ||
+            enableChangesGrouping ||
+            (path !== undefined && writePathKey(candidate, options?.workspacePath) === path)),
+      );
       index += run.length;
-      // 单个写操作保持自身行渲染（每条“编辑 file +N -N”独立成行），相邻 ≥2 条才建「更改」容器。
-      if (enableChangesGrouping && run.length > 1) {
-        items.push(buildChangesGroup(run, atStageTail(index)));
-      } else items.push(...run.map(rowItem));
+      /** 旧的跨文件分组开关可能为 false；同文件紧邻编辑仍合并，不能被它整段短路。 */
+      if (run.length > 1) items.push(buildChangesGroup(run, atStageTail(index)));
+      else items.push(...run.map(rowItem));
       continue;
     }
 
