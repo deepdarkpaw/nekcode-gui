@@ -153,6 +153,8 @@ export function planSubagentRows(
   turnId: string,
   sessionRunning: boolean,
   allocate: (entityId: string) => number,
+  /** Registry sampled after entries, when available; parent phase is not a child liveness fact. */
+  liveSubagents?: ReadonlyMap<string, NekSubagentRecord>,
 ): SubagentRowPlan {
   const anchors = new Map(anchorsInput);
   const rows: ConversationRow[] = [];
@@ -175,7 +177,10 @@ export function planSubagentRows(
         entityId,
         rowId,
         rowTurnId,
-        normalizePersistedSubagentRecord(extracted.record, sessionRunning),
+        normalizePersistedSubagentRecord(
+          liveSubagents?.get(extracted.record.id) ?? extracted.record,
+          liveSubagents ? liveSubagents.has(extracted.record.id) : sessionRunning,
+        ),
         parentToolCallId,
       ),
     );

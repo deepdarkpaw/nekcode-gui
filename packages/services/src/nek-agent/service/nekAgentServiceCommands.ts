@@ -134,24 +134,21 @@ export async function getStatusSnapshot(
   sessionKey: string,
 ): Promise<NekStatusSnapshot> {
   const target = context.target(sessionKey);
-  const [state, stats, extension, entries] = await Promise.all([
+  const [state, stats, entries] = await Promise.all([
     target.client.call({ type: "get_state" }),
     target.client.call({ type: "get_session_stats" }),
-    target.client.call({ type: "extension_call", method: "nek.get_state" }),
     // nek 的 subagent registry 是纯内存表：重开 GUI 后只剩 entries 里 toolResult 的 details。
     target.client.call({ type: "get_entries" }),
   ]);
+  // Read the registry after entries: a child registered before its persisted spawn result
+  // must be visible here. Parent isStreaming alone never proves a historical child is alive.
+  const extension = await target.client.call({ type: "extension_call", method: "nek.get_state" });
   if (!isNekState(extension.result)) {
     throw new Error("nek returned an invalid status state snapshot");
   }
   const live = extension.result;
   // 内存里的子代理是活的权威：histories 只补它没有的 id，绝不覆盖实时状态。
-  const persisted = collectPersistedSubagentRecords(entries.entries, {
-    // 父会话还在跑时，内存里缺席的持久 running 记录可能只是这两次请求的时序差，
-    // 判死会把刚 spawn 的子代理永久标成 aborted（状态 store 不复活终态）；
-    // 父会话静止时残留的 running 不可能真实存在，必须收敛。
-    sessionRunning: state.isStreaming === true,
-  });
+  const persisted = collectPersistedSubagentRecords(entries.entries);
   const liveIds = new Set(live.subagents.map((record) => record.id));
   const restored = [...persisted.values()]
     .filter((entry) => !liveIds.has(entry.record.id))

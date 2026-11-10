@@ -6,12 +6,20 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import type {
   NekAgentMessage,
+  NekCustomMessageEntry,
   NekRpcSessionState,
   NekSessionEntry,
   NekSessionStats,
   NekState,
 } from "@zcode/shared/nek-protocol";
 import type { NekRowIdentity } from "./nekRows.js";
+import {
+  buildPlanPreviewRow,
+  buildUserInputRow,
+  contentText,
+  isPlanPreviewDetails,
+  toEpochMs,
+} from "./nekRows.js";
 
 /**
  * entries 路径的共享类型与行身份分配器。
@@ -29,7 +37,7 @@ export interface NekSnapshotInput {
   stats?: NekSessionStats;
   /** `get_info`/`session_info_changed` 给的会话名。 */
   title?: string;
-  /** `extension_call nek.get_state` 的计划与模式。 */
+  /** `extension_call nek.get_state` 的计划/模式与子代理注册表；采样不得早于 entries。 */
   nekState?: NekState;
   /** 已经存在的行（增量刷新时用于复用 rowId）。 */
   existing?: { rows: ConversationRow[]; byEntity: Map<string, number>; nextRowId: number };
@@ -117,6 +125,27 @@ export function identity(
   return { entityId, rowId, turnId, createdAt };
 }
 
-/**
- * 把 entries 投影成行。纯函数式：同样的输入永远得到同样的行（除了 rowId 由分配器决定）。
- */
+/** A visible custom entry owns its plan row or injected user context, without mutable replay state. */
+export function projectCustomMessage(
+  entry: NekCustomMessageEntry,
+  turn: TurnContext,
+  allocator: RowAllocator,
+): ConversationRow | null {
+  if (entry.customType === "nek.plan_preview" && isPlanPreviewDetails(entry.details)) {
+    const entityId = `entry:${entry.timestamp}:plan:${entry.details.plan.revision}`;
+    const rowId = allocator.resolve(entityId);
+    return buildPlanPreviewRow(
+      identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)),
+      entry.details,
+    );
+  }
+  // 其他 custom 消息等价于"注入的用户侧上下文"：用 synthetic 来源的 userInput 呈现。
+  const text = contentText(entry.content as string | Array<{ type: string }>);
+  if (text.trim() === "") return null;
+  const entityId = `custom:${entry.timestamp}:${entry.customType}`;
+  const rowId = allocator.resolve(entityId);
+  return buildUserInputRow(identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)), {
+    text,
+    origin: "synthetic",
+  });
+}

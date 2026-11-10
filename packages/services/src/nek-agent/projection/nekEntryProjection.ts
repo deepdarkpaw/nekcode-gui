@@ -11,14 +11,12 @@ import {
   assistantThinkingBlocks,
   assistantToolCalls,
   buildAssistantTextRow,
-  buildPlanPreviewRow,
   buildReasoningRow,
   buildTimelineMarkerRow,
   buildToolCallRow,
   buildTurnHeaderRow,
   buildUserInputRow,
   contentText,
-  isPlanPreviewDetails,
   isRedactedThinking,
   toEpochMs,
 } from "./nekRows.js";
@@ -26,7 +24,12 @@ import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { settleInactiveNekWorkRows } from "./nekSettledWork.js";
 import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProjectionSnapshot.js";
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
-import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
+import {
+  identity,
+  orderActiveBranch,
+  projectCustomMessage,
+  RowAllocator,
+} from "./nekEntryShared.js";
 import { planSubagentRows, type SubagentRowAnchor } from "./nekSubagentRecords.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 import { projectNekUserImages } from "./nekUserImages.js";
@@ -60,6 +63,9 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
   // 子代理行身份 = `subagent:<record.id>`；锚点只在首次出现时确定。
   let subagentAnchors: ReadonlyMap<string, SubagentRowAnchor> = new Map();
   const sessionRunning = input.isSessionRunning ?? input.state?.isStreaming === true;
+  const liveSubagents = input.nekState
+    ? new Map(input.nekState.subagents.map((record) => [record.id, record]))
+    : undefined;
 
   let turn: TurnContext = { turnId: "turn-0", entityId: "turn-0", startedAt: 0 };
   let turnOpen = false;
@@ -290,6 +296,7 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
             turn.turnId,
             sessionRunning,
             (entityId) => allocator.resolve(entityId),
+            liveSubagents,
           );
           subagentAnchors = subagents.anchors;
           for (const row of subagents.rows) push(row);
@@ -403,28 +410,4 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
     plan,
     mode,
   };
-}
-
-function projectCustomMessage(
-  entry: NekCustomMessageEntry,
-  turn: TurnContext,
-  allocator: RowAllocator,
-): ConversationRow | null {
-  if (entry.customType === "nek.plan_preview" && isPlanPreviewDetails(entry.details)) {
-    const entityId = `entry:${entry.timestamp}:plan:${entry.details.plan.revision}`;
-    const rowId = allocator.resolve(entityId);
-    return buildPlanPreviewRow(
-      identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-      entry.details,
-    );
-  }
-  // 其他 custom 消息等价于"注入的用户侧上下文"：用 synthetic 来源的 userInput 呈现。
-  const text = contentText(entry.content as string | Array<{ type: string }>);
-  if (text.trim() === "") return null;
-  const entityId = `custom:${entry.timestamp}:${entry.customType}`;
-  const rowId = allocator.resolve(entityId);
-  return buildUserInputRow(identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)), {
-    text,
-    origin: "synthetic",
-  });
 }

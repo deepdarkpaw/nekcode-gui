@@ -122,6 +122,25 @@ test("世代一致时快照正常落地", async () => {
   assert.deepEqual(h.phases(), ["idle"]);
 });
 
+test("SS-2: projection reload samples the child registry only after persisted entries finish", async () => {
+  const h = harness();
+  const gate = Promise.withResolvers<void>();
+  const process = fakeProcess(h.calls, async (type) => {
+    if (type === "get_entries") await gate.promise;
+  });
+  h.record.process = process;
+  const pending = reloadSessionSnapshot(h.context, process);
+  try {
+    await flush();
+    assert.ok(h.calls.includes("get_entries"));
+    assert.ok(!h.calls.includes("extension_call"));
+  } finally {
+    gate.resolve();
+    await pending;
+  }
+  assert.equal(h.settled(), 1);
+});
+
 test("连续 3 次生命周期世代变化后显式失败，不冒充装载成功", async () => {
   const h = harness();
   const process = fakeProcess(h.calls, (type) => {

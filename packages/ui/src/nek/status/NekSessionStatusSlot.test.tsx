@@ -167,6 +167,45 @@ describe("Nek session status slot wiring", () => {
     expect(stopSubagent).toHaveBeenCalledWith("a");
   });
 
+  it("SS-4: a stop failure shows its full detail and keeps retry available", async () => {
+    const detail =
+      "nek extension_call failed: Unknown subagent 01a1c60d-1259-7107-a279-7223aff3ad42. Please inspect the parent session.";
+    const onStopSubagent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error(detail))
+      .mockResolvedValue(undefined);
+    useNekStatusStore.getState().consumeEvent("s", { type: "nek.subagent", payload: record("a") });
+    setNekStatusActions("s", statusActions());
+    renderView(<NekSessionStatusSlot sessionKey="s" callbacks={callbacks({ onStopSubagent })} />);
+    fireEvent.click(screen.getByRole("button", { name: "子代理" }));
+    fireEvent.click(screen.getByRole("button", { name: "停止 子代理 a" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(detail);
+    expect(alert.className).not.toContain("truncate");
+    expect(alert.className).toContain("break-words");
+    expect(
+      useNekStatusStore.getState().sessions.s?.subagents.byId.a?.stopRequested,
+    ).toBeUndefined();
+    const retry = screen.getByRole("button", { name: "停止 子代理 a" });
+    expect(retry.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(retry);
+    await waitFor(() => expect(onStopSubagent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("SS-1: restored absent children have no stop action even when the parent is running", () => {
+    const onStopSubagent = vi.fn();
+    useNekStatusStore.getState().consumeEvent("s", { type: "agent_start" });
+    useNekStatusStore
+      .getState()
+      .consumeEvent("s", { type: "nek.subagent", payload: record("a", "aborted") });
+    setNekStatusActions("s", statusActions());
+    renderView(<NekSessionStatusSlot sessionKey="s" callbacks={callbacks({ onStopSubagent })} />);
+    fireEvent.click(screen.getByRole("button", { name: "子代理" }));
+    expect(screen.queryByRole("button", { name: "停止 子代理 a" })).toBeNull();
+    expect(onStopSubagent).not.toHaveBeenCalled();
+  });
+
   it("S2: an all-finished section shows the ended count instead of a running summary", () => {
     act(() => {
       for (const id of ["a", "b"]) {

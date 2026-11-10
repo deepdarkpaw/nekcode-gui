@@ -110,7 +110,7 @@ export function NekSubagentStatusSection({
         ) : null}
       </div>
       {bulkActions.stopAll.error ? (
-        <p role="alert" className="truncate text-ui-sm text-destructive">
+        <p role="alert" className="whitespace-pre-wrap break-words text-ui-sm text-destructive">
           {bulkActions.stopAll.error}
         </p>
       ) : null}
@@ -168,7 +168,7 @@ function NekSubagentStatusRow(props: {
     <li
       data-status-view="subagent-row"
       data-subagent-id={props.id}
-      className="flex min-h-8 min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-ui-base hover:bg-hover"
+      className="flex min-h-8 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-2 py-1 text-ui-base hover:bg-hover"
     >
       {subagentStatusIcon(view.tone)}
       <button
@@ -188,11 +188,6 @@ function NekSubagentStatusRow(props: {
           {view.elapsed}
         </span>
       </button>
-      {error ? (
-        <span role="alert" className="max-w-40 shrink-0 truncate text-ui-sm text-destructive">
-          {error}
-        </span>
-      ) : null}
       {actions.stop.visible ? (
         <Button
           type="button"
@@ -210,6 +205,14 @@ function NekSubagentStatusRow(props: {
           <Square aria-hidden="true" className="size-3 fill-current" />
           {intl.formatMessage({ id: "nek.status.subagent.stop" })}
         </Button>
+      ) : null}
+      {error ? (
+        <span
+          role="alert"
+          className="min-w-0 basis-full whitespace-pre-wrap break-words text-ui-sm text-destructive"
+        >
+          {error}
+        </span>
       ) : null}
     </li>
   );
