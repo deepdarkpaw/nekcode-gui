@@ -23,6 +23,7 @@ import {
   toEpochMs,
 } from "./nekRows.js";
 import { mergeToolResultRow } from "./nekToolResultRow.js";
+import { settleInactiveNekWorkRows } from "./nekSettledWork.js";
 import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProjectionSnapshot.js";
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import { identity, orderActiveBranch, RowAllocator } from "./nekEntryShared.js";
@@ -382,6 +383,7 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
   if (turnOpen) {
     pushTurnHeader(input.state?.isStreaming === true ? "running" : completedState());
   }
+  settleInactiveNekWorkRows(rows);
 
   const usage = summarizeUsage(branch, {
     contextWindow: input.stats?.contextUsage?.contextWindow ?? input.state?.model?.contextWindow,

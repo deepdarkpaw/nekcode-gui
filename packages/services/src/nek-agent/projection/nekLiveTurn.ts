@@ -2,6 +2,7 @@ import type { NekRpcEvent } from "@zcode/shared/nek-protocol";
 import type { NekRowIdentity } from "./nekRows.js";
 import { buildTurnHeaderRow } from "./nekRows.js";
 import type { NekProjectionStore } from "./nekProjectionStore.js";
+import { settleNekWorkRow } from "./nekSettledWork.js";
 
 /**
  * 事件流投影的共享状态与轮次机。
@@ -123,8 +124,14 @@ export function closeTurn(
   const turn = ctx.turn;
   if (!turn?.open) return;
   turn.open = false;
+  const endedAt = ctx.now();
+  for (const row of ctx.store.window) {
+    if (row.turnId !== turn.turnId) continue;
+    const settled = settleNekWorkRow(row, endedAt);
+    if (settled !== row) ctx.store.update(row.rowId, () => settled);
+  }
   ctx.store.update(turn.headerRowId, (row) =>
-    row.kind === "turnHeader" ? { ...row, state, endedAt: ctx.now() } : row,
+    row.kind === "turnHeader" ? { ...row, state, endedAt } : row,
   );
 }
 
@@ -149,15 +156,19 @@ export function applyTurnLifecycleEvent(ctx: NekLiveContext, event: NekRpcEvent)
       (work) => work.kind === "compact",
     );
     const compacting = compactionWork.length > 0;
-    closeTurn(
-      ctx,
-      ctx.turn?.lastStopReason === "aborted" ? "completedInterrupted" : "completedSuccess",
-    );
+    const outcome = event.outcome ?? ctx.turn?.lastStopReason;
+    const state =
+      outcome === "aborted"
+        ? "completedInterrupted"
+        : outcome === "error"
+          ? "failed"
+          : "completedSuccess";
+    closeTurn(ctx, state);
     ctx.store.setState({
       control: {
         ...ctx.store.state.control,
-        phase: "completedSuccess",
-        sessionEnded: false,
+        phase: state === "failed" ? "error" : state,
+        sessionEnded: !compacting,
         canStop: compacting,
         stopState: compacting ? "stoppable" : "idle",
         stopTargetKind: compacting ? "compact" : "unknown",
