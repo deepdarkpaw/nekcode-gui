@@ -224,7 +224,7 @@
     ".agents/skills/react-best-practices/rules/server-parallel-nested-fetching.md": "4d9c44e579e1286013acf5cb5f65b04297d2b68909f44f8163804656514a78ff",
     ".agents/skills/react-best-practices/rules/server-serialization.md": "4d025c42043c56e6355196a2e885d168cdb15248d0797146c9db838a57b34946",
     ".agents/skills/react-best-practices/SKILL.md": "b7d246acb440bee224ab33614979a5b8debe5fdb13d0304967aa19358eb69d9f",
-    "package.json": "ffe6916591b9ed3458b7b7668b8b3201cc58d4c668359130c4fd2076b36535e6",
+    "package.json": "c12a966f7e9b068fcd083f84da87422620f09ab265203758a3f272e34d98f8b2",
     "packages/client/package.json": "e76f441549130dc3e5e68072a36b6cb9044e19a6625f1e813f19a4def2b1b689",
     "packages/desktop/package.json": "a9cbf9ab4b5832ee595f59559cf479aac3adb7e9dc9cf30433a29e7e0ddc1132",
     "packages/desktop/src/renderer/public/material-icons/3d.svg": "9527b849f0fba57ca7640e2717b3a19cb5f5e046712cbbd8b75d73af338c68fb",
