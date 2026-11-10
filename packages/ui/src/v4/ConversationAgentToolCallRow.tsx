@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { TID_V4_ROW, TID_V4_SUBAGENT_OPEN_SIDE_PANE, testId } from "@zcode/shared";
+import type { SubagentRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
 import { getAgentPrimaryText } from "@/ToolCallBlocks/renderers/agentHelpers.js";
 import type { ConversationAssistantWorkRenderItem } from "@/v4/conversationAssistantWorkItems.js";
@@ -33,6 +34,39 @@ function openSubagentSessionFromSummary({
     title,
   });
   return true;
+}
+
+/** A window may start after the spawn tool. Render the child fact through the same agent summary,
+ * without inventing a tool in the protocol or dumping a full report into a plain-text row. */
+export function ConversationSubagentRow({
+  row,
+  context,
+}: {
+  row: SubagentRow;
+  context: ConversationRowRenderContext;
+}) {
+  const item = useMemo(() => {
+    const summary: ToolCallRow = {
+      rowId: row.rowId,
+      entityId: row.entityId,
+      turnId: row.turnId,
+      createdAt: row.createdAt,
+      createdAtSeq: row.createdAtSeq,
+      kind: "toolCall",
+      toolCallId: row.entityId ?? `subagent:${row.rowId}`,
+      toolName: "subagent",
+      inputText: "",
+      input: { description: row.summaryText, subagent_type: row.subagentType },
+      status: row.status === "failed" ? "error" : row.status,
+    };
+    return {
+      kind: "agentToolCall" as const,
+      key: `subagent:${row.rowId}`,
+      row: summary,
+      subagentRow: row,
+    };
+  }, [row]);
+  return <ConversationAgentToolCallRow item={item} context={context} />;
 }
 
 export function ConversationAgentToolCallRow({

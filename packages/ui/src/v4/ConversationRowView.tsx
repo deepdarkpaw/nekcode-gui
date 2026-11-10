@@ -39,7 +39,6 @@ import type {
   ConversationRowTarget,
   HookInvocationRow,
   ReasoningRow,
-  SubagentRow,
   TimelineMarkerRow,
   ToolCallRow,
   TurnHeaderRow,
@@ -109,6 +108,7 @@ import { ConversationFileRewindDialog } from "@/v4/ConversationFileRewindDialog.
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
 import { ConversationExtensionErrors } from "@/v4/ConversationExtensionErrors.js";
+import { ConversationSubagentRow } from "@/v4/ConversationAgentToolCallRow.js";
 import {
   ConversationUserInputEpilogue,
   splitUserInputEpilogue,
@@ -1844,22 +1844,6 @@ const ToolCallRowView = memo(function ToolCallRowView({
   );
 });
 
-const SubagentRowView = memo(function SubagentRowView({ row }: { row: SubagentRow }) {
-  // subagent 行已经和 Agent/Task 工具行配对渲染；裸行只保留异常兜底摘要，
-  // 避免再生成一个“子会话”卡片或第二套下钻入口。
-  const summary = (
-    <>
-      {row.subagentType} · {row.status}
-      {row.summaryText ? ` — ${row.summaryText}` : ""}
-    </>
-  );
-  return (
-    <RowShell rowId={row.rowId}>
-      <div className="text-ui-sm text-[var(--color-foreground-subtle)]">{summary}</div>
-    </RowShell>
-  );
-});
-
 /**
  * v4 row 渲染分发。memo：虚拟列表逐行渲染，父投影变化时只有 props 真正变化的行才重渲染
  * （前提是 onFork/onRetry/onEdit 为稳定引用 + context 引用稳定，见 SessionPane 的
@@ -1936,7 +1920,7 @@ function ConversationRowViewImpl({
       }
       return <ToolCallRowView row={row} context={context} />;
     case "subagent":
-      return <SubagentRowView row={row} />;
+      return <ConversationSubagentRow row={row} context={context} />;
     case "artifact":
       return <ArtifactRowView row={row} />;
     default:

@@ -21,7 +21,7 @@ import {
   toEpochMs,
 } from "./nekRows.js";
 import { mergeToolResultRow } from "./nekToolResultRow.js";
-import { currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
+import { closeTurn, currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentDetails } from "./nekLiveTools.js";
 import { projectNekUserImages } from "./nekUserImages.js";
@@ -46,6 +46,9 @@ export function applyMessageStart(ctx: NekLiveContext, message: NekAgentMessage 
   }
   if (message.role === "user") {
     const timestamp = toEpochMs(message.timestamp);
+    // nek emits this only after consuming the input (and interrupting await). Match replay's
+    // user boundary: later assistant/tool work must not continue the old wait's visual turn.
+    closeTurn(ctx, "completedSuccess");
     ensureTurn(ctx, timestamp);
     const entityId = `msg:${timestamp}:user`;
     const rowId = ctx.store.allocate(entityId);
@@ -311,7 +314,7 @@ function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessag
       },
     ),
   );
-  if (result.toolName === "subagent") applySubagentDetails(ctx, result.toolCallId, result.details);
+  applySubagentDetails(ctx, result.toolName, result.toolCallId, result.details);
 }
 
 /**

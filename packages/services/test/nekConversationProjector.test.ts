@@ -716,6 +716,7 @@ test("subagent tool results become subagent rows with a parent tool call", () =>
           id: "child-1",
           description: "look around",
           type: "explorer",
+          background: false,
           status: "completed",
           startedAt: 1_100,
           endedAt: 1_900,
@@ -728,7 +729,7 @@ test("subagent tool results become subagent rows with a parent tool call", () =>
   scheduler.flushAll();
   const subagent = projector.snapshot().rows.window.find((row) => row.kind === "subagent");
   assert.equal(subagent?.kind === "subagent" && subagent.status, "success");
-  assert.equal(subagent?.kind === "subagent" && subagent.summaryText, "found it");
+  assert.equal(subagent?.kind === "subagent" && subagent.summaryText, "look around");
   assert.equal(subagent?.kind === "subagent" && subagent.parentToolCallId, "call_sub");
   assert.equal(subagent?.kind === "subagent" && subagent.childSessionId, "child-1");
 });

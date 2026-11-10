@@ -19,6 +19,7 @@ import type {
   NekRpcSessionState,
   NekSessionEntry,
   NekState,
+  NekSubagentRecord,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekRowIdentity } from "./nekRows.js";
@@ -307,17 +308,7 @@ export function subagentRowFromRecord(
   entityId: string,
   rowId: number,
   turnId: string,
-  record: {
-    id: string;
-    description: string;
-    type: string;
-    status: "running" | "completed" | "errored" | "aborted";
-    startedAt: number;
-    endedAt?: number;
-    finalText?: string;
-    error?: string;
-    sessionFile?: string;
-  },
+  record: NekSubagentRecord,
   parentToolCallId?: string,
 ): ConversationRow {
   const status =
@@ -328,13 +319,14 @@ export function subagentRowFromRecord(
         : record.status === "aborted"
           ? "cancelled"
           : "running";
-  const text = record.finalText ?? record.error ?? record.description;
   return buildSubagentRow(identity(entityId, rowId, turnId, record.startedAt), {
     subagentType: record.type,
     status,
-    summaryText: text,
+    // This is the task's compact label, not the full Markdown report (available in the child tab).
+    summaryText: record.description,
     ...(parentToolCallId ? { parentToolCallId } : {}),
     childSessionId: record.id,
+    ...(record.background ? { backgrounded: true as const } : {}),
     startedAt: record.startedAt,
     ...(record.endedAt === undefined ? {} : { endedAt: record.endedAt }),
   });

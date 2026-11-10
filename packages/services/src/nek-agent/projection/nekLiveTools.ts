@@ -5,6 +5,7 @@ import { mergeToolResultRow } from "./nekToolResultRow.js";
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { subagentRowFromRecord } from "./nekProjectionSnapshot.js";
+import { extractSubagentsFromToolResult } from "./nekSubagentRecords.js";
 
 /**
  * 工具执行与子代理行。
@@ -121,26 +122,23 @@ export function applyToolExecutionEnd(
       { toolCallId, toolName, result, isError, endedAt },
     ),
   );
-  if (toolName === "subagent") {
-    const record = subagentRecordFrom(details);
-    if (record) applySubagentRecord(ctx, record, toolCallId);
-  }
+  applySubagentDetails(ctx, toolName, toolCallId, details);
 }
 
-function subagentRecordFrom(details: unknown): NekSubagentRecord | undefined {
-  if (typeof details !== "object" || details === null) return undefined;
-  const record = (details as { subagent?: unknown }).subagent;
-  return typeof record === "object" && record !== null ? (record as NekSubagentRecord) : undefined;
-}
-
-/** `subagent` 工具结果里的 details 携带完整记录；浮动行按 `subagent:<id>` 归并。 */
+/** Live and replay share the typed subagent/await/stop_subagent result contract. */
 export function applySubagentDetails(
   ctx: NekLiveContext,
+  toolName: string,
   toolCallId: string,
   details: unknown,
 ): void {
-  const record = subagentRecordFrom(details);
-  if (record) applySubagentRecord(ctx, record, toolCallId);
+  for (const { record, parentToolCallId } of extractSubagentsFromToolResult(
+    toolName,
+    toolCallId,
+    details,
+  )) {
+    applySubagentRecord(ctx, record, parentToolCallId);
+  }
 }
 
 /** `extension_event: nek.subagent` 与工具 details 共用的子代理行更新。 */
@@ -153,12 +151,13 @@ export function applySubagentRecord(
   const rowId = ctx.store.allocate(entityId);
   const existing = ctx.store.getRow(rowId);
   const createdAt = existing?.createdAt ?? record.startedAt;
-  const row = subagentRowFromRecord(
-    entityId,
-    rowId,
-    currentTurnId(ctx),
-    record,
-    parentToolCallId ?? (existing?.kind === "subagent" ? existing.parentToolCallId : undefined),
-  );
+  const subagent = existing?.kind === "subagent" ? existing : undefined;
+  const parentId = subagent?.parentToolCallId ?? parentToolCallId;
+  const parentRowId = parentId ? ctx.store.findRowId(`tool:${parentId}`) : undefined;
+  const parent = parentRowId === undefined ? undefined : ctx.store.getRow(parentRowId);
+  // Progress belongs to the spawn, not to whichever user turn happens to be active now.
+  // A later tool result may fill the parent anchor missing from the first extension event.
+  const turnId = parent?.turnId ?? subagent?.turnId ?? currentTurnId(ctx);
+  const row = subagentRowFromRecord(entityId, rowId, turnId, record, parentId);
   ctx.store.add({ ...row, createdAt, createdAtSeq: rowId } as ConversationRow);
 }

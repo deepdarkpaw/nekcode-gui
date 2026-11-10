@@ -315,6 +315,7 @@ export function buildSubagentRow(
     summaryText: string;
     parentToolCallId?: string;
     childSessionId?: string;
+    backgrounded?: true;
     startedAt?: number;
     endedAt?: number;
   },
@@ -327,6 +328,7 @@ export function buildSubagentRow(
     summaryText: args.summaryText,
     ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
     ...(args.childSessionId ? { childSessionId: args.childSessionId } : {}),
+    ...(args.backgrounded ? { backgrounded: true as const } : {}),
     ...(args.startedAt === undefined ? {} : { startedAt: args.startedAt }),
     ...(args.endedAt === undefined ? {} : { endedAt: args.endedAt }),
   };

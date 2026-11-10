@@ -161,7 +161,7 @@ test("SP-1: toolResult details restore every persisted subagent row with its par
     for (const row of rows) {
       assert.equal(row.status, "success");
       assert.equal(row.subagentType, "worker");
-      assert.equal(row.summaryText, `report ${row.childSessionId}`);
+      assert.equal(row.summaryText, `Inspect ${row.childSessionId}`);
       assert.equal(row.startedAt, 1_000);
       // `await` 的更新是同一行的状态刷新：结束时间取最后出现的记录。
       assert.equal(row.endedAt, 3_000);
