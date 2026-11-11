@@ -11,6 +11,7 @@ import type { NekPlanSummary } from "@zcode/shared/nek-protocol";
 import type { NekSessionCommandEnvelope } from "./types.js";
 import { isNekState } from "../service/types.js";
 import { buildPlanPreviewRow } from "../projection/nekRows.js";
+import { nekConversationRowsRange } from "../projection/nekConversationHistory.js";
 import {
   bindingSnapshot,
   existingBindingSnapshot,
@@ -244,26 +245,7 @@ export function createNekLegacyMethods(
     },
     async conversationRowsRangeV4(input) {
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
-      const snapshot = target.service.conversationSnapshot(sessionKey);
-      const beforeRowId = input.beforeRowId;
-      const beforeIndex =
-        beforeRowId !== undefined
-          ? snapshot.rows.window.findIndex((row) => row.rowId === beforeRowId)
-          : -1;
-      const rows =
-        beforeRowId !== undefined
-          ? beforeIndex >= 0
-            ? snapshot.rows.window.slice(0, beforeIndex)
-            : []
-          : snapshot.rows.window;
-      const window = rows.slice(-input.limit);
-      return {
-        rows: window,
-        atSeq: snapshot.seq,
-        atRevision: snapshot.revision,
-        atLogEpoch: snapshot.logEpoch,
-        hasMore: window.length < rows.length,
-      };
+      return nekConversationRowsRange(target.service.conversationSnapshot(sessionKey), input);
     },
     async conversationPlansV4(input): Promise<V4ConversationPlansResult> {
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);

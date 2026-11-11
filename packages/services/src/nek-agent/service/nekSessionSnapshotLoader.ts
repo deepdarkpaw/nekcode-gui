@@ -1,3 +1,5 @@
+import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
+import { measureNekOpenRequest } from "./nekSessionOpenTiming.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 import { isNekState, type NekSessionPhase, type NekSessionRecord } from "./types.js";
@@ -90,23 +92,28 @@ export async function initializeSessionState(
 export async function reloadSessionSnapshot(
   context: NekSessionSnapshotContext,
   process: NekRpcProcess,
+  openTiming?: ConversationOpenTiming,
 ): Promise<void> {
   const { record } = context;
   for (let attempt = 0; attempt < MAX_SNAPSHOT_ATTEMPTS; attempt += 1) {
     assertSnapshotTarget(record, process);
     const epoch = record.stateEpoch ?? 0;
-    const [state, entries, stats] = await Promise.all([
-      process.client.call({ type: "get_state" }),
-      process.client.call({ type: "get_entries" }),
-      process.client.call({ type: "get_session_stats" }),
-    ]);
+    const [state, entries, stats] = await measureNekOpenRequest(openTiming, () =>
+      Promise.all([
+        process.client.call({ type: "get_state" }),
+        process.client.call({ type: "get_entries" }),
+        process.client.call({ type: "get_session_stats" }),
+      ]),
+    );
     assertSnapshotTarget(record, process);
     if ((record.stateEpoch ?? 0) !== epoch) continue;
     // Registry must not predate the persisted spawn facts used to reconstruct child rows.
-    const extension = await process.client.call({
-      type: "extension_call",
-      method: "nek.get_state",
-    });
+    const extension = await measureNekOpenRequest(openTiming, () =>
+      process.client.call({
+        type: "extension_call",
+        method: "nek.get_state",
+      }),
+    );
     // 取快照期间发生了压缩/回合边界：这批事实属于更早的生命周期，丢弃重取。
     if ((record.stateEpoch ?? 0) !== epoch) continue;
     // 关闭/换进程同样整批作废：迟到的响应不能再落地。

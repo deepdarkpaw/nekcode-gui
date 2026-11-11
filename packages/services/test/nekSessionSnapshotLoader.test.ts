@@ -3,6 +3,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
 import {
@@ -120,6 +121,29 @@ test("世代一致时快照正常落地", async () => {
   assert.equal(h.settled(), 1);
   assert.equal(h.boundPaths(), 1);
   assert.deepEqual(h.phases(), ["idle"]);
+});
+
+test("OT-1: snapshot timing measures parallel RPC waits once and excludes projection work", async (t) => {
+  let now = 0;
+  t.mock.method(performance, "now", () => now);
+  const h = harness();
+  const process = fakeProcess(h.calls, (type) => {
+    if (type === "get_entries") now += 25;
+    if (type === "extension_call") now += 10;
+  });
+  h.record.process = process;
+  h.context.createProjector = () =>
+    ({
+      loadSnapshot: () => {
+        now += 80;
+      },
+      flushNow: () => {},
+    }) as unknown as NekConversationProjector;
+  const timing: ConversationOpenTiming = { version: 1 };
+  await reloadSessionSnapshot(h.context, process, timing);
+  assert.equal(timing.cliRequestMs, 35);
+  assert.equal(now, 115);
+  assert.deepEqual(h.calls, ["get_state", "get_entries", "get_session_stats", "extension_call"]);
 });
 
 test("SS-2: projection reload samples the child registry only after persisted entries finish", async () => {

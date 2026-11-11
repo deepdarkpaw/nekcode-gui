@@ -2,6 +2,7 @@ import type { NekSessionSummary } from "@zcode/shared/nek-protocol";
 import { sessionMapKey } from "./frameHelpers.js";
 import type { NekSessionBinding, NekWorkspaceTarget } from "./types.js";
 import type { NekSession, NekSessionResult } from "../service/types.js";
+import { nekOpenDurationMs } from "../service/nekSessionOpenTiming.js";
 
 const MAX_BINDINGS = 5_000;
 const MAX_RESTORE_FLIGHTS = 128;
@@ -91,14 +92,20 @@ export class NekSessionBindings {
   }
 
   private async restore(target: NekWorkspaceTarget, sessionId: string): Promise<NekSessionBinding> {
+    const lookupStartedAt = performance.now();
     const summary = (await this.ports.listSessions(target)).find((item) => item.id === sessionId);
+    const taskMetaReadMs = nekOpenDurationMs(lookupStartedAt);
     if (!summary) throw new Error(`nek session ${sessionId} was not found`);
-    await this.ports.resumeSession({
+    const result = await this.ports.resumeSession({
       workspacePath: target.workspacePath,
       sessionPath: summary.path,
     });
     this.assertAlive();
-    return this.require(target, sessionId);
+    // 返回副本：共享在途恢复可共享本次 timing，之后 warm ensure 只读不带 timing 的表项。
+    return {
+      ...this.require(target, sessionId),
+      openTiming: { version: 1, ...result.openTiming, taskMetaReadMs },
+    };
   }
 
   private assertAlive(): void {

@@ -1,6 +1,7 @@
 import type { Event } from "@zcode/rpc";
 import type {
   CommandsQueryResult,
+  ConversationOpenTiming,
   ConversationTopicWireCandidate,
   ConversationSnapshot,
   SessionsIndexTopicWireCandidate,
@@ -59,6 +60,8 @@ export interface NekSessionBinding {
   sessionKey: string;
   sessionId: string;
   sessionPath?: string;
+  /** 仅本次在途 admission 的诊断，不保存在 binding 表中。 */
+  openTiming?: ConversationOpenTiming;
 }
 
 export interface NekSessionCommandEnvelope {

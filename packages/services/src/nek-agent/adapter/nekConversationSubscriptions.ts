@@ -6,6 +6,8 @@ import type {
   V4ConversationSubscribeResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentService } from "../service/nekAgentService.js";
+import { nekOpenDurationMs } from "../service/nekSessionOpenTiming.js";
+import { nekConversationWireSnapshot } from "../projection/nekConversationHistory.js";
 import { makeSubscriptionId, makeTopicWireFrames, workspaceKey } from "./frameHelpers.js";
 import type {
   NekConversationResyncParams,
@@ -16,6 +18,11 @@ import type {
 } from "./types.js";
 
 const MAX_CONVERSATION_SUBSCRIPTIONS = 128;
+
+interface ConversationDeliveryTiming {
+  encodeMs: number;
+  snapshotRowCount?: number;
+}
 
 interface ConversationSubscription {
   id: string;
@@ -46,11 +53,13 @@ export class NekConversationSubscriptions {
   ) {}
 
   async subscribe(input: NekConversationSubscribeParams): Promise<V4ConversationSubscribeResult> {
+    const subscribeStartedAt = performance.now();
     if (this.subscriptions.size >= MAX_CONVERSATION_SUBSCRIPTIONS)
       throw new Error(
         `nek conversation subscription limit exceeded (${MAX_CONVERSATION_SUBSCRIPTIONS})`,
       );
     const binding = await this.ensureBinding(input, input.sessionId);
+    const hostPrepareMs = nekOpenDurationMs(subscribeStartedAt);
     const topic = `conversation/${input.sessionId}`;
     const subscription: ConversationSubscription = {
       id: makeSubscriptionId(topic),
@@ -61,12 +70,14 @@ export class NekConversationSubscriptions {
       detach: () => {},
     };
     let firstFrame: ConversationTopicFrame | undefined;
+    let initialDelivery: ConversationDeliveryTiming | undefined;
     let initialError: unknown;
     subscription.detach = await this.service.subscribeConversation(binding.sessionKey, (frame) => {
       const deliveryKind = firstFrame ? "online" : "initial";
       firstFrame ??= frame;
       try {
-        this.emit(subscription, { ...frame, topic }, deliveryKind);
+        const delivery = this.emit(subscription, { ...frame, topic }, deliveryKind);
+        if (deliveryKind === "initial") initialDelivery = delivery;
       } catch (error) {
         // 投影器隔离 listener 异常；首帧编码失败必须转成订阅失败，不能成功 ACK 后等超时。
         if (deliveryKind !== "initial") throw error;
@@ -77,10 +88,29 @@ export class NekConversationSubscriptions {
       subscription.detach();
       throw initialError;
     }
+    if (firstFrame?.payload.kind !== "snapshot" || !initialDelivery) {
+      subscription.detach();
+      throw new Error("nek conversation subscription did not produce an initial snapshot");
+    }
     this.subscriptions.set(subscription.id, subscription);
-    const logEpoch =
-      firstFrame?.payload.kind === "snapshot" ? firstFrame.payload.snapshot.logEpoch : "nek-1";
-    return { ack: { subscriptionId: subscription.id, mode: "snapshot", logEpoch } };
+    return {
+      ack: {
+        subscriptionId: subscription.id,
+        mode: "snapshot",
+        logEpoch: firstFrame.payload.snapshot.logEpoch,
+        openTiming: {
+          version: 1,
+          sessionRuntimeState: "warm",
+          ...(this.service.getSession(binding.sessionKey)?.processId !== undefined
+            ? { cliProcessState: "reused" as const }
+            : {}),
+          ...binding.openTiming,
+          hostPrepareMs,
+          initialFrameEncodeMs: initialDelivery.encodeMs,
+          snapshotRowCount: initialDelivery.snapshotRowCount,
+        },
+      },
+    };
   }
 
   async resync(input: NekConversationResyncParams): Promise<V4ConversationResyncResult> {
@@ -123,17 +153,35 @@ export class NekConversationSubscriptions {
     subscription: ConversationSubscription,
     frame: ConversationTopicFrame,
     deliveryKind: "initial" | "online" | "recovery",
-  ): void {
+  ): ConversationDeliveryTiming {
+    const encodeStartedAt = performance.now();
     subscription.ordinal += 1;
     const emitter = this.emitter(subscription.workspaceKey);
-    for (const wire of makeTopicWireFrames(
-      frame,
+    const wireFrame: ConversationTopicFrame =
+      frame.payload.kind === "snapshot"
+        ? {
+            ...frame,
+            payload: {
+              kind: "snapshot",
+              snapshot: nekConversationWireSnapshot(frame.payload.snapshot),
+            },
+          }
+        : frame;
+    const wires = makeTopicWireFrames(
+      wireFrame,
       subscription.id,
       subscription.ordinal,
       deliveryKind,
-    )) {
-      emitter.fire(wire);
-    }
+    );
+    // 扇出 listener 可能同步运行任意宿主逻辑，不能计入构造/编码耗时。
+    const encodeMs = nekOpenDurationMs(encodeStartedAt);
+    for (const wire of wires) emitter.fire(wire);
+    return {
+      encodeMs,
+      ...(wireFrame.payload.kind === "snapshot"
+        ? { snapshotRowCount: wireFrame.payload.snapshot.rows.window.length }
+        : {}),
+    };
   }
 
   private emitter(workspace: string): Emitter<ConversationTopicWireCandidate> {

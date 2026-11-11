@@ -1,4 +1,6 @@
+import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
+import { measureNekOpenRequest, nekOpenDurationMs } from "./nekSessionOpenTiming.js";
 import { isNekSessionSnapshot, type NekSessionRecord, type NekSessionResult } from "./types.js";
 
 const MAX_RESUME_FLIGHTS = 128;
@@ -51,15 +53,26 @@ export abstract class NekAgentSessionResumeBase extends NekAgentServiceRuntimeBa
   }): Promise<NekSessionResult> {
     const existing = this.byPath.get(input.sessionPath);
     if (existing?.process && !existing.readonly) return this.result(existing);
+    const restoreStartedAt = performance.now();
+    const openTiming: ConversationOpenTiming = { version: 1, sessionRuntimeState: "cold" };
     const control = await this.pool.ensureControl();
-    const snapshot = await control.client.call({
-      type: "read_session_snapshot",
-      sessionPath: input.sessionPath,
-    });
+    openTiming.cliBootstrapMs = nekOpenDurationMs(restoreStartedAt);
+    const snapshot = await measureNekOpenRequest(openTiming, () =>
+      control.client.call({
+        type: "read_session_snapshot",
+        sessionPath: input.sessionPath,
+      }),
+    );
     this.assertAlive();
     if (!isNekSessionSnapshot(snapshot))
       throw new Error("nek returned an invalid session snapshot");
-    if (snapshot.session.locked) return this.openLockedSnapshot(snapshot, input.cwd);
+    if (snapshot.session.locked) {
+      const result = this.openLockedSnapshot(snapshot, input.cwd);
+      return {
+        ...result,
+        openTiming: { ...openTiming, cliSessionRestoreMs: nekOpenDurationMs(restoreStartedAt) },
+      };
+    }
 
     const record =
       existing ??
@@ -79,15 +92,22 @@ export abstract class NekAgentSessionResumeBase extends NekAgentServiceRuntimeBa
       record.lockedBy = undefined;
       record.lockHolder = undefined;
       record.snapshot = undefined;
-      await this.openProcess(record, {
-        sessionKey: record.key,
-        cwd: record.cwd,
-        sessionPath: input.sessionPath,
-        approve: approval,
-        extensionUi: this.extensionUiFor({ workspacePath: record.cwd, sessionKey: record.key }),
-      });
+      await this.openProcess(
+        record,
+        {
+          sessionKey: record.key,
+          cwd: record.cwd,
+          sessionPath: input.sessionPath,
+          approve: approval,
+          extensionUi: this.extensionUiFor({ workspacePath: record.cwd, sessionKey: record.key }),
+        },
+        openTiming,
+      );
       this.assertAlive();
-      return this.result(record);
+      return {
+        ...this.result(record),
+        openTiming: { ...openTiming, cliSessionRestoreMs: nekOpenDurationMs(restoreStartedAt) },
+      };
     } catch (error) {
       this.detachProcess(record);
       await this.reclaimQuietly(record, "failed to reclaim a failed nek session process");

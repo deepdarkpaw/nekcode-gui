@@ -1,4 +1,6 @@
 import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
+import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
+import { measureNekOpenBootstrap, measureNekOpenRequest } from "./nekSessionOpenTiming.js";
 import type {
   NekAgentMessage,
   NekInteractionScope,
@@ -189,11 +191,14 @@ export abstract class NekAgentServiceRuntimeBase {
   protected async openProcess(
     record: NekSessionRecord,
     request: NekSessionProcessCreateOptions,
+    openTiming?: ConversationOpenTiming,
   ): Promise<NekRpcProcess> {
-    const process = await this.acquireProcess(record, request);
+    const process = await measureNekOpenBootstrap(openTiming, record.process, () =>
+      this.acquireProcess(record, request),
+    );
     try {
-      await this.initializeProcess(record, process);
-      await this.refreshProcessSnapshot(record);
+      await this.initializeProcess(record, process, openTiming);
+      await this.refreshProcessSnapshot(record, openTiming);
     } finally {
       this.pool.releaseSession(record.key);
     }
@@ -286,15 +291,21 @@ export abstract class NekAgentServiceRuntimeBase {
   protected async initializeProcess(
     record: NekSessionRecord,
     process: NekRpcProcess,
+    openTiming?: ConversationOpenTiming,
   ): Promise<void> {
-    await initializeSessionState(this.snapshotContext(record), process);
+    await measureNekOpenRequest(openTiming, () =>
+      initializeSessionState(this.snapshotContext(record), process),
+    );
   }
 
   /** 用 get_entries / get_state / get_session_stats 重建投影器快照（带生命周期世代 fence）。 */
-  protected async refreshProcessSnapshot(record: NekSessionRecord): Promise<void> {
+  protected async refreshProcessSnapshot(
+    record: NekSessionRecord,
+    openTiming?: ConversationOpenTiming,
+  ): Promise<void> {
     const process = record.process;
     if (!process) throw new Error(`nek session ${record.key} has no live process`);
-    await reloadSessionSnapshot(this.snapshotContext(record), process);
+    await reloadSessionSnapshot(this.snapshotContext(record), process, openTiming);
   }
 
   protected createProjector(record: NekSessionRecord): NekConversationProjector {

@@ -1,5 +1,9 @@
 import type { GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
-import type { ConversationSnapshot, ConversationTopicFrame } from "@zcode/shared/zcode-protocol-v4";
+import type {
+  ConversationOpenTiming,
+  ConversationSnapshot,
+  ConversationTopicFrame,
+} from "@zcode/shared/zcode-protocol-v4";
 import type {
   NekAgentMessage,
   NekGuiInfo,
@@ -78,6 +82,8 @@ export interface NekSession {
 
 export interface NekSessionResult extends NekSession {
   conversation: ConversationSnapshot;
+  /** 仅随本次恢复返回的技术时长；不写入会话记录或 conversation 快照。 */
+  openTiming?: ConversationOpenTiming;
 }
 
 export interface NekPromptInput {
