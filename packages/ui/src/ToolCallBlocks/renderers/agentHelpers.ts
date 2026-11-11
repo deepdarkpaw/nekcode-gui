@@ -1,6 +1,7 @@
 import type { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ToolCallBlockRenderContext } from "@/ToolCallBlocks/shared.js";
 import { isSubagentColor } from "@/lib/subagentColors.js";
+import { readToolResultDisplay } from "../toolResultDisplay.js";
 
 type AgentIntl = ReturnType<typeof useZCodeIntl>["intl"];
 type AgentToolCall = ToolCallBlockRenderContext["toolCallNode"]["toolCall"];
@@ -132,16 +133,24 @@ export function getAgentKindLabel(
   // 流式 input 的半截 JSON 暂时读不到 subagent_type，若一读不到就按“模型省略字段”
   // 回退 general-purpose，首帧会误报、之后再跳成真实类型。只有 inputPreviewComplete 明确为 true
   // 才能确认字段确实省略；已投影的 subagentRow 类型则作为 runtime 权威结果优先展示。
+  const display = readToolResultDisplay(toolCall.raw);
+  const resuming = Boolean(inputRecord && readStringField(inputRecord, ["resume"]));
   const explicitName =
+    (display?.kind === "subagent_identity" ? display.type : undefined) ??
     (authoritativeAgentType?.trim() || undefined) ??
     readAgentNameFromRecord(outputRecord) ??
-    readAgentNameFromRecord(inputRecord) ??
+    (resuming ? undefined : readAgentNameFromRecord(inputRecord)) ??
     rawName;
   if (explicitName) {
     return explicitName;
   }
 
-  return rawRecord?.inputPreviewComplete === true ? fallbackLabel || DEFAULT_AGENT_TYPE_LABEL : "";
+  // Resume preserves the original type; omitted input is not a request for the default type.
+  if (resuming) return "";
+  if (rawRecord?.inputPreviewComplete !== true) return "";
+  return (
+    fallbackLabel || (toolCall.toolName === "subagent" ? "explorer" : DEFAULT_AGENT_TYPE_LABEL)
+  );
 }
 
 export function getAgentColor(toolCall: AgentToolCall) {

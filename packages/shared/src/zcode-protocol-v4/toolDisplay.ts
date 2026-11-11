@@ -47,10 +47,20 @@ export const questionAnswersDisplaySchema = z.object({
   ),
 });
 
+/** Runtime identity of this spawn/resume call, independent of the child's original timeline anchor. */
+export const subagentIdentityDisplaySchema = z.object({
+  kind: z.literal("subagent_identity"),
+  id: z.string().min(1),
+  type: z.string().min(1),
+  model: z.string().min(1).optional(),
+});
+export type SubagentIdentityDisplay = z.infer<typeof subagentIdentityDisplaySchema>;
+
 // toolCall 终态 output 的结构化展示模型。
 const toolResultDisplaySchema = z.discriminatedUnion("kind", [
   bashOutputDisplaySchema,
   questionAnswersDisplaySchema,
+  subagentIdentityDisplaySchema,
   z.object({
     kind: z.literal("file_diff"),
     /** Original tool patch; do not regenerate it from a single input replacement. */

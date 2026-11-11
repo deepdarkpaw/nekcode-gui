@@ -1,5 +1,6 @@
 import {
   questionAnswersDisplaySchema,
+  subagentIdentityDisplaySchema,
   type ToolResultDisplay,
 } from "@zcode/shared/zcode-protocol-v4";
 
@@ -58,6 +59,15 @@ export function projectNekToolDetails(
 ): ToolResultDisplay | undefined {
   const data = record(details);
   if (!data) return undefined;
+  if (toolName === "subagent" && data.subagent !== undefined) {
+    const child = record(data.subagent);
+    return subagentIdentityDisplaySchema.parse({
+      kind: "subagent_identity",
+      id: child?.id,
+      type: child?.type,
+      model: child?.model,
+    });
+  }
   if (toolName === "ask_question" && data.answers !== undefined) {
     return questionAnswersDisplaySchema.parse({ kind: "question_answers", answers: data.answers });
   }

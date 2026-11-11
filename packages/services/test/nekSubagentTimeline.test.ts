@@ -6,6 +6,7 @@ import type {
   NekSessionEntry,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
+import { conversationRowSchema } from "@zcode/shared/zcode-protocol-v4";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
 import { projectEntries } from "../src/nek-agent/projection/nekEntryProjection.js";
 
@@ -98,6 +99,51 @@ function fixture() {
       })),
   };
 }
+
+test("resume tool rows carry runtime identity live and on replay without moving the original child anchor", () => {
+  const { p, message, result, entries } = fixture();
+  try {
+    const resumed = { ...child, type: "preset-worker", model: "test/reasoner" };
+    const call = assistant(2200, "subagent", "resume-call");
+    const block = call.content[0]!;
+    if (block.type !== "toolCall") throw new Error("Expected tool call");
+    block.arguments = { description: "Continue workflow", resume: child.id };
+    message(call);
+    const expected = {
+      kind: "subagent_identity",
+      id: child.id,
+      type: resumed.type,
+      model: resumed.model,
+    };
+    p.handleEvent({
+      type: "tool_execution_update",
+      toolName: "subagent",
+      toolCallId: "resume-call",
+      args: block.arguments,
+      partialResult: { content: [], details: { subagent: resumed } },
+    });
+    const partial = p.rows.window.find(
+      (row) => row.kind === "toolCall" && row.toolCallId === "resume-call",
+    );
+    assert.deepEqual(partial?.kind === "toolCall" && partial.output?.display, expected);
+    result("subagent", "resume-call", { subagent: resumed }, 2300);
+    for (const rows of [
+      p.rows.window,
+      projectEntries({ sessionId: "parent", entries: entries() }).rows,
+    ]) {
+      const row = rows.find((row) => row.kind === "toolCall" && row.toolCallId === "resume-call")!;
+      const parsed = conversationRowSchema.parse(JSON.parse(JSON.stringify(row)));
+      assert.deepEqual(parsed.kind === "toolCall" && parsed.output?.display, expected);
+      assert.deepEqual(parsed.kind === "toolCall" && parsed.input, block.arguments);
+      const children = rows.filter((row) => row.kind === "subagent");
+      assert.equal(children.length, 1);
+      assert.equal(children[0]?.parentToolCallId, "spawn");
+      assert.equal(children[0]?.subagentType, resumed.type);
+    }
+  } finally {
+    p.dispose();
+  }
+});
 
 test("ST-1: accepted input ends the old wait's visual turn; subsequent work stays after the input", () => {
   const { p, message, entries } = fixture();

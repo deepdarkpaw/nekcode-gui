@@ -1,4 +1,6 @@
 import {
+  subagentIdentityDisplaySchema,
+  type SubagentIdentityDisplay,
   toolCallListModelsDisplaySchema,
   type ToolCallListModelsDisplay,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -33,6 +35,7 @@ interface RespondToCoordinatorToolResultDisplay {
 }
 
 export type ToolResultDisplay =
+  | SubagentIdentityDisplay
   | LocalAgentMessageToolResultDisplay
   | TaskStopToolResultDisplay
   | TaskOutputToolResultDisplay
@@ -56,6 +59,11 @@ function readOptionalString(
 
 function parseDisplay(value: unknown): ToolResultDisplay | undefined {
   if (!isRecord(value)) return undefined;
+
+  if (value.kind === "subagent_identity") {
+    const parsed = subagentIdentityDisplaySchema.safeParse(value);
+    return parsed.success ? parsed.data : undefined;
+  }
 
   if (value.kind === "local_agent_message") {
     if (value.status !== "success" && value.status !== "failed") return undefined;

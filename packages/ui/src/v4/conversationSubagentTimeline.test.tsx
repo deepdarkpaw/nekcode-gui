@@ -85,6 +85,55 @@ const renderRows = (rows: ConversationRow[], onOpenSubagentSession = vi.fn()) =>
 };
 afterEach(cleanup);
 
+it.each([undefined, "generalPurpose"])(
+  "resume displays the result's worker type instead of omitted/conflicting input (%s)",
+  (requestedType) => {
+    const resumed: ToolCallRow = {
+      ...spawn,
+      ...base(8, "second"),
+      toolCallId: "resume-call",
+      input: { description: "Continue workflow", resume: "child", subagent_type: requestedType },
+      output: {
+        text: "Started subagent child",
+        display: {
+          kind: "subagent_identity",
+          id: "child",
+          type: "preset-worker",
+          model: "test/reasoner",
+        },
+      },
+    };
+    // The original spawn and child may be outside the tail window. This row must be self-contained.
+    const { container } = renderRows([header(6, "second", "running"), resumed]);
+    expect(container.textContent).toContain("preset-worker");
+    expect(container.textContent).not.toContain("general-purpose");
+    expect(container.textContent).not.toContain("generalPurpose");
+  },
+);
+
+it("resume awaiting its runtime identity never invents a default type", () => {
+  const resumed: ToolCallRow = {
+    ...spawn,
+    toolCallId: "resume-call",
+    status: "running",
+    input: { description: "Continue workflow", resume: "child" },
+    output: undefined,
+  };
+  const { container } = renderRows([header(1, "first", "running"), resumed]);
+  expect(container.textContent).toContain("Continue workflow");
+  expect(container.textContent).not.toContain("general-purpose");
+  expect(container.textContent).not.toContain("explorer");
+});
+
+it("a new nek subagent without a requested type uses nek's explorer default", () => {
+  const { container } = renderRows([
+    header(1, "first", "running"),
+    { ...spawn, status: "running", input: { description: "Explore files" }, output: undefined },
+  ]);
+  expect(container.textContent).toContain("explorer");
+  expect(container.textContent).not.toContain("general-purpose");
+});
+
 it("ST-4: a completed child stays paired with its original spawn and never dumps its Markdown report", () => {
   const items = buildAssistantWorkRenderItems([spawn, child], context);
   expect(items.map((item) => item.kind)).toEqual(["agentToolCall"]);
