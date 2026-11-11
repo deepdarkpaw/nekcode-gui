@@ -120,7 +120,7 @@ export function useNekInstructionsDoc(
   const save = useCallback(
     (content: string) =>
       mutate({
-        optimistic: (data) => ({ ...data, content }),
+        // 待保存正文由 InstructionsEditor 的草稿持有，文档只在写后真实读取时更新。
         write: (data) =>
           config.writeInstructions(target, scope, content, { revision: data.revision, cwd }),
       }),

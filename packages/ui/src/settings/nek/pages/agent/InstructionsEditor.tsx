@@ -11,30 +11,37 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { isImeComposing } from "@/lib/imeComposition.js";
 import { formatActionBindingLabel } from "@/shortcuts/actionBinding.js";
+import { useNekSettingsContext } from "../../api/NekSettingsContext.js";
 import { useNekInstructionsDoc } from "../../api/settingsDocs.js";
 import { useNekDirtyRegistration, useOnDocumentReset } from "../../api/useNekDocument.js";
 import { DocumentBanners, DocumentGate } from "../../components/DocumentStatus.js";
 
-export function InstructionsEditor({
-  scope,
-  cwd,
-  title,
-}: {
+interface InstructionsEditorProps {
   scope: NekConfigScope;
   cwd?: string;
   title: string;
-}) {
+}
+
+export function InstructionsEditor(props: InstructionsEditorProps) {
+  const { targetKey } = useNekSettingsContext();
+  return (
+    <InstructionsEditorImpl key={JSON.stringify([targetKey, props.scope, props.cwd])} {...props} />
+  );
+}
+
+function InstructionsEditorImpl({ scope, cwd, title }: InstructionsEditorProps) {
   const { intl } = useZCodeIntl();
   const doc = useNekInstructionsDoc(scope, cwd);
   const saved = doc.data?.content ?? "";
-  const [draft, setDraft] = useState(saved);
-  const dirty = draft !== saved;
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
+  // undefined 表示未编辑：异步读取与 clean watch 直接显示文档，不创建虚假的空草稿。
+  const [draft, setDraft] = useState<string>();
+  const value = draft ?? saved;
+  const dirty = value !== saved;
   useEffect(() => {
-    if (!dirtyRef.current) setDraft(saved);
+    // 正文只由真实读回确认；失败或保存期间的新编辑不能被早先的成功结果清掉。
+    setDraft((current) => (current === saved ? undefined : current));
   }, [saved]);
-  useOnDocumentReset(doc.resetToken, () => setDraft(doc.data?.content ?? ""));
+  useOnDocumentReset(doc.resetToken, () => setDraft(undefined));
   useNekDirtyRegistration([doc], dirty);
   const saveButtonRef = useRef<HTMLDivElement>(null);
 
@@ -57,9 +64,11 @@ export function InstructionsEditor({
           <div className="flex flex-col gap-2">
             <Textarea
               aria-label={title}
-              value={draft}
+              value={value}
               className="min-h-48 font-mono"
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) =>
+                setDraft(event.target.value === saved ? undefined : event.target.value)
+              }
               onKeyDown={handleKeyDown}
             />
             <div className="flex items-center justify-end gap-2">
@@ -68,7 +77,7 @@ export function InstructionsEditor({
                   {intl.formatMessage({ id: "settings.nek.instructions.unsaved" })}
                 </span>
               ) : null}
-              <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
+              <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(undefined)}>
                 {intl.formatMessage({ id: "settings.nek.instructions.revert" })}
               </Button>
               <div ref={saveButtonRef}>
@@ -78,7 +87,7 @@ export function InstructionsEditor({
                   disabledReason={intl.formatMessage({ id: "settings.nek.instructions.noChanges" })}
                   shortcut={formatActionBindingLabel("CmdOrCtrl+s")}
                   label={intl.formatMessage({ id: "settings.nek.instructions.save" })}
-                  onClick={() => doc.save(draft)}
+                  onClick={() => doc.save(value)}
                 >
                   {intl.formatMessage({ id: "settings.nek.instructions.save" })}
                 </AsyncButton>
