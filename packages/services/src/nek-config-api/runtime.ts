@@ -26,6 +26,7 @@ import type { NekWatchChange } from "./watch.js";
 import { agentsDir, projectConfigDir } from "./paths.js";
 import { modelRuntimeFingerprint, type NekLiveModelRuntime } from "./modelRuntime.js";
 import { NekLiveModelRuntimes } from "./liveModelRuntimes.js";
+import { NekControlModelReads, withModelReadAdmission } from "./controlModelReads.js";
 
 /** 目标机器上一个正在运行的 nek 会话进程。 */
 export interface NekConfigSessionHandle {
@@ -188,6 +189,7 @@ export class NekConfigRuntime {
           .catch((error: unknown) => this.logger?.warn("retired nek control close failed", error));
         throw new Error("nek control retired during creation; retry");
       }
+      const reads = new NekControlModelReads(context.executor);
       let lease: NekLiveModelRuntime;
       try {
         lease = this.liveModels.owner.register({
@@ -208,6 +210,7 @@ export class NekConfigRuntime {
               failures: [],
             }),
           release: () => {
+            reads.dispose();
             if (this.modelControls.get(context.key) === lease)
               this.modelControls.delete(context.key);
           },
@@ -221,19 +224,7 @@ export class NekConfigRuntime {
         throw error;
       }
       this.modelControls.set(context.key, lease);
-      return {
-        onAuthEvent: (listener) => client.onAuthEvent(listener),
-        respondExtensionUi: (response) => client.respondExtensionUi(response),
-        setStructuredHandler: (handler) => client.setStructuredHandler(handler),
-        close: () => client.close(),
-        call: ((command) => {
-          const call = () => client.call(command);
-          if (command.type === "get_available_models" || command.type === "get_model_catalog")
-            return lease.run("selection", call);
-          if (command.type === "reload") return lease.reload();
-          return call();
-        }) as NekControlClient["call"],
-      };
+      return withModelReadAdmission(client, lease, reads);
     });
     this.controls.set(context.key, created);
     try {
