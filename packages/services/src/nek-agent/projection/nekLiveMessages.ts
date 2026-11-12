@@ -11,8 +11,10 @@ import {
   assistantThinkingBlocks,
   assistantToolCalls,
   buildAssistantTextRow,
+  buildModelErrorMarker,
   buildPlanPreviewRow,
   buildReasoningRow,
+  buildTimelineMarkerRow,
   buildToolCallRow,
   buildUserInputRow,
   contentText,
@@ -196,8 +198,18 @@ export function applyMessageUpdate(
       );
       return;
     }
+    case "error":
+      // error carries the terminal assistant snapshot in some live transports. Project its
+      // content first so partial output is preserved, then the same message-based error marker
+      // will be upserted again by message_end if that event follows. The event reason is
+      // authoritative for aborts, even if a provider payload has an inconsistent stopReason.
+      if (update.error) {
+        applyAssistantMessage(ctx, update.error, false, update.reason !== "aborted");
+        if (update.reason === "aborted" && ctx.turn) ctx.turn.lastStopReason = "aborted";
+      }
+      return;
     default:
-      // `start` / `done` / `error` 不产生行：完成态由 message_end 决定。
+      // `start` / `done` 不产生行：完成态由 message_end 决定。
       return;
   }
 }
@@ -225,6 +237,7 @@ function applyAssistantMessage(
   ctx: NekLiveContext,
   assistant: NekAssistantMessage,
   streaming: boolean,
+  projectModelError = true,
 ): void {
   const responseKey = ctx.assistantResponseKey ?? `resp:${assistant.timestamp}`;
   const createdAt = toEpochMs(assistant.timestamp);
@@ -292,8 +305,35 @@ function applyAssistantMessage(
       }),
     );
   }
+  if (!streaming && projectModelError) applyAssistantErrorMarker(ctx, assistant);
   // 该 response 的流式累积到此为止：丢弃 key，下一次 message_start 重新建立。
   ctx.assistantResponseKey = streaming ? responseKey : undefined;
+}
+
+/** Error marker identity is based on the assistant message, not event delivery count. */
+export function applyAssistantErrorMarker(
+  ctx: NekLiveContext,
+  assistant: NekAssistantMessage,
+): void {
+  const marker = buildModelErrorMarker(assistant);
+  if (!marker) return;
+  const entityId = `model-error:${assistant.timestamp}`;
+  const rowId = ctx.store.allocate(entityId);
+  const previous = ctx.store.getRow(rowId);
+  if (
+    previous?.kind === "timelineMarker" &&
+    previous.marker.type === "modelError" &&
+    JSON.stringify(previous.marker) === JSON.stringify(marker)
+  ) {
+    return;
+  }
+  const identity = rowIdentity(
+    entityId,
+    rowId,
+    previous?.turnId ?? currentTurnId(ctx),
+    previous?.createdAt ?? toEpochMs(assistant.timestamp),
+  );
+  ctx.store.add(buildTimelineMarkerRow(identity, marker, "turnTailBoundary"));
 }
 
 function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessage): void {

@@ -108,6 +108,7 @@ import { ConversationFileRewindDialog } from "@/v4/ConversationFileRewindDialog.
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
 import { ConversationExtensionErrors } from "@/v4/ConversationExtensionErrors.js";
+import { ConversationModelError } from "@/v4/ConversationModelError.js";
 import { ConversationSubagentRow } from "@/v4/ConversationAgentToolCallRow.js";
 import {
   ConversationUserInputEpilogue,
@@ -1905,6 +1906,10 @@ function ConversationRowViewImpl({
       return row.marker.type === "extensionError" ? (
         <RowShell rowId={row.rowId}>
           <ConversationExtensionErrors marker={row.marker} />
+        </RowShell>
+      ) : row.marker.type === "modelError" ? (
+        <RowShell rowId={row.rowId}>
+          <ConversationModelError marker={row.marker} />
         </RowShell>
       ) : (
         <TimelineMarkerRowView row={row} context={context} />

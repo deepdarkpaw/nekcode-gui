@@ -12,7 +12,7 @@ import { buildTimelineMarkerRow, buildToolCallRow, toEpochMs } from "./nekRows.j
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentRecord } from "./nekLiveTools.js";
-import { applyCustomMessage } from "./nekLiveMessages.js";
+import { applyAssistantErrorMarker, applyCustomMessage } from "./nekLiveMessages.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 import { withNekModelSelection, withNekMode } from "./nekProjectionSnapshot.js";
 
@@ -243,6 +243,12 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
           "assistantWork",
         ),
       );
+      return;
+    }
+    case "message": {
+      if (entry.message.role === "assistant") {
+        applyAssistantErrorMarker(ctx, entry.message);
+      }
       return;
     }
     case "custom_message": {
