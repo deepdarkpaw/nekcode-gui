@@ -9,7 +9,7 @@
  * - `getAuthStatus`（nek `auth_status`）只给没有 models.json 条目的内建服务商补显示名；
  * - `readSettings` 提供默认模型/思考等级；有 workspace 时读 `project` 作用域的 `effective`，
  *   与 nek 的 `SettingsManager`（global ← project 深合并）一致；
- * - `watch` + `reloadRunningSessions`：配置变化 → nek 先重读配置，再读事实。
+ * - `watch` 失效通知；真实 NekConfigApi 在模型 RPC 准入处按内容保证新鲜度，避免第二个 reload owner。
  *
  * 目标固定为本机：host 进程本身就运行在目标机器上（远端 workspace 由远端 gui-server 的
  * 同名服务回答），因此这里不猜、也不接受“本地表代替远端”的目标参数。
@@ -35,6 +35,8 @@ export interface NekModelFactsApi extends Pick<
   | "reloadRunningSessions"
   | "watch"
 > {
+  /** Content-owning API ports admit their own model RPCs; non-owning ports require explicit reload. */
+  readonly ownsModelRuntimeFreshness?: boolean;
   readModelsConfig(target: NekConfigTarget): Promise<Pick<NekModelsConfigView, "providers">>;
 }
 
@@ -170,7 +172,7 @@ export function createNekModelFactsSource(
     read: async (readOptions) => {
       const cwd = readOptions?.cwd?.trim() ?? "";
       assertHealthy(cwd);
-      for (let attempt = 0; loadedEpoch !== epoch; attempt += 1) {
+      for (let attempt = 0; !api.ownsModelRuntimeFreshness && loadedEpoch !== epoch; attempt += 1) {
         if (attempt === 3)
           throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
         if (!reloading)

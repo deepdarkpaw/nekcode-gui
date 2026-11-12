@@ -13,6 +13,8 @@ import type {
   NekRpcCommandType,
   NekRpcResponseDataFor,
   NekSessionReloadOutcome,
+  NekModelRuntimeFreshness,
+  NekReloadResult,
 } from "@zcode/shared/nek-protocol";
 import type { NekControlClient } from "./control.js";
 import { createNekControlClient } from "./control.js";
@@ -22,6 +24,8 @@ import { NekLoginManager } from "./login.js";
 import { NekWatchHub } from "./watch.js";
 import type { NekWatchChange } from "./watch.js";
 import { agentsDir, projectConfigDir } from "./paths.js";
+import { modelRuntimeFingerprint, type NekLiveModelRuntime } from "./modelRuntime.js";
+import { NekLiveModelRuntimes } from "./liveModelRuntimes.js";
 
 /** 目标机器上一个正在运行的 nek 会话进程。 */
 export interface NekConfigSessionHandle {
@@ -29,6 +33,8 @@ export interface NekConfigSessionHandle {
   cwd?: string;
   /** 回合正在运行：reload 会被推迟到回合结束后。 */
   busy: boolean;
+  /** Content-deduped path for models-only write notifications. */
+  refreshModels?: () => Promise<NekReloadResult>;
   call: <C extends NekRpcCommandType>(
     command: NekRpcCommandOfType<C>,
   ) => Promise<NekRpcResponseDataFor<C>>;
@@ -117,6 +123,20 @@ export class NekConfigRuntime {
   private readonly controls = new Map<string, Promise<NekControlClient>>();
   private readonly reloadListeners = new Map<string, Set<(result: NekReloadOutcome) => void>>();
   private readonly autoReload: boolean;
+  private readonly modelControls = new Map<string, NekLiveModelRuntime>();
+  private readonly liveModels = new NekLiveModelRuntimes({
+    watch: (target, listener) => this.watch(target, listener),
+    report: (target, result) => this.emitReloadResult(target, result),
+    warn: (...args) => this.logger?.warn(...args),
+  });
+
+  /** Connect the machine-local session owner; registrations never create/reopen a process. */
+  modelRuntime(target: NekConfigTarget): NekModelRuntimeFreshness {
+    // Target resolution is lazy so host construction does not perform IO/start nek.
+    return {
+      register: (handle) => this.liveModels.forTarget(this.target(target)).register(handle),
+    };
+  }
 
   constructor(private readonly options: NekConfigApiOptions) {
     const config = options.config ?? {};
@@ -155,13 +175,71 @@ export class NekConfigRuntime {
     const context = this.target(target);
     const existing = this.controls.get(context.key);
     if (existing) return await existing;
-    const factory = this.options.control ?? defaultControlFactory;
-    const created = factory({ target, executor: context.executor, logger: this.options.logger });
+    if (this.controls.size >= 128) throw new Error("nek control capacity exceeded");
+    const factory = this.options.control ?? createNekControlClient;
+    const created = factory({
+      target,
+      executor: context.executor,
+      logger: this.options.logger,
+    }).then((client) => {
+      if (this.controls.get(context.key) !== created) {
+        void client
+          .close()
+          .catch((error: unknown) => this.logger?.warn("retired nek control close failed", error));
+        throw new Error("nek control retired during creation; retry");
+      }
+      let lease: NekLiveModelRuntime;
+      try {
+        lease = this.liveModels.owner.register({
+          handle: {
+            sessionKey: "control",
+            cwd: "",
+            isWritable: () => this.controls.get(context.key) === created,
+            reload: () => client.call({ type: "reload" }),
+            rebindModel: async () => undefined,
+            call: (command) => client.call(command),
+          },
+          fingerprint: () => modelRuntimeFingerprint(context.executor),
+          diagnostics: (result) =>
+            this.emitReloadResult(target, {
+              reloaded: result.deferred ? 0 : 1,
+              deferred: result.deferred ? 1 : 0,
+              diagnostics: result.diagnostics,
+              failures: [],
+            }),
+          release: () => {
+            if (this.modelControls.get(context.key) === lease)
+              this.modelControls.delete(context.key);
+          },
+        });
+      } catch (error) {
+        void client
+          .close()
+          .catch((closeError: unknown) =>
+            this.logger?.warn("unregistered nek control close failed", closeError),
+          );
+        throw error;
+      }
+      this.modelControls.set(context.key, lease);
+      return {
+        onAuthEvent: (listener) => client.onAuthEvent(listener),
+        respondExtensionUi: (response) => client.respondExtensionUi(response),
+        setStructuredHandler: (handler) => client.setStructuredHandler(handler),
+        close: () => client.close(),
+        call: ((command) => {
+          const call = () => client.call(command);
+          if (command.type === "get_available_models" || command.type === "get_model_catalog")
+            return lease.run("selection", call);
+          if (command.type === "reload") return lease.reload();
+          return call();
+        }) as NekControlClient["call"],
+      };
+    });
     this.controls.set(context.key, created);
     try {
       return await created;
     } catch (error) {
-      this.controls.delete(context.key);
+      if (this.controls.get(context.key) === created) this.controls.delete(context.key);
       throw error;
     }
   }
@@ -171,6 +249,7 @@ export class NekConfigRuntime {
     const key = targetKeyOf(target);
     const existing = this.controls.get(key);
     this.controls.delete(key);
+    this.modelControls.get(key)?.dispose();
     if (existing) await (await existing.catch(() => undefined))?.close();
   }
 
@@ -181,7 +260,8 @@ export class NekConfigRuntime {
 
   /** 目标机器上正在运行的会话进程（MCP 状态、reload 用）。 */
   sessionsOf(target: NekConfigTarget): NekConfigSessionHandle[] {
-    return this.options.sessions?.sessions(target) ?? [];
+    const live = this.liveModels.sessions(targetKeyOf(target));
+    return [...live, ...(this.options.sessions?.sessions(target) ?? [])];
   }
 
   /**
@@ -236,7 +316,8 @@ export class NekConfigRuntime {
     const agentDir = this.target(target).layout.agentDir;
     const workspaces = new Set(files.map((file) => workspaceOfWrite(agentDir, file.path)));
     const cwd = workspaces.size === 1 ? [...workspaces][0] : undefined;
-    void this.reload(target, cwd)
+    const modelsOnly = files.every((file) => basename(file.path) === "models.json");
+    void this.reload(target, cwd, modelsOnly)
       .then((result) => this.emitReloadResult(target, result))
       .catch((error: unknown) => {
         this.options.logger?.warn("automatic reload after a config write failed", error);
@@ -269,17 +350,23 @@ export class NekConfigRuntime {
   }
 
   /** 对目标机器上所有 nek 进程发 reload。回合正在跑的计入 deferred。 */
-  async reload(target: NekConfigTarget, cwd?: string): Promise<NekReloadOutcome> {
+  async reload(
+    target: NekConfigTarget,
+    cwd?: string,
+    modelsOnly = false,
+  ): Promise<NekReloadOutcome> {
     this.target(target);
     const diagnostics: NekConfigDiagnostic[] = [];
     const failures: NekReloadOutcome["failures"] = [];
     let reloaded = 0;
     let deferred = 0;
-    const sessions = this.options.sessions?.sessions(target) ?? [];
+    const sessions = this.sessionsOf(target);
     for (const session of sessions) {
       if (cwd && (!session.cwd || normalize(session.cwd) !== normalize(cwd))) continue;
       const outcome = await this.reloadOne(session.sessionKey, session.busy, () =>
-        session.call({ type: "reload" }),
+        modelsOnly && session.refreshModels
+          ? session.refreshModels()
+          : session.call({ type: "reload" }),
       );
       reloaded += outcome.reloaded;
       deferred += outcome.deferred;
@@ -289,7 +376,8 @@ export class NekConfigRuntime {
     if (this.hasControl(target)) {
       const outcome = await this.reloadOne("control", false, async () => {
         const control = await this.control(target);
-        return await control.call({ type: "reload" });
+        const lease = this.modelControls.get(targetKeyOf(target));
+        return await (modelsOnly && lease ? lease.refresh() : control.call({ type: "reload" }));
       });
       reloaded += outcome.reloaded;
       deferred += outcome.deferred;
@@ -300,6 +388,7 @@ export class NekConfigRuntime {
   }
 
   dispose(): void {
+    this.liveModels.owner.dispose();
     this.watchHub.dispose();
     this.login.dispose();
     for (const pending of this.controls.values()) {
@@ -316,13 +405,13 @@ export class NekConfigRuntime {
   private async reloadOne(
     label: string,
     busy: boolean,
-    call: () => Promise<{ deferred: boolean; diagnostics: NekConfigDiagnostic[] }>,
+    call: () => Promise<NekReloadResult & { changed?: boolean }>,
   ): Promise<NekReloadOutcome> {
     try {
       const result = await call();
       const queued = result.deferred || busy;
       return {
-        reloaded: queued ? 0 : 1,
+        reloaded: queued || result.changed === false ? 0 : 1,
         deferred: queued ? 1 : 0,
         diagnostics: result.diagnostics,
         failures: [],
@@ -383,13 +472,4 @@ function workspaceOfWrite(agentDir: string, file: string): string | undefined {
     directory = dirname(directory);
   }
   return dirname(file);
-}
-
-/** 默认控制进程工厂（真机）；测试通过 `options.control` 注入假实现。 */
-async function defaultControlFactory(args: {
-  target: NekConfigTarget;
-  executor: NekConfigHostExecutor;
-  logger?: NekConfigApiLogger;
-}): Promise<NekControlClient> {
-  return await createNekControlClient(args);
 }

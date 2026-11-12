@@ -52,6 +52,12 @@ export class NekConfigApi implements INekConfigApi {
     this.copyGroup = createCopyGroup(this.runtime);
   }
 
+  /** Host-only production wiring: binds live CLI writers to this config owner. */
+  modelRuntime: NekConfigRuntime["modelRuntime"] = (target) => this.runtime.modelRuntime(target);
+
+  /** Facts use content-fenced control admission rather than a second watcher epoch owner. */
+  readonly ownsModelRuntimeFreshness = true;
+
   // ---- 目标 ----
 
   listTargets: INekConfigApi["listTargets"] = async () => await this.options.hosts.listTargets();

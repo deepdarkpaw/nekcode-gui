@@ -8,6 +8,7 @@ import type {
   NekGuiInfo,
   NekMentionTargetInfo,
   NekModel,
+  NekModelRuntimeLease,
   NekReloadResult,
   NekRpcSlashCommand,
   NekSessionEntry,
@@ -25,6 +26,7 @@ export { clearQueue, retrieveQueue, requeueQueue } from "./nekQueueCommands.js";
 
 export interface NekAgentCommandTarget {
   client: NekRpcClient;
+  modelRuntime?: NekModelRuntimeLease;
   capabilities?: NekGuiInfo["capabilities"];
   projector?: NekConversationProjector;
   phase: "idle" | "running" | "waiting_input" | "error" | "locked";
@@ -52,6 +54,14 @@ export async function sendPrompt(
   input: NekPromptInput,
 ): Promise<{ disposition: string }> {
   const target = context.writableTarget(input.sessionKey);
+  const submit = () => submitPrompt(context.writableTarget(input.sessionKey), input);
+  return await (target.modelRuntime ? target.modelRuntime.run("input", submit) : submit());
+}
+
+async function submitPrompt(
+  target: NekAgentCommandTarget,
+  input: NekPromptInput,
+): Promise<{ disposition: string }> {
   const images = input.images as NekImageContent[] | undefined;
   const attachments = input.attachments?.length ? input.attachments : undefined;
   if (attachments && target.capabilities?.promptAttachments !== 1) {
@@ -177,18 +187,19 @@ export async function setModel(
   context: NekAgentCommandContext,
   input: { sessionKey: string; provider: string; modelId: string },
 ): Promise<NekModel> {
-  return await context.writableTarget(input.sessionKey).client.call({
-    type: "set_model",
-    provider: input.provider,
-    modelId: input.modelId,
-  });
+  const target = context.writableTarget(input.sessionKey);
+  const select = () =>
+    target.client.call({ type: "set_model", provider: input.provider, modelId: input.modelId });
+  return await (target.modelRuntime ? target.modelRuntime.run("selection", select) : select());
 }
 
 export async function cycleModel(
   context: NekAgentCommandContext,
   sessionKey: string,
 ): Promise<NekCycleModelResult | null> {
-  return await context.writableTarget(sessionKey).client.call({ type: "cycle_model" });
+  const target = context.writableTarget(sessionKey);
+  const cycle = () => target.client.call({ type: "cycle_model" });
+  return await (target.modelRuntime ? target.modelRuntime.run("selection", cycle) : cycle());
 }
 
 export async function setThinkingLevel(
@@ -218,7 +229,10 @@ export async function reload(
   context: NekAgentCommandContext,
   sessionKey: string,
 ): Promise<NekReloadResult> {
-  return await context.writableTarget(sessionKey).client.call({ type: "reload" });
+  const target = context.writableTarget(sessionKey);
+  return await (target.modelRuntime
+    ? target.modelRuntime.reload()
+    : target.client.call({ type: "reload" }));
 }
 
 /** nek 没有独立的模式命令，走 `extension_call nek.set_mode`。 */

@@ -303,7 +303,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
       });
       if (input.model || input.thinking || input.mode) {
         await this.withLease(record, async () => {
-          if (input.model) await process.client.call({ type: "set_model", ...input.model });
+          if (input.model) await this.setModel({ sessionKey: key, ...input.model });
           if (input.thinking)
             await process.client.call({ type: "set_thinking_level", level: input.thinking });
           if (input.mode) await this.setMode({ sessionKey: key, mode: input.mode });
@@ -494,8 +494,11 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   private commandTarget(sessionKey: string, writable: boolean): NekAgentCommandTarget {
     const record = writable ? this.requireWritable(sessionKey) : this.requireRecord(sessionKey);
     const process = this.requireProcess(record);
+    if (writable && this.modelFreshness && !record.modelRuntime)
+      throw new Error("nek model runtime is initializing; retry the operation");
     return {
       client: process.client,
+      modelRuntime: record.modelRuntime,
       capabilities: process.guiInfo.capabilities,
       projector: record.projector,
       phase: record.phase,

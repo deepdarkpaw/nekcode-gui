@@ -18,6 +18,8 @@ import type {
   NekSessionSummary,
   NekState,
   NekThinkingLevel,
+  NekModelRuntimeFreshness,
+  NekModelRuntimeLease,
 } from "@zcode/shared/nek-protocol";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
@@ -35,6 +37,7 @@ export interface NekSessionRecord {
   process?: NekRpcProcess;
   detachEvents?: () => void;
   detachExit?: () => void;
+  modelRuntime?: NekModelRuntimeLease;
   projector?: NekConversationProjector;
   state?: NekRpcSessionState;
   snapshot?: NekSessionSnapshot;
@@ -115,6 +118,7 @@ export interface NekAgentServiceOptions {
   guiInfo?: NekGuiInfo;
   cwd?: string;
   processPool?: NekProcessPool<NekRpcProcess>;
+  modelRuntime?: NekModelRuntimeFreshness;
   createSessionProcess?: (
     options: NekSessionProcessCreateOptions,
   ) => Promise<NekRpcProcess> | NekRpcProcess;
