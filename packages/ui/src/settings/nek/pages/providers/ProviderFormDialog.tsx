@@ -8,7 +8,7 @@ import { useDialogDraft } from "../../components/useDialogDraft.js";
  * 高级（默认折叠）：自定义请求头、authHeader、compat。
  */
 import { useId, useMemo, useState } from "react";
-import { WandSparklesIcon, ZapIcon } from "lucide-react";
+import { ZapIcon } from "lucide-react";
 import type { NekEndpointApi, NekProviderView } from "@zcode/shared/nek-protocol";
 import { NEK_ENDPOINT_APIS } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
@@ -20,7 +20,8 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
-import { analyzeBaseUrl, BASE_URL_PLACEHOLDERS, type BaseUrlIssue } from "../../lib/baseUrl.js";
+import { BASE_URL_PLACEHOLDERS } from "../../lib/baseUrl.js";
+import { BaseUrlPreview } from "../../components/BaseUrlPreview.js";
 import { ApiKeyField } from "../../components/ApiKeyField.js";
 import { Field, invalidProps } from "../../components/Field.js";
 import { KeyValueEditor, Segmented } from "../../components/inputs.js";
@@ -39,48 +40,6 @@ import {
 
 /** 分段控件里“不在服务商上设置端点”的取值（Radix 单选把空串当成未选中，不能直接用 ""）。 */
 const API_UNSET = "per-model" as const;
-
-function BaseUrlPreview({
-  api,
-  value,
-  onFix,
-}: {
-  api: NekEndpointApi;
-  value: string;
-  onFix: (fixed: string) => void;
-}) {
-  const { intl } = useZCodeIntl();
-  const analysis = analyzeBaseUrl(api, value);
-  if (analysis.kind !== "ok") {
-    return null;
-  }
-  const issue: BaseUrlIssue | null = analysis.issue;
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="text-ui-sm text-foreground-subtle">
-        {intl.formatMessage({ id: "settings.nek.provider.finalUrl" })}{" "}
-        <span className="break-all font-mono text-foreground">{analysis.finalUrl}</span>
-      </p>
-      {issue ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-warning/10 px-2 py-1.5">
-          <span className="text-ui-sm text-foreground">
-            {intl.formatMessage(
-              { id: `settings.nek.provider.baseUrlIssue.${issue.kind}` },
-              {
-                suffix: "suffix" in issue ? issue.suffix : "",
-                version: "version" in issue ? issue.version : "",
-              },
-            )}
-          </span>
-          <Button type="button" size="sm" variant="secondary" onClick={() => onFix(issue.fixed)}>
-            <WandSparklesIcon aria-hidden="true" />
-            {intl.formatMessage({ id: "settings.nek.provider.applyFix" }, { url: issue.fixed })}
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * 用当前草稿测一次连接：`{providerId, draft}` —— 已保存的密钥 + 草稿里的其他字段，

@@ -17,6 +17,7 @@ import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { enabledThinkingLevels } from "../../lib/thinkingLevels.js";
 import { NEK_DEFAULT_CONTEXT_WINDOW, NEK_DEFAULT_MAX_TOKENS } from "../../lib/fetchedModels.js";
 import { Field, invalidProps } from "../../components/Field.js";
+import { BaseUrlPreview } from "../../components/BaseUrlPreview.js";
 import { Segmented, TokenCountInput } from "../../components/inputs.js";
 import { ThinkingLevelSelect, thinkingLevelLabel } from "../../components/modelControls.js";
 import { NekFormDialog } from "../../components/NekFormDialog.js";
@@ -262,6 +263,12 @@ export function ModelEditorDialog({
               placeholder={providerBaseUrl}
               {...invalidProps(ids.baseUrl, errors.baseUrl)}
               onChange={(event) => update({ baseUrl: event.target.value })}
+            />
+            <BaseUrlPreview
+              api={draft.api || providerApi}
+              value={draft.baseUrl.trim() || providerBaseUrl}
+              modelId={draft.id.trim() || undefined}
+              onFix={(baseUrl) => update({ baseUrl })}
             />
           </Field>
           <Field

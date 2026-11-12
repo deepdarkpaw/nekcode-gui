@@ -6,6 +6,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { Field } from "../../components/Field.js";
 import { Segmented } from "../../components/inputs.js";
+import { BaseUrlPreview } from "../../components/BaseUrlPreview.js";
 
 export function ModelImportEndpoints({
   provider,
@@ -70,6 +71,11 @@ export function ModelImportEndpoints({
           placeholder={provider.baseUrl}
           aria-invalid={baseUrlInvalid || undefined}
           onChange={(event) => onBaseUrlChange(event.target.value)}
+        />
+        <BaseUrlPreview
+          api={api || provider.api}
+          value={baseUrl.trim() || provider.baseUrl}
+          onFix={onBaseUrlChange}
         />
       </Field>
     </div>

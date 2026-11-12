@@ -3474,6 +3474,8 @@ const enUS: Record<string, string> = {
   "settings.nek.fetch.apiHint":
     "Applies to the selected models. Choose the protocol supported by this provider, not the model name. Import different protocols in separate batches.",
   "settings.nek.modelEditor.baseUrl": "Model Base URL",
+  "settings.nek.modelEditor.geminiRouteHint":
+    "Google Gemini uses the native /models/…:streamGenerateContent route, not an OpenAI-compatible request. For a 404, check the gateway's protocol and version path: native APIs usually use /v1beta and may support /v1. Follow the provider's documentation. For mixed gateways, override this model's URL rather than changing the entire provider.",
   "settings.nek.modelEditor.baseUrlHint":
     "Leave blank to inherit the provider or built-in URL; mixed gateways can use a separate URL for this model.",
   "settings.nek.modelEditor.apiBuiltin": "Inherit built-in defaults",

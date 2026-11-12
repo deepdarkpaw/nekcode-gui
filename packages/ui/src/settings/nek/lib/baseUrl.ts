@@ -17,7 +17,7 @@ export const BASE_URL_PLACEHOLDERS: Readonly<Record<NekEndpointApi, string>> = {
 };
 
 /** 常见错误：每种都附带一键修正后的地址。 */
-export type BaseUrlIssue =
+type BaseUrlIssue =
   | { kind: "endpointSuffix"; suffix: string; fixed: string }
   | { kind: "duplicateVersion"; suffix: string; fixed: string }
   | { kind: "missingVersion"; version: string; fixed: string }
@@ -58,7 +58,7 @@ export function finalRequestUrl(api: NekEndpointApi, base: string, modelId = "{m
     case "anthropic-messages":
       return `${base}/v1/messages`;
     case "google-generative-ai":
-      return `${base}/models/${modelId}:streamGenerateContent`;
+      return `${base}/models/${modelId.replace(/^models\//u, "")}:streamGenerateContent?alt=sse`;
   }
 }
 
@@ -94,7 +94,11 @@ function detectVersionIssue(api: NekEndpointApi, base: string, url: URL): BaseUr
 }
 
 /** 分析输入的 Base URL：最终地址 + 第一个常见错误（含修正值）。 */
-export function analyzeBaseUrl(api: NekEndpointApi, raw: string): BaseUrlAnalysis {
+export function analyzeBaseUrl(
+  api: NekEndpointApi,
+  raw: string,
+  modelId?: string,
+): BaseUrlAnalysis {
   const trimmed = raw.trim();
   if (trimmed === "") {
     return { kind: "empty" };
@@ -108,5 +112,5 @@ export function analyzeBaseUrl(api: NekEndpointApi, raw: string): BaseUrlAnalysi
     detectSuffixIssue(api, base) ??
     detectVersionIssue(api, base, url) ??
     (base !== trimmed ? { kind: "trailingSlash" as const, fixed: base } : null);
-  return { kind: "ok", finalUrl: finalRequestUrl(api, base), issue };
+  return { kind: "ok", finalUrl: finalRequestUrl(api, base, modelId), issue };
 }

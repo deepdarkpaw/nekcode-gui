@@ -3294,6 +3294,8 @@ const zhCN: Record<string, string> = {
   "settings.nek.fetch.apiHint":
     "应用于本次勾选的模型。请按此服务商实际支持的协议选择，不根据模型名称推断；不同协议可分批添加。",
   "settings.nek.modelEditor.baseUrl": "模型 Base URL",
+  "settings.nek.modelEditor.geminiRouteHint":
+    "Google Gemini 使用原生 /models/…:streamGenerateContent 路由，不是 OpenAI 兼容请求。若返回 404，请核对中转站支持的协议和版本路径；原生接口通常使用 /v1beta，也可能支持 /v1，请以服务商文档为准。混合网关请单独填写此模型的地址，不要更改整个服务商。",
   "settings.nek.modelEditor.baseUrlHint":
     "留空继承服务商或内置地址；混合网关可为此模型单独指定地址。",
   "settings.nek.modelEditor.apiBuiltin": "继承内置默认值",
