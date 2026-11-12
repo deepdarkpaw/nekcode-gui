@@ -26,6 +26,27 @@ function writer(reload: NekModelRuntimeHandle["reload"]): NekModelRuntimeHandle 
   };
 }
 
+test("retired lease rejects asynchronously so a watch fanout can continue to other sessions", async () => {
+  const owner = new NekModelRuntimeOwner();
+  const lease = owner.register({
+    handle: {
+      ...writer(async () => ({ deferred: false, diagnostics: [] })),
+      isWritable: () => false,
+    },
+    fingerprint: async () => "one",
+    release: () => undefined,
+  });
+  try {
+    const refresh = lease.refresh();
+    assert.ok(refresh instanceof Promise);
+    await assert.rejects(refresh, /changed or closed/);
+    const reload = lease.reload();
+    await assert.rejects(reload, /changed or closed/);
+  } finally {
+    owner.dispose();
+  }
+});
+
 test("MR10: content churn has a bounded retry budget and never submits stale input", async () => {
   const owner = new NekModelRuntimeOwner();
   let generation = 0;

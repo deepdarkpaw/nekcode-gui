@@ -172,7 +172,7 @@ export function createNekModelFactsSource(
     read: async (readOptions) => {
       const cwd = readOptions?.cwd?.trim() ?? "";
       assertHealthy(cwd);
-      for (let attempt = 0; !api.ownsModelRuntimeFreshness && loadedEpoch !== epoch; attempt += 1) {
+      for (let attempt = 0; loadedEpoch !== epoch; attempt += 1) {
         if (attempt === 3)
           throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
         if (!reloading)
@@ -227,7 +227,9 @@ export function createNekModelFactsSource(
                   globalRevisions.delete(globalRevisions.keys().next().value!);
                 if (change.error) globalErrors.set(change.file, change.error.message);
                 else globalErrors.delete(change.file);
-                epoch += 1;
+                // Only models.json has content-fenced RPC admission. Auth/settings changes
+                // still need the existing reload path (including external OAuth login/logout).
+                if (!api.ownsModelRuntimeFreshness || name !== "models.json") epoch += 1;
                 for (const scope of scopes.values()) {
                   notifyListeners(scope.listeners);
                 }

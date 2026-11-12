@@ -54,7 +54,7 @@ export class NekModelRuntimeOwner {
       if (!active || this.disposed || !handle.isWritable())
         throw new Error("nek model runtime process changed or closed; retry the operation");
     };
-    const serialize = <T>(run: () => Promise<T>): Promise<T> => {
+    const serialize = async <T>(run: () => Promise<T>): Promise<T> => {
       assertLive();
       if (pending >= MAX_PENDING)
         return Promise.reject(new Error("nek model admission capacity exceeded; retry"));

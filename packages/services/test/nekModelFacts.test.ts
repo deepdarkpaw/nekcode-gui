@@ -138,6 +138,41 @@ test("思考等级夹取与 nek clampThinkingLevel 一致：精确 → 向上 �
   assert.equal(clampNekThinkingLevel([], "medium"), undefined);
 });
 
+test("content-owned model reads still reload for external auth/settings changes", async () => {
+  const api = createFakeFactsApi();
+  let file = "models.json";
+  const source = createNekModelFactsSource({
+    ...api,
+    ownsModelRuntimeFreshness: true,
+    watch: (target, listener, cwd) =>
+      api.watch(target, (change) => listener({ ...change, file }), cwd),
+  });
+  try {
+    source.onDidChange(() => undefined);
+    api.notifyWatch();
+    await source.read();
+    assert.equal(
+      countCalls(api, "reloadRunningSessions"),
+      0,
+      "models admission belongs to the content owner",
+    );
+    file = "auth.json";
+    api.notifyWatch();
+    await source.read();
+    assert.equal(
+      countCalls(api, "reloadRunningSessions"),
+      1,
+      "OAuth changes are not covered by the models fingerprint",
+    );
+    file = "settings.json";
+    api.notifyWatch();
+    await source.read();
+    assert.equal(countCalls(api, "reloadRunningSessions"), 2);
+  } finally {
+    source.dispose();
+  }
+});
+
 test("配置变化后先让 nek 重载，再读事实", async () => {
   const api = createFakeFactsApi({ available: [CUSTOM], catalog: [CUSTOM] });
   const source = createNekModelFactsSource(api);
