@@ -3470,6 +3470,15 @@ const enUS: Record<string, string> = {
   "settings.nek.fetch.error.other": "Failed to fetch the model list",
   "settings.nek.fetch.manualAdd": "Add manually",
   "settings.nek.fetch.noneSelected": "Select models to add first",
+  "settings.nek.fetch.api": "Imported model endpoint",
+  "settings.nek.fetch.apiHint":
+    "Applies to the selected models. Choose the protocol supported by this provider, not the model name. Import different protocols in separate batches.",
+  "settings.nek.modelEditor.baseUrl": "Model Base URL",
+  "settings.nek.modelEditor.baseUrlHint":
+    "Leave blank to inherit the provider or built-in URL; mixed gateways can use a separate URL for this model.",
+  "settings.nek.modelEditor.apiBuiltin": "Inherit built-in defaults",
+  "settings.nek.modelEditor.description":
+    "Configure this model's protocol, URL and capabilities. Model settings override provider defaults.",
   "settings.nek.fetch.add": "Add {count} models",
   "settings.nek.modelEditor.addTitle": "Add model",
   "settings.nek.modelEditor.editTitle": "Edit model",

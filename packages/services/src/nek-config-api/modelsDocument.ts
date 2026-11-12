@@ -24,6 +24,7 @@ import {
 } from "./documents.js";
 import { conflict, fieldErrorsOf, validationError } from "./errors.js";
 import { sameRevision } from "./revision.js";
+import { validateModelEndpoints } from "./modelsValidation.js";
 
 /** nek 内置服务商的 ID（models.json 里出现同名条目即为"覆盖内置服务商"）。 */
 export const BUILTIN_PROVIDER_IDS: ReadonlySet<string> = new Set([
@@ -309,5 +310,12 @@ export async function editModelsSnapshot(
   if (!sameRevision(current.revision, expectedRevision)) throw conflict(snapshot.path);
   let text = current.content ?? EMPTY_MODELS_TEXT;
   for (const edit of edits) text = applyJsoncEdit(snapshot.path, text, edit.pointer, edit.value);
+  const candidates = readProviders(snapshot.path, parseJsoncMapping(snapshot.path, text));
+  for (const [id, provider] of Object.entries(candidates)) {
+    const previous = snapshot.providers[id];
+    if (sameJson(provider, previous)) continue;
+    validateProviderValue(id, provider);
+    validateModelEndpoints(id, provider, previous, BUILTIN_PROVIDER_IDS.has(id));
+  }
   return await writeTextDocument(executor, snapshot.path, text);
 }

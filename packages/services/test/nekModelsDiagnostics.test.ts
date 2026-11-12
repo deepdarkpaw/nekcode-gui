@@ -65,12 +65,12 @@ test("custom providers report models nek cannot resolve an api or baseUrl for", 
       {
         severity: "error",
         message:
-          'provider "half-configured": no "api" for model "no-api"; set "api" on the provider or on each model, otherwise nek cannot load this provider\'s models',
+          'provider "half-configured": no "api" for model "no-api"; set "api" on the provider or on each model to avoid load failures or order-dependent endpoint selection',
       },
       {
         severity: "error",
         message:
-          'provider "no-base-url": no "baseUrl" for model "a"; set "baseUrl" on the provider or on each model, otherwise nek cannot load this provider\'s models',
+          'provider "no-base-url": no "baseUrl" for model "a"; set "baseUrl" on the provider or on each model to avoid load failures or order-dependent endpoint selection',
       },
     ],
   );

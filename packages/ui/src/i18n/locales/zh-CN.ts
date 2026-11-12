@@ -3290,6 +3290,15 @@ const zhCN: Record<string, string> = {
   "settings.nek.fetch.error.other": "获取模型列表失败",
   "settings.nek.fetch.manualAdd": "手动添加",
   "settings.nek.fetch.noneSelected": "请先勾选要添加的模型",
+  "settings.nek.fetch.api": "导入模型端点",
+  "settings.nek.fetch.apiHint":
+    "应用于本次勾选的模型。请按此服务商实际支持的协议选择，不根据模型名称推断；不同协议可分批添加。",
+  "settings.nek.modelEditor.baseUrl": "模型 Base URL",
+  "settings.nek.modelEditor.baseUrlHint":
+    "留空继承服务商或内置地址；混合网关可为此模型单独指定地址。",
+  "settings.nek.modelEditor.apiBuiltin": "继承内置默认值",
+  "settings.nek.modelEditor.description":
+    "配置此模型使用的协议、地址和能力。模型级设置优先于服务商默认值。",
   "settings.nek.fetch.add": "添加 {count} 个模型",
   "settings.nek.modelEditor.addTitle": "添加模型",
   "settings.nek.modelEditor.editTitle": "编辑模型",

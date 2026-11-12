@@ -122,6 +122,8 @@ export function ModelEditorDialog({
   onOpenChange,
   model,
   providerApi,
+  providerBaseUrl,
+  overridesBuiltin = false,
   defaultLevel,
   otherIds,
   onSave,
@@ -133,6 +135,8 @@ export function ModelEditorDialog({
   model: NekModelConfig | undefined;
   /** provider.api；空值表示每个模型必须明确设置 api。 */
   providerApi: string;
+  providerBaseUrl: string;
+  overridesBuiltin?: boolean;
   defaultLevel: NekThinkingLevel | undefined;
   otherIds: ReadonlySet<string>;
   onSave: (draft: ModelDraft) => Promise<void>;
@@ -146,11 +150,24 @@ export function ModelEditorDialog({
   const baseId = useId();
   const initial = useMemo(() => modelDraftFrom(model, defaultLevel), [model, defaultLevel]);
   const [draft, setDraft, resetDraft] = useDialogDraft(open, initial);
-  const errors = validateModelDraft(draft, otherIds, t, providerApi);
+  const errors = validateModelDraft(draft, otherIds, t, providerApi, {
+    builtin: overridesBuiltin,
+    baseUrl: providerBaseUrl,
+  });
+  const canInheritApi = Boolean(providerApi.trim()) || overridesBuiltin;
   const update = (patch: Partial<ModelDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const apiOptions = [
-    ...(providerApi.trim()
-      ? [{ value: MODEL_API_INHERIT, label: t("settings.nek.modelEditor.apiInherit") }]
+    ...(canInheritApi
+      ? [
+          {
+            value: MODEL_API_INHERIT,
+            label: t(
+              providerApi.trim()
+                ? "settings.nek.modelEditor.apiInherit"
+                : "settings.nek.modelEditor.apiBuiltin",
+            ),
+          },
+        ]
       : []),
     ...NEK_ENDPOINT_APIS.map((api) => ({
       value: api,
@@ -164,6 +181,7 @@ export function ModelEditorDialog({
     id: `${baseId}-id`,
     name: `${baseId}-name`,
     api: `${baseId}-api`,
+    baseUrl: `${baseId}-base-url`,
     ctx: `${baseId}-ctx`,
     max: `${baseId}-max`,
     level: `${baseId}-level`,
@@ -175,6 +193,7 @@ export function ModelEditorDialog({
       onOpenChange={onOpenChange}
       variant="drawer"
       title={t(model ? "settings.nek.modelEditor.editTitle" : "settings.nek.modelEditor.addTitle")}
+      description={t("settings.nek.modelEditor.description")}
       dirty={isModelDraftDirty(draft, initial)}
       valid={Object.keys(errors).length === 0}
       saveLabel={t(model ? "settings.nek.modelEditor.save" : "settings.nek.modelEditor.add")}
@@ -216,18 +235,33 @@ export function ModelEditorDialog({
             label={t("settings.nek.modelEditor.api")}
             htmlFor={ids.api}
             hint={t(
-              providerApi.trim()
+              canInheritApi
                 ? "settings.nek.modelEditor.apiHint"
                 : "settings.nek.modelEditor.apiRequiredHint",
             )}
             error={attempted ? errors.api : undefined}
           >
             <Segmented
-              value={draft.api || (providerApi.trim() ? MODEL_API_INHERIT : "")}
+              value={draft.api || (canInheritApi ? MODEL_API_INHERIT : "")}
               options={apiOptions}
               onChange={(api) => update({ api: api === MODEL_API_INHERIT ? "" : api })}
               ariaLabel={t("settings.nek.modelEditor.api")}
               id={ids.api}
+            />
+          </Field>
+          <Field
+            label={t("settings.nek.modelEditor.baseUrl")}
+            htmlFor={ids.baseUrl}
+            hint={t("settings.nek.modelEditor.baseUrlHint")}
+            error={attempted || draft.baseUrl ? errors.baseUrl : undefined}
+          >
+            <Input
+              {...TECHNICAL_INPUT_ATTRIBUTES}
+              id={ids.baseUrl}
+              value={draft.baseUrl}
+              placeholder={providerBaseUrl}
+              {...invalidProps(ids.baseUrl, errors.baseUrl)}
+              onChange={(event) => update({ baseUrl: event.target.value })}
             />
           </Field>
           <Field

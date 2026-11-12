@@ -2,6 +2,7 @@
  * 模型编辑抽屉的编辑态与校验。
  */
 import type { NekModelConfig, NekThinkingLevel } from "@zcode/shared/nek-protocol";
+import { analyzeBaseUrl } from "../../lib/baseUrl.js";
 import {
   thinkingDraftFromModel,
   thinkingFieldsFromDraft,
@@ -17,6 +18,7 @@ export interface ModelDraft {
   name: string;
   /** 空字符串表示继承 provider.api；provider 没有 api 时保存前必须明确选择。 */
   api: string;
+  baseUrl: string;
   contextWindow: number | undefined;
   contextValid: boolean;
   maxTokens: number | undefined;
@@ -31,6 +33,7 @@ export interface ModelDraft {
 export type ModelDraftField =
   | "id"
   | "api"
+  | "baseUrl"
   | "contextWindow"
   | "maxTokens"
   | "defaultLevel"
@@ -45,6 +48,7 @@ export function modelDraftFrom(
     id: model?.id ?? "",
     name: model?.name ?? "",
     api: model?.api ?? "",
+    baseUrl: model?.baseUrl ?? "",
     contextWindow: model?.contextWindow,
     contextValid: true,
     maxTokens: model?.maxTokens,
@@ -81,6 +85,7 @@ export function validateModelDraft(
   otherIds: ReadonlySet<string>,
   t: Translate,
   providerApi = "",
+  defaults: { builtin?: boolean; baseUrl?: string } = {},
 ): ModelDraftErrors {
   const errors: ModelDraftErrors = {};
   const id = draft.id.trim();
@@ -89,8 +94,17 @@ export function validateModelDraft(
   } else if (otherIds.has(id)) {
     errors.id = t("settings.nek.modelEditor.error.idDuplicate");
   }
-  if (providerApi.trim() === "" && draft.api.trim() === "") {
+  if (!defaults.builtin && providerApi.trim() === "" && draft.api.trim() === "") {
     errors.api = t("settings.nek.modelEditor.error.apiRequired");
+  }
+  if (!defaults.builtin && !defaults.baseUrl?.trim() && !draft.baseUrl.trim()) {
+    errors.baseUrl = t("settings.nek.provider.error.baseUrlRequired");
+  }
+  if (
+    draft.baseUrl.trim() &&
+    analyzeBaseUrl("openai-completions", draft.baseUrl).kind === "invalid"
+  ) {
+    errors.baseUrl = t("settings.nek.provider.error.baseUrlInvalid");
   }
   if (!draft.contextValid) {
     errors.contextWindow = t("settings.nek.modelEditor.error.tokens");
@@ -125,6 +139,7 @@ export function modelConfigFromDraft(
     id: draft.id.trim(),
     name: draft.name.trim() || undefined,
     api: draft.api.trim() || undefined,
+    baseUrl: draft.baseUrl.trim() || undefined,
     contextWindow: draft.contextWindow,
     maxTokens: draft.maxTokens,
     input: draft.image ? ["text", "image"] : original?.input ? ["text"] : undefined,

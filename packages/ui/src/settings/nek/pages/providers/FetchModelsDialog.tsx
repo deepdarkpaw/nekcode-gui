@@ -4,6 +4,8 @@
  * 401/403 → "Key 无效或无权限"；404 → "该地址不提供模型列表接口" + [手动添加]。
  */
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { analyzeBaseUrl } from "../../lib/baseUrl.js";
+import { ModelImportEndpoints } from "./ModelImportEndpoints.js";
 import { ImageIcon, LoaderIcon, PencilLineIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
@@ -197,12 +199,23 @@ export function FetchModelsDialog({
   const state = useFetchedModels(open, provider, attempt);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [importApi, setImportApi] = useState("");
+  const [importBaseUrl, setImportBaseUrl] = useState("");
+  const baseUrlMissing =
+    !importBaseUrl.trim() && !provider.baseUrl.trim() && !provider.overridesBuiltin;
+  const baseUrlInvalid =
+    Boolean(importBaseUrl.trim()) &&
+    analyzeBaseUrl("openai-completions", importBaseUrl).kind === "invalid";
+  const canInheritApi = Boolean(provider.api.trim()) || provider.overridesBuiltin;
+  const apiRequired = !canInheritApi && !importApi;
   useEffect(() => {
     if (open) {
       setQuery("");
       setSelected(new Set());
+      setImportApi("");
+      setImportBaseUrl("");
     }
-  }, [open]);
+  }, [open, provider.id]);
 
   const rows = state.status === "ready" ? state.rows : [];
   const visible = useMemo(() => filterFetchedModels(rows, query), [rows, query]);
@@ -277,6 +290,16 @@ export function FetchModelsDialog({
           <div />
         )}
         <div className="min-h-0 overflow-y-auto">
+          {state.status === "ready" ? (
+            <ModelImportEndpoints
+              provider={provider}
+              api={importApi}
+              baseUrl={importBaseUrl}
+              baseUrlInvalid={baseUrlInvalid}
+              onApiChange={setImportApi}
+              onBaseUrlChange={setImportBaseUrl}
+            />
+          ) : null}
           {state.status === "loading" ? (
             <p
               role="status"
@@ -340,11 +363,22 @@ export function FetchModelsDialog({
             {t("common.cancel")}
           </Button>
           <AsyncButton
-            disabled={chosen.length === 0}
-            disabledReason={t("settings.nek.fetch.noneSelected")}
+            disabled={chosen.length === 0 || apiRequired || baseUrlMissing || baseUrlInvalid}
+            disabledReason={t(
+              apiRequired
+                ? "settings.nek.modelEditor.error.apiRequired"
+                : baseUrlMissing
+                  ? "settings.nek.provider.error.baseUrlRequired"
+                  : baseUrlInvalid
+                    ? "settings.nek.provider.error.baseUrlInvalid"
+                    : "settings.nek.fetch.noneSelected",
+            )}
             successFeedback="none"
             onClick={async () => {
-              await onAdd(chosen.map(modelConfigFromRow));
+              if (apiRequired || baseUrlMissing || baseUrlInvalid) return;
+              await onAdd(
+                chosen.map((row) => modelConfigFromRow(row, importApi, importBaseUrl.trim())),
+              );
               onOpenChange(false);
             }}
           >

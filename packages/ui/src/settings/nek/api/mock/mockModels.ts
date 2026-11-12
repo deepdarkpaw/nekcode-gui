@@ -55,7 +55,7 @@ export function saveProvider(
   if (options.isNew && existing) {
     throw mockError("validation", `Provider ${write.id} already exists`, { id: "duplicate" });
   }
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(write.id)) {
+  if (options.isNew && !/^[a-z0-9][a-z0-9-]*$/.test(write.id)) {
     throw mockError("validation", "Invalid provider id", { id: "format" });
   }
   if (write.apiKey === "") {

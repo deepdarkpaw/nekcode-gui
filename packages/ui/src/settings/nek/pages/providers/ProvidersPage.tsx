@@ -210,6 +210,8 @@ function ProvidersBody({
         onOpenChange={(open) => !open && close()}
         model={dialog.kind === "model" ? dialog.model : undefined}
         providerApi={selected.api}
+        providerBaseUrl={selected.baseUrl}
+        overridesBuiltin={selected.overridesBuiltin}
         defaultLevel={
           dialog.kind === "model" && dialog.model
             ? values.modelThinkingLevels?.[formatModelRef(selected.id, dialog.model.id)]

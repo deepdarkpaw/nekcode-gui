@@ -176,7 +176,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
     },
 
     saveProvider: async (target, provider, options) => {
-      requireProviderId(provider.id, "id");
+      if (options.isNew) requireProviderId(provider.id, "id");
       if (provider.apiKey === "") {
         throw validationError("apiKey must be omitted, kept, replaced, or removed explicitly", {
           apiKey: "empty string is not a valid deletion instruction",
@@ -185,6 +185,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       const snapshot = await readSnapshot(target);
       if (!sameRevision(snapshot.revision, options.revision)) throw conflict(snapshot.path);
       const existing = snapshot.providers[provider.id];
+      if (!options.isNew && !existing) requireProvider(snapshot, provider.id);
       if (options.isNew && existing) {
         throw validationError(`provider "${provider.id}" already exists`, { id: "duplicate" });
       }

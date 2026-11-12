@@ -57,17 +57,22 @@ export const nekModelCostSchema = loose({
     .optional(),
 });
 
+/** Validate without normalizing: transport and endpoint values are persisted verbatim. */
+const modelEndpointText = z
+  .string()
+  .refine((value) => value.trim().length > 0, "must not be blank");
+
 export const nekModelDefinitionSchema = loose({
   id: z.string().min(1),
   name: z.string().min(1).optional(),
-  api: z.string().min(1).optional(),
-  baseUrl: z.string().min(1).optional(),
+  api: modelEndpointText.optional(),
+  baseUrl: modelEndpointText.optional(),
   reasoning: z.boolean().optional(),
   thinkingLevelMap: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
   input: z.array(z.enum(["text", "image"])).optional(),
   cost: nekModelCostSchema.optional(),
-  contextWindow: z.number().optional(),
-  maxTokens: z.number().optional(),
+  contextWindow: z.number().positive().optional(),
+  maxTokens: z.number().positive().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   inputLimits: nekOpaqueJsonSchema.optional(),
   promptCache: nekOpaqueJsonSchema.optional(),
@@ -88,9 +93,9 @@ export const nekModelOverrideSchema = loose({
 
 export const nekProviderSchema = loose({
   name: z.string().min(1).optional(),
-  baseUrl: z.string().min(1).optional(),
+  baseUrl: modelEndpointText.optional(),
   apiKey: z.string().min(1).optional(),
-  api: z.string().min(1).optional(),
+  api: modelEndpointText.optional(),
   oauth: z.literal("radius").optional(),
   headers: z.record(z.string(), z.string()).optional(),
   compat: nekOpaqueJsonSchema.optional(),

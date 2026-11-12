@@ -244,9 +244,10 @@ describe("fetchedModels", () => {
     expect(modelConfigFromRow(row!).thinkingLevelMap).toMatchObject({ minimal: null, max: null });
   });
 
-  it("keeps a catalog model endpoint when adding a fetched model", () => {
+  it("never borrows routing from a matching catalog id; the import choice wins", () => {
     const [row] = mergeFetchedModels([{ id: "gpt-4.1" }], catalog, new Set());
-    expect(modelConfigFromRow(row!).api).toBe("openai-responses");
+    expect(modelConfigFromRow(row!)).not.toHaveProperty("api");
+    expect(modelConfigFromRow(row!, "openai-completions").api).toBe("openai-completions");
   });
 
   it("classifies 401/403/404", () => {
