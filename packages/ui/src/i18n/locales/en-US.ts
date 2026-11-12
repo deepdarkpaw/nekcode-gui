@@ -527,6 +527,7 @@ const enUS: Record<string, string> = {
   "modelTrajectory.usage.input": "in {count}",
   "modelTrajectory.usage.output": "out {count}",
   "chat.toolbar.model.loadFailedRetry": "Models failed to load. Retry",
+  "chat.toolbar.model.loading": "Loading models…",
   "chat.toolbar.model.remoteWaiting": "Waiting for remote models",
   "chat.toolbar.model.targetMissing": "No model target",
   "root.modelSelection.loadFailed": "Model configuration failed to load.",

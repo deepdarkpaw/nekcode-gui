@@ -488,6 +488,7 @@ const zhCN: Record<string, string> = {
   "modelTrajectory.usage.input": "输入 {count}",
   "modelTrajectory.usage.output": "输出 {count}",
   "chat.toolbar.model.loadFailedRetry": "模型加载失败，重试",
+  "chat.toolbar.model.loading": "模型加载中…",
   "chat.toolbar.model.remoteWaiting": "等待远程模型",
   "chat.toolbar.model.targetMissing": "暂无模型目标",
   "root.modelSelection.loadFailed": "模型配置加载失败。",

@@ -1649,6 +1649,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/services/src/nek-config-api/liveModelRuntimes.ts",
   "packages/services/src/nek-config-api/localTargetHost.ts",
   "packages/services/src/nek-config-api/login.ts",
+  "packages/services/src/nek-config-api/managedControl.ts",
   "packages/services/src/nek-config-api/mcpApi.ts",
   "packages/services/src/nek-config-api/mcpDocument.ts",
   "packages/services/src/nek-config-api/modelRuntime.ts",

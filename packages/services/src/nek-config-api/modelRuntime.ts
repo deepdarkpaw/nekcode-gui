@@ -34,17 +34,22 @@ export class NekModelRuntimeOwner {
   private readonly writers = new Set<NekLiveModelRuntime>();
   private disposed = false;
 
-  register(options: {
-    handle: NekModelRuntimeHandle;
-    fingerprint: () => Promise<string>;
-    release: () => void;
-    diagnostics?: (result: NekReloadResult) => void;
-  }): NekLiveModelRuntime {
+  register(
+    options: {
+      handle: NekModelRuntimeHandle;
+      fingerprint: () => Promise<string>;
+      release: () => void;
+      diagnostics?: (result: NekReloadResult) => void;
+    },
+    registration: { initialFingerprint?: string } = {},
+  ): NekLiveModelRuntime {
     if (this.disposed) throw new Error("nek model runtime disposed");
     if (this.writers.size >= MAX_WRITERS) throw new Error("nek model runtime capacity exceeded");
     const { handle, fingerprint } = options;
     let active = true;
-    let applied: string | undefined;
+    // A freshly spawned process already loaded this exact content; seeding it removes a
+    // redundant reload that otherwise dominates the first model read after each spawn.
+    let applied: string | undefined = registration.initialFingerprint;
     let pending = 0;
     let needsRebind = false;
     let tail = Promise.resolve();

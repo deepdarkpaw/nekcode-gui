@@ -441,7 +441,11 @@ function V4ComposerModelControlsImpl({
         data-usage-max={usage?.contextWindow?.maxTokens ?? ""}
         className="hidden"
       />
-      {modelSelectionState.status === "error" && modelSelectionReload ? (
+      {modelSelectionState.status === "loading" ? (
+        <span role="status" className="px-2 text-ui-sm text-foreground-subtle">
+          {intl.formatMessage({ id: "chat.toolbar.model.loading" })}
+        </span>
+      ) : modelSelectionState.status === "error" && modelSelectionReload ? (
         <Button
           type="button"
           variant="ghost"

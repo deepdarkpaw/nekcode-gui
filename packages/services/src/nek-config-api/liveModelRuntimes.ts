@@ -23,7 +23,7 @@ export class NekLiveModelRuntimes {
 
   forTarget(context: NekTargetContext): NekModelRuntimeFreshness {
     return {
-      register: (handle) => {
+      register: (handle, registration) => {
         let scope = this.targets.get(context.key);
         if (!scope) {
           scope = { writers: new Set(), stop: () => undefined };
@@ -66,23 +66,26 @@ export class NekLiveModelRuntimes {
         }
         const owned = scope;
         try {
-          const writer = this.owner.register({
-            handle,
-            fingerprint: () => modelRuntimeFingerprint(context.executor),
-            diagnostics: (result) =>
-              this.options.report(context.target, {
-                reloaded: result.deferred ? 0 : 1,
-                deferred: result.deferred ? 1 : 0,
-                diagnostics: result.diagnostics,
-                failures: [],
-              }),
-            release: () => {
-              owned.writers.delete(writer);
-              if (owned.writers.size) return;
-              owned.stop();
-              this.targets.delete(context.key);
+          const writer = this.owner.register(
+            {
+              handle,
+              fingerprint: () => modelRuntimeFingerprint(context.executor),
+              diagnostics: (result) =>
+                this.options.report(context.target, {
+                  reloaded: result.deferred ? 0 : 1,
+                  deferred: result.deferred ? 1 : 0,
+                  diagnostics: result.diagnostics,
+                  failures: [],
+                }),
+              release: () => {
+                owned.writers.delete(writer);
+                if (owned.writers.size) return;
+                owned.stop();
+                this.targets.delete(context.key);
+              },
             },
-          });
+            registration,
+          );
           owned.writers.add(writer);
           return writer;
         } catch (error) {

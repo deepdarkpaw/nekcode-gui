@@ -24,9 +24,9 @@ import { NekLoginManager } from "./login.js";
 import { NekWatchHub } from "./watch.js";
 import type { NekWatchChange } from "./watch.js";
 import { agentsDir, projectConfigDir } from "./paths.js";
-import { modelRuntimeFingerprint, type NekLiveModelRuntime } from "./modelRuntime.js";
+import type { NekLiveModelRuntime } from "./modelRuntime.js";
 import { NekLiveModelRuntimes } from "./liveModelRuntimes.js";
-import { NekControlModelReads, withModelReadAdmission } from "./controlModelReads.js";
+import { openManagedControl } from "./managedControl.js";
 
 /** 目标机器上一个正在运行的 nek 会话进程。 */
 export interface NekConfigSessionHandle {
@@ -135,7 +135,8 @@ export class NekConfigRuntime {
   modelRuntime(target: NekConfigTarget): NekModelRuntimeFreshness {
     // Target resolution is lazy so host construction does not perform IO/start nek.
     return {
-      register: (handle) => this.liveModels.forTarget(this.target(target)).register(handle),
+      register: (handle, registration) =>
+        this.liveModels.forTarget(this.target(target)).register(handle, registration),
     };
   }
 
@@ -177,54 +178,20 @@ export class NekConfigRuntime {
     const existing = this.controls.get(context.key);
     if (existing) return await existing;
     if (this.controls.size >= 128) throw new Error("nek control capacity exceeded");
-    const factory = this.options.control ?? createNekControlClient;
-    const created = factory({
+    let created!: Promise<NekControlClient>;
+    created = openManagedControl({
       target,
-      executor: context.executor,
+      context,
+      factory: this.options.control ?? createNekControlClient,
       logger: this.options.logger,
-    }).then((client) => {
-      if (this.controls.get(context.key) !== created) {
-        void client
-          .close()
-          .catch((error: unknown) => this.logger?.warn("retired nek control close failed", error));
-        throw new Error("nek control retired during creation; retry");
-      }
-      const reads = new NekControlModelReads(context.executor);
-      let lease: NekLiveModelRuntime;
-      try {
-        lease = this.liveModels.owner.register({
-          handle: {
-            sessionKey: "control",
-            cwd: "",
-            isWritable: () => this.controls.get(context.key) === created,
-            reload: () => client.call({ type: "reload" }),
-            rebindModel: async () => undefined,
-            call: (command) => client.call(command),
-          },
-          fingerprint: () => modelRuntimeFingerprint(context.executor),
-          diagnostics: (result) =>
-            this.emitReloadResult(target, {
-              reloaded: result.deferred ? 0 : 1,
-              deferred: result.deferred ? 1 : 0,
-              diagnostics: result.diagnostics,
-              failures: [],
-            }),
-          release: () => {
-            reads.dispose();
-            if (this.modelControls.get(context.key) === lease)
-              this.modelControls.delete(context.key);
-          },
-        });
-      } catch (error) {
-        void client
-          .close()
-          .catch((closeError: unknown) =>
-            this.logger?.warn("unregistered nek control close failed", closeError),
-          );
-        throw error;
-      }
-      this.modelControls.set(context.key, lease);
-      return withModelReadAdmission(client, lease, reads);
+      register: (handle, registration) => this.liveModels.owner.register(handle, registration),
+      setLease: (lease) => {
+        if (lease) this.modelControls.set(context.key, lease);
+        else if (this.modelControls.get(context.key)?.handle.sessionKey === "control")
+          this.modelControls.delete(context.key);
+      },
+      report: (result) => this.emitReloadResult(target, result),
+      isCurrent: () => this.controls.get(context.key) === created,
     });
     this.controls.set(context.key, created);
     try {

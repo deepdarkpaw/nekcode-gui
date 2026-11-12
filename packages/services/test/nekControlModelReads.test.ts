@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NekControlModelReads } from "../src/nek-config-api/controlModelReads.js";
+import { modelRuntimeFingerprint } from "../src/nek-config-api/modelRuntime.js";
+import { seededControlFingerprint } from "../src/nek-config-api/managedControl.js";
 import { createNekModelFactsSource } from "../src/model-provider/nekModelFacts.js";
 import { createNekModelSelectionService } from "../src/model-provider/nekModelSelectionService.js";
 import { runtimeHarness, modelsPath, modelsText } from "./nekModelRuntimeHarness.js";
@@ -140,6 +142,37 @@ test("unique in-flight work is bounded and dispose rejects late completion", asy
     );
   } finally {
     reads.dispose();
+    await h.dispose();
+  }
+});
+
+test("a freshly spawned control process already loaded models.json, so its first read needs no proving reload", async () => {
+  const h = runtimeHarness();
+  try {
+    await h.configApi.listAvailableModels({ kind: "local" });
+    assert.equal(
+      h.control.commands.filter((command) => command.type === "reload").length,
+      0,
+      "spawn-time content equals the file, so no reload is required to prove freshness",
+    );
+  } finally {
+    await h.dispose();
+  }
+});
+
+test("content changed between spawn and ACK is never seeded, so freshness still needs a reload", async () => {
+  const h = runtimeHarness();
+  try {
+    // Resolve the spawn-time fingerprint first, then rewrite the file: the pair now differs.
+    const atSpawn = modelRuntimeFingerprint(h.executor);
+    await atSpawn;
+    h.executor.setFile(modelsPath, modelsText("changed-during-spawn", "http://new"));
+    assert.equal(await seededControlFingerprint(h.executor, atSpawn), undefined);
+    // Unchanged content still seeds, which is what removes the redundant first reload.
+    const stable = modelRuntimeFingerprint(h.executor);
+    await stable;
+    assert.equal(await seededControlFingerprint(h.executor, stable), await stable);
+  } finally {
     await h.dispose();
   }
 });

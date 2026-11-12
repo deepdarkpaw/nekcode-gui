@@ -318,10 +318,14 @@ test("MR8: model facts use the same config owner's content admission without wat
   const facts = createNekModelFactsSource(h.configApi);
   try {
     assert.equal((await facts.read()).models[0]?.modelId, "old");
+    // The spawn-time content is proven, so the first read costs no reload; only the edit does.
+    assert.equal(h.control.commands.filter((c) => c.type === "reload").length, 0);
     h.executor.setFile(modelsPath, modelsText("fresh"));
     assert.equal((await facts.read()).models[0]?.modelId, "fresh");
+    const afterEdit = h.control.commands.filter((c) => c.type === "reload").length;
+    assert.equal(afterEdit, 1, "a content change still needs exactly one reload");
     await facts.read();
-    assert.equal(h.control.commands.filter((c) => c.type === "reload").length, 2);
+    assert.equal(h.control.commands.filter((c) => c.type === "reload").length, afterEdit);
     h.executor.setFile(modelsPath, modelsText("retry"));
     h.failControl("control reload failed");
     await assert.rejects(facts.read(), /control reload failed/);
