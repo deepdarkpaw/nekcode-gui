@@ -3224,6 +3224,8 @@ const zhCN: Record<string, string> = {
     "Anthropic 的 Base URL 不应包含 {suffix}，否则会请求到 /v1/v1/messages。",
   "settings.nek.provider.baseUrlIssue.missingVersion": "Base URL 可能缺少 {version}。",
   "settings.nek.provider.baseUrlIssue.trailingSlash": "Base URL 末尾有多余的斜杠。",
+  "settings.nek.provider.baseUrlIssue.geminiVersion":
+    "原生 Gemini 的版本段来自此地址，SDK 默认是 /v1beta；若服务商只代理 /v1beta，点右侧改用：",
   "settings.nek.provider.applyFix": "改为 {url}",
   "settings.nek.provider.error.nameRequired": "请填写名称",
   "settings.nek.provider.error.id.required": "请填写 ID",

@@ -21,6 +21,8 @@ type BaseUrlIssue =
   | { kind: "endpointSuffix"; suffix: string; fixed: string }
   | { kind: "duplicateVersion"; suffix: string; fixed: string }
   | { kind: "missingVersion"; version: string; fixed: string }
+  /** 原生 Gemini：SDK 默认版本是 /v1beta，版本段来自 Base URL。 */
+  | { kind: "geminiVersion"; fixed: string }
   | { kind: "trailingSlash"; fixed: string };
 
 export type BaseUrlAnalysis =
@@ -82,6 +84,12 @@ function detectVersionIssue(api: NekEndpointApi, base: string, url: URL): BaseUr
     return { kind: "duplicateVersion", suffix: "/v1", fixed: base.slice(0, -3) };
   }
   if (path !== "") {
+    // Native Gemini takes its version segment from the base URL (pi clears apiVersion for a
+    // custom base). /v1beta is the SDK default; /v1 is a legitimate Google version, so this
+    // stays a suggestion rather than an error.
+    if (api === "google-generative-ai" && /\/v1$/i.test(path)) {
+      return { kind: "geminiVersion", fixed: `${base.slice(0, -3)}/v1beta` };
+    }
     return null;
   }
   if (api === "openai-completions" || api === "openai-responses") {

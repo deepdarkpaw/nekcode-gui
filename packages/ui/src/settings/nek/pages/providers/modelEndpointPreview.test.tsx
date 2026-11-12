@@ -130,3 +130,43 @@ it("URL suggestions only change the unsaved field when explicitly applied", () =
   fireEvent.click(screen.getByRole("button"));
   expect(onFix).toHaveBeenCalledWith("https://gateway.invalid/v1beta");
 });
+
+it("suggests the SDK default /v1beta for native Gemini inherited from an OpenAI-style gateway", () => {
+  const onFix = vi.fn();
+  render(
+    <BaseUrlPreview
+      api="google-generative-ai"
+      value="https://gateway.invalid/v1"
+      modelId="gemini-4-carbon"
+      onFix={onFix}
+    />,
+    { wrapper: env.wrapper },
+  );
+  expect(
+    screen.getByText(
+      "https://gateway.invalid/v1/models/gemini-4-carbon:streamGenerateContent?alt=sse",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText(/SDK 默认是 \/v1beta/)).toBeTruthy();
+  expect(onFix).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button"));
+  expect(onFix).toHaveBeenCalledWith("https://gateway.invalid/v1beta");
+});
+
+it("keeps a Google-native /v1beta address without any suggestion", () => {
+  render(
+    <BaseUrlPreview
+      api="google-generative-ai"
+      value="https://generativelanguage.googleapis.com/v1beta"
+      modelId="gemini-4-carbon"
+      onFix={() => {}}
+    />,
+    { wrapper: env.wrapper },
+  );
+  expect(
+    screen.getByText(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-4-carbon:streamGenerateContent?alt=sse",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/SDK 默认是 \/v1beta/)).toBeNull();
+});

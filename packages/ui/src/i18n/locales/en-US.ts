@@ -3400,6 +3400,8 @@ const enUS: Record<string, string> = {
     "An Anthropic Base URL should not include {suffix}, otherwise requests go to /v1/v1/messages.",
   "settings.nek.provider.baseUrlIssue.missingVersion": "The Base URL may be missing {version}.",
   "settings.nek.provider.baseUrlIssue.trailingSlash": "The Base URL has a trailing slash.",
+  "settings.nek.provider.baseUrlIssue.geminiVersion":
+    "Native Gemini takes its version from this URL and the SDK defaults to /v1beta. If the gateway only serves /v1beta, apply:",
   "settings.nek.provider.applyFix": "Change to {url}",
   "settings.nek.provider.error.nameRequired": "Enter a name",
   "settings.nek.provider.error.id.required": "Enter an ID",
