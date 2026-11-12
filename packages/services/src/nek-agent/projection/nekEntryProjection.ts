@@ -11,6 +11,7 @@ import {
   assistantThinkingBlocks,
   assistantToolCalls,
   buildAssistantTextRow,
+  buildModelErrorMarker,
   buildReasoningRow,
   buildTimelineMarkerRow,
   buildToolCallRow,
@@ -266,6 +267,24 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
                 input: call.toolCall.arguments,
                 assistantResponseId: responseId,
               }),
+            );
+          }
+          const modelError = buildModelErrorMarker(assistant);
+          if (modelError) {
+            const entityId = `model-error:${assistant.timestamp}`;
+            const rowId = allocator.resolve(entityId);
+            const previous = rows[rowIndexById.get(rowId) ?? -1];
+            push(
+              buildTimelineMarkerRow(
+                identity(
+                  entityId,
+                  rowId,
+                  previous?.turnId ?? turn.turnId,
+                  previous?.createdAt ?? toEpochMs(assistant.timestamp),
+                ),
+                modelError,
+                "turnTailBoundary",
+              ),
             );
           }
           break;

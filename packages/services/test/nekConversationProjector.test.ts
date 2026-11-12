@@ -9,6 +9,7 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekRpcEvent, NekSessionEntry, NekUsage } from "@zcode/shared/nek-protocol";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
+import { projectEntries } from "../src/nek-agent/projection/nekEntryProjection.js";
 
 /**
  * 投影器的验收方式：用按 nek 文档手写的事件流回放，断言
@@ -27,6 +28,44 @@ const usage: NekUsage = {
   totalTokens: 15,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
+
+const empty404 = '{"error":{"message":"","code":404,"status":"Not Found"}}';
+
+function errorAssistant(
+  timestamp: number,
+  options: { errorMessage?: string; stopReason?: "error" | "aborted"; text?: string } = {},
+) {
+  return {
+    role: "assistant" as const,
+    content: options.text ? [{ type: "text" as const, text: options.text }] : [],
+    api: "google-generative-ai",
+    provider: "CPA",
+    model: "gemini-4-carbon",
+    usage,
+    stopReason: options.stopReason ?? "error",
+    ...(options.errorMessage === undefined ? {} : { errorMessage: options.errorMessage }),
+    timestamp,
+  };
+}
+
+function errorEntries(assistant: ReturnType<typeof errorAssistant>): NekSessionEntry[] {
+  return [
+    {
+      type: "message",
+      id: `user-${assistant.timestamp}`,
+      parentId: null,
+      timestamp: iso(assistant.timestamp - 1),
+      message: { role: "user", content: "prompt", timestamp: assistant.timestamp - 1 },
+    },
+    {
+      type: "message",
+      id: `assistant-${assistant.timestamp}`,
+      parentId: `user-${assistant.timestamp}`,
+      timestamp: iso(assistant.timestamp),
+      message: assistant,
+    },
+  ];
+}
 
 function iso(ms: number): string {
   return new Date(ms).toISOString();
@@ -987,4 +1026,173 @@ test("an extension-appended hidden custom message also stays out of the transcri
     projector.snapshot().rows.window.map((row) => row.kind),
     ["turnHeader", "userInput"],
   );
+});
+
+test("model errors are visible in live 404 failures while preserving partial output", () => {
+  const { projector, scheduler } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: "prompt", timestamp: 2_000 },
+  });
+  projector.handleEvent({
+    type: "message_start",
+    message: {
+      ...errorAssistant(3_000, { stopReason: "error" }),
+      stopReason: "pending",
+    },
+  });
+  projector.handleEvent({
+    type: "message_update",
+    usage,
+    assistantMessageEvent: { type: "text_start", contentIndex: 0 },
+  });
+  projector.handleEvent({
+    type: "message_update",
+    usage,
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "partial" },
+  });
+  projector.handleEvent({
+    type: "message_update",
+    usage,
+    assistantMessageEvent: {
+      type: "error",
+      reason: "error",
+      error: errorAssistant(3_000, { errorMessage: empty404, text: "partial" }),
+    },
+  });
+  projector.handleEvent({
+    type: "message_end",
+    message: errorAssistant(3_000, { errorMessage: empty404, text: "partial" }),
+  });
+  projector.handleEvent({ type: "agent_settled", outcome: "error" });
+  scheduler.flushAll();
+  const rows = projector.snapshot().rows.window;
+  const text = rows.find((row) => row.kind === "assistantText");
+  const markers = rows.filter(
+    (row): row is Extract<typeof row, { kind: "timelineMarker" }> =>
+      row.kind === "timelineMarker" && row.marker.type === "modelError",
+  );
+  assert.equal(text?.kind === "assistantText" && text.text, "partial");
+  assert.equal(markers.length, 1);
+  assert.deepEqual(markers[0]?.kind === "timelineMarker" ? markers[0].marker : undefined, {
+    type: "modelError",
+    provider: "CPA",
+    model: "gemini-4-carbon",
+    api: "google-generative-ai",
+    statusCode: 404,
+    statusText: "Not Found",
+    rawError: empty404,
+  });
+  assert.equal(markers[0]?.kind === "timelineMarker" && markers[0].lane, "turnTailBoundary");
+  const header = rows.find((row) => row.kind === "turnHeader");
+  assert.equal(header?.kind === "turnHeader" ? header.state : undefined, "failed");
+});
+
+test("persisted model errors use message identities, decode on the wire, and stay distinct", () => {
+  const first = errorAssistant(4_000, { errorMessage: empty404 });
+  const second = errorAssistant(6_000, { errorMessage: empty404 });
+  const firstEntries = errorEntries(first);
+  const secondEntries = errorEntries(second).map((entry, index) => ({
+    ...entry,
+    parentId:
+      index === 0 ? (firstEntries.at(-1)?.id ?? null) : (`user-${second.timestamp}` as string),
+  }));
+  const { projector, frames } = createProjector();
+  projector.loadSnapshot({ entries: [...firstEntries, ...secondEntries] });
+  const snapshot = replay(frames);
+  const markers = snapshot.rows.window.filter(
+    (row): row is Extract<typeof row, { kind: "timelineMarker" }> =>
+      row.kind === "timelineMarker" && row.marker.type === "modelError",
+  );
+  assert.equal(markers.length, 2);
+  assert.deepEqual(
+    markers.map((row) => row.entityId),
+    ["model-error:4000", "model-error:6000"],
+  );
+  assert.equal(markers[0]?.kind === "timelineMarker" && markers[0].marker.statusCode, 404);
+  assert.equal(markers[0]?.kind === "timelineMarker" && markers[0].marker.rawError, empty404);
+  assert.notEqual(markers[0]?.turnId, markers[1]?.turnId);
+  for (const frame of frames) conversationTopicFrameSchema.parse(JSON.parse(JSON.stringify(frame)));
+  projector.loadSnapshot({ entries: [...firstEntries, ...secondEntries] });
+  assert.equal(
+    projector
+      .snapshot()
+      .rows.window.filter(
+        (row) => row.kind === "timelineMarker" && row.marker.type === "modelError",
+      ).length,
+    2,
+  );
+});
+
+test("duplicate entry_appended and message_end events upsert one model error, while abort stays an interruption", () => {
+  const { projector, scheduler } = createProjector();
+  projector.loadSnapshot({ entries: [], leafId: null });
+  projector.handleEvent({
+    type: "message_start",
+    message: { role: "user", content: "prompt", timestamp: 8_000 },
+  });
+  const failed = errorAssistant(9_000, { errorMessage: "provider failed" });
+  projector.handleEvent({ type: "message_end", message: failed });
+  projector.handleEvent({ type: "message_end", message: failed });
+  const entry = {
+    type: "message" as const,
+    id: "persisted-error",
+    parentId: null,
+    timestamp: iso(9_000),
+    message: failed,
+  };
+  projector.handleEvent({ type: "entry_appended", entry });
+  projector.handleEvent({ type: "entry_appended", entry });
+  projector.handleEvent({
+    type: "message_start",
+    message: { ...errorAssistant(10_000), stopReason: "pending" },
+  });
+  projector.handleEvent({
+    type: "message_update",
+    usage,
+    assistantMessageEvent: {
+      type: "error",
+      reason: "aborted",
+      error: errorAssistant(10_000, { errorMessage: "provider failed" }),
+    },
+  });
+  projector.handleEvent({
+    type: "message_end",
+    message: errorAssistant(10_000, { stopReason: "aborted", errorMessage: "cancelled" }),
+  });
+  scheduler.flushAll();
+  const rows = projector.snapshot().rows.window;
+  const errors = rows.filter(
+    (row) => row.kind === "timelineMarker" && row.marker.type === "modelError",
+  );
+  assert.equal(errors.length, 1);
+  assert.equal(
+    rows.some((row) => row.kind === "timelineMarker" && row.entityId === "model-error:10000"),
+    false,
+  );
+});
+
+test("an error without errorMessage remains a generic visible model failure", () => {
+  const projection = projectEntries({
+    sessionId: "generic-error",
+    entries: errorEntries(errorAssistant(11_000)),
+  });
+  const marker = projection.rows.find(
+    (row): row is Extract<typeof row, { kind: "timelineMarker" }> =>
+      row.kind === "timelineMarker" && row.marker.type === "modelError",
+  );
+  assert.ok(marker);
+  assert.equal(marker.marker.type, "modelError");
+  assert.equal(marker.marker.rawError, "");
+  assert.equal(marker.marker.statusCode, undefined);
+
+  const longError = projectEntries({
+    sessionId: "bounded-error",
+    entries: errorEntries(errorAssistant(12_000, { errorMessage: "x".repeat(9_000) })),
+  }).rows.find(
+    (row): row is Extract<typeof row, { kind: "timelineMarker" }> =>
+      row.kind === "timelineMarker" && row.marker.type === "modelError",
+  );
+  assert.equal(longError?.kind === "timelineMarker" ? longError.marker.rawError.length : 0, 8192);
 });

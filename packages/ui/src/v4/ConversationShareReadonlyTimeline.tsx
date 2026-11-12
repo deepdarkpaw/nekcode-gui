@@ -49,6 +49,7 @@ import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ToolLayout } from "@/ToolCallBlocks/ToolLayout.js";
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
+import { ConversationModelError } from "@/v4/ConversationModelError.js";
 import {
   buildAssistantWorkRenderItems,
   type ConversationAssistantWorkRenderItem,
@@ -560,6 +561,9 @@ function renderReadonlyRow(
         />
       );
     case "timelineMarker": {
+      if (row.marker.type === "modelError") {
+        return <ConversationModelError key={row.rowId} marker={row.marker} />;
+      }
       // 这里原本直接把 row.marker.type 当文案渲染，于是分享页会出现一条写着
       // 字面量 compact / modelChange / goalVerify 的分割线（发布只剥掉 fork/checkpoint 类）。
       // 改为取本地化文案；识别不了的类型不渲染，不再泄漏枚举名。

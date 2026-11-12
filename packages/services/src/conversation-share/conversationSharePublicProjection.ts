@@ -238,6 +238,7 @@ function projectTimelineMarker(
     case "goalSet":
     case "goalVerify":
     case "retryNotice":
+    case "modelError":
       return { ...row.marker };
     case "extensionError":
     case "forkNotice":

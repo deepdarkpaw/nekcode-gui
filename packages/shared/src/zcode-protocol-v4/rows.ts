@@ -361,6 +361,15 @@ export const timelineMarkerPayloadSchema = z.union([
     attempt: z.number(),
     reasonCode: z.string(),
   }),
+  z.object({
+    type: z.literal("modelError"),
+    provider: z.string(),
+    model: z.string(),
+    api: z.string(),
+    statusCode: z.number().int().optional(),
+    statusText: z.string().max(256).optional(),
+    rawError: z.string().max(8192),
+  }),
   // workspace 域动作在时间线上的回执。
   z.object({
     type: z.literal("checkpointRestored"),

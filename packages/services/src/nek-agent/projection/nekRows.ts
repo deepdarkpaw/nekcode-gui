@@ -94,6 +94,44 @@ export function assistantToolCalls(
   return calls;
 }
 
+const MODEL_ERROR_RAW_LIMIT = 8192;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** assistant 的原始 provider 错误 → 有界、可传输的模型错误 marker。 */
+export function buildModelErrorMarker(
+  message: NekAssistantMessage,
+): Extract<TimelineMarkerPayload, { type: "modelError" }> | undefined {
+  if (message.stopReason !== "error") return undefined;
+  const rawError = typeof message.errorMessage === "string" ? message.errorMessage : "";
+  let statusCode: number | undefined;
+  let statusText: string | undefined;
+  try {
+    const parsed: unknown = rawError ? JSON.parse(rawError) : undefined;
+    const error = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : parsed;
+    if (isRecord(error)) {
+      const code = error.code;
+      if (typeof code === "number" && Number.isInteger(code)) statusCode = code;
+      if (typeof error.status === "string" && error.status.trim() !== "") {
+        statusText = error.status.slice(0, 256);
+      }
+    }
+  } catch {
+    // The raw provider text remains available; malformed JSON has no reliable status metadata.
+  }
+  return {
+    type: "modelError",
+    provider: message.provider,
+    model: message.model,
+    api: message.api,
+    ...(statusCode === undefined ? {} : { statusCode }),
+    ...(statusText === undefined ? {} : { statusText }),
+    rawError: rawError.slice(0, MODEL_ERROR_RAW_LIMIT),
+  };
+}
+
 /** 工具结果 / 部分结果 → 纯文本（`{ content: [...] }` 形状，或直接是字符串）。 */
 export function toolResultText(result: unknown): string {
   if (typeof result === "string") return result;
