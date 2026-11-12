@@ -274,14 +274,11 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
             const entityId = `model-error:${assistant.timestamp}`;
             const rowId = allocator.resolve(entityId);
             const previous = rows[rowIndexById.get(rowId) ?? -1];
+            const owner = previous?.turnId ?? turn.turnId;
+            const at = previous?.createdAt ?? toEpochMs(assistant.timestamp);
             push(
               buildTimelineMarkerRow(
-                identity(
-                  entityId,
-                  rowId,
-                  previous?.turnId ?? turn.turnId,
-                  previous?.createdAt ?? toEpochMs(assistant.timestamp),
-                ),
+                identity(entityId, rowId, owner, at),
                 modelError,
                 "turnTailBoundary",
               ),

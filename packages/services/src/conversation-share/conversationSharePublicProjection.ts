@@ -238,8 +238,18 @@ function projectTimelineMarker(
     case "goalSet":
     case "goalVerify":
     case "retryNotice":
-    case "modelError":
       return { ...row.marker };
+    case "modelError":
+      // Provider responses may echo credentials/URLs. Share only the safe failure summary;
+      // raw error details remain visible in the private conversation and its local history.
+      return {
+        type: "modelError",
+        provider: row.marker.provider,
+        model: row.marker.model,
+        api: row.marker.api,
+        ...(row.marker.statusCode === undefined ? {} : { statusCode: row.marker.statusCode }),
+        rawError: "",
+      };
     case "extensionError":
     case "forkNotice":
     case "forkCreated":

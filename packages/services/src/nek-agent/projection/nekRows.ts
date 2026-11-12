@@ -109,7 +109,8 @@ export function buildModelErrorMarker(
   let statusCode: number | undefined;
   let statusText: string | undefined;
   try {
-    const parsed: unknown = rawError ? JSON.parse(rawError) : undefined;
+    const parsed: unknown =
+      rawError && rawError.length <= MODEL_ERROR_RAW_LIMIT ? JSON.parse(rawError) : undefined;
     const error = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : parsed;
     if (isRecord(error)) {
       const code = error.code;
@@ -128,7 +129,10 @@ export function buildModelErrorMarker(
     api: message.api,
     ...(statusCode === undefined ? {} : { statusCode }),
     ...(statusText === undefined ? {} : { statusText }),
-    rawError: rawError.slice(0, MODEL_ERROR_RAW_LIMIT),
+    rawError:
+      rawError.length > MODEL_ERROR_RAW_LIMIT
+        ? `${rawError.slice(0, MODEL_ERROR_RAW_LIMIT - 1)}…`
+        : rawError,
   };
 }
 
