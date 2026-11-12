@@ -75,10 +75,11 @@ export interface WorkspaceFileSearchDecision {
 
 export interface WorkspaceFileSearchFilterContext {
   /**
-   * `.zcodiumignore` 规则加载成功时为 true：目录排除的单一真相源是规则文件，
-   * 内置目录黑名单退役（用户从文件里删掉 node_modules/ 就应恢复搜索），
+   * `.zcodiumignore` 规则可用时为 true（含文件缺失时内存合成的模板规则）：
+   * 目录排除的单一真相源是规则文件，内置目录黑名单退役
+   * （用户从文件里删掉 node_modules/ 就应恢复搜索），
    * 仅文件级规则（.env/二进制后缀）与隐藏目录语义继续叠加。
-   * fail-open（规则文件完全不可用）时为 false/缺省，黑名单照旧兜底。
+   * 只有规则完全不可用（读取失败且无可用降级）时才为 false/缺省，黑名单照旧兜底。
    */
   ignoreRulesActive: boolean;
 }
@@ -122,7 +123,8 @@ function isInsideHiddenDirectory(relativePath: string): boolean {
 export const defaultWorkspaceFileSearchFilter: WorkspaceFileSearchFilter = {
   evaluate(entry, context) {
     if (entry.type === "directory") {
-      // ignoreRulesActive 时目录黑名单退役：目录排除的唯一来源是 .zcodiumignore 规则文件。
+      // ignoreRulesActive 时目录黑名单退役：目录排除的唯一来源是 .zcodiumignore 规则，
+      // 文件缺失时用内存合成的同一份模板规则（不落盘），见 workspaceFileIgnore.ts。
       if (!context?.ignoreRulesActive && shouldSkipDirectory(entry.name)) {
         return { include: false, traverse: false };
       }

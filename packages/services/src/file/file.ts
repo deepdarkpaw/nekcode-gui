@@ -51,7 +51,8 @@ export interface IFileService {
    * JSON 转义大字符串（实测 6-9s 主线程长任务）。单块不超过 ~4MB：大消息在
    * renderer 接收端的分帧重组是秒级长任务（实测 4.6-6.3s），分块 + 块间让出后
    * 主线程每次只处理一小块（~50ms），输入永不冻结。
-   * Host 侧有 60s TTL + .zcodiumignore 指纹签名的整包缓存，分块只是切片。
+   * Host 侧有 60s TTL + 忽略规则指纹（`.zcodiumignore`，缺失时跟随 `.gitignore`）的
+   * 整包缓存，分块只是切片。
    */
   listWorkspaceFilesRange(params: {
     rootPath: string;
@@ -60,7 +61,8 @@ export interface IFileService {
   }): Promise<string>;
   /**
    * workspace 搜索忽略规则（.zcodiumignore）的读写，供设置页编辑使用。
-   * source: "file" 已存在文件内容；"template" 尚未创建时的初始内容预览（保存时才落盘）。
+   * source: "file" 已存在文件内容；"template" 尚未创建时的初始内容预览
+   * （搜索/列举按同一内容在内存里剪枝，但不会因此创建文件；只有 write 才落盘）。
    */
   readWorkspaceFileSearchIgnore(params: {
     rootPath: string;
@@ -74,6 +76,10 @@ export interface IFileService {
     rootPath: string;
     transform: "sync-gitignore" | "reset-defaults";
   }): Promise<{ content: string }>;
+  /**
+   * 设置页保存：`.zcodiumignore` 唯一的写入入口（原子整文件写，文件不存在时创建）。
+   * 读取/搜索/列举都不会隐式创建该文件。
+   */
   writeWorkspaceFileSearchIgnore(params: { rootPath: string; content: string }): Promise<void>;
 }
 

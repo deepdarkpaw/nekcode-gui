@@ -14,6 +14,7 @@ import {
   type WorkspaceFileSearchFilter,
 } from "./workspaceFileMentionFilter.js";
 import {
+  WORKSPACE_FILE_GITIGNORE_FILE_NAME,
   WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME,
   isWorkspaceFileSearchPathIgnored,
   loadWorkspaceFileSearchIgnoreRules,
@@ -189,7 +190,7 @@ export interface CreateFileServiceOptions {
  * 37 万文件 workspace 的全仓扫描即使并发化也要数秒，同一 workspace 的
  * 反复打开（@ 面板关闭即清理的 renderer 语义、Command Center、文件树）
  * 不应每次都重扫。服务内按 workspaceIdentity（缺省为 rootPath）隔离，
- * 校验 rootPath + .zcodiumignore 的 mtime/size 指纹；规则编辑后缓存失效，
+ * 校验 rootPath + 忽略规则指纹；规则编辑后缓存失效，
  * 保持"编辑规则后下次使用生效"的契约。
  */
 const WORKSPACE_FILE_LIST_CACHE_TTL_MS = 60_000;
@@ -202,13 +203,23 @@ interface WorkspaceFileIndex {
   candidates?: ReturnType<typeof buildHostFileSearchCandidates>;
 }
 
+/**
+ * 索引缓存的规则指纹。`.zcodiumignore` 存在时只认它（唯一权威规则源）；
+ * 不存在时规则由 `.gitignore` + 内置默认段在内存合成，指纹必须跟随 `.gitignore`，
+ * 否则编辑 `.gitignore` 后 60s 内的旧索引会继续用过期规则。
+ * 前缀区分两种来源：文件被创建/删除时指纹一定变化。
+ */
 async function statWorkspaceFileSearchIgnoreFingerprint(rootPath: string): Promise<string> {
-  try {
-    const fileStat = await stat(join(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME));
-    return `${fileStat.mtimeMs}:${fileStat.size}`;
-  } catch {
-    return "none";
+  const ignoreStat = await stat(join(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME)).catch(
+    () => null,
+  );
+  if (ignoreStat) {
+    return `ignore:${ignoreStat.mtimeMs}:${ignoreStat.size}`;
   }
+  const gitignoreStat = await stat(join(rootPath, WORKSPACE_FILE_GITIGNORE_FILE_NAME)).catch(
+    () => null,
+  );
+  return gitignoreStat ? `gitignore:${gitignoreStat.mtimeMs}:${gitignoreStat.size}` : "none";
 }
 
 export function createFileService(options: CreateFileServiceOptions = {}): IFileService {
@@ -247,7 +258,7 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
     return check;
   };
 
-  // 全量扫描 + 打包（带 60s TTL / .zcodiumignore 指纹缓存）。分块 RPC 共享同一份 packed。
+  // 全量扫描 + 打包（带 60s TTL / 规则指纹缓存）。分块 RPC 共享同一份 packed。
   const workspaceFileListScanning = new Map<
     string,
     { signature: string; promise: Promise<WorkspaceFileIndex> }
@@ -258,7 +269,6 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
     refresh = false,
   ): Promise<WorkspaceFileIndex> => {
     const workspaceKey = workspaceIdentity?.trim() || rootPath;
-    const ignoreRules = await loadWorkspaceFileSearchIgnoreRules(rootPath, workspaceIgnoreLogger);
     const cacheSignature = `${rootPath}\n${await statWorkspaceFileSearchIgnoreFingerprint(rootPath)}`;
     for (const [key, value] of workspaceFileListCache) {
       if (Date.now() - value.at >= WORKSPACE_FILE_LIST_CACHE_TTL_MS)
@@ -274,6 +284,8 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
       return cached;
     }
     const scanning = (async () => {
+      // 规则读取只发生在真正扫描时：缓存命中路径不碰规则文件，缺失文件也只是内存合成。
+      const ignoreRules = await loadWorkspaceFileSearchIgnoreRules(rootPath, workspaceIgnoreLogger);
       const entries: WorkspaceFileEntry[] = [];
       const pendingDirectories: string[] = [rootPath];
       // 单线程串行 DFS 一次只 await 一个 readdir，
