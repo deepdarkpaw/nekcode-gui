@@ -106,16 +106,16 @@ export class NekModelRuntimeOwner {
         serialize(async () => {
           const result = await ensure();
           if (result.diagnostics.length) options.diagnostics?.(result);
-          if (result.deferred)
-            throw new Error(
-              "nek model configuration reload is pending; wait for the current turn to finish and retry",
-            );
           const errors = result.diagnostics.filter((item) => item.severity === "error");
           if (errors.length)
             throw new Error(
               `nek model configuration reload failed: ${errors.map((item) => item.message).join("; ")}`,
             );
-          if (kind === "input" && needsRebind) {
+          // `deferred` is nek's "apply after this turn" answer, not a failure: the running turn
+          // keeps its own config either way, and blocking would also block the very steer /
+          // follow-up that is meant to land in that turn. `applied` stays unset (and
+          // `needsRebind` set), so the next command after the turn settles reloads and rebinds.
+          if (kind === "input" && needsRebind && !result.deferred) {
             await handle.rebindModel();
             assertLive();
             // Rebinding is asynchronous; a concurrent edit must not slip into this prompt.
@@ -125,7 +125,7 @@ export class NekModelRuntimeOwner {
           assertLive();
           // No await between the final identity check and the actual RPC submission.
           const value = await command();
-          if (kind === "input" || value != null) needsRebind = false;
+          if (!result.deferred && (kind === "input" || value != null)) needsRebind = false;
           return value;
         }),
       reload: () => {

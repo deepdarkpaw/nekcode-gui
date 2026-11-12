@@ -135,8 +135,8 @@ test("MR4: every active scope/window sees machine-local edits; another remote ma
   }
 });
 
-for (const mode of ["failure", "diagnostics", "deferred"] as const) {
-  test(`MR5: ${mode} does not certify freshness or send stale selection; same content retries successfully`, async () => {
+for (const mode of ["failure", "diagnostics"] as const) {
+  test(`MR5: ${mode} does not certify freshness or admit work; same content retries successfully`, async () => {
     const h = runtimeHarness();
     try {
       const opened = await h.open();
@@ -145,22 +145,10 @@ for (const mode of ["failure", "diagnostics", "deferred"] as const) {
       if (mode === "failure") h.failReload("reload exploded");
       if (mode === "diagnostics")
         h.setDiagnostics([{ file: modelsPath, severity: "error", message: "bad model endpoint" }]);
-      if (mode === "deferred") h.sessions[0]!.busy = true;
       const before = h.sessions[0]!.commands.length;
       await assert.rejects(
         h.agentService.service.setModel(selection(opened.sessionKey, "new")),
-        mode === "failure"
-          ? /reload exploded/
-          : mode === "deferred"
-            ? /pending.*retry/
-            : /bad model endpoint/,
-      );
-      await assert.rejects(
-        h.agentService.service.sendPrompt({
-          sessionKey: opened.sessionKey,
-          message: "must not submit",
-          streamingBehavior: "steer",
-        }),
+        mode === "failure" ? /reload exploded/ : /bad model endpoint/,
       );
       assert.equal(
         h.sessions[0]!.commands.slice(before).some((c) =>
@@ -170,7 +158,6 @@ for (const mode of ["failure", "diagnostics", "deferred"] as const) {
       );
       h.failReload();
       h.setDiagnostics([]);
-      h.sessions[0]!.busy = false;
       await h.agentService.service.setModel(selection(opened.sessionKey, "new"));
       assert.equal(h.sessions[0]!.selected()?.id, "new");
     } finally {
@@ -179,34 +166,54 @@ for (const mode of ["failure", "diagnostics", "deferred"] as const) {
   });
 }
 
-test("MR15: command-time warnings are published; filesystem admission errors reject and remain retryable", async () => {
+/**
+ * nek defers a reload to the end of a running turn. That is "apply later", not a failure:
+ * blocking here would also block the steer/follow-up aimed at that very turn. The config must
+ * still be picked up after the turn settles, before the next command uses it.
+ */
+test("MR5d: a deferred reload lets this turn's input through and is applied before the next one", async () => {
   const h = runtimeHarness();
   try {
     const opened = await h.open();
     await h.agentService.service.setModel(selection(opened.sessionKey));
-    h.executor.setFile(modelsPath, modelsText("warning"));
-    const diagnostics: string[] = [];
-    const stop = h.configApi.onReloadResult(LOCAL, (result) =>
-      diagnostics.push(...result.diagnostics.map((item) => item.message)),
+    // Same model id, changed endpoint: the case the freshness gate exists for.
+    h.executor.setFile(modelsPath, modelsText("old", "http://new-endpoint"));
+    h.sessions[0]!.busy = true;
+    const before = h.sessions[0]!.commands.length;
+    await h.agentService.service.sendPrompt({
+      sessionKey: opened.sessionKey,
+      message: "input during a running turn",
+      streamingBehavior: "steer",
+    });
+    const duringTurn = h.sessions[0]!.commands.slice(before).map((c) => c.type);
+    assert.equal(duringTurn.filter((c) => c === "reload").length, 1);
+    assert.ok(
+      duringTurn.some((c) => ["prompt", "steer", "follow_up"].includes(c)),
+      "the input still reaches nek while the reload is deferred",
     );
-    h.setDiagnostics([{ file: modelsPath, severity: "warning", message: "inspect this model" }]);
-    await h.agentService.service.setModel(selection(opened.sessionKey, "warning"));
-    assert.ok(diagnostics.includes("inspect this model"));
-    stop();
-    h.setDiagnostics([]);
-    const read = h.executor.readFile;
-    h.executor.setFile(modelsPath, modelsText("after-io"));
-    h.executor.readFile = async (path) => {
-      if (path === modelsPath) throw new Error("models read denied");
-      return await read(path);
-    };
-    await assert.rejects(
-      h.agentService.service.setModel(selection(opened.sessionKey, "after-io")),
-      /models read denied/,
+    assert.equal(
+      h.sessions[0]!.selected()?.baseUrl,
+      "http://old",
+      "a deferred reload must not pretend the new endpoint is live",
     );
-    h.executor.readFile = read;
-    await h.agentService.service.setModel(selection(opened.sessionKey, "after-io"));
-    assert.equal(h.sessions[0]!.selected()?.id, "after-io");
+
+    h.sessions[0]!.busy = false;
+    const beforeSettled = h.sessions[0]!.commands.length;
+    await h.agentService.service.sendPrompt({
+      sessionKey: opened.sessionKey,
+      message: "next turn",
+      streamingBehavior: "steer",
+    });
+    const afterSettled = h.sessions[0]!.commands.slice(beforeSettled).map((c) => c.type);
+    assert.ok(
+      afterSettled.indexOf("reload") < afterSettled.indexOf("set_model"),
+      "reload precedes rebinding",
+    );
+    assert.equal(
+      h.sessions[0]!.selected()?.baseUrl,
+      "http://new-endpoint",
+      "the deferred config is live once the turn settled",
+    );
   } finally {
     await h.dispose();
   }
