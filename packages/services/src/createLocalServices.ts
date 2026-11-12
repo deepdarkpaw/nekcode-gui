@@ -48,7 +48,7 @@ import { createOnboardingRecordService } from "./onboarding/onboardingRecordServ
 import { createObservableSettingService } from "./setting/observableSettingService.js";
 import { createCredentialService } from "./credential/credentialService.js";
 import { createBroadcastService } from "./broadcast/broadcastService.js";
-import { createNekZCodeAgentService } from "./nek-agent/adapter/index.js";
+import { createNekRuntimeServices } from "./createNekRuntimeServices.js";
 import type { ZCodeAgentCommandResolver } from "./zcode-agent/zcodeAgentCommand.js";
 import { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
 import { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
@@ -59,7 +59,7 @@ import { createFileWatcherService } from "./fileWatcher/fileWatcherService.js";
 import { IModelSelectionService } from "./model-provider/modelSelectionService.js";
 import { createNekModelFactsSource } from "./model-provider/nekModelFacts.js";
 import { createNekModelSelectionService } from "./model-provider/nekModelSelectionService.js";
-import { NekConfigApi, createLocalNekConfigTargetHost } from "./nek-config-api/index.js";
+import { createLocalNekConfigTargetHost } from "./nek-config-api/index.js";
 import { createClientScenesService } from "./client-scenes/clientScenesService.js";
 import { createSkillsService } from "./skills/skillsService.js";
 import { createSkillSyncService } from "./skill-sync/skillSyncService.js";
@@ -130,14 +130,16 @@ export function createLocalServices(options: CreateLocalServicesOptions): Servic
     });
   const taskIndexRepo = new TaskIndexRepo();
   const nekModelLog = createServiceLogger("nek-model-selection");
-  const nekConfigApi = new NekConfigApi({
-    hosts: createLocalNekConfigTargetHost(),
-    logger: { warn: (...args) => nekModelLog.warn(undefined, ...args) },
+  const { configApi: nekConfigApi, agentService: zcodeAgentService } = createNekRuntimeServices({
+    agent: { cwd: options.zcodeAgentSpawnFallbackCwd },
+    config: {
+      hosts: createLocalNekConfigTargetHost(),
+      logger: { warn: (...args) => nekModelLog.warn(undefined, ...args) },
+    },
   });
   const modelSelectionService = createNekModelSelectionService({
     facts: createNekModelFactsSource(nekConfigApi, { log: nekModelLog }),
   });
-  const zcodeAgentService = createNekZCodeAgentService({ cwd: options.zcodeAgentSpawnFallbackCwd });
   const zcodeTaskIndexSyncer = createZCodeTaskIndexSyncer({
     agentService: zcodeAgentService,
     taskIndexRepo,

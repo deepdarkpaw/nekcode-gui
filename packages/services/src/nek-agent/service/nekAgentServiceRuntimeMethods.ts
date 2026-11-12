@@ -15,6 +15,7 @@ import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import { NekGuiInteractionBridge } from "./guiInteractionBridge.js";
 import { createProjectTrustPrompt, requestProjectApproval } from "./projectTrustPrompt.js";
+import { bindNekSessionModelRuntime, detachNekSessionProcess } from "./nekSessionModelRuntime.js";
 import { applyNekPoolReclaim, applyNekSessionEvent } from "./nekSessionEventRouting.js";
 import {
   bumpStateEpoch,
@@ -67,9 +68,11 @@ export abstract class NekAgentServiceRuntimeBase {
   protected readonly listeners = new Set<(event: NekAgentServiceEvent) => void>();
   protected detachPoolEvents: (() => void) | undefined;
   protected disposed = false;
+  protected readonly modelFreshness: NekAgentServiceOptions["modelRuntime"];
 
   constructor(options: NekAgentServiceOptions) {
     this.config = options.runtimeConfig ?? DEFAULT_GUI_RUNTIME_CONFIG;
+    this.modelFreshness = options.modelRuntime;
     this.logger = options.logger;
     this.pendingInputs = new NekPendingInputController({
       maxPerSession: this.config.nek.pendingInputsPerSession,
@@ -199,6 +202,7 @@ export abstract class NekAgentServiceRuntimeBase {
     try {
       await this.initializeProcess(record, process, openTiming);
       await this.refreshProcessSnapshot(record, openTiming);
+      bindNekSessionModelRuntime(record, process, this.modelFreshness);
     } finally {
       this.pool.releaseSession(record.key);
     }
@@ -217,6 +221,7 @@ export abstract class NekAgentServiceRuntimeBase {
     try {
       await this.initializeProcess(record, process);
       await this.refreshProcessSnapshot(record);
+      bindNekSessionModelRuntime(record, process, this.modelFreshness);
     } catch (error) {
       this.pool.releaseSession(record.key);
       throw error;
@@ -281,11 +286,7 @@ export abstract class NekAgentServiceRuntimeBase {
   }
 
   protected detachProcess(record: NekSessionRecord): void {
-    record.detachEvents?.();
-    record.detachEvents = undefined;
-    record.detachExit?.();
-    record.detachExit = undefined;
-    record.process = undefined;
+    detachNekSessionProcess(record);
   }
 
   protected async initializeProcess(
