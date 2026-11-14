@@ -122,6 +122,7 @@ import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPane
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
 import { useConversationHistoryControls } from "@/v4/useConversationHistoryControls.js";
 import { ConversationShareImportNotice } from "@/v4/ConversationShareImportNotice.js";
+import { ConversationLiveHistoryNotice } from "@/v4/ConversationLiveHistoryNotice.js";
 import { ConversationShareConfirmationDock } from "@/v4/ConversationShareConfirmationDock.js";
 import { ConversationShareSuccessDock } from "@/v4/ConversationShareSuccessDock.js";
 import {
@@ -3452,6 +3453,18 @@ export function SessionPane({
       ? "auto"
       : "inline";
   const controlLastError = snapshot?.control.lastError ?? null;
+  const liveHistoryPreview = snapshot?.liveHistoryPreview ?? null;
+  const liveHistoryFault =
+    controlLastError?.code === "fault.historyProjection" ? controlLastError.message : undefined;
+  const resyncHistory = historyControls?.resyncHistory;
+  const liveHistoryNotice =
+    (liveHistoryPreview || liveHistoryFault) && resyncHistory ? (
+      <ConversationLiveHistoryNotice
+        preview={liveHistoryPreview}
+        error={liveHistoryFault}
+        reload={async () => resyncHistory()}
+      />
+    ) : null;
   const controlLastErrorKey = controlLastError
     ? createSessionErrorKey(snapshot?.sessionId ?? sessionId, controlLastError)
     : null;
@@ -4140,9 +4153,10 @@ export function SessionPane({
                 view: shareDraft?.view,
               })}
               headerSlot={
+                liveHistoryNotice ??
                 // unsupportedRowCount 也要开这个门：整份副本的行都被本 build 跳过时
                 // rows 为空，但只读块必须留下来显示「需要更新 ZCode」，不能整块消失。
-                importedShare &&
+                (importedShare &&
                 (importedShare.rows.length > 0 || importedShare.unsupportedRowCount > 0) ? (
                   <ConversationShareImportNotice
                     rows={importedShare.rows}
@@ -4158,7 +4172,7 @@ export function SessionPane({
                     onOpenFileLink={onOpenFileLink}
                     onOpenCodeViewer={onOpenCodeViewer}
                   />
-                ) : null
+                ) : null)
               }
               emptyState={
                 isDraft ? (

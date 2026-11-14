@@ -479,6 +479,7 @@ function ConversationTimelineImpl({
   loadOlderRef.current = { canLoadOlder, loadingOlder, onLoadOlder };
   const historyControlsRef = useRef(historyControls);
   historyControlsRef.current = historyControls;
+  const lastViewportAnchorRef = useRef<string | null>(null);
   const historyScopeRef = useRef(sessionKey);
   historyScopeRef.current = sessionKey;
   const historyJumpGeneration = useRef(0);
@@ -1114,6 +1115,23 @@ function ConversationTimelineImpl({
     ],
   );
 
+  /** Tell the bounded history window which turn the user reads; only changes are reported. */
+  const reportViewportAnchor = useCallback(
+    (element: HTMLDivElement, followingLatest: boolean) => {
+      const controls = historyControlsRef.current;
+      if (!controls?.setViewportAnchor) return;
+      const item = virtualizer.getVirtualItemForOffset(element.scrollTop);
+      const unit = item ? virtualizedUnitsRef.current[item.index] : undefined;
+      const turnId = unit && item && unit.key === item.key ? unit.turnId : undefined;
+      if (!turnId) return;
+      const key = `${turnId}\0${followingLatest}`;
+      if (lastViewportAnchorRef.current === key) return;
+      lastViewportAnchorRef.current = key;
+      controls.setViewportAnchor({ turnId, followingLatest });
+    },
+    [virtualizer],
+  );
+
   const handleScroll = useCallback(() => {
     const element = scrollRef.current;
     if (!element) return;
@@ -1151,6 +1169,7 @@ function ConversationTimelineImpl({
       },
     });
     commitFollowing(following);
+    if (scrollSource !== "layout") reportViewportAnchor(element, following);
     if (scrollSource === "user") {
       pendingDetachedScrollRestoreRef.current = null;
       userAdjustedScrollSinceRestoreRef.current = true;
@@ -1195,6 +1214,7 @@ function ConversationTimelineImpl({
   }, [
     commitFollowing,
     getActiveUserScrollIntent,
+    reportViewportAnchor,
     saveCurrentScrollMemory,
     syncTurnNavigatorViewport,
     virtualizer,
