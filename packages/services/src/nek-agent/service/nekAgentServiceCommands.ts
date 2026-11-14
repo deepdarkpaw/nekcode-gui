@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { NEK_STATUS_FRAME_MAX_SUBAGENTS } from "@zcode/shared/nek-protocol";
 import type {
   NekAgentTypeInfo,
   NekBashResult,
@@ -15,12 +14,13 @@ import type {
   NekSessionEntry,
   NekSessionStats,
   NekSessionTreeNode,
-  NekStatusSnapshot,
+  NekHistoryStatusSnapshot,
   NekSubagentRecord,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
+import { historyChildDirectory, historyChildPreview } from "./nekHistoryChildren.js";
 import { historyResult, requireHistoryPages } from "./nekHistoryRpc.js";
 import { validateHistoryDisplay } from "../projection/nekHistoryDisplay.js";
 import { collectPersistedSubagentRecords } from "../projection/nekSubagentRecords.js";
@@ -145,9 +145,7 @@ export async function abortRetry(
 export async function getStatusSnapshot(
   context: NekAgentCommandContext,
   sessionKey: string,
-): Promise<
-  NekStatusSnapshot & { historyChildren: { total: number; loaded: number; complete: boolean } }
-> {
+): Promise<NekHistoryStatusSnapshot> {
   const target = context.target(sessionKey);
   requireHistoryPages(target);
   const [state, stats, pageResult] = await Promise.all([
@@ -156,6 +154,13 @@ export async function getStatusSnapshot(
     // nek 的 subagent registry 是纯内存表：重开 GUI 后只剩 entries 里 toolResult 的 details。
     target.client.call({ type: "read_history_page", turnLimit: 20 }),
   ]);
+  const directory = historyChildDirectory(
+    await target.client.call({
+      type: "read_history_subagent",
+      limit: 50,
+      branchRevision: historyResult(pageResult).branchRevision,
+    }),
+  );
   // Read the registry after entries: a child registered before its persisted spawn result
   // must be visible here. Parent isStreaming alone never proves a historical child is alive.
   const extension = await target.client.call({ type: "extension_call", method: "nek.get_state" });
@@ -181,17 +186,11 @@ export async function getStatusSnapshot(
     }),
   );
   const combined = [...live.subagents, ...restored];
-  const visible = new Set(
-    combined.slice(-NEK_STATUS_FRAME_MAX_SUBAGENTS).map((record) => record.id),
-  );
-  const loaded = [...persisted.keys()].filter((id) => visible.has(id)).length;
+  const children = historyChildPreview(directory, live.subagents);
+  if (children.total !== metadata.children.count)
+    throw new Error("nek child directory metadata changed during status read");
   return {
-    historyChildren: {
-      total: metadata.children.count,
-      loaded,
-      complete:
-        metadata.children.count === loaded && combined.length <= NEK_STATUS_FRAME_MAX_SUBAGENTS,
-    },
+    historyChildren: children,
     sessionKey: state.sessionId,
     running: state.isStreaming,
     compacting: state.isCompacting,

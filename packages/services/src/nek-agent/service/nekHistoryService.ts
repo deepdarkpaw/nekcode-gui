@@ -2,7 +2,7 @@ import type {
   NekHistoryCommand,
   NekStoredAttachment,
   NekHistoryIdentity,
-  NekHistoryResponseData,
+  NekHistoryCommandResult,
   NekHistoryResult,
   NekHistorySubagentRecord,
 } from "@zcode/shared/nek-protocol";
@@ -26,7 +26,7 @@ import type { NekConversationProjector } from "../nekConversationProjector.js";
 export interface NekHistoryReadContext {
   read<C extends NekHistoryCommand>(
     command: C,
-  ): Promise<Extract<NekHistoryResponseData[C["type"]], { ok: true }>>;
+  ): Promise<Extract<NekHistoryCommandResult<C>, { ok: true }>>;
   projector: NekConversationProjector;
   watermark: ConversationHistoryWatermark;
   snapshot: ConversationSnapshot;
@@ -60,6 +60,11 @@ export abstract class NekHistoryServiceBase extends NekAgentServiceRuntimeBase {
     run: (context: NekHistoryReadContext) => Promise<T>,
   ): Promise<T> {
     this.assertAlive();
+    if (subagentId !== undefined && (typeof subagentId !== "string" || !subagentId.trim()))
+      throw new NekHistoryReadError(
+        "INVALID_REQUEST",
+        "subagentId must be a nonempty child identity",
+      );
     if (this.historyFlights >= 16)
       throw new NekHistoryReadError("CAPACITY", "nek history request capacity exceeded (16)");
     this.historyFlights += 1;
@@ -184,6 +189,17 @@ function makeHistoryReader(
         "FOREIGN_CURSOR",
         "nek returned history for a different session",
       );
-    return result as Extract<NekHistoryResponseData[C["type"]], { ok: true }>;
+    if (command.type === "read_history_subagent") {
+      const single = typeof command.subagentId === "string";
+      if (
+        (single && !("subagent" in result)) ||
+        (!single && (!("kind" in result) || result.kind !== "subagents"))
+      )
+        throw new NekHistoryReadError(
+          "INVALID_RESPONSE",
+          "nek child result does not match the requested query shape",
+        );
+    }
+    return result as Extract<NekHistoryCommandResult<C>, { ok: true }>;
   };
 }

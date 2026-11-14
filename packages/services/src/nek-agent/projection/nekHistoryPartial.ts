@@ -1,6 +1,12 @@
 import type { NekHistoryEntry } from "@zcode/shared/nek-protocol";
 import type { ConversationRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
-import { buildToolCallRow, buildTimelineMarkerRow, buildModelErrorMarker, contentText, toEpochMs } from "./nekRows.js";
+import {
+  buildToolCallRow,
+  buildTimelineMarkerRow,
+  buildModelErrorMarker,
+  contentText,
+  toEpochMs,
+} from "./nekRows.js";
 import { HISTORY_ROW_STRIDE, historyRowId } from "./nekHistoryIdentity.js";
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -23,15 +29,16 @@ export function partialAssistantError(source: NekHistoryEntry): ConversationRow 
     api: typeof message.api === "string" ? message.api : "",
     ...(typeof message.errorMessage === "string" ? { errorMessage: message.errorMessage } : {}),
   });
-  return buildTimelineMarkerRow({
-    rowId: historyRowId(source.position, HISTORY_ROW_STRIDE - 3),
-    entityId: `model-error:${source.id}`, turnId: source.turnId, createdAt: toEpochMs(source.timestamp),
-  }, marker!, "turnTailBoundary");
-}
-
-export function historyAssistantStopReason(source: NekHistoryEntry): unknown {
-  const message = displayMessage(source);
-  return message?.role === "assistant" ? message.stopReason : undefined;
+  return buildTimelineMarkerRow(
+    {
+      rowId: historyRowId(source.position, HISTORY_ROW_STRIDE - 3),
+      entityId: `model-error:${source.id}`,
+      turnId: source.turnId,
+      createdAt: toEpochMs(source.timestamp),
+    },
+    marker!,
+    "turnTailBoundary",
+  );
 }
 
 /** Parse only surviving call identities. Partial display objects never become model/session entries. */
@@ -84,9 +91,19 @@ export function partialToolResult(
     typeof message.isError !== "boolean"
   )
     return;
-  const anchor = anchors.findLast(
-    (row) => row.kind === "toolCall" && row.toolCallId === message.toolCallId,
-  );
+  const anchor =
+    anchors.findLast((row) => row.kind === "toolCall" && row.toolCallId === message.toolCallId) ??
+    (source.toolCallOrigin === null
+      ? buildToolCallRow(
+          {
+            entityId: `tool:${message.toolCallId}`,
+            rowId: historyRowId(source.position, 2),
+            turnId: source.turnId,
+            createdAt: toEpochMs(source.timestamp),
+          },
+          { toolCallId: message.toolCallId, toolName: message.toolName, status: "inputStreaming" },
+        )
+      : undefined);
   if (anchor?.kind !== "toolCall")
     throw new Error("nek HISTORY_ANCHOR_REQUIRED: deferred result has no original tool call seed");
   const text = Array.isArray(message.content)

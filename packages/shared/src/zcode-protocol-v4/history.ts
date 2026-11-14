@@ -10,6 +10,7 @@ export const historyContentReferenceSchema = z.object({
   mediaType: z.string(),
   encoding: z.literal("base64"),
   entryId: z.string().optional(),
+  format: z.enum(["durable-record", "session-entry"]).optional(),
 });
 export type HistoryContentReference = z.infer<typeof historyContentReferenceSchema>;
 export const conversationHistoryTurnSchema = z.object({

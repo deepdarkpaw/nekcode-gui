@@ -23,7 +23,8 @@ import {
 } from "./nekRows.js";
 
 import { HISTORY_ROW_STRIDE as STRIDE, historyRowId } from "./nekHistoryIdentity.js";
-import { partialToolCalls, partialToolResult, partialAssistantError, historyAssistantStopReason } from "./nekHistoryPartial.js";
+import { partialMessageRows, partialCustomRows } from "./nekHistoryPartialMessages.js";
+import { partialToolCalls, partialToolResult, partialAssistantError } from "./nekHistoryPartial.js";
 export { historyRowId } from "./nekHistoryIdentity.js";
 export const historyTurn = (turn: NekHistoryTurn): ConversationHistoryTurn => ({
   turnId: turn.id,
@@ -52,10 +53,11 @@ function identityLayout(
   anchors: readonly ConversationRow[],
 ) {
   const ids = new Map<string, number>([[turn.id, historyRowId(turn.header.position, 0)]]);
-  const positions = new Map(sources.map((source) => [source.id, source.position]));
+  const wrappers = new Map(sources.map((source) => [source.id, source]));
   for (const row of anchors) if (row.entityId) ids.set(row.entityId, row.rowId);
   for (const entry of complete) {
-    const pos = positions.get(entry.id)!;
+    const wrapper = wrappers.get(entry.id)!;
+    const pos = wrapper.position;
     ids.set(`entry:${entry.id}`, historyRowId(pos, 2));
     ids.set(`entry:${entry.id}:user`, historyRowId(pos, 1));
     if (entry.type === "custom_message") {
@@ -81,6 +83,12 @@ function identityLayout(
         if (block.type === "toolCall") ids.set(`tool:${block.id}`, historyRowId(pos, slot + 2));
       });
     }
+    if (
+      message.role === "toolResult" &&
+      wrapper.toolCallOrigin === null &&
+      !ids.has(`tool:${message.toolCallId}`)
+    )
+      ids.set(`tool:${message.toolCallId}`, historyRowId(pos, 2));
     if (message.role === "toolResult" && message.toolName === "subagent") {
       const records = extractSubagentsFromToolResult(
         message.toolName,
@@ -106,9 +114,9 @@ function identityLayout(
 /** Omitted fields can include any subtree/root. Keep an explicit deferred row, not fake completion. */
 function deferred(source: NekHistoryEntry): ConversationRow {
   const identity = {
-    rowId: historyRowId(source.position, STRIDE - 2),
+    rowId: historyRowId(source.position, source.role === "user" ? 1 : STRIDE - 2),
     turnId: source.turnId,
-    entityId: `history-deferred:${source.id}`,
+    entityId: source.role === "user" ? `entry:${source.id}:user` : `history-deferred:${source.id}`,
     createdAt: toEpochMs(source.timestamp),
   };
   const row =
@@ -154,7 +162,18 @@ export function projectHistory(input: {
         return entry;
       });
     const partialCalls = sources.flatMap(partialToolCalls);
-    anchors.push(...partialCalls);
+    const partialMessages = sources.flatMap((source) => [
+      ...partialMessageRows(source, input.sessionId),
+      ...partialCustomRows(source),
+    ]);
+    for (const source of sources)
+      if (
+        source.role === "user" &&
+        source.omissions.length &&
+        !partialMessages.some((row) => row.entityId === `entry:${source.id}:user`)
+      )
+        partialMessages.push(deferred(source));
+    anchors.push(...partialCalls, ...partialMessages);
     const resolve = identityLayout(turn, sources, complete, anchors);
     const subagentAnchors = new Map(
       anchors.flatMap((row) =>
@@ -188,7 +207,39 @@ export function projectHistory(input: {
       if (entry.type === "thinking_level_change")
         selection = { ...selection, thought: entry.thinkingLevel };
     }
-    for (const row of partialCalls) result.set(row.rowId, row);
+    const actualUser = turn.header.entry?.message;
+    const startedAt =
+      typeof actualUser === "object" &&
+      actualUser !== null &&
+      "timestamp" in actualUser &&
+      typeof actualUser.timestamp === "number"
+        ? actualUser.timestamp
+        : toEpochMs(turn.header.timestamp);
+    const lastResponse = sources.findLast((source) => source.role === "assistant")?.entry?.message;
+    const stop =
+      typeof lastResponse === "object" && lastResponse !== null && "stopReason" in lastResponse
+        ? lastResponse.stopReason
+        : undefined;
+    projected.rows = projected.rows.map((row) =>
+      row.kind === "turnHeader"
+        ? {
+            ...row,
+            startedAt,
+            createdAt: startedAt,
+            ...(stop === "error"
+              ? { state: "failed" as const }
+              : stop === "aborted"
+                ? { state: "completedInterrupted" as const }
+                : stop === "pending"
+                  ? { state: "running" as const }
+                  : {}),
+            ...(sources.some((source) => source.omissions.length) || turn.continuationCursor
+              ? { endedAt: undefined }
+              : {}),
+          }
+        : row,
+    );
+    for (const row of [...partialCalls, ...partialMessages]) result.set(row.rowId, row);
     for (const row of projected.rows) result.set(row.rowId, row);
     anchors.push(
       ...projected.rows.filter((row) => row.kind === "toolCall" || row.kind === "subagent"),
@@ -225,17 +276,50 @@ export function projectHistory(input: {
     }
     for (const source of sources)
       if (source.omissions.length) {
-        const row = deferred(source);
-        result.set(row.rowId, row);
+        if (["custom", "usage", "label", "context_edit"].includes(source.type)) continue;
+        if (source.type === "custom_message" && source.entry?.display === false) {
+          if (source.entry.customType === "nek.attachments") {
+            const owner = [...result.values()].find(
+              (row) => row.kind === "userInput" && row.entityId === `entry:${source.parentId}:user`,
+            );
+            if (!owner)
+              throw new Error(
+                "nek HISTORY_ANCHOR_REQUIRED: deferred attachments have no owning user",
+              );
+            result.set(owner.rowId, {
+              ...owner,
+              historyContent: [
+                ...(owner.historyContent ?? []),
+                ...source.omissions.map((ref) => ({ ...ref, entryId: source.id })),
+              ],
+            });
+          }
+          continue;
+        }
+        if (source.type === "custom_message" && source.entry?.display !== true)
+          throw new Error(
+            "nek HISTORY_DISPLAY_CONTEXT_REQUIRED: root custom entry has no visibility seed",
+          );
         const error = partialAssistantError(source);
         if (error) result.set(error.rowId, error);
+        if (
+          [...result.values()].some(
+            (row) =>
+              row.kind !== "timelineMarker" &&
+              row.historyContent?.some((ref) => ref.entryId === source.id),
+          )
+        )
+          continue;
+        const row = deferred(source);
+        result.set(row.rowId, row);
       }
-    const lastAssistant = sources.findLast((source) => source.role === "assistant");
-    const stop = lastAssistant && historyAssistantStopReason(lastAssistant);
     const headerId = historyRowId(turn.header.position, 0);
     const header = result.get(headerId);
     if (header?.kind === "turnHeader" && (stop === "error" || stop === "aborted"))
-      result.set(headerId, { ...header, state: stop === "error" ? "failed" : "completedInterrupted" });
+      result.set(headerId, {
+        ...header,
+        state: stop === "error" ? "failed" : "completedInterrupted",
+      });
   }
   return [...result.values()]
     .sort((a, b) => a.rowId - b.rowId)

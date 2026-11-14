@@ -62,7 +62,7 @@ function fixture(running: boolean, live: NekSubagentRecord[], beforeEntries = as
       events.push("entries-read");
       return fixtureHistory([entry], command, { ...historySummary, id: "parent" });
     }
-    if (command.type === "read_session_metadata")
+    if (command.type === "read_session_metadata" || command.type === "read_history_subagent")
       return fixtureHistory([entry], command, { ...historySummary, id: "parent" });
     if (command.type === "extension_call" && command.method === "nek.get_state")
       return { result: state(live) };

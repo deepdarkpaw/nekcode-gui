@@ -5,7 +5,14 @@ import type { NekSessionLockHolder, NekSessionSummary } from "./gui-rpc.js";
 /** The CLI currently exposes a total count, not an enumerable persisted child directory. */
 export interface NekHistoryStatusSnapshot extends NekStatusSnapshot {
   /** Persisted total and known persisted IDs in the bounded view; completeness is conservative. */
-  historyChildren?: { total: number; loaded: number; complete: boolean };
+  historyChildren?: {
+    total: number;
+    loaded: number;
+    complete: boolean;
+    items?: NekHistorySubagentRecord[];
+    hasMore?: boolean;
+    nextCursor?: string;
+  };
 }
 
 export interface NekHistoryOptions {
@@ -46,7 +53,22 @@ export type NekHistoryCommand =
       offset?: number;
       limit?: number;
     } & NekHistoryOptions)
-  | ({ id?: string; type: "read_history_subagent"; subagentId: string } & NekHistoryOptions);
+  | NekHistorySubagentCommand;
+export type NekHistorySubagentCommand =
+  | ({
+      id?: string;
+      type: "read_history_subagent";
+      subagentId: string;
+      cursor?: never;
+      limit?: never;
+    } & NekHistoryOptions)
+  | ({
+      id?: string;
+      type: "read_history_subagent";
+      subagentId?: undefined;
+      cursor?: string;
+      limit?: number;
+    } & NekHistoryOptions);
 export type NekHistoryErrorCode =
   | "INVALID_REQUEST"
   | "INVALID_CURSOR"
@@ -73,6 +95,7 @@ export interface NekHistorySelection {
 }
 export interface NekHistoryOmission {
   pointer: string;
+  format?: "durable-record" | "session-entry";
   ref: string;
   totalBytes: number;
   mediaType: "application/json";
@@ -87,6 +110,9 @@ export interface NekHistoryEntry {
   type: string;
   role?: string;
   preview: string;
+  toolCallOrigin?: { entryId: string; position: number; toolCallId: string; name: string } | null;
+  subagents?: NekHistorySubagentRecord[];
+  subagentCount?: number;
   entry: Record<string, unknown>;
   omissions: NekHistoryOmission[];
 }
@@ -164,11 +190,26 @@ export interface NekHistorySubagentRecord {
 export interface NekHistorySubagent extends NekHistoryIdentity {
   subagent: NekHistorySubagentRecord;
 }
+export interface NekHistorySubagentDirectory extends NekHistoryIdentity {
+  kind: "subagents";
+  subagents: NekHistorySubagentRecord[];
+  total: number;
+  count: number;
+  hasMore: boolean;
+  nextCursor?: string;
+}
+export type NekHistoryCommandResult<C extends NekHistoryCommand> = C extends {
+  type: "read_history_subagent";
+}
+  ? C extends { subagentId: string }
+    ? NekHistoryResult<NekHistorySubagent>
+    : NekHistoryResult<NekHistorySubagentDirectory>
+  : NekHistoryResponseData[C["type"]];
 export interface NekHistoryResponseData {
   read_session_metadata: NekHistoryResult<NekHistoryMetadata>;
   read_history_page: NekHistoryResult<NekHistoryPage>;
   read_history_turn: NekHistoryResult<NekHistoryTurnPage>;
   read_history_directory: NekHistoryResult<NekHistoryDirectory>;
   read_history_content: NekHistoryResult<NekHistoryContent>;
-  read_history_subagent: NekHistoryResult<NekHistorySubagent>;
+  read_history_subagent: NekHistoryResult<NekHistorySubagent | NekHistorySubagentDirectory>;
 }
