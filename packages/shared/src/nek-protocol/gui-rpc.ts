@@ -11,6 +11,7 @@
  * 新增的部分；既有命令与事件的形状以 nek 文档为准，镜像类型见 `./rpc.ts`。
  */
 
+import type { NekHistoryCommand, NekHistoryResponseData } from "./history.js";
 import type { NekMcpServerConfig, NekMode } from "./gui-extension-api.js";
 import { compareSemverVersions } from "../forceUpdate.js";
 
@@ -92,7 +93,7 @@ export const NEK_ENDPOINT_APIS: readonly NekEndpointApi[] = [
 export interface NekGuiInfo {
   protocolVersion: number;
   /** 缺失时不能发送附件路径：旧 RPC 会忽略未知字段，必须明确要求更新。 */
-  capabilities?: { promptAttachments?: 1 };
+  capabilities?: { promptAttachments?: 1; historyPages?: 1 };
   /** nek 自身版本（package.json `nekConfig.version`），例如 "0.4.0"。 */
   nekVersion: string;
   /** 基线 pi 版本，例如 "1.0.2"。 */
@@ -150,6 +151,7 @@ export interface NekProviderOverrides {
 }
 
 export type NekGuiRpcCommand =
+  | NekHistoryCommand
   // ---- 运行时 [session + control] ----
   | { id?: string; type: "get_info" }
   | { id?: string; type: "reload" }
@@ -222,6 +224,12 @@ export const NEK_CONTROL_COMMANDS: readonly string[] = [
   "delete_session",
   "rename_session",
   "read_session_snapshot",
+  "read_session_metadata",
+  "read_history_page",
+  "read_history_turn",
+  "read_history_directory",
+  "read_history_content",
+  "read_history_subagent",
   "import_session",
   "auth_status",
   "auth_login",
@@ -437,7 +445,7 @@ export type NekMcpTestResult =
   | { ok: true; latencyMs: number; tools: Array<{ name: string; description?: string }> }
   | { ok: false; message: string };
 
-export interface NekGuiRpcResponseData {
+export interface NekGuiRpcResponseData extends NekHistoryResponseData {
   get_info: NekInfo;
   reload: NekReloadResult;
   validate_config: { diagnostics: NekConfigDiagnostic[] };

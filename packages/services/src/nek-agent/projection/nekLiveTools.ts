@@ -112,7 +112,6 @@ export function applyToolExecutionEnd(
   isError: boolean,
 ): void {
   const details = (result as { details?: unknown } | undefined)?.details;
-  if (details !== undefined) ctx.toolDetails.set(toolCallId, details);
   const endedAt = ctx.now();
   const rowId = toolRowId(ctx, toolCallId);
   ctx.store.add(
@@ -148,6 +147,28 @@ export function applySubagentRecord(
   parentToolCallId?: string,
 ): void {
   const entityId = `subagent:${record.id}`;
+  if (ctx.historyPages && ctx.store.findRowId(entityId) === undefined) {
+    const anchor = ctx
+      .historyAnchors?.()
+      .find((row) => row.kind === "subagent" && row.childSessionId === record.id);
+    if (anchor?.kind === "subagent") {
+      ctx.store.restoreAnchor(
+        subagentRowFromRecord(
+          entityId,
+          anchor.rowId,
+          anchor.turnId,
+          record,
+          anchor.parentToolCallId,
+        ),
+      );
+      return;
+    }
+    const parentId = parentToolCallId ? ctx.store.findRowId(`tool:${parentToolCallId}`) : undefined;
+    const input =
+      parentId === undefined ? undefined : ctx.store.getRow<ToolCallRow>(parentId)?.input;
+    if (!parentToolCallId || (typeof input === "object" && input !== null && "resume" in input))
+      throw new Error("nek HISTORY_ANCHOR_REQUIRED: child update has no original spawn seed");
+  }
   const rowId = ctx.store.allocate(entityId);
   const existing = ctx.store.getRow(rowId);
   const createdAt = existing?.createdAt ?? record.startedAt;

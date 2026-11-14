@@ -281,6 +281,16 @@ function childSnapshot(id: string): NekSessionSnapshot {
     { role: "user", content: `Inspect ${id}`, timestamp: 1_000 },
     {
       role: "assistant",
+      api: "test",
+      stopReason: "stop",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
       provider: "mock",
       model: "local-only",
       timestamp: 2_000,
@@ -338,15 +348,15 @@ test("SP-4: a reopened session backfills the status snapshot and previews histor
     assert.equal(preview.rows.find((row) => row.kind === "turnHeader")?.state, "completedSuccess");
     assert.equal(h.sessions.length, 1, "history preview never resumes the child session");
     assert.ok(
-      h.control.commands.some(
+      h.sessions[0]!.commands.some(
         (command) =>
-          command.type === "read_session_snapshot" &&
+          command.type === "read_history_page" &&
           command.sessionPath === "/sessions/subagents/child-a.jsonl",
       ),
     );
     await assert.rejects(
       h.adapter.getSubagentConversation({ ...params, id: "missing-child" }),
-      /Unknown subagent missing-child/,
+      /Unknown subagent/,
     );
   } finally {
     await h.adapter.dispose();

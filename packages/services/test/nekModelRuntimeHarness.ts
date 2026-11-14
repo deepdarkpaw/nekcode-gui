@@ -1,3 +1,4 @@
+import { fixtureHistory, historySummary } from "./nekHistoryFixture.js";
 import { basename, join, resolve } from "node:path";
 import type {
   NekConfigDiagnostic,
@@ -51,6 +52,11 @@ export function runtimeHarness(shared?: MemoryNekConfigHostExecutor) {
   let controlModels = readModels();
   let controlFailure: string | undefined;
   const control = createProcess((command) => {
+    if (command.type === "read_session_metadata" || command.type === "read_history_page") {
+      const saved = snapshots.get(command.sessionPath!);
+      if (!saved) throw new Error("missing history fixture");
+      return fixtureHistory(saved.entries, command, saved.session, saved.lockedBy);
+    }
     if (command.type === "read_session_snapshot") return snapshots.get(command.sessionPath);
     if (command.type === "get_project_trust") return { cwd: "", trusted: true, resources: [] };
     if (command.type === "get_available_models") return { models: controlModels };
@@ -103,6 +109,12 @@ export function runtimeHarness(shared?: MemoryNekConfigHostExecutor) {
               messageCount: 1,
               pendingMessageCount: 0,
             };
+          if (command.type === "read_session_metadata" || command.type === "read_history_page")
+            return fixtureHistory([], command, {
+              ...historySummary,
+              id,
+              path: `/sessions/${id}.jsonl`,
+            });
           if (command.type === "get_entries") return { entries: [], leafId: null, hasMore: false };
           if (command.type === "get_session_stats")
             return {

@@ -33,12 +33,22 @@ export interface NekSnapshotInput {
   entries: NekSessionEntry[];
   leafId?: string | null;
   messages?: NekAgentMessage[];
+  /** Explicit cold child liveness; otherwise use state.isStreaming (absent state means stopped). */
+  isSessionRunning?: boolean;
   state?: NekRpcSessionState;
   stats?: NekSessionStats;
   /** `get_info`/`session_info_changed` 给的会话名。 */
   title?: string;
   /** `extension_call nek.get_state` 的计划/模式与子代理注册表；采样不得早于 entries。 */
   nekState?: NekState;
+  /** Source history is already branch-ordered and owns turn/row identities. */
+  historyLayout?: {
+    turnId: string;
+    selection?: { provider?: string; model?: string; thought?: string };
+    partial?: boolean;
+    resolve: (entityId: string) => number;
+    subagentAnchors?: ReadonlyMap<string, { turnId: string; parentToolCallId?: string }>;
+  };
   /** 已经存在的行（增量刷新时用于复用 rowId）。 */
   existing?: { rows: ConversationRow[]; byEntity: Map<string, number>; nextRowId: number };
 }
@@ -81,7 +91,10 @@ export class RowAllocator {
   private readonly existingRows: Map<number, ConversationRow>;
   private nextRowId: number;
 
-  constructor(existing?: NekSnapshotInput["existing"]) {
+  constructor(
+    existing?: NekSnapshotInput["existing"],
+    private readonly resolveStable?: (entityId: string) => number,
+  ) {
     this.byEntity = new Map(existing?.byEntity ?? []);
     this.nextRowId = existing?.nextRowId ?? 1;
     this.existingRows = new Map((existing?.rows ?? []).map((row) => [row.rowId, row]));
@@ -90,8 +103,8 @@ export class RowAllocator {
   resolve(entityId: string): number {
     const known = this.byEntity.get(entityId);
     if (known !== undefined) return known;
-    const rowId = this.nextRowId;
-    this.nextRowId += 1;
+    const rowId = this.resolveStable ? this.resolveStable(entityId) : this.nextRowId;
+    this.nextRowId = Math.max(this.nextRowId, rowId + 1);
     this.byEntity.set(entityId, rowId);
     return rowId;
   }
@@ -108,6 +121,14 @@ export class RowAllocator {
   get nextId(): number {
     return this.nextRowId;
   }
+}
+
+export function completedTurnState(reason: string | undefined) {
+  return reason === "aborted"
+    ? "completedInterrupted"
+    : reason === "error"
+      ? "failed"
+      : "completedSuccess";
 }
 
 export interface TurnContext {
@@ -132,7 +153,7 @@ export function projectCustomMessage(
   allocator: RowAllocator,
 ): ConversationRow | null {
   if (entry.customType === "nek.plan_preview" && isPlanPreviewDetails(entry.details)) {
-    const entityId = `entry:${entry.timestamp}:plan:${entry.details.plan.revision}`;
+    const entityId = `entry:${entry.id}:plan:${entry.details.plan.revision}`;
     const rowId = allocator.resolve(entityId);
     return buildPlanPreviewRow(
       identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)),
@@ -142,7 +163,7 @@ export function projectCustomMessage(
   // 其他 custom 消息等价于"注入的用户侧上下文"：用 synthetic 来源的 userInput 呈现。
   const text = contentText(entry.content as string | Array<{ type: string }>);
   if (text.trim() === "") return null;
-  const entityId = `custom:${entry.timestamp}:${entry.customType}`;
+  const entityId = `custom:${entry.id}:${entry.customType}`;
   const rowId = allocator.resolve(entityId);
   return buildUserInputRow(identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)), {
     text,

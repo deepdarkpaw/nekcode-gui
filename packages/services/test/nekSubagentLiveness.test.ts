@@ -1,3 +1,4 @@
+import { fixtureHistory, historySummary } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NekSessionEntry, NekState, NekSubagentRecord } from "@zcode/shared/nek-protocol";
@@ -56,11 +57,13 @@ function fixture(running: boolean, live: NekSubagentRecord[], beforeEntries = as
     events.push(command.type === "extension_call" ? command.method : command.type);
     if (command.type === "get_state") return runtime(running);
     if (command.type === "get_session_stats") return {};
-    if (command.type === "get_entries") {
+    if (command.type === "read_history_page") {
       await beforeEntries();
       events.push("entries-read");
-      return { entries: [entry], leafId: entry.id };
+      return fixtureHistory([entry], command, { ...historySummary, id: "parent" });
     }
+    if (command.type === "read_session_metadata")
+      return fixtureHistory([entry], command, { ...historySummary, id: "parent" });
     if (command.type === "extension_call" && command.method === "nek.get_state")
       return { result: state(live) };
     if (command.type === "extension_call" && command.method === "nek.stop_subagent")
@@ -70,6 +73,7 @@ function fixture(running: boolean, live: NekSubagentRecord[], beforeEntries = as
   const target: NekAgentCommandTarget = {
     client: p.process.client,
     phase: "running",
+    capabilities: { historyPages: 1 },
     setPhase: () => {},
   };
   const context = {
@@ -113,7 +117,7 @@ test("SS-2: registry is sampled after entries, so a newly spawned child is never
   const pending = getStatusSnapshot(context, "parent");
   try {
     await new Promise<void>((ok) => setTimeout(ok, 5));
-    assert.ok(events.includes("get_entries"));
+    assert.ok(events.includes("read_history_page"));
     assert.ok(!events.includes("nek.get_state"), "registry must not be older than entries");
     live.push(child);
     gate.resolve();

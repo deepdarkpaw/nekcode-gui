@@ -75,6 +75,11 @@ export function applyNekSessionEvent(input: NekSessionEventTarget, event: NekRpc
       input.setPhase(record, record.state?.isCompacting ? "running" : "idle");
       input.refreshSnapshot(record);
       return;
+    case "entry_appended":
+      // Refresh only the latest bounded source window/cursors after a consumed user boundary.
+      if (event.entry.type === "message" && event.entry.message.role === "user")
+        input.refreshSnapshot(record);
+      return;
     case "extension_ui_request":
       if (
         event.method === "structured" ||

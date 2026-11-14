@@ -1,3 +1,5 @@
+import { verifyHistorySpawnAnchors } from "./nekHistoryAnchors.js";
+import { historyResult, requireHistoryPages, HISTORY_RPC_MAX_BYTES } from "./nekHistoryRpc.js";
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { measureNekOpenRequest } from "./nekSessionOpenTiming.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
@@ -70,6 +72,7 @@ export async function initializeSessionState(
   process: NekRpcProcess,
 ): Promise<void> {
   const { record } = context;
+  requireHistoryPages(process.guiInfo);
   for (let attempt = 0; attempt < MAX_SNAPSHOT_ATTEMPTS; attempt += 1) {
     assertSnapshotTarget(record, process);
     const epoch = record.stateEpoch ?? 0;
@@ -95,18 +98,41 @@ export async function reloadSessionSnapshot(
   openTiming?: ConversationOpenTiming,
 ): Promise<void> {
   const { record } = context;
+  requireHistoryPages(process.guiInfo);
   for (let attempt = 0; attempt < MAX_SNAPSHOT_ATTEMPTS; attempt += 1) {
     assertSnapshotTarget(record, process);
     const epoch = record.stateEpoch ?? 0;
-    const [state, entries, stats] = await measureNekOpenRequest(openTiming, () =>
+    const eventEpoch = record.eventEpoch ?? 0;
+    const [state, pageResult, stats] = await measureNekOpenRequest(openTiming, () =>
       Promise.all([
         process.client.call({ type: "get_state" }),
-        process.client.call({ type: "get_entries" }),
+        process.client.call({
+          type: "read_history_page",
+          turnLimit: 20,
+          maxBytes: HISTORY_RPC_MAX_BYTES,
+        }),
         process.client.call({ type: "get_session_stats" }),
       ]),
     );
     assertSnapshotTarget(record, process);
     if ((record.stateEpoch ?? 0) !== epoch) continue;
+    const page = historyResult(pageResult);
+    await verifyHistorySpawnAnchors(
+      page.entries,
+      (subagentId) => process.client.call({ type: "read_history_subagent", subagentId }),
+      record.projector?.acceptsHistoryPage(page) ? record.projector.historyAnchors() : [],
+    );
+    const metadata = historyResult(
+      await measureNekOpenRequest(openTiming, () =>
+        process.client.call({
+          type: "read_session_metadata",
+          branchRevision: page.branchRevision,
+          maxBytes: HISTORY_RPC_MAX_BYTES,
+        }),
+      ),
+    );
+    if (metadata.sessionId !== page.sessionId || page.sessionId !== state.sessionId)
+      throw new NekSnapshotStaleError("nek history snapshot session mismatch");
     // Registry must not predate the persisted spawn facts used to reconstruct child rows.
     const extension = await measureNekOpenRequest(openTiming, () =>
       process.client.call({
@@ -115,7 +141,7 @@ export async function reloadSessionSnapshot(
       }),
     );
     // 取快照期间发生了压缩/回合边界：这批事实属于更早的生命周期，丢弃重取。
-    if ((record.stateEpoch ?? 0) !== epoch) continue;
+    if ((record.stateEpoch ?? 0) !== epoch || (record.eventEpoch ?? 0) !== eventEpoch) continue;
     // 关闭/换进程同样整批作废：迟到的响应不能再落地。
     assertSnapshotTarget(record, process);
     record.state = state;
@@ -123,14 +149,17 @@ export async function reloadSessionSnapshot(
     record.path = state.sessionFile ?? record.path;
     context.bindPath(record);
     const projector = (record.projector ??= context.createProjector(record));
-    projector.loadSnapshot({
-      entries: entries.entries,
-      leafId: entries.leafId,
+    record.historyMetadata = metadata;
+    const previousLogEpoch = projector.snapshot().logEpoch;
+    projector.loadHistory({
+      page,
+      metadata,
       state,
       stats,
       nekState: isNekState(extension.result) ? extension.result : undefined,
-      title: state.sessionName,
     });
+    if (projector.snapshot().logEpoch !== previousLogEpoch)
+      record.historyGeneration = (record.historyGeneration ?? 0) + 1;
     projector.flushNow();
     context.setPhase(record, state.isStreaming || state.isCompacting ? "running" : "idle");
     // 快照是权威事实：压缩已经收口（或从未开始）时，把 GUI 暂存的输入放行。

@@ -6,6 +6,7 @@ import {
 
 /** ZCodium publisher 的 wire 尾窗：只裁传输视图，不改变同源分页所需的投影与历史水位。 */
 export function nekConversationWireSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
+  if (snapshot.history) return snapshot;
   const limit = PROTOCOL_V4_LIMITS.snapshotTailWindowRows;
   if (snapshot.rows.window.length <= limit) return snapshot;
   return {

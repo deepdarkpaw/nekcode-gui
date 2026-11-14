@@ -1,6 +1,7 @@
 /**
  * 快照生命周期 fence：陈旧/关闭/换进程的快照必须显式失败，绝不冒充已装载。
  */
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
@@ -62,8 +63,9 @@ function harness(overrides: Partial<NekSessionRecord> = {}): Harness {
     ...overrides,
   };
   const projector = {
-    loadSnapshot: () => {},
+    loadHistory: () => {},
     flushNow: () => {},
+    snapshot: () => ({ logEpoch: "test" }),
   } as unknown as NekConversationProjector;
   const context: NekSessionSnapshotContext = {
     record,
@@ -97,12 +99,14 @@ function fakeProcess(
   onCommand: (type: string) => void | Promise<void> = () => {},
 ): NekRpcProcess {
   return {
+    guiInfo: { capabilities: { historyPages: 1 } },
     client: {
       call: async (command: { type: string }) => {
         calls.push(command.type);
         await onCommand(command.type);
         if (command.type === "get_state") return state;
-        if (command.type === "get_entries") return { entries: [], leafId: null };
+        if (command.type === "read_history_page" || command.type === "read_session_metadata")
+          return fixtureHistory([], command);
         if (command.type === "get_session_stats") return stats;
         if (command.type === "extension_call") return { result: undefined };
         throw new Error(`unexpected command ${command.type}`);
@@ -128,35 +132,42 @@ test("OT-1: snapshot timing measures parallel RPC waits once and excludes projec
   t.mock.method(performance, "now", () => now);
   const h = harness();
   const process = fakeProcess(h.calls, (type) => {
-    if (type === "get_entries") now += 25;
+    if (type === "read_history_page") now += 25;
     if (type === "extension_call") now += 10;
   });
   h.record.process = process;
   h.context.createProjector = () =>
     ({
-      loadSnapshot: () => {
+      loadHistory: () => {
         now += 80;
       },
       flushNow: () => {},
+      snapshot: () => ({ logEpoch: "test" }),
     }) as unknown as NekConversationProjector;
   const timing: ConversationOpenTiming = { version: 1 };
   await reloadSessionSnapshot(h.context, process, timing);
   assert.equal(timing.cliRequestMs, 35);
   assert.equal(now, 115);
-  assert.deepEqual(h.calls, ["get_state", "get_entries", "get_session_stats", "extension_call"]);
+  assert.deepEqual(h.calls, [
+    "get_state",
+    "read_history_page",
+    "get_session_stats",
+    "read_session_metadata",
+    "extension_call",
+  ]);
 });
 
 test("SS-2: projection reload samples the child registry only after persisted entries finish", async () => {
   const h = harness();
   const gate = Promise.withResolvers<void>();
   const process = fakeProcess(h.calls, async (type) => {
-    if (type === "get_entries") await gate.promise;
+    if (type === "read_history_page") await gate.promise;
   });
   h.record.process = process;
   const pending = reloadSessionSnapshot(h.context, process);
   try {
     await flush();
-    assert.ok(h.calls.includes("get_entries"));
+    assert.ok(h.calls.includes("read_history_page"));
     assert.ok(!h.calls.includes("extension_call"));
   } finally {
     gate.resolve();
@@ -168,7 +179,7 @@ test("SS-2: projection reload samples the child registry only after persisted en
 test("连续 3 次生命周期世代变化后显式失败，不冒充装载成功", async () => {
   const h = harness();
   const process = fakeProcess(h.calls, (type) => {
-    if (type === "get_entries") h.record.stateEpoch = (h.record.stateEpoch ?? 0) + 1;
+    if (type === "read_history_page") h.record.stateEpoch = (h.record.stateEpoch ?? 0) + 1;
   });
   h.record.process = process;
   await assert.rejects(reloadSessionSnapshot(h.context, process), (error: Error) => {
@@ -199,7 +210,7 @@ test("关闭会话后迟到的快照不再落地（不绑路径、不覆盖状�
   const h = harness();
   const gate = Promise.withResolvers<void>();
   const process = fakeProcess(h.calls, async (type) => {
-    if (type === "get_entries") await gate.promise;
+    if (type === "read_history_page") await gate.promise;
   });
   h.record.process = process;
   const inFlight = reloadSessionSnapshot(h.context, process);
@@ -220,7 +231,7 @@ test("进程被更换后迟到的快照不再落地（旧进程结果不能写�
   const h = harness();
   const gate = Promise.withResolvers<void>();
   const oldProcess = fakeProcess(h.calls, async (type) => {
-    if (type === "get_entries") await gate.promise;
+    if (type === "read_history_page") await gate.promise;
   });
   const newProcess = fakeProcess(h.calls);
   h.record.process = oldProcess;

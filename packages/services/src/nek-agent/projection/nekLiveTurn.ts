@@ -1,4 +1,5 @@
 import type { NekRpcEvent } from "@zcode/shared/nek-protocol";
+import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import type { NekRowIdentity } from "./nekRows.js";
 import { buildTurnHeaderRow } from "./nekRows.js";
 import type { NekProjectionStore } from "./nekProjectionStore.js";
@@ -30,6 +31,8 @@ export interface NekLiveTurn {
 export interface NekLiveContext {
   store: NekProjectionStore;
   now: () => number;
+  historyPages?: boolean;
+  historyAnchors?: () => readonly ConversationRow[];
   turn?: NekLiveTurn;
   /** 当前 assistant response 的身份前缀（来自 `message_start.message.timestamp`）。 */
   assistantResponseKey?: string;
@@ -38,8 +41,6 @@ export interface NekLiveContext {
   streamRows: Map<string, number>;
   /** toolCallId → rowId。 */
   toolRows: Map<string, number>;
-  /** v4 没有通用 details 字段，这里保留原始 details 供上层自取。 */
-  toolDetails: Map<string, unknown>;
   markerSerial: number;
   /**
    * 正在进行的压缩所占据的 marker 行。
@@ -76,7 +77,6 @@ export function createNekLiveContext(
       : {}),
     streamRows: new Map(),
     toolRows: new Map(),
-    toolDetails: new Map(),
     markerSerial: 0,
     activeCompactEntityId: undefined,
     pendingCompactionEntrySync: false,
@@ -100,8 +100,10 @@ export function currentTurnId(ctx: NekLiveContext): string {
 export function ensureTurn(ctx: NekLiveContext, startedAt: number): NekLiveTurn {
   if (ctx.turn?.open) return ctx.turn;
   closeTurn(ctx, "completedSuccess");
-  const entityId = `turn:${startedAt}`;
-  const rowId = ctx.store.allocate(entityId);
+  const liveEntityId = `turn:${startedAt}`;
+  const rowId = ctx.store.allocate(liveEntityId);
+  const previous = ctx.store.getRow(rowId);
+  const entityId = previous?.kind === "turnHeader" ? previous.turnId : liveEntityId;
   const turn: NekLiveTurn = {
     entityId,
     turnId: entityId,

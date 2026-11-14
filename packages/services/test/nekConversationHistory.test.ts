@@ -7,6 +7,10 @@ import {
   type ConversationTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionEntry } from "@zcode/shared/nek-protocol";
+import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
+import { nekConversationRowsRange } from "../src/nek-agent/projection/nekConversationHistory.js";
+import { fixtureHistory } from "./nekHistoryFixture.js";
+import type { NekHistoryMetadata, NekHistoryPage } from "@zcode/shared/nek-protocol";
 import { entry, harness, params, target } from "./nekSessionHarness.js";
 
 /** 多个真实 user 边界构成的可确定重放历史；不依赖 CLI 或模型。 */
@@ -27,7 +31,7 @@ function snapshotOf(wire: ConversationTopicWireCandidate | undefined): Conversat
   return wire.frame.payload.snapshot;
 }
 
-test("HP-1: initial wire tail preserves metadata and leaves the authoritative history intact", async () => {
+test("HS1/HS2: initial source page preserves total metadata without loading old bodies", async () => {
   const h = harness({ entries: historyEntries() });
   const frames: ConversationTopicWireCandidate[] = [];
   h.adapter.onDynamicConversationFrame(target)((frame) => frames.push(frame));
@@ -36,15 +40,16 @@ test("HP-1: initial wire tail preserves metadata and leaves the authoritative hi
     const full = await h.adapter.readNekSession(params);
     const initial = snapshotOf(frames[0]);
     assert.equal(subscription.ack.openTiming?.snapshotRowCount, initial.rows.window.length);
-    assert.ok(full.rows.window.length > PROTOCOL_V4_LIMITS.snapshotTailWindowRows);
-    assert.deepEqual(initial, {
-      ...full,
-      rows: {
-        ...full.rows,
-        window: full.rows.window.slice(-PROTOCOL_V4_LIMITS.snapshotTailWindowRows),
-      },
-    });
-    assert.ok(initial.rows.window[0]!.rowId > initial.rows.firstRowId!);
+    assert.equal(full.rows.window.length, 40);
+    assert.equal(full.history?.totalTurns, 160);
+    assert.equal(full.history?.turns.length, 20);
+    assert.equal(full.history?.hasOlder, true);
+    assert.deepEqual(initial, full);
+    assert.ok(
+      ![...h.control.commands, ...h.sessions.flatMap((s) => s.commands)].some(
+        (c) => c.type === "read_session_snapshot" || c.type === "get_entries",
+      ),
+    );
     assert.deepEqual((await h.adapter.readNekSession(params)).rows, full.rows);
   } finally {
     await h.adapter.dispose();
@@ -60,22 +65,25 @@ test("HP-2: existing rowsRange reconstructs every omitted row with the same iden
     const initial = snapshotOf(frames[0]);
     const full = await h.adapter.readNekSession(params);
     let loaded = [...initial.rows.window];
-    let hasMore = true;
+    let cursor = initial.history?.olderCursor;
     let pages = 0;
-    while (hasMore) {
+    while (cursor) {
       assert.ok(pages++ < 10, "cursor must advance to the start of history");
       const beforeRowId = loaded[0]!.rowId;
-      const page = await h.adapter.conversationRowsRangeV4({ ...params, beforeRowId, limit: 100 });
-      assert.ok(page.rows.length > 0 && page.rows.length <= 100);
+      const page = await h.adapter.conversationHistoryPageV4({ ...params, beforeCursor: cursor });
+      assert.ok(page.rows.length > 0 && page.rows.length <= 40);
       assert.ok(page.rows.every((row) => row.rowId < beforeRowId));
       assert.equal(page.atLogEpoch, full.logEpoch);
       assert.equal(page.atSeq, full.seq);
       assert.equal(page.atRevision, full.revision);
       loaded = [...page.rows, ...loaded];
-      hasMore = page.hasMore;
+      cursor = page.history.olderCursor;
     }
-    assert.ok(pages > 1);
-    assert.deepEqual(loaded, full.rows.window);
+    assert.equal(pages, 7);
+    assert.equal(loaded.length, 320);
+    assert.deepEqual(loaded.slice(-40), full.rows.window);
+    const again = await h.adapter.conversationHistoryPageV4({ ...params, aroundEntryId: "user-1" });
+    assert.deepEqual(again.rows, loaded.slice(0, 40));
     assert.equal(new Set(loaded.map((row) => row.rowId)).size, loaded.length);
   } finally {
     await h.adapter.dispose();
@@ -83,25 +91,24 @@ test("HP-2: existing rowsRange reconstructs every omitted row with the same iden
 });
 
 test("HP-2: numeric cursors need not identify an existing row, and page size stays bounded", async () => {
-  const h = harness({ entries: historyEntries() });
+  const projector = new NekConversationProjector({ sessionId: "legacy" });
   try {
-    const full = await h.adapter.readNekSession(params);
-    const page = await h.adapter.conversationRowsRangeV4({
-      ...params,
+    projector.loadSnapshot({ entries: historyEntries() });
+    const full = projector.snapshot();
+    const page = nekConversationRowsRange(full, {
       beforeRowId: full.rows.window.at(-1)!.rowId + 10,
       limit: 10_000,
     });
     assert.deepEqual(page.rows, full.rows.window.slice(-PROTOCOL_V4_LIMITS.rowsRangeMaxLimit));
     assert.equal(page.hasMore, true);
-    const atStart = await h.adapter.conversationRowsRangeV4({
-      ...params,
+    const atStart = nekConversationRowsRange(full, {
       beforeRowId: full.rows.firstRowId!,
       limit: 20,
     });
     assert.deepEqual(atStart.rows, []);
     assert.equal(atStart.hasMore, false);
   } finally {
-    await h.adapter.dispose();
+    projector.dispose();
   }
 });
 
@@ -153,13 +160,16 @@ test("HP-3: online authoritative rebuilds cross the same snapshot tail boundary"
     const binding = await h.adapter.ensureNekSessionBinding(params, params.sessionId);
     const projector = h.adapter.service.commandContext().target(binding.sessionKey).projector;
     assert.ok(projector);
-    projector.loadSnapshot({ entries, leafId: entries.at(-1)!.id });
+    projector.loadHistory({
+      page: fixtureHistory(entries, { type: "read_history_page" }) as NekHistoryPage,
+      metadata: fixtureHistory(entries, { type: "read_session_metadata" }) as NekHistoryMetadata,
+    });
     const online = frames.at(-1);
     assert.ok(online?.kind === "complete" && online.deliveryKind === "online");
     const full = await h.adapter.readNekSession(params);
-    assert.equal(snapshotOf(online).rows.window.length, PROTOCOL_V4_LIMITS.snapshotTailWindowRows);
+    assert.equal(snapshotOf(online).rows.window.length, 40);
     assert.equal(snapshotOf(online).rows.totalCount, full.rows.totalCount);
-    assert.ok(full.rows.window.length > PROTOCOL_V4_LIMITS.snapshotTailWindowRows);
+    assert.equal(full.history?.totalTurns, 160);
   } finally {
     await h.adapter.dispose();
   }
@@ -232,9 +242,12 @@ test("HP-4: paging back to a child preserves its original spawn turn and parent 
   try {
     await h.adapter.subscribeConversationV4(params);
     const initial = snapshotOf(frames[0]);
-    const full = await h.adapter.readNekSession(params);
-    const source = full.rows.window.find((row) => row.kind === "subagent");
-    const spawn = full.rows.window.find(
+    const oldPage = await h.adapter.conversationHistoryPageV4({
+      ...params,
+      aroundEntryId: "user-1",
+    });
+    const source = oldPage.rows.find((row) => row.kind === "subagent");
+    const spawn = oldPage.rows.find(
       (row) => row.kind === "toolCall" && row.toolCallId === "spawn-call",
     );
     assert.ok(source?.kind === "subagent" && spawn);
@@ -242,10 +255,9 @@ test("HP-4: paging back to a child preserves its original spawn turn and parent 
       initial.rows.window.some((row) => row.rowId === source.rowId),
       false,
     );
-    const page = await h.adapter.conversationRowsRangeV4({
+    const page = await h.adapter.conversationHistoryPageV4({
       ...params,
-      beforeRowId: initial.rows.window[0]!.rowId,
-      limit: 200,
+      aroundEntryId: "spawn-result",
     });
     const recovered = page.rows.find((row) => row.rowId === source.rowId);
     assert.deepEqual(recovered, source);
@@ -266,14 +278,14 @@ test("HP-4: locked history supports the same wire tail and pages without a sessi
   try {
     await h.adapter.subscribeConversationV4(params);
     const initial = snapshotOf(frames[0]);
-    assert.equal(initial.rows.window.length, PROTOCOL_V4_LIMITS.snapshotTailWindowRows);
+    assert.equal(initial.rows.window.length, 40);
     assert.equal(initial.control.readOnly?.reason, "locked");
-    const page = await h.adapter.conversationRowsRangeV4({
+    const page = await h.adapter.conversationHistoryPageV4({
       ...params,
-      beforeRowId: initial.rows.window[0]!.rowId,
-      limit: 200,
+      beforeCursor: initial.history!.olderCursor,
     });
-    assert.equal(page.rows.length, 200);
+    assert.equal(page.rows.length, 40);
+    assert.equal(page.history.turns.length, 20);
     assert.equal(h.sessions.length, 0);
   } finally {
     await h.adapter.dispose();

@@ -78,7 +78,7 @@ test("extension errors do not turn a healthy process into a failed session requi
     const binding = await h.adapter.ensureNekSessionBinding(target, params.sessionId);
     assert.equal(h.adapter.service.getSession(binding.sessionKey)?.phase, "idle");
     assert.equal(
-      h.control.commands.filter((item) => item.type === "read_session_snapshot").length,
+      h.control.commands.filter((item) => item.type === "read_session_metadata").length,
       1,
     );
     assert.equal(h.sessions.length, 1);
