@@ -16,6 +16,7 @@ import type {
   AttachmentRef,
   CommandAck,
   ConversationRowTarget,
+  ConversationHistoryTurn,
 } from "@zcode/shared/zcode-protocol-v4";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
@@ -23,6 +24,8 @@ import { cn } from "@/components/lib/utils.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import { MessageActions } from "@/components/ai-elements/message.js";
 import { SubagentLinkProvider } from "@/components/ai-elements/subagent-link.js";
+import { AsyncButton } from "@/components/ui/async-button.js";
+import { ConversationDeferredContent } from "./ConversationDeferredContent.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -66,6 +69,9 @@ import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsActio
 
 interface ConversationTurnGroupProps {
   unit: ConversationTurnRenderUnit;
+  historyTurn?: ConversationHistoryTurn;
+  historyTruncated?: boolean;
+  onLoadHistoryTurn?: (turnId: string, cursor?: string) => Promise<void>;
   /** 仅由 Timeline 注入给当前 live turn；历史 turn 永远不携带运行时 retry。 */
   apiRetry?: ApiRetryState | null;
   context: ConversationRowRenderContext;
@@ -1008,6 +1014,18 @@ export const ConversationTurnGroup = memo(function ConversationTurnGroup(
   props: ConversationTurnGroupProps,
 ) {
   const { context } = props;
+  const { intl } = useZCodeIntl();
+  const deferred = useMemo(
+    () => [
+      ...new Map(
+        props.unit.renderRows.flatMap((row) =>
+          (row.historyContent ?? []).map((reference) => [reference.ref, reference] as const),
+        ),
+      ).values(),
+    ],
+    [props.unit.renderRows],
+  );
+  const continuation = props.historyTurn?.continuationCursor;
   return (
     <SubagentLinkProvider
       parentSessionId={context.sessionId}
@@ -1015,6 +1033,34 @@ export const ConversationTurnGroup = memo(function ConversationTurnGroup(
       onOpen={context.onOpenSubagentSession}
     >
       <ConversationTurnGroupImpl {...props} />
+      {deferred.length > 0 || continuation || props.historyTruncated ? (
+        <div className="mx-4 mb-3 space-y-2">
+          {deferred.map((reference) => (
+            <ConversationDeferredContent
+              key={`${context.sessionId}:${context.logEpoch}:${reference.ref}`}
+              reference={reference}
+              read={context.readHistoryContent}
+            />
+          ))}
+          {(continuation || props.historyTruncated) && props.onLoadHistoryTurn ? (
+            <AsyncButton
+              variant="ghost"
+              size="sm"
+              successFeedback="none"
+              onClick={() =>
+                props.onLoadHistoryTurn!(
+                  props.unit.turnId,
+                  props.historyTruncated ? undefined : continuation,
+                )
+              }
+            >
+              {intl.formatMessage({
+                id: props.historyTruncated ? "chat.history.restoreTurn" : "chat.history.loadTurn",
+              })}
+            </AsyncButton>
+          ) : null}
+        </div>
+      ) : null}
     </SubagentLinkProvider>
   );
 });

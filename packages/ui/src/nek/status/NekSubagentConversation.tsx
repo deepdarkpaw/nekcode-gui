@@ -16,12 +16,13 @@ export function NekSubagentConversation({
   onOpenBrowserUrl,
   onOpenCodeViewer,
   onOpenFileLink,
+  onOpenSubagentSession,
 }: {
   tab: SubagentSessionSidePaneTab;
   focused: boolean;
 } & Pick<
   ConversationRowRenderContext,
-  "onOpenBrowserUrl" | "onOpenCodeViewer" | "onOpenFileLink"
+  "onOpenBrowserUrl" | "onOpenCodeViewer" | "onOpenFileLink" | "onOpenSubagentSession"
 >) {
   const { zcodeAgentService } = useServices();
   const { intl } = useZCodeIntl();
@@ -61,6 +62,7 @@ export function NekSubagentConversation({
       onOpenBrowserUrl,
       onOpenCodeViewer,
       onOpenFileLink,
+      onOpenSubagentSession,
     }),
     [
       tab.workspacePath,
@@ -73,6 +75,7 @@ export function NekSubagentConversation({
       onOpenBrowserUrl,
       onOpenCodeViewer,
       onOpenFileLink,
+      onOpenSubagentSession,
     ],
   );
   return (

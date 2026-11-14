@@ -38,6 +38,8 @@ interface UseConversationTimelineFindOptions {
   conversationFindQuery: string;
   conversationFindActiveIndex: number;
   conversationFindNavigationRequestId: number;
+  /** A source-history directory owns navigation; this hook only decorates mounted text. */
+  highlightOnly?: boolean;
   onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
   searchResultHighlightRequest?: ChatSearchResultHighlightRequest | null;
   onSearchResultHighlightDone?: (requestId: number) => void;
@@ -72,6 +74,7 @@ export function useConversationTimelineFind({
   conversationFindQuery,
   conversationFindActiveIndex,
   conversationFindNavigationRequestId,
+  highlightOnly = false,
   onConversationFindMatchStateChange,
   searchResultHighlightRequest,
   onSearchResultHighlightDone,
@@ -80,7 +83,10 @@ export function useConversationTimelineFind({
   const codeCommentCardsEnabled = useAssistantCodeCommentFeatureEnabled();
   const findStable = sessionPhase !== "running" && sessionPhase !== "prewarming";
   const unitFindCacheRef = useRef(
-    new Map<string, { source: ConversationFindMatch[]; loadedRowCount: number }>(),
+    new Map<
+      string,
+      { unit: ConversationTurnRenderUnit; source: ConversationFindMatch[]; loadedRowCount: number }
+    >(),
   );
   const unitFindCacheQueryRef = useRef("");
   const conversationFindIndex = useMemo(() => {
@@ -90,6 +96,11 @@ export function useConversationTimelineFind({
       unitFindCacheRef.current.clear();
       unitFindCacheQueryRef.current = normalizedQuery;
     }
+    const visibleKeys = new Set(
+      renderUnits.map((unit) => `${normalizedQuery}:${codeCommentCardsEnabled}:${unit.key}`),
+    );
+    for (const key of unitFindCacheRef.current.keys())
+      if (!visibleKeys.has(key)) unitFindCacheRef.current.delete(key);
     const matches: ConversationFindMatch[] = [];
     let loadedRowCount = 0;
     // streaming delta 只会改变当前 running turn；稳定 turn 的全文索引可复用，
@@ -97,13 +108,15 @@ export function useConversationTimelineFind({
     renderUnits.forEach((unit, unitIndex) => {
       const cacheKey = `${normalizedQuery}:${codeCommentCardsEnabled}:${unit.key}`;
       const cached = !unit.isRunning ? unitFindCacheRef.current.get(cacheKey) : undefined;
-      const unitIndexResult = cached
+      const reusable = cached?.unit === unit;
+      const unitIndexResult = reusable
         ? { matches: cached.source, loadedRowCount: cached.loadedRowCount }
         : buildConversationFindIndex([unit], query, {
             projectAssistantCodeComments: codeCommentCardsEnabled,
           });
-      if (!unit.isRunning && !cached) {
+      if (!unit.isRunning && !reusable) {
         unitFindCacheRef.current.set(cacheKey, {
+          unit,
           source: unitIndexResult.matches,
           loadedRowCount: unitIndexResult.loadedRowCount,
         });
@@ -201,7 +214,7 @@ export function useConversationTimelineFind({
   }, [canLoadOlder, conversationFindIndex.query, findStable, loadingOlder, onLoadOlder, rows]);
 
   useEffect(() => {
-    if (!conversationFindIndex.query || !activeFindMatch) {
+    if (highlightOnly || !conversationFindIndex.query || !activeFindMatch) {
       return;
     }
     const scrollKey = `${conversationFindIndex.query}:${activeFindMatch.rowId}:${activeFindMatch.rowMatchIndex}:${activeFindMatch.unitIndex}`;
@@ -210,7 +223,7 @@ export function useConversationTimelineFind({
     }
     lastFindScrollKeyRef.current = scrollKey;
     scrollToUnit(activeFindMatch.unitIndex);
-  }, [activeFindMatch, conversationFindIndex.query, scrollToUnit]);
+  }, [activeFindMatch, conversationFindIndex.query, highlightOnly, scrollToUnit]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -224,10 +237,14 @@ export function useConversationTimelineFind({
         root,
         query: conversationFindQuery,
         matches: conversationFindIndex.matches,
-        activeMatch: activeFindMatch,
+        activeMatch: highlightOnly ? null : activeFindMatch,
       });
       const highlightScrollKey = `${conversationFindNavigationRequestId}:${conversationFindIndex.query}:${activeFindMatch?.rowId ?? "none"}:${activeFindMatch?.rowMatchIndex ?? -1}:${activeFindMatch?.unitIndex ?? -1}`;
-      if (activeRange && lastFindHighlightScrollKeyRef.current !== highlightScrollKey) {
+      if (
+        !highlightOnly &&
+        activeRange &&
+        lastFindHighlightScrollKeyRef.current !== highlightScrollKey
+      ) {
         lastFindHighlightScrollKeyRef.current = highlightScrollKey;
         scrollConversationFindRangeIntoView(activeRange);
       }
@@ -239,6 +256,7 @@ export function useConversationTimelineFind({
     conversationFindIndex,
     conversationFindQuery,
     conversationFindNavigationRequestId,
+    highlightOnly,
     mountedRowsKey,
     rootRef,
   ]);

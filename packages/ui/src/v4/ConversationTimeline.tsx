@@ -47,12 +47,12 @@ import {
   type ConversationTurnRenderUnit,
 } from "@/v4/conversationTurnRenderUnits.js";
 import { ConversationTurnRenderUnitCache } from "@/v4/conversationTurnRenderUnitCache.js";
+import type { ConversationHistoryControls } from "./useConversationHistoryControls.js";
+import { AsyncButton } from "@/components/ui/async-button.js";
+import { ConversationHistoryHeader } from "./ConversationHistoryHeader.js";
 import {
   resolveAdjacentConversationTurnQuery,
   resolveConversationTurnNavigatorActiveQueryRowId,
-  resolveConversationTurnNavigatorHydrationRetryDelayMs,
-  shouldHydrateConversationTurnNavigatorDirectory,
-  type ConversationTurnNavigatorHydrationResult,
   type ConversationTurnNavigatorQueryPosition,
   type ConversationTurnNavigatorVirtualItem,
 } from "@/v4/conversationTurnNavigatorHelpers.js";
@@ -273,14 +273,7 @@ interface ConversationTimelineProps {
   loadingOlder?: boolean;
   /** 拉取更早一窗历史（接近顶部时自动预取）。 */
   onLoadOlder?: () => Promise<void> | void;
-  /** 宽屏问题目录挂载后一次补齐当前有效分支的全部历史。 */
-  onLoadAllOlder?: () => Promise<ConversationTurnNavigatorHydrationResult>;
-  /**
-   * 问题导航目录失效代际（store turnNavigatorDirectoryRevision）。
-   * real-user query 增删后终态必须失效重探测；组件 hydration key
-   * 追加此 revision，避免同一 logEpoch 内永久拦截。
-   */
-  turnNavigatorDirectoryRevision?: number;
+  historyControls?: ConversationHistoryControls;
   /** 与旧 ChatView 对齐：composer dock 属于同一个滚动视口，sticky 到滚动容器底部。 */
   bottomDock?: ReactNode;
   /** 分享选择面板所在的共享父容器；用于把 dock 的真实位置写入同一坐标系。 */
@@ -365,8 +358,7 @@ function ConversationTimelineImpl({
   canLoadOlder = false,
   loadingOlder = false,
   onLoadOlder,
-  onLoadAllOlder,
-  turnNavigatorDirectoryRevision = 0,
+  historyControls,
   bottomDock,
   selectionPanelLayoutContainerRef,
   backgroundScrollLocked = false,
@@ -398,7 +390,7 @@ function ConversationTimelineImpl({
   //
   // 依赖必须是「有没有 slot」而不是 headerSlot 本身：后者是 ReactNode，宿主传的是内联 JSX，
   // 每次渲染都是新对象，会让 ResizeObserver 在流式输出期间每帧重建。
-  const hasHeaderSlot = Boolean(headerSlot);
+  const hasHeaderSlot = Boolean(headerSlot || historyControls);
   const [headerSlotHeight, setHeaderSlotHeight] = useState(0);
   useEffect(() => {
     const element = headerSlotRef.current;
@@ -479,6 +471,41 @@ function ConversationTimelineImpl({
   // loadOlder 相关值经 ref 读取，保持 handleScroll 稳定引用。
   const loadOlderRef = useRef({ canLoadOlder, loadingOlder, onLoadOlder });
   loadOlderRef.current = { canLoadOlder, loadingOlder, onLoadOlder };
+  const historyControlsRef = useRef(historyControls);
+  historyControlsRef.current = historyControls;
+  const historyScopeRef = useRef(sessionKey);
+  historyScopeRef.current = sessionKey;
+  const historyJumpGeneration = useRef(0);
+  const historyJumpRef = useRef<{ scope: string; turnId?: string; bottom?: true } | null>(null);
+  const [historyJumpRevision, setHistoryJumpRevision] = useState(0);
+  const [historyNavigationError, setHistoryNavigationError] = useState<string | null>(null);
+  const navigateHistory = useCallback(
+    async (target: "latest" | "oldest" | { entryId: string; turnId: string }) => {
+      const controls = historyControlsRef.current;
+      if (!controls) return;
+      const scope = historyScopeRef.current;
+      const generation = ++historyJumpGeneration.current;
+      setHistoryNavigationError(null);
+      try {
+        let jump: { scope: string; turnId?: string; bottom?: true } | null = null;
+        if (target === "latest") {
+          if (await controls.loadLatest()) jump = { scope, bottom: true };
+        } else if (target === "oldest") {
+          const turnId = await controls.loadOldest();
+          if (turnId) jump = { scope, turnId };
+        } else if (await controls.loadAround(target.entryId))
+          jump = { scope, turnId: target.turnId };
+        if (historyScopeRef.current !== scope || historyJumpGeneration.current !== generation)
+          return;
+        historyJumpRef.current = jump;
+        setHistoryJumpRevision((revision) => revision + 1);
+      } catch (error) {
+        if (historyScopeRef.current === scope && historyJumpGeneration.current === generation)
+          setHistoryNavigationError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [],
+  );
   const followingRef = useRef(initialFollowing());
   const programmaticScrollFrameRef = useRef<number | null>(null);
   const userScrollIntentRef = useRef<{
@@ -515,15 +542,7 @@ function ConversationTimelineImpl({
     viewportHeightPx: 0,
     activeQueryRowId: undefined as number | undefined,
   });
-  const [turnNavigatorContainerWidthPx, setTurnNavigatorContainerWidthPx] = useState(0);
   const turnNavigatorJumpFrameRef = useRef<number | null>(null);
-  const turnNavigatorHydrationAttemptRef = useRef<{
-    attemptCount: number;
-    key: string | null;
-    retryTimer: number | null;
-    status: "idle" | "in-flight" | "waiting" | "terminal";
-  }>({ attemptCount: 0, key: null, retryTimer: null, status: "idle" });
-  const [turnNavigatorHydrationRetryRevision, setTurnNavigatorHydrationRetryRevision] = useState(0);
   const timelineRootRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
   const shareSelectionPanelLayoutRef = useRef<{
@@ -594,116 +613,6 @@ function ConversationTimelineImpl({
 
     return () => window.clearInterval(timer);
   }, [hasRunningUnit]);
-
-  useLayoutEffect(() => {
-    const element = timelineRootRef.current;
-    if (!element) return;
-
-    // rail 改由 CSS container query 隐藏后，完整历史补拉失去了同一宽度
-    // 资格边界，手机远控与窄分屏也会请求全部 rows。这里仅同步只读分页资格；
-    // rail 的显隐、占位与过渡仍完全由 CSS 裁决，不恢复 composer 几何测量。
-    const commitWidth = (width: number) => {
-      const normalizedWidth = Math.max(0, Math.round(width));
-      setTurnNavigatorContainerWidthPx((current) =>
-        current === normalizedWidth ? current : normalizedWidth,
-      );
-    };
-    const readWidth = () => commitWidth(element.clientWidth);
-    readWidth();
-
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        const borderBox = entry?.borderBoxSize?.[0];
-        commitWidth(borderBox?.inlineSize ?? entry?.contentRect.width ?? element.clientWidth);
-      });
-      observer.observe(element);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener("resize", readWidth);
-    return () => window.removeEventListener("resize", readWidth);
-  }, []);
-
-  useEffect(() => {
-    if (
-      !shouldHydrateConversationTurnNavigatorDirectory({
-        canLoadOlder,
-        containerWidthPx: turnNavigatorContainerWidthPx,
-        hasLoadHandler: Boolean(onLoadAllOlder),
-        loadingOlder,
-      })
-    ) {
-      return;
-    }
-    // terminal key 必须与 store turnNavigatorDirectoryRevision 同步。
-    // 仅用 sessionKey + logEpoch 时，real-user query 增删不换 epoch，
-    // 组件层 terminal 永久拦截，store 即使失效缓存也无法重新探测。
-    const hydrationKey = `${sessionKey}:${rowContext.logEpoch ?? "unknown"}:${turnNavigatorDirectoryRevision}`;
-    const attempt = turnNavigatorHydrationAttemptRef.current;
-    if (attempt.key !== hydrationKey) {
-      if (attempt.retryTimer !== null) window.clearTimeout(attempt.retryTimer);
-      Object.assign(attempt, {
-        attemptCount: 0,
-        key: hydrationKey,
-        retryTimer: null,
-        status: "idle" as const,
-      });
-    }
-    if (attempt.status !== "idle" || !onLoadAllOlder) return;
-    attempt.status = "in-flight";
-    logger.debug("[v4-turn-navigator] 目录请求补齐完整历史", {
-      attempt: attempt.attemptCount + 1,
-      loadedRows: rows.length,
-      sessionKey,
-      totalRows: totalCount,
-    });
-    void onLoadAllOlder().then((result) => {
-      if (attempt.key !== hydrationKey) return;
-      if (result.status === "hydrated" || result.status === "not-enough-queries") {
-        attempt.status = "terminal";
-        return;
-      }
-      if (result.status === "stale") {
-        attempt.status = "idle";
-        return;
-      }
-      attempt.attemptCount += 1;
-      const retryDelayMs = resolveConversationTurnNavigatorHydrationRetryDelayMs(
-        attempt.attemptCount,
-      );
-      if (retryDelayMs === null) {
-        attempt.status = "terminal";
-        return;
-      }
-      attempt.status = "waiting";
-      attempt.retryTimer = window.setTimeout(() => {
-        if (attempt.key !== hydrationKey) return;
-        attempt.retryTimer = null;
-        attempt.status = "idle";
-        setTurnNavigatorHydrationRetryRevision((revision) => revision + 1);
-      }, retryDelayMs);
-    });
-  }, [
-    canLoadOlder,
-    loadingOlder,
-    onLoadAllOlder,
-    rowContext.logEpoch,
-    rows,
-    sessionKey,
-    totalCount,
-    turnNavigatorContainerWidthPx,
-    turnNavigatorDirectoryRevision,
-    turnNavigatorHydrationRetryRevision,
-  ]);
-
-  useEffect(
-    () => () => {
-      const timer = turnNavigatorHydrationAttemptRef.current.retryTimer;
-      if (timer !== null) window.clearTimeout(timer);
-    },
-    [],
-  );
 
   const getScrollElement = useCallback(() => scrollRef.current, []);
   const getItemKey = useCallback(
@@ -834,6 +743,9 @@ function ConversationTimelineImpl({
   const handleWheelCapture = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
       markUserScrollIntent(timelineWheelScrollIntent(event.deltaY));
+      // A short page cannot scroll farther up; the wheel is still explicit older-history intent.
+      if (event.deltaY < 0 && event.currentTarget.scrollTop === 0)
+        event.currentTarget.dispatchEvent(new Event("scroll"));
     },
     [markUserScrollIntent],
   );
@@ -1200,6 +1112,9 @@ function ConversationTimelineImpl({
       programmaticScrollFrameRef.current !== null &&
       Math.abs(element.scrollTop - lastObservedScrollTopRef.current) < 1;
     const userScrollIntent = getActiveUserScrollIntent();
+    const movingUp =
+      userScrollIntent === "awayFromBottom" ||
+      (userScrollIntent === "unknown" && element.scrollTop < lastObservedScrollTopRef.current);
     // 用户输入优先；其余 scroll 若落在内容/测高 guard 内视为布局补偿，guard 外的
     // 未分类事件继续按真实用户滚动处理，兼容原生滚动条和辅助技术。
     const scrollSource =
@@ -1237,6 +1152,8 @@ function ConversationTimelineImpl({
     const loadOlder = loadOlderRef.current;
     const triggerPx = historyPrefetchTriggerPx(element.clientHeight);
     if (
+      scrollSource === "user" &&
+      movingUp &&
       shouldTriggerLoadOlder({
         scrollTop: element.scrollTop,
         canLoadOlder: loadOlder.canLoadOlder,
@@ -1262,7 +1179,9 @@ function ConversationTimelineImpl({
         scrollTop: element.scrollTop,
         triggerPx,
       });
-      loadOlder.onLoadOlder?.();
+      // Consume this intent before admission; prepend/measurement scrolls must not drain pages.
+      userScrollIntentRef.current = { intent: "none", observedAt: 0 };
+      void loadOlder.onLoadOlder?.();
     }
   }, [
     commitFollowing,
@@ -1273,6 +1192,10 @@ function ConversationTimelineImpl({
   ]);
 
   const handleScrollToTop = useCallback(() => {
+    if (historyControlsRef.current?.history.hasOlder) {
+      void navigateHistory("oldest");
+      return;
+    }
     const element = scrollRef.current;
     if (!element) return;
     clearUserScrollIntent();
@@ -1287,10 +1210,15 @@ function ConversationTimelineImpl({
     clearUserScrollIntent,
     commitFollowing,
     markProgrammaticScroll,
+    navigateHistory,
     syncTurnNavigatorViewport,
   ]);
 
   const handleBackToBottom = useCallback(() => {
+    if (historyControlsRef.current?.history.hasNewer) {
+      void navigateHistory("latest");
+      return;
+    }
     pendingDetachedScrollRestoreRef.current = null;
     clearUserScrollIntent();
     commitFollowing(true);
@@ -1298,7 +1226,13 @@ function ConversationTimelineImpl({
     // scrollToBottom 只更新组件内 ref；若用户点击后立刻切任务，scope
     // cleanup/scroll 事件可能还没运行，旧 Map 会把下次恢复重新带回中部甚至顶部。
     saveCurrentScrollMemory();
-  }, [clearUserScrollIntent, commitFollowing, saveCurrentScrollMemory, scrollToBottom]);
+  }, [
+    clearUserScrollIntent,
+    commitFollowing,
+    navigateHistory,
+    saveCurrentScrollMemory,
+    scrollToBottom,
+  ]);
 
   useLayoutEffect(() => {
     if (!scrollToBottomActionRef) return;
@@ -1393,6 +1327,40 @@ function ConversationTimelineImpl({
   );
 
   useLayoutEffect(() => {
+    const jump = historyJumpRef.current;
+    if (!jump || jump.scope !== sessionKey) return;
+    if (jump.bottom) {
+      historyJumpRef.current = null;
+      clearUserScrollIntent();
+      commitFollowing(true);
+      scrollToBottom();
+      saveCurrentScrollMemory();
+      return;
+    }
+    const unitIndex = renderUnits.findIndex((unit) => unit.turnId === jump.turnId);
+    const row =
+      renderUnits[unitIndex]?.visibleUserInputs[0] ?? renderUnits[unitIndex]?.renderRows[0];
+    if (!row) return;
+    historyJumpRef.current = null;
+    scrollToQuery({ unitIndex, rowId: row.rowId });
+  }, [
+    historyJumpRevision,
+    renderUnits,
+    sessionKey,
+    scrollToQuery,
+    clearUserScrollIntent,
+    commitFollowing,
+    scrollToBottom,
+    saveCurrentScrollMemory,
+  ]);
+
+  useEffect(() => {
+    historyJumpGeneration.current += 1;
+    historyJumpRef.current = null;
+    setHistoryNavigationError(null);
+  }, [sessionKey]);
+
+  useLayoutEffect(() => {
     if (!scrollToQueryActionRef) return;
     const action = (target: { unitIndex: number; rowId: number }) => {
       scrollToQuery(target);
@@ -1461,19 +1429,60 @@ function ConversationTimelineImpl({
     [clearUserScrollIntent, commitFollowing, liveUnitIndex, syncTurnNavigatorViewport, virtualizer],
   );
 
+  const historyFindNavigationRef = useRef("");
+  const historyFindCountRef = useRef("");
+  useEffect(() => {
+    if (
+      !historyControls ||
+      historyControls.directoryQuery !== conversationFindQuery ||
+      historyControls.directory.loading
+    )
+      return;
+    const directory = historyControls.directory;
+    const activeIndex = directory.items.length
+      ? Math.max(0, Math.min(conversationFindActiveIndex, directory.items.length - 1))
+      : -1;
+    if (!conversationFindQuery.trim()) {
+      historyFindNavigationRef.current = "";
+      return;
+    }
+    const countKey = `${sessionKey}:${conversationFindQuery}:${directory.items.length}:${activeIndex}`;
+    if (historyFindCountRef.current !== countKey) {
+      historyFindCountRef.current = countKey;
+      onConversationFindMatchStateChange?.({ matchCount: directory.items.length, activeIndex });
+    }
+    const key = `${sessionKey}:${conversationFindQuery}:${conversationFindNavigationRequestId}:${activeIndex}`;
+    if (historyFindNavigationRef.current === key) return;
+    const item = directory.items[activeIndex];
+    if (!item) return;
+    historyFindNavigationRef.current = key;
+    void navigateHistory({ entryId: item.entryId, turnId: item.turnId });
+  }, [
+    historyControls,
+    conversationFindQuery,
+    conversationFindActiveIndex,
+    conversationFindNavigationRequestId,
+    onConversationFindMatchStateChange,
+    sessionKey,
+    navigateHistory,
+  ]);
+
   useConversationTimelineFind({
     rootRef: scrollRef,
     renderUnits,
     rows,
     mountedRowsKey,
-    canLoadOlder,
+    canLoadOlder: historyControls ? false : canLoadOlder,
     loadingOlder,
-    onLoadOlder,
+    onLoadOlder: historyControls ? undefined : onLoadOlder,
     sessionPhase,
     conversationFindQuery,
     conversationFindActiveIndex,
     conversationFindNavigationRequestId,
-    onConversationFindMatchStateChange,
+    highlightOnly: Boolean(historyControls),
+    onConversationFindMatchStateChange: historyControls
+      ? undefined
+      : onConversationFindMatchStateChange,
     searchResultHighlightRequest,
     onSearchResultHighlightDone,
     scrollToUnit,
@@ -1771,7 +1780,17 @@ function ConversationTimelineImpl({
         <ConversationTurnNavigator
           sessionKey={sessionKey}
           renderUnits={renderUnits}
-          isHydratingDirectory={loadingOlder}
+          isHydratingDirectory={historyControls?.directory.loading ?? false}
+          directory={
+            historyControls
+              ? {
+                  ...historyControls.directory,
+                  onNavigate: (entryId, turnId) => {
+                    void navigateHistory({ entryId, turnId });
+                  },
+                }
+              : undefined
+          }
           scrollOffsetPx={virtualizer.scrollOffset ?? turnNavigatorViewport.scrollOffsetPx}
           viewportHeightPx={
             virtualizer.scrollRect?.height ?? turnNavigatorViewport.viewportHeightPx
@@ -1843,7 +1862,7 @@ function ConversationTimelineImpl({
            * mask-repeat:no-repeat，遮罩会退化成平铺，把水印裁成一条横带（表现为水印
            * 只剩半截或整块看不见）。key 不同即强制换新节点，旧遮罩无从继承。
            */}
-          {renderUnits.length === 0 && !headerSlot ? (
+          {renderUnits.length === 0 && !hasHeaderSlot ? (
             <div
               key="v4-timeline-empty-slot"
               className={cn(
@@ -1867,7 +1886,7 @@ function ConversationTimelineImpl({
                * headerSlot 必须落在被 mask 的消息层内、并套用与实时消息列相同的宽度类：
                * 放在消息层之外会既比正文宽、又从 sticky composer 下方透出来。
                */}
-              {headerSlot ? (
+              {hasHeaderSlot ? (
                 <div
                   ref={headerSlotRef}
                   data-v4-timeline-header-slot="true"
@@ -1878,6 +1897,12 @@ function ConversationTimelineImpl({
                     summaryPanelInlineOffsetClassName,
                   )}
                 >
+                  {historyControls ? (
+                    <ConversationHistoryHeader
+                      controls={historyControls}
+                      navigationError={historyNavigationError}
+                    />
+                  ) : null}
                   {headerSlot}
                 </div>
               ) : null}
@@ -1912,6 +1937,13 @@ function ConversationTimelineImpl({
                     >
                       <ConversationTurnGroup
                         unit={unit}
+                        historyTurn={historyControls?.history.turns.find(
+                          (turn) => turn.turnId === unit.turnId,
+                        )}
+                        historyTruncated={historyControls?.truncatedTurns.some(
+                          (turn) => turn.turnId === unit.turnId,
+                        )}
+                        onLoadHistoryTurn={historyControls?.loadTurn}
                         apiRetry={null}
                         context={rowContext}
                         onFork={onFork}
@@ -1942,6 +1974,13 @@ function ConversationTimelineImpl({
                 >
                   <ConversationTurnGroup
                     unit={liveUnit}
+                    historyTurn={historyControls?.history.turns.find(
+                      (turn) => turn.turnId === liveUnit.turnId,
+                    )}
+                    historyTruncated={historyControls?.truncatedTurns.some(
+                      (turn) => turn.turnId === liveUnit.turnId,
+                    )}
+                    onLoadHistoryTurn={historyControls?.loadTurn}
                     apiRetry={apiRetry}
                     context={rowContext}
                     onFork={onFork}
@@ -1950,6 +1989,35 @@ function ConversationTimelineImpl({
                     onEdit={onEdit}
                     shareSelection={shareSelection}
                   />
+                </div>
+              ) : null}
+              {historyControls?.history.hasNewer ? (
+                <div
+                  className={cn(
+                    "relative mx-auto flex w-full gap-2 px-4 py-2",
+                    contentWidthClassName,
+                    summaryPanelInlineOffsetClassName,
+                  )}
+                >
+                  <AsyncButton
+                    variant="ghost"
+                    size="xs"
+                    successFeedback="none"
+                    onClick={async () => {
+                      commitFollowing(false);
+                      await historyControls.loadNewer();
+                    }}
+                  >
+                    {intl.formatMessage({ id: "chat.history.loadNewer" })}
+                  </AsyncButton>
+                  <AsyncButton
+                    variant="ghost"
+                    size="xs"
+                    successFeedback="none"
+                    onClick={() => navigateHistory("latest")}
+                  >
+                    {intl.formatMessage({ id: "chat.scrollToBottom" })}
+                  </AsyncButton>
                 </div>
               ) : null}
               {pendingGuides.length > 0 ? (

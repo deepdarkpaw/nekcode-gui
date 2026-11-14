@@ -1,8 +1,9 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type {
   OpenScopedSubagentSideTabRequest,
+  OpenSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
   SubagentSessionSidePaneTab,
 } from "@/lib/workspaceSidePane.js";
@@ -16,6 +17,7 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
   onOpenBrowserUrl,
   onOpenCodeViewer,
   onOpenFileLink,
+  onOpenSubagentSession,
 }: {
   tab: SubagentSessionSidePaneTab;
   focused: boolean;
@@ -34,6 +36,13 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
     [tab.remoteSessionId, tab.workspaceIdentity, tab.workspacePath],
   );
 
+  const openChild = useCallback(
+    (request: OpenSubagentSideTabRequest) => {
+      onOpenSubagentSession({ ...request, ...scope, rootSessionId: tab.rootSessionId });
+    },
+    [onOpenSubagentSession, scope, tab.rootSessionId],
+  );
+
   return (
     <V4PaneConversationProvider scope={scope}>
       <NekSubagentConversation
@@ -42,6 +51,7 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
         onOpenBrowserUrl={onOpenBrowserUrl}
         onOpenCodeViewer={onOpenCodeViewer}
         onOpenFileLink={onOpenFileLink}
+        onOpenSubagentSession={openChild}
       />
     </V4PaneConversationProvider>
   );

@@ -15,6 +15,8 @@ import type {
   CommandAck,
   ConversationRow,
   ConversationRowTarget,
+  ConversationHistoryContentOptions,
+  V4ConversationHistoryContentResult,
   TurnHeaderRow,
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
@@ -74,6 +76,10 @@ export interface ConversationRowRenderContext {
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
+  /** One explicit bounded history chunk, scoped by the existing conversation owner. */
+  readHistoryContent?: (
+    options: ConversationHistoryContentOptions,
+  ) => Promise<V4ConversationHistoryContentResult>;
   /**
    * 取消一项后台工作（`cancelBackgroundWork{workId}`），由宿主绑定 dispatchCommand + sessionId。
    *

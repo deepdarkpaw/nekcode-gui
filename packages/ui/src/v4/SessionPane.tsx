@@ -120,6 +120,7 @@ import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
+import { useConversationHistoryControls } from "@/v4/useConversationHistoryControls.js";
 import { ConversationShareImportNotice } from "@/v4/ConversationShareImportNotice.js";
 import { ConversationShareConfirmationDock } from "@/v4/ConversationShareConfirmationDock.js";
 import { ConversationShareSuccessDock } from "@/v4/ConversationShareSuccessDock.js";
@@ -154,7 +155,6 @@ import {
 import { buildConversationStatusPanelModel } from "@/v4/conversationStatusPanelModel.js";
 import {
   hasOlderRows,
-  shouldAutoLoadIncompleteLeadingTurn,
 } from "@/v4/conversationProjectionStore.js";
 import type {
   ConversationFileChangesRequestOptions,
@@ -875,6 +875,10 @@ export function SessionPane({
     workspacePath,
   ]);
   const sessionLeaseReady = lease?.sessionId === sessionId;
+  const historyControls = useConversationHistoryControls(
+    sessionLeaseReady ? lease?.store : undefined,
+    focused ? conversationFindQuery : "",
+  );
   const newlyCreatedSessionIdRef = useRef<string | null>(null);
   useSessionOpenDiagnostics({
     sessionId,
@@ -951,7 +955,6 @@ export function SessionPane({
 
   // 稳定回调读取的最新值经 ref 透传，避免回调依赖高频变化的 snapshot/文本。
   const snapshotRef = useRef<ConversationSnapshot | null>(snapshot);
-  const autoLoadIncompleteTurnCursorRef = useRef<string | null>(null);
   snapshotRef.current = snapshot;
   const composerDraftStateRef = useRef({ hasContent: false, busy: false });
   const paneRootRef = useRef<HTMLDivElement>(null);
@@ -1858,6 +1861,7 @@ export function SessionPane({
       applyFileRewind: workspaceFileRewindEnabled ? handleApplyFileRewind : undefined,
       readAttachment: attachmentRead,
       readAttachmentRange: attachmentReadRange,
+      readHistoryContent: historyControls?.readContent,
     }),
     [
       workspacePath,
@@ -1893,6 +1897,7 @@ export function SessionPane({
       handleApplyFileRewind,
       attachmentRead,
       attachmentReadRange,
+      historyControls?.readContent,
     ],
   );
 
@@ -3265,32 +3270,6 @@ export function SessionPane({
     });
   }, [handleLoadAllOlder, sessionId, shareActive, snapshot]);
 
-  useEffect(() => {
-    if (
-      !sessionId ||
-      !lease?.store ||
-      !shouldAutoLoadIncompleteLeadingTurn(snapshot, state.loadingOlder)
-    ) {
-      return;
-    }
-    const firstRowId = snapshot?.rows.window[0]?.rowId;
-    if (firstRowId === undefined) return;
-    const cursorKey = `${sessionId}:${state.subscriptionId ?? "connecting"}:${firstRowId}`;
-    if (autoLoadIncompleteTurnCursorRef.current === cursorKey) return;
-    autoLoadIncompleteTurnCursorRef.current = cursorKey;
-
-    // snapshotTailWindowRows 按 row 截尾，可能把一个长 turn 的 header/user
-    // 留在窗口外。旧 UI 只在 scroll 事件到达顶边时 loadOlder；内容不足一屏或 scrollTop
-    // 已经为 0 时不会再产生事件，于是只渲染 assistant，必须先下滚再上滚。检测到首 turn
-    // 缺 header 后立即逐窗补齐；cursor 去重避免空 range 或失败时 effect 自旋。
-    logger.debug("[v4-pane] 冷快照首 turn 不完整，自动补拉更早行", {
-      firstRowId,
-      sessionId,
-      turnId: snapshot?.rows.window[0]?.turnId,
-    });
-    void lease.store.loadOlder();
-  }, [lease, sessionId, snapshot, state.loadingOlder, state.subscriptionId]);
-
   // subscribe ACK 会先把 store 置 live，initial snapshot 稍后才到；只看
   // status 会在无投影窗口提前启用编辑器。正式 session 必须等首个 snapshot 才可输入。
   const connecting = sessionId !== null && (state.status === "connecting" || snapshot === null);
@@ -4171,9 +4150,8 @@ export function SessionPane({
               onEdit={editActionsEnabled ? handleEdit : undefined}
               canLoadOlder={timelineSnapshot ? hasOlderRows(timelineSnapshot) : false}
               loadingOlder={timelineSnapshot ? state.loadingOlder : false}
-              onLoadOlder={handleLoadOlder}
-              onLoadAllOlder={handleLoadAllOlder}
-              turnNavigatorDirectoryRevision={state.turnNavigatorDirectoryRevision}
+              onLoadOlder={historyControls?.loadOlder ?? handleLoadOlder}
+              historyControls={historyControls}
               bottomDock={conversationBottomDock}
               hideTurnNavigator={shareActive && shareInSelectionStage}
               backgroundScrollLocked={resolveConversationShareBackgroundScrollLocked({

@@ -18,6 +18,15 @@ import {
 } from "@/v4/conversationTurnNavigatorHelpers.js";
 import type { ConversationTurnRenderUnit } from "@/v4/conversationTurnRenderUnits.js";
 import { ConversationTurnNavigatorPreviewCache } from "./conversationTurnNavigatorPreviewCache.js";
+import { ChevronUpIcon, RefreshCwIcon } from "lucide-react";
+import { AsyncButton } from "@/components/ui/async-button.js";
+import type { HistoryDirectoryState } from "./historyDirectoryController.js";
+
+export interface ConversationTurnDirectory extends HistoryDirectoryState {
+  loadMore(): Promise<void> | void;
+  reload(): Promise<void> | void;
+  onNavigate(entryId: string, turnId: string): void;
+}
 
 interface ConversationTurnNavigatorProps {
   sessionKey: string;
@@ -27,6 +36,7 @@ interface ConversationTurnNavigatorProps {
   virtualItems: readonly ConversationTurnNavigatorVirtualItem[];
   activeQueryRowId?: number;
   isHydratingDirectory?: boolean;
+  directory?: ConversationTurnDirectory;
   onJumpToQuery: (target: { unitIndex: number; rowId: number }, behavior: ScrollBehavior) => void;
 }
 
@@ -55,13 +65,14 @@ function ConversationTurnNavigatorImpl({
   virtualItems,
   activeQueryRowId,
   isHydratingDirectory = false,
+  directory,
   onJumpToQuery,
 }: ConversationTurnNavigatorProps) {
   const { intl } = useZCodeIntl();
   const prefersReducedMotion = usePrefersReducedMotion();
   const previewCache = useMemo(() => new ConversationTurnNavigatorPreviewCache(), [sessionKey]);
   const [interactionItemIndex, setInteractionItemIndex] = useState<number | undefined>(undefined);
-  const items = useMemo(
+  const loadedItems = useMemo(
     () =>
       buildConversationTurnNavigatorItems(
         renderUnits,
@@ -80,6 +91,30 @@ function ConversationTurnNavigatorImpl({
       ),
     [intl, renderUnits, previewCache],
   );
+
+  const items = useMemo(() => {
+    if (!directory)
+      return loadedItems.map((item, position) => ({ ...item, position, entryId: "" }));
+    const byTurn = new Map(loadedItems.map((item) => [item.turnId, item]));
+    return directory.items
+      .toSorted((a, b) => a.position - b.position)
+      .map((entry) => {
+        const loaded = byTurn.get(entry.turnId);
+        return {
+          key: entry.entryId,
+          turnId: entry.turnId,
+          entryId: entry.entryId,
+          position: entry.position,
+          unitIndex: loaded?.unitIndex ?? -1,
+          rowId: loaded?.rowId ?? -1,
+          userPreview: entry.preview,
+          assistantPreview:
+            loaded?.assistantPreview ?? intl.formatMessage({ id: "chat.history.notLoaded" }),
+          assistantPreviewKind: loaded?.assistantPreviewKind ?? ("empty" as const),
+          isRunning: loaded?.isRunning ?? false,
+        };
+      });
+  }, [directory, loadedItems, intl]);
 
   const activeUnitIndex = useMemo(
     () =>
@@ -138,14 +173,14 @@ function ConversationTurnNavigatorImpl({
     });
   }, [activeItemIndex, items.length, railVirtualizer]);
 
-  if (items.length < 2) {
+  if (items.length < 2 && !directory?.hasMore && !directory?.error) {
     return null;
   }
 
   return (
     <nav
       aria-label={intl.formatMessage({ id: "chat.turnNavigator.label" })}
-      aria-busy={isHydratingDirectory}
+      aria-busy={directory?.loading ?? isHydratingDirectory}
       data-testid={TID_V4_TURN_NAVIGATOR}
       data-item-count={items.length}
       data-rendered-item-count={virtualRows.length}
@@ -159,6 +194,29 @@ function ConversationTurnNavigatorImpl({
         onPointerLeave={() => setInteractionItemIndex(undefined)}
         onScroll={() => setInteractionItemIndex(undefined)}
       >
+        {directory?.hasMore || directory?.error ? (
+          <AsyncButton
+            variant="ghost"
+            size="icon-xs"
+            successFeedback="none"
+            label={intl.formatMessage({
+              id: directory.error ? "chat.message.bodyPreview.retry" : "chat.history.moreDirectory",
+            })}
+            onClick={() => (directory.error ? directory.reload() : directory.loadMore())}
+            disabled={directory.loading}
+            disabledReason={
+              directory.loading
+                ? intl.formatMessage({ id: "chat.message.bodyPreview.loading" })
+                : undefined
+            }
+          >
+            {directory.error ? (
+              <RefreshCwIcon className="size-3" />
+            ) : (
+              <ChevronUpIcon className="size-3" />
+            )}
+          </AsyncButton>
+        ) : null}
         <div className="relative w-9" style={{ height: `${railVirtualizer.getTotalSize()}px` }}>
           {virtualRows.map((virtualRow) => {
             const itemIndex = virtualRow.index;
@@ -183,10 +241,10 @@ function ConversationTurnNavigatorImpl({
                       aria-current={active ? "location" : undefined}
                       aria-label={intl.formatMessage(
                         { id: "chat.turnNavigator.jumpToQuery" },
-                        { index: String(itemIndex + 1) },
+                        { index: String(item.position + 1) },
                       )}
-                      aria-posinset={itemIndex + 1}
-                      aria-setsize={items.length}
+                      aria-posinset={item.position + 1}
+                      aria-setsize={directory?.totalTurns ?? items.length}
                       data-testid={testId(TID_V4_TURN_NAVIGATOR_ITEM, item.key)}
                       data-item-index={itemIndex}
                       data-unit-index={item.unitIndex}
@@ -198,12 +256,16 @@ function ConversationTurnNavigatorImpl({
                       data-visual-scale={String(visualState.scaleX)}
                       data-visual-tone={visualState.tone}
                       onBlur={() => setInteractionItemIndex(undefined)}
-                      onClick={() =>
+                      onClick={() => {
+                        if (directory && item.entryId && item.unitIndex < 0) {
+                          directory.onNavigate(item.entryId, item.turnId);
+                          return;
+                        }
                         onJumpToQuery(
                           { unitIndex: item.unitIndex, rowId: item.rowId },
                           prefersReducedMotion ? "auto" : "smooth",
-                        )
-                      }
+                        );
+                      }}
                       onFocus={() => setInteractionItemIndex(itemIndex)}
                       onPointerEnter={() => setInteractionItemIndex(itemIndex)}
                       onPointerLeave={() => setInteractionItemIndex(undefined)}
