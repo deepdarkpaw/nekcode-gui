@@ -40,6 +40,7 @@ import {
   checkStatus,
   checkStop,
 } from "./lib/conversation-check.mjs";
+import { checkLongHistory, writeLongHistorySession } from "./lib/history-check.mjs";
 
 const { values } = parseArgs({
   options: { app: { type: "string" }, keep: { type: "boolean", default: false } },
@@ -242,6 +243,15 @@ try {
     "09-session-resume",
   );
   await step("12-pasted-image", () => checkPastedImage(session, mock), "10-stop-running");
+  await step(
+    "13-long-history",
+    async () => {
+      const sample = writeLongHistorySession(sandbox);
+      const timing = await checkLongHistory(session);
+      console.log(`[long-history] bytes=${sample.bytes} firstMs=${timing.firstMs}`);
+    },
+    "04-workspace-ready",
+  );
 } catch (error) {
   matrix.push({ name: "harness", status: "fail", error: String(error) });
 } finally {
