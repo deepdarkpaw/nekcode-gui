@@ -1,4 +1,5 @@
 import { fixtureHistory } from "./nekHistoryFixture.js";
+import { createHistoryStream, historyStreamCapabilities } from "./nekHistoryStreamFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -18,7 +19,7 @@ import type { NekExtensionUiHandler } from "../src/nek-agent/nekExtensionUiRoute
 
 const guiInfo = {
   protocolVersion: 1,
-  capabilities: { historyPages: 1 },
+  capabilities: historyStreamCapabilities,
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -53,6 +54,11 @@ function fakeProcess(
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
+  const write = (record: unknown) => stdout.write(`${JSON.stringify(record)}\n`);
+  const historyStream = createHistoryStream(write, {
+    sessionId: "s1",
+    sessionPath: "/tmp/session.jsonl",
+  });
   const commands: NekRpcCommand[] = [];
   const responses: unknown[] = [];
   const failExtensions = new Set<string>();
@@ -75,7 +81,9 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
-      if (
+      if (command.type === "set_history_stream") {
+        data = historyStream.negotiate();
+      } else if (
         command.type === "read_history_page" ||
         command.type === "read_session_metadata" ||
         command.type === "read_history_subagent"
@@ -119,9 +127,13 @@ function fakeProcess(
         };
       } else if (command.type === "extension_call") {
         if (failExtensions.has(command.method)) {
-          stdout.write(
-            `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: false, error: `nek rejected ${command.method}` })}\n`,
-          );
+          write({
+            id: command.id,
+            type: "response",
+            command: command.type,
+            success: false,
+            error: `nek rejected ${command.method}`,
+          });
           continue;
         }
         if (invalidExtensions.has(command.method)) data = { result: {} };
@@ -181,9 +193,7 @@ function fakeProcess(
       } else if (command.type === "prompt") {
         data = { disposition: "started" };
       }
-      stdout.write(
-        `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: true, data })}\n`,
-      );
+      write({ id: command.id, type: "response", command: command.type, success: true, data });
     }
   });
   let exited = false;
@@ -211,9 +221,7 @@ function fakeProcess(
     responses,
     failExtensions,
     invalidExtensions,
-    emit: (record) =>
-      stdout.write(`${JSON.stringify(record)}
-`),
+    emit: (record) => historyStream.emit(record as Record<string, unknown>),
     process: {
       client,
       guiInfo,
@@ -228,6 +236,24 @@ function fakeProcess(
   };
 }
 
+/** 挂住控制进程的某类调用：让后续语义变化落在一次进行中的读取上。 */
+function holdControlCalls(control: FakeProcess, type: NekRpcCommand["type"]) {
+  const original = control.process.client.call.bind(control.process.client);
+  const gate = Promise.withResolvers<void>();
+  let armed = true;
+  control.process.client.call = (async (command: NekRpcCommand, ...rest: unknown[]) => {
+    if (armed && command.type === type) {
+      armed = false;
+      await gate.promise;
+    }
+    return await (original as (c: NekRpcCommand, ...r: unknown[]) => Promise<unknown>)(
+      command,
+      ...rest,
+    );
+  }) as typeof control.process.client.call;
+  return { release: () => gate.resolve() };
+}
+
 test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce and remain retryable", async () => {
   const control = fakeProcess("control");
   const session = fakeProcess("session");
@@ -240,6 +266,11 @@ test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce 
     logger: { warn: (...args) => warnings.push(args) },
   });
   const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+  // 生产端每条记录是一次独立的 stdout 读取：逐条投递才符合有界接纳的输入节奏。
+  const emitChunk = async (record: Record<string, unknown>) => {
+    session.emit(record);
+    await drain();
+  };
   try {
     const target = { workspacePath: "/workspace", workspaceIdentity: "logical-workspace" };
     const created = await adapter.createNekSession(target);
@@ -256,7 +287,7 @@ test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce 
     control.commands.length = session.commands.length = 0;
     const initialFrames = frames.length;
     for (let i = 0; i < 100; i++)
-      session.emit({
+      await emitChunk({
         type: "message_update",
         usage: {},
         assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" },
@@ -266,7 +297,10 @@ test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce 
     assert.equal(session.commands.length, 0);
     assert.equal(frames.length, initialFrames);
 
-    for (let i = 0; i < 100; i++) session.emit({ type: "session_info_changed", name: "same" });
+    // 目录读取进行中到达的语义变化只置脏位：100 次变化合并成一次补读，共 2 次。
+    const held = holdControlCalls(control, "list_sessions");
+    for (let i = 0; i < 100; i++) await emitChunk({ type: "session_info_changed", name: "same" });
+    held.release();
     await drain();
     assert.equal(control.commands.filter((command) => command.type === "list_sessions").length, 2);
     assert.equal(frames.length, initialFrames, "unchanged catalogs must not be republished");
