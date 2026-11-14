@@ -115,6 +115,12 @@ function scheduleMicrotask(callback: () => void): void {
   void Promise.resolve().then(callback);
 }
 
+/** Expanded tool inspection owns its own scroll intent, never an implicit older-history request. */
+function isNestedTimelineScroll(target: EventTarget | null, root: HTMLElement): boolean {
+  const owner = target instanceof Element ? target.closest("[data-v4-timeline-scroll]") : null;
+  return owner !== null && owner !== root;
+}
+
 function isEditableScrollTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (
@@ -742,6 +748,7 @@ function ConversationTimelineImpl({
 
   const handleWheelCapture = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (isNestedTimelineScroll(event.target, event.currentTarget)) return;
       markUserScrollIntent(timelineWheelScrollIntent(event.deltaY));
       // A short page cannot scroll farther up; the wheel is still explicit older-history intent.
       if (event.deltaY < 0 && event.currentTarget.scrollTop === 0)
@@ -756,6 +763,7 @@ function ConversationTimelineImpl({
 
   const handleTouchMoveCapture = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (isNestedTimelineScroll(event.target, event.currentTarget)) return;
       const nextClientY = event.touches[0]?.clientY;
       const previousClientY = touchClientYRef.current;
       if (nextClientY === undefined || previousClientY === null) return;
@@ -771,6 +779,7 @@ function ConversationTimelineImpl({
 
   const handleKeyDownCapture = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (isNestedTimelineScroll(event.target, event.currentTarget)) return;
       markUserScrollIntent(
         timelineKeyboardScrollIntent({
           key: event.key,
