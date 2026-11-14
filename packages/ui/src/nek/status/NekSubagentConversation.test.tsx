@@ -44,10 +44,29 @@ it("S1/S2: the right-side tab uses parent-scoped preview and the standard read-o
       status: "completed",
       rows: [],
       totalCount: 0,
+      history: {
+        branchRevision: "branch",
+        totalTurns: 0,
+        turns: [],
+        hasOlder: false,
+        hasNewer: false,
+      },
     });
   const subscribeConversationV4 = vi.fn();
   const services = {
-    zcodeAgentService: { getSubagentConversation, subscribeConversationV4 },
+    zcodeAgentService: {
+      getSubagentConversation,
+      subscribeConversationV4,
+      onAgentRuntimeLifecycle: vi.fn(() => ({ dispose: vi.fn() })),
+      conversationHistoryDirectoryV4: vi.fn(async () => ({
+        items: [],
+        totalTurns: 0,
+        hasMore: false,
+        atSeq: 0,
+        atRevision: 0,
+        atLogEpoch: "epoch",
+      })),
+    },
   } as unknown as IServiceAccessor;
   render(
     <ServiceProvider services={services}>
@@ -66,11 +85,14 @@ it("S1/S2: the right-side tab uses parent-scoped preview and the standard read-o
     remoteSessionId: tab.remoteSessionId,
     sessionId: "parent",
     id: "child",
+    turnLimit: 20,
   });
   expect(subscribeConversationV4).not.toHaveBeenCalled();
   const props = timeline.mock.calls.at(-1)![0];
   expect(props.rowContext.sessionId).toBe("child");
   expect(props.rowContext.workspaceRemoteSessionId).toBe("ssh-host");
+  expect(props.historyControls.history.totalTurns).toBe(0);
+  expect(props.rowContext.readHistoryContent).toBeTypeOf("function");
   expect(props.onFork).toBeUndefined();
   expect(props.onEdit).toBeUndefined();
 });

@@ -323,5 +323,9 @@ export function projectHistory(input: {
   }
   return [...result.values()]
     .sort((a, b) => a.rowId - b.rowId)
-    .map((row) => conversationRowSchema.parse(row));
+    .map((row) => {
+      if (!row.turnId)
+        throw new Error("nek HISTORY_TURN_IDENTITY_REQUIRED: source row has no owning turn");
+      return conversationRowSchema.parse({ ...row, productTurnId: row.turnId });
+    });
 }

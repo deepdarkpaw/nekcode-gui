@@ -42,6 +42,10 @@ for (const count of [70, 1000])
             beforeCursor: cursor,
           });
           lengths.push(response.history.turns.length);
+          assert.ok(
+            response.rows.every((row) => row.productTurnId && row.productTurnId === row.turnId),
+            "source history retains canonical product turn ownership for export",
+          );
           cursor = response.history.olderCursor;
         }
       if (count === 70) assert.deepEqual(lengths, [20, 20, 20, 10]);

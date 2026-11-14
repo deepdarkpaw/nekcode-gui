@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
-import { Button } from "@/components/ui/button.js";
+import { useMemo } from "react";
+import { AsyncButton } from "@/components/ui/async-button.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { SubagentSessionSidePaneTab } from "@/lib/workspaceSidePane.js";
@@ -7,7 +7,7 @@ import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";
-import { useSubagentConversation } from "./useSubagentConversation.js";
+import { useSubagentHistoryConversation } from "./useSubagentHistoryConversation.js";
 
 /** 标准 ZCode 时间线，数据由父 nek 的只读预览契约提供，不打开一个新的 child 运行时。 */
 export function NekSubagentConversation({
@@ -31,25 +31,11 @@ export function NekSubagentConversation({
     (state) => state.codePreviewSettings,
     DEFAULT_CODE_PREVIEW_SETTINGS,
   );
-  const load = useCallback(
-    () =>
-      zcodeAgentService.getSubagentConversation({
-        workspacePath: tab.workspacePath,
-        workspaceIdentity: tab.workspaceIdentity,
-        remoteSessionId: tab.remoteSessionId,
-        sessionId: tab.parentSessionId,
-        id: tab.childSessionId,
-      }),
-    [
-      zcodeAgentService,
-      tab.workspacePath,
-      tab.workspaceIdentity,
-      tab.remoteSessionId,
-      tab.parentSessionId,
-      tab.childSessionId,
-    ],
-  );
-  const { data, error, retry } = useSubagentConversation(load, focused);
+  const { data, error, retry, historyControls } = useSubagentHistoryConversation({
+    service: zcodeAgentService,
+    scope: tab,
+    active: focused,
+  });
   const rowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       workspacePath: tab.workspacePath,
@@ -63,6 +49,7 @@ export function NekSubagentConversation({
       onOpenCodeViewer,
       onOpenFileLink,
       onOpenSubagentSession,
+      readHistoryContent: historyControls?.readContent,
     }),
     [
       tab.workspacePath,
@@ -76,6 +63,7 @@ export function NekSubagentConversation({
       onOpenCodeViewer,
       onOpenFileLink,
       onOpenSubagentSession,
+      historyControls?.readContent,
     ],
   );
   return (
@@ -83,9 +71,9 @@ export function NekSubagentConversation({
       {error ? (
         <div role="alert" className="flex items-center gap-2 p-3 text-ui-sm text-destructive">
           <span className="min-w-0 break-words">{error}</span>
-          <Button variant="outline" size="sm" onClick={retry}>
+          <AsyncButton variant="outline" size="sm" onClick={retry} successFeedback="none">
             {intl.formatMessage({ id: "chat.message.bodyPreview.retry" })}
-          </Button>
+          </AsyncButton>
         </div>
       ) : !data ? (
         <p role="status" className="p-3 text-ui-sm text-foreground-subtle">
@@ -107,16 +95,10 @@ export function NekSubagentConversation({
                   ? "completedInterrupted"
                   : "completedSuccess"
           }
-          headerSlot={
-            data.totalCount > data.rows.length ? (
-              <p className="p-3 text-ui-xs text-foreground-subtle">
-                {intl.formatMessage(
-                  { id: "nek.status.subagent.previewTruncated" },
-                  { count: data.totalCount - data.rows.length },
-                )}
-              </p>
-            ) : undefined
-          }
+          historyControls={historyControls}
+          canLoadOlder={historyControls?.history.hasOlder ?? false}
+          loadingOlder={historyControls?.loading ?? false}
+          onLoadOlder={historyControls?.loadOlder}
         />
       ) : null}
     </div>
