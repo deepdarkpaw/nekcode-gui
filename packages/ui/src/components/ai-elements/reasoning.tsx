@@ -13,6 +13,7 @@ import { TID_CHAT_REASONING_CONTENT, TID_CHAT_REASONING_TRIGGER } from "@zcode/s
 import { BrainIcon, ChevronRightIcon } from "lucide-react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { QueuedSummaryContent } from "@/ToolCallBlocks/QueuedSummaryContent.js";
+import { SubagentReferenceText } from "./subagent-link.js";
 import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import {
   EMPTY_SCROLL_MASK_STATE,
@@ -554,7 +555,7 @@ export const ReasoningContent = memo(
                 ref={contentRef}
                 className="min-w-0 whitespace-pre-wrap break-words text-foreground-subtlest"
               >
-                {children}
+                <SubagentReferenceText text={children} />
               </div>
             </div>
           </div>

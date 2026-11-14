@@ -101,6 +101,8 @@ import { createZCodeFileCitationRemarkPlugin } from "@/lib/zcodeFileCitationRema
 import { windowsFileLinkEscapeRemarkPlugin } from "@/lib/windowsFileLinkEscapeRemarkPlugin.js";
 import { projectZCodeFileCitations } from "@/lib/zcodeFileCitation.js";
 import { rewriteMarkdownArtifactImageSources } from "@zcode/shared";
+import { parseSubagentLink, subagentLinkRehypePlugin } from "@/lib/markdownSubagentLink.js";
+import { SubagentLink } from "./subagent-link.js";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -822,6 +824,7 @@ function rewriteLocalFileMarkdownTargetsRehypePlugin() {
 }
 
 const messageRehypePlugins: PluggableList = [
+  subagentLinkRehypePlugin,
   rewriteLocalFileMarkdownTargetsRehypePlugin,
   ...Object.values(defaultRehypePlugins),
 ];
@@ -1416,6 +1419,14 @@ export const MessageResponse = memo(
         }: ComponentProps<"a"> & { node?: unknown }) => {
           const resolvedHref =
             typeof href === "string" ? stripBalancedAssistantPathQuotes(href) : "";
+          const subagentId = parseSubagentLink(resolvedHref);
+          if (subagentId) {
+            return (
+              <SubagentLink id={subagentId} className={linkClassName}>
+                {children}
+              </SubagentLink>
+            );
+          }
           const fileLink = resolveMarkdownFileLink(workspacePath, resolvedHref, {
             homePath: workspaceHomePath,
           });

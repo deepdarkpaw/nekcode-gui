@@ -22,6 +22,7 @@ import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
 import { cn } from "@/components/lib/utils.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import { MessageActions } from "@/components/ai-elements/message.js";
+import { SubagentLinkProvider } from "@/components/ai-elements/subagent-link.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -1002,4 +1003,18 @@ function ConversationTurnGroupImpl({
   );
 }
 
-export const ConversationTurnGroup = memo(ConversationTurnGroupImpl);
+/** A turn's nested Markdown/tool/thinking links share its authoritative parent scope. */
+export const ConversationTurnGroup = memo(function ConversationTurnGroup(
+  props: ConversationTurnGroupProps,
+) {
+  const { context } = props;
+  return (
+    <SubagentLinkProvider
+      parentSessionId={context.sessionId}
+      rootSessionId={context.rootSessionId}
+      onOpen={context.onOpenSubagentSession}
+    >
+      <ConversationTurnGroupImpl {...props} />
+    </SubagentLinkProvider>
+  );
+});
