@@ -23,7 +23,8 @@ export type ConversationHistoryTurn = z.infer<typeof conversationHistoryTurnSche
 export const conversationHistorySchema = z.object({
   branchRevision: z.string(),
   totalTurns: z.number().int().nonnegative(),
-  turns: z.array(conversationHistoryTurnSchema).max(20),
+  /** A source page is at most20; a renderer window may retain six such pages. */
+  turns: z.array(conversationHistoryTurnSchema).max(120),
   olderCursor: z.string().optional(),
   newerCursor: z.string().optional(),
   hasOlder: z.boolean(),

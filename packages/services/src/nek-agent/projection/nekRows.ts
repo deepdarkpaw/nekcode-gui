@@ -102,7 +102,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** assistant 的原始 provider 错误 → 有界、可传输的模型错误 marker。 */
 export function buildModelErrorMarker(
-  message: NekAssistantMessage,
+  message: Pick<NekAssistantMessage, "stopReason" | "errorMessage" | "provider" | "model" | "api">,
 ): Extract<TimelineMarkerPayload, { type: "modelError" }> | undefined {
   if (message.stopReason !== "error") return undefined;
   const rawError = typeof message.errorMessage === "string" ? message.errorMessage : "";

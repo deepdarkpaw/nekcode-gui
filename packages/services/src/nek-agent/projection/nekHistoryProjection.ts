@@ -23,7 +23,7 @@ import {
 } from "./nekRows.js";
 
 import { HISTORY_ROW_STRIDE as STRIDE, historyRowId } from "./nekHistoryIdentity.js";
-import { partialToolCalls, partialToolResult } from "./nekHistoryPartial.js";
+import { partialToolCalls, partialToolResult, partialAssistantError, historyAssistantStopReason } from "./nekHistoryPartial.js";
 export { historyRowId } from "./nekHistoryIdentity.js";
 export const historyTurn = (turn: NekHistoryTurn): ConversationHistoryTurn => ({
   turnId: turn.id,
@@ -114,7 +114,7 @@ function deferred(source: NekHistoryEntry): ConversationRow {
   const row =
     source.role === "user"
       ? buildUserInputRow(identity, { text: source.preview })
-      : buildAssistantTextRow(identity, { text: source.preview, state: "interrupted" });
+      : buildAssistantTextRow(identity, { text: source.preview, state: "deferred" });
   return {
     ...row,
     historyContent: source.omissions.map((omission) => ({ ...omission, entryId: source.id })),
@@ -227,7 +227,15 @@ export function projectHistory(input: {
       if (source.omissions.length) {
         const row = deferred(source);
         result.set(row.rowId, row);
+        const error = partialAssistantError(source);
+        if (error) result.set(error.rowId, error);
       }
+    const lastAssistant = sources.findLast((source) => source.role === "assistant");
+    const stop = lastAssistant && historyAssistantStopReason(lastAssistant);
+    const headerId = historyRowId(turn.header.position, 0);
+    const header = result.get(headerId);
+    if (header?.kind === "turnHeader" && (stop === "error" || stop === "aborted"))
+      result.set(headerId, { ...header, state: stop === "error" ? "failed" : "completedInterrupted" });
   }
   return [...result.values()]
     .sort((a, b) => a.rowId - b.rowId)

@@ -136,7 +136,7 @@ export const assistantTextRowSchema = z.object({
   // 同一模型 response 的正文与工具共享此 ID；optional 兼容旧 snapshot。
   assistantResponseId: z.string().min(1).optional(),
   text: z.string(),
-  state: z.enum(["streaming", "complete", "interrupted", "failed"]),
+  state: z.enum(["streaming", "complete", "interrupted", "failed", "deferred"]),
   model: z.string().optional(),
   feedback: z.enum(["like", "dislike"]).optional(),
 });

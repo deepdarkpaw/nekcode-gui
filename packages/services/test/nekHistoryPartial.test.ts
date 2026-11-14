@@ -98,3 +98,27 @@ test("HS2/HS3: huge omitted arguments/output retain tool identity and explicit r
   assert.deepEqual(call.message.content[0].arguments, { path: "original" });
   assert.ok(JSON.stringify(rows).length < 10_000);
 });
+
+for (const stopReason of ["stop", "error", "aborted"] as const) {
+  test(`HS2: deferred assistant body is not an interruption and preserves known model outcome (${stopReason})`, () => {
+    const assistant: NekSessionEntry = {
+      ...entry, id: "assistant", parentId: entry.id,
+      message: { role: "assistant", api: "test", provider: "test", model: "test", timestamp: 2,
+        content: [{ type: "text", text: "original" }], stopReason,
+        errorMessage: "Fixture HTTP 404", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } },
+    };
+    const source = fixtureHistory([entry, assistant], { type: "read_history_page" }) as NekHistoryPage;
+    source.entries[1] = { ...source.entries[1]!, entry: { ...assistant, message: { ...assistant.message, content: null } },
+      omissions: [{ pointer: "/message/content", ref: "body-ref", totalBytes: 90000000, mediaType: "application/json", encoding: "base64" }] };
+    const rows = projectHistory({ sessionId: "s1", turns: source.turns, entries: source.entries });
+    const preview = rows.find((row) => row.kind === "assistantText");
+    assert.equal(preview?.kind === "assistantText" && preview.state, "deferred");
+    const errors = rows.filter((row) => row.kind === "timelineMarker" && row.marker.type === "modelError");
+    assert.equal(errors.length, stopReason === "error" ? 1 : 0);
+    if (stopReason === "error") assert.ok(JSON.stringify(errors).includes("Fixture HTTP 404"));
+    const header = rows.find((row) => row.kind === "turnHeader");
+    assert.equal(header?.kind === "turnHeader" && header.state,
+      stopReason === "error" ? "failed" : stopReason === "aborted" ? "completedInterrupted" : "completedSuccess");
+  });
+}
