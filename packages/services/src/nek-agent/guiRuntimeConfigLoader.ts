@@ -5,6 +5,8 @@
  * 两个文件都按键合并（用户文件只需写想改的键）；任何解析错误都进诊断，不中断启动。
  */
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   type GuiRuntimeConfig,
@@ -28,6 +30,18 @@ export interface LoadedGuiRuntimeConfig {
 }
 
 type ReadText = (path: string) => Promise<string | undefined>;
+
+/** Host and remote service assembly use the same target-local runtime configuration sources. */
+export async function loadHostGuiRuntimeConfig(
+  warn: (...args: unknown[]) => void,
+): Promise<GuiRuntimeConfig> {
+  const result = await loadGuiRuntimeConfig([
+    { path: join(process.cwd(), "config", "config.yaml"), label: "bundled" },
+    { path: join(homedir(), ".nek", "gui", "config.yaml"), label: "user" },
+  ]);
+  for (const diagnostic of result.diagnostics) warn("invalid GUI runtime config", diagnostic);
+  return result.config;
+}
 
 async function readTextIfExists(path: string): Promise<string | undefined> {
   try {

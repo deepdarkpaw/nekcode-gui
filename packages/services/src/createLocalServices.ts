@@ -4,6 +4,7 @@ import {
   type ServiceAuthorityMode,
 } from "@zcode/shared";
 import { ServiceCollection } from "./collection.js";
+import type { GuiRuntimeConfig } from "@zcode/shared/guiRuntimeConfig";
 import { IFileService } from "./file/file.js";
 import { IMediaPreviewService } from "./media-preview/mediaPreview.js";
 import { IGitService } from "./git/git.js";
@@ -87,6 +88,7 @@ import {
 } from "./localServiceResources.js";
 
 interface CreateLocalServicesOptions {
+  guiRuntimeConfig?: GuiRuntimeConfig;
   parentPort?: Parameters<typeof createBroadcastService>[0];
   settingService?: ISettingService;
   credentialService?: ICredentialService;
@@ -131,7 +133,7 @@ export function createLocalServices(options: CreateLocalServicesOptions): Servic
   const taskIndexRepo = new TaskIndexRepo();
   const nekModelLog = createServiceLogger("nek-model-selection");
   const { configApi: nekConfigApi, agentService: zcodeAgentService } = createNekRuntimeServices({
-    agent: { cwd: options.zcodeAgentSpawnFallbackCwd },
+    agent: { cwd: options.zcodeAgentSpawnFallbackCwd, runtimeConfig: options.guiRuntimeConfig },
     config: {
       hosts: createLocalNekConfigTargetHost(),
       logger: { warn: (...args) => nekModelLog.warn(undefined, ...args) },

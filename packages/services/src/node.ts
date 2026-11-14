@@ -131,6 +131,7 @@ export {
   conversationShareConnectionScopeFactory,
 } from "./conversation-share/conversationShareService.js";
 export { createLocalServices } from "./createLocalServices.js";
+export { loadHostGuiRuntimeConfig } from "./nek-agent/guiRuntimeConfigLoader.js";
 export {
   disposeServiceResources,
   disposeServiceResourcesAndWait,

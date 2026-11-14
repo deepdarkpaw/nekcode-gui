@@ -46,6 +46,7 @@ import {
 } from "@zcode/services";
 import {
   createLocalServices,
+  loadHostGuiRuntimeConfig,
   disposeServiceResources,
   disposeServiceResourcesAndWait,
   createServiceLogger,
@@ -1798,6 +1799,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
         ),
       initializeServices: async () => {
         logger.info("initializing local services");
+        const guiRuntimeConfig = await loadHostGuiRuntimeConfig((...args) => logger.warn(...args));
         activeSessionRealtimePort = createTaskRealtimeBridgeForHostInit(msg, parentPort);
         const settingService = createSettingService();
         const hostApiNetworkTransport = createHostApiNetworkTransport(async () => {
@@ -1813,6 +1815,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
           log: (message, details) => logger.warn(message, details),
           establishOwner: () => {
             const initializedServices = createLocalServices({
+              guiRuntimeConfig,
               parentPort,
               settingService,
               credentialService: createHostCredentialBridge(parentPort),

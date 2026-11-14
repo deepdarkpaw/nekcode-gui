@@ -5,6 +5,7 @@ import {
 import {
   NekConfigApi,
   createLocalNekConfigTargetHost,
+  nekConfigApiConfigFromRuntime,
   type NekConfigApiOptions,
 } from "./nek-config-api/index.js";
 
@@ -15,7 +16,11 @@ export function createNekRuntimeServices(
     config?: NekConfigApiOptions;
   } = {},
 ) {
-  const configApi = new NekConfigApi(options.config ?? { hosts: createLocalNekConfigTargetHost() });
+  const configOptions = options.config ?? { hosts: createLocalNekConfigTargetHost() };
+  const configApi = new NekConfigApi({
+    ...configOptions,
+    config: nekConfigApiConfigFromRuntime(options.agent?.runtimeConfig ?? {}, configOptions.config),
+  });
   const agentService = createNekAgentServiceAdapter({
     ...options.agent,
     modelRuntime: configApi.modelRuntime({ kind: "local" }),

@@ -1,4 +1,4 @@
-import { disposeServiceResourcesAndWait } from "@zcode/services/node";
+import { disposeServiceResourcesAndWait, loadHostGuiRuntimeConfig } from "@zcode/services/node";
 import {
   ZCODE_VERSION,
   SERVICE_AUTHORITY_MODE_ENV,
@@ -51,8 +51,10 @@ async function main() {
   log(`client connected: ${ack.clientId} (v${ack.version})`);
 
   // Phase 3: Initialize services and start stdio RPC server
+  const guiRuntimeConfig = await loadHostGuiRuntimeConfig(log);
   const { authorityModeParseResult, services } = createStdioServices({
     env: process.env,
+    guiRuntimeConfig,
   });
   if (authorityModeParseResult.invalidRawValue) {
     log(
