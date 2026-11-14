@@ -21,6 +21,8 @@ const nekSchema = z.object({
 
 const timeoutsSchema = z.object({
   commandMs: positiveInt,
+  /** End-to-end model menu read, including control startup and admission. */
+  modelReadMs: positiveInt,
   promptPreflightMs: positiveInt,
   longRunningMs: positiveInt,
   shutdownGraceMs: nonNegativeInt,
@@ -97,6 +99,7 @@ export const DEFAULT_GUI_RUNTIME_CONFIG: GuiRuntimeConfig = {
   },
   timeouts: {
     commandMs: 15_000,
+    modelReadMs: 15_000,
     promptPreflightMs: 20_000,
     longRunningMs: 180_000,
     shutdownGraceMs: 1_500,

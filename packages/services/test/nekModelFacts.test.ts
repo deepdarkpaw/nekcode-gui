@@ -152,7 +152,7 @@ test("content-owned model reads still reload for external auth/settings changes"
     api.notifyWatch();
     await source.read();
     assert.equal(
-      countCalls(api, "reloadRunningSessions"),
+      countCalls(api, "refreshModelControl"),
       0,
       "models admission belongs to the content owner",
     );
@@ -160,14 +160,14 @@ test("content-owned model reads still reload for external auth/settings changes"
     api.notifyWatch();
     await source.read();
     assert.equal(
-      countCalls(api, "reloadRunningSessions"),
+      countCalls(api, "refreshModelControl"),
       1,
       "OAuth changes are not covered by the models fingerprint",
     );
     file = "settings.json";
     api.notifyWatch();
     await source.read();
-    assert.equal(countCalls(api, "reloadRunningSessions"), 2);
+    assert.equal(countCalls(api, "refreshModelControl"), 2);
   } finally {
     source.dispose();
   }
@@ -178,14 +178,14 @@ test("配置变化后先让 nek 重载，再读事实", async () => {
   const source = createNekModelFactsSource(api);
   source.onDidChange(() => undefined);
   await source.read();
-  assert.equal(countCalls(api, "reloadRunningSessions"), 0);
+  assert.equal(countCalls(api, "refreshModelControl"), 0);
 
   api.notifyWatch();
   await source.read();
-  assert.equal(countCalls(api, "reloadRunningSessions"), 1);
+  assert.equal(countCalls(api, "refreshModelControl"), 1);
   // 重载成功即消费掉 pending：重复读取不再重载。
   await source.read();
-  assert.equal(countCalls(api, "reloadRunningSessions"), 1);
+  assert.equal(countCalls(api, "refreshModelControl"), 1);
   source.dispose();
 });
 
@@ -214,7 +214,7 @@ test("重载失败：读取抛错、pending 保留，修好后重试会再次重
   api.setReloadError(undefined);
   api.setCatalog([CUSTOM, CUSTOM_2], [CUSTOM, CUSTOM_2]);
   const facts = await source.read();
-  assert.equal(countCalls(api, "reloadRunningSessions"), 2);
+  assert.equal(countCalls(api, "refreshModelControl"), 2);
   assert.deepEqual(
     facts.models.map((model) => model.modelId),
     ["mock-model", "mock-model-2"],

@@ -40,6 +40,59 @@ function host() {
 }
 
 describe("model selection read ownership", () => {
+  it("ML3/ML7: watch bursts schedule one follow-up and continuous churn becomes retryable error", async () => {
+    const fake = host();
+    const first = deferred();
+    const followUp = deferred();
+    fake.getView
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => followUp.promise);
+    const { result } = renderHook(() => useModelSelectionServiceView(fake.service));
+    act(() => {
+      for (let i = 0; i < 100; i++) fake.invalidate();
+    });
+    expect(fake.getView).toHaveBeenCalledTimes(1);
+    await act(async () => first.resolve(VIEW));
+    expect(fake.getView).toHaveBeenCalledTimes(2);
+    act(() => {
+      for (let i = 0; i < 100; i++) fake.invalidate();
+    });
+    await act(async () => followUp.resolve(VIEW));
+    expect(fake.getView).toHaveBeenCalledTimes(2);
+    expect(result.current.state.status).toBe("error");
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+  });
+
+  it("ML4: dirty follow-up carries elapsed budget, not a reset deadline", async () => {
+    const fake = host();
+    const first = deferred();
+    fake.getView.mockImplementationOnce(() => first.promise);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+    try {
+      const { result } = renderHook(() => useModelSelectionServiceView(fake.service));
+      clock.mockReturnValue(13000);
+      act(() => fake.invalidate());
+      await act(async () => first.resolve(VIEW));
+      expect(fake.getView.mock.calls.at(-1)).toEqual([undefined, { elapsedMs: 12000 }]);
+      expect(result.current.state.status).toBe("ready");
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("ML4/ML5: deadline error withdraws stale ready and requires explicit retry", async () => {
+    const fake = host();
+    const { result } = renderHook(() => useModelSelectionServiceView(fake.service));
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    fake.getView.mockRejectedValueOnce(new Error("nek model read deadline exceeded at queue"));
+    act(() => fake.invalidate());
+    expect(result.current.state.status).toBe("loading");
+    await waitFor(() => expect(result.current.state.status).toBe("error"));
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+  });
+
   it("MW-U4: subscription admission failure is visible and retryable, not an effect crash", async () => {
     const fake = host();
     const subscribe = fake.service.onDynamicDidChange;
@@ -87,9 +140,10 @@ describe("model selection read ownership", () => {
     act(() => fake.invalidate());
     expect(result.current.state.status).toBe("loading");
     act(() => fake.invalidate());
-    await act(async () => newer.reject(new Error("reload rejected")));
-    expect(result.current.state.status).toBe("error");
+    expect(fake.getView).toHaveBeenCalledTimes(2);
     await act(async () => older.resolve(VIEW));
+    expect(result.current.state.status).toBe("loading");
+    await act(async () => newer.reject(new Error("reload rejected")));
     expect(result.current.state.status).toBe("error");
     act(() => result.current.reload());
     await waitFor(() => expect(result.current.state.status).toBe("ready"));

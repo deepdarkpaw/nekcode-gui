@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type {
+  NekModelReadContext,
   NekModelRuntimeHandle,
   NekModelRuntimeLease,
   NekReloadResult,
 } from "@zcode/shared/nek-protocol";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
+import { NekModelAdmission } from "./modelAdmission.js";
+import { assertModelRead, waitForModelRead } from "./modelReadLifetime.js";
 
 const MAX_WRITERS = 128;
-const MAX_PENDING = 16;
 const MAX_MODELS_BYTES = 4 * 1024 * 1024;
 
 /** Content, not mtime/model ID, fences same-ID endpoint changes and watcher debounce races. */
@@ -26,7 +28,8 @@ type ModelRefreshResult = NekReloadResult & { changed: boolean };
 
 export interface NekLiveModelRuntime extends NekModelRuntimeLease {
   readonly handle: NekModelRuntimeHandle;
-  refresh(): Promise<ModelRefreshResult>;
+  refresh(context?: NekModelReadContext): Promise<ModelRefreshResult>;
+  invalidate(): void;
 }
 
 /** Only live process leases are retained. No model catalog or accepted input lives here. */
@@ -50,49 +53,57 @@ export class NekModelRuntimeOwner {
     // A freshly spawned process already loaded this exact content; seeding it removes a
     // redundant reload that otherwise dominates the first model read after each spawn.
     let applied: string | undefined = registration.initialFingerprint;
-    let pending = 0;
     let needsRebind = false;
-    let tail = Promise.resolve();
+    let invalidation = 0;
+    let dirty = false;
+    const admission = new NekModelAdmission();
+    const lifetime = new AbortController();
+    const readContext = (context?: NekModelReadContext): NekModelReadContext => ({
+      ...context,
+      signal: context?.signal
+        ? AbortSignal.any([lifetime.signal, context.signal])
+        : lifetime.signal,
+    });
     let refreshing: Promise<ModelRefreshResult> | undefined;
     let reloading: Promise<NekReloadResult> | undefined;
     const assertLive = () => {
       if (!active || this.disposed || !handle.isWritable())
         throw new Error("nek model runtime process changed or closed; retry the operation");
     };
-    const serialize = async <T>(run: () => Promise<T>): Promise<T> => {
+    const serialize = async <T>(
+      run: () => Promise<T>,
+      context?: NekModelReadContext,
+    ): Promise<T> => {
       assertLive();
-      if (pending >= MAX_PENDING)
-        return Promise.reject(new Error("nek model admission capacity exceeded; retry"));
-      pending += 1;
-      const result = tail.then(async () => {
-        assertLive();
-        return await run();
-      });
-      tail = result.then(
-        () => undefined,
-        () => undefined,
-      );
-      return result.finally(() => {
-        pending -= 1;
-      });
+      return admission.run(run, context);
     };
-    const ensure = async (force = false): Promise<ModelRefreshResult> => {
+    const ensure = async (
+      force = false,
+      context?: NekModelReadContext,
+    ): Promise<ModelRefreshResult> => {
       let result: ModelRefreshResult = { changed: false, deferred: false, diagnostics: [] };
       for (let attempt = 0; attempt < 3; attempt += 1) {
         assertLive();
-        const before = await fingerprint();
+        assertModelRead(context);
+        const generation = invalidation;
+        const before = await waitForModelRead(fingerprint(), context);
         assertLive();
-        if (!force && before === applied) return result;
+        assertModelRead(context);
+        if (!force && !dirty && before === applied) return result;
+        dirty = false;
         // A failed/deferred/diagnostic reload can never certify even an older fingerprint.
         applied = undefined;
         needsRebind = true;
-        result = { ...(await handle.reload()), changed: true };
+        context?.stage?.("reload");
+        result = { ...(await waitForModelRead(handle.reload(context), context)), changed: true };
         assertLive();
+        assertModelRead(context);
         if (result.deferred) return result;
         if (result.diagnostics.some((item) => item.severity === "error")) return result;
-        const after = await fingerprint();
+        const after = await waitForModelRead(fingerprint(), context);
         assertLive();
-        if (before === after) {
+        assertModelRead(context);
+        if (before === after && generation === invalidation) {
           applied = after;
           return result;
         }
@@ -102,9 +113,14 @@ export class NekModelRuntimeOwner {
     };
     const lease: NekLiveModelRuntime = {
       handle,
-      run: (kind, command) =>
-        serialize(async () => {
-          const result = await ensure();
+      invalidate: () => {
+        if (!dirty) invalidation += 1;
+        dirty = true;
+      },
+      run: (kind, command, caller) => {
+        const context = readContext(caller);
+        return serialize(async () => {
+          const result = await ensure(false, context);
           if (result.diagnostics.length) options.diagnostics?.(result);
           const errors = result.diagnostics.filter((item) => item.severity === "error");
           if (errors.length)
@@ -124,20 +140,28 @@ export class NekModelRuntimeOwner {
           }
           assertLive();
           // No await between the final identity check and the actual RPC submission.
-          const value = await command();
+          assertModelRead(context);
+          const value = await waitForModelRead(command(), context);
+          assertLive();
+          assertModelRead(context);
           if (!result.deferred && (kind === "input" || value != null)) needsRebind = false;
           return value;
-        }),
-      reload: () => {
+        }, context);
+      },
+      reload: (caller) => {
+        const context = readContext(caller);
+        if (caller) return serialize(() => ensure(true, context), context);
         if (!reloading)
-          reloading = serialize(() => ensure(true)).finally(() => {
+          reloading = serialize(() => ensure(true, context), context).finally(() => {
             reloading = undefined;
           });
         return reloading;
       },
-      refresh: () => {
+      refresh: (caller) => {
+        const context = readContext(caller);
+        if (caller) return serialize(() => ensure(false, context), context);
         if (!refreshing)
-          refreshing = serialize(() => ensure()).finally(() => {
+          refreshing = serialize(() => ensure(false, context), context).finally(() => {
             refreshing = undefined;
           });
         return refreshing;
@@ -145,6 +169,8 @@ export class NekModelRuntimeOwner {
       dispose: () => {
         if (!active) return;
         active = false;
+        lifetime.abort(new Error("nek model runtime process changed or disposed; retry"));
+        admission.dispose();
         applied = undefined;
         this.writers.delete(lease);
         options.release();

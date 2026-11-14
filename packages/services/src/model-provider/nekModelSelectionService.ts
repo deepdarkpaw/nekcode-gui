@@ -15,6 +15,12 @@ import {
 } from "@zcode/shared/model-selection-resolution";
 import type { IModelSelectionService } from "./modelSelectionService.js";
 import type { NekModelFacts, NekModelFactsSource } from "./nekModelFacts.js";
+import {
+  DEFAULT_MODEL_READ_MS,
+  NekModelReadBudget,
+  waitForModelRead,
+  assertModelRead,
+} from "../nek-config-api/index.js";
 
 interface NekModelSelectionServiceOptions {
   readonly facts: NekModelFactsSource;
@@ -25,7 +31,7 @@ interface NekModelSelectionService extends IModelSelectionService {
 }
 
 /** 一次 `getView()` 最多读几次：被更新的读取超车时重读，避免把旧目录当当前事实返回。 */
-const MAX_READ_ATTEMPTS = 3;
+const MAX_READ_ATTEMPTS = 2;
 
 export function createNekModelSelectionService(
   options: NekModelSelectionServiceOptions,
@@ -37,40 +43,55 @@ export function createNekModelSelectionService(
   let settledSequence = 0;
   let startedSequence = 0;
   let disposed = false;
+  const flights = new Map<
+    string,
+    {
+      promise: Promise<{ facts: NekModelFacts; revision: number }>;
+      budget: NekModelReadBudget;
+      waiters: number;
+    }
+  >();
 
   /** A temporary scope lease fences this read even when no other caller re-reads. */
   const readFacts = async (
-    input: ModelSelectionViewInput | undefined,
-  ): Promise<ModelSelectionView> => {
-    const scope = input?.workspacePath ? { cwd: input.workspacePath } : undefined;
+    cwd: string,
+    budget: NekModelReadBudget,
+  ): Promise<{ facts: NekModelFacts; revision: number }> => {
+    const scope = cwd ? { cwd } : undefined;
     let epoch = 0;
     const release = source.onDidChange(() => {
-      epoch += 1;
+      epoch = 1;
     }, scope);
     try {
       for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
-        const generation = epoch;
+        epoch = 0;
+        assertModelRead(budget.context);
         const sequence = ++startedSequence;
         let facts: NekModelFacts;
         try {
-          facts = await source.read(scope);
+          facts = await waitForModelRead(
+            source.read({ ...scope, ...budget.context }),
+            budget.context,
+          );
         } catch (error) {
           const superseded = sequence < settledSequence;
           settledSequence = Math.max(settledSequence, sequence);
           if (disposed) throw new Error("ModelSelectionService 已 dispose");
-          if (generation !== epoch || superseded) continue;
+          assertModelRead(budget.context);
+          if (epoch || superseded) continue;
           throw error;
         }
         if (disposed) throw new Error("ModelSelectionService 已 dispose");
         const superseded = sequence < settledSequence;
         settledSequence = Math.max(settledSequence, sequence);
-        if (generation !== epoch || superseded) continue;
+        assertModelRead(budget.context);
+        if (epoch || superseded) continue;
         const key = catalogKey(facts);
         if (key !== lastKey) {
           lastKey = key;
           revision += 1;
         }
-        return project(facts, revision, input);
+        return { facts, revision };
       }
       throw new Error("Model configuration changed during every read; retry the read");
     } finally {
@@ -82,9 +103,44 @@ export function createNekModelSelectionService(
   const unsubscribe = source.onDidChange(() => undefined);
 
   return {
-    async getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView> {
+    async getView(
+      input?: ModelSelectionViewInput,
+      read?: { readonly elapsedMs: number },
+    ): Promise<ModelSelectionView> {
       if (disposed) throw new Error("ModelSelectionService 已 dispose");
-      return await readFacts(input);
+      const cwd = input?.workspacePath?.trim() ?? "";
+      const elapsed = read?.elapsedMs ?? 0;
+      if (!Number.isFinite(elapsed) || elapsed < 0)
+        throw new Error("Invalid model read elapsed budget");
+      const remaining = (source.modelReadMs ?? DEFAULT_MODEL_READ_MS) - elapsed;
+      let flight = flights.get(cwd);
+      if (!flight) {
+        if (flights.size >= 128) throw new Error("Model read scope capacity exceeded; retry");
+        const budget = new NekModelReadBudget(remaining);
+        const promise = readFacts(cwd, budget).finally(() => {
+          const timings = budget.finish();
+          budget.abort();
+          source.reportReadTiming?.(timings);
+          if (flights.get(cwd)?.budget === budget) flights.delete(cwd);
+        });
+        flight = { promise, budget, waiters: 0 };
+        flights.set(cwd, flight);
+      }
+      if (flight.waiters >= 1024) throw new Error("Model read waiter capacity exceeded; retry");
+      const waiter = new NekModelReadBudget(remaining);
+      waiter.context.stage?.("shared-read");
+      flight.waiters += 1;
+      try {
+        const result = await waitForModelRead(flight.promise, waiter.context);
+        return project(result.facts, result.revision, input);
+      } finally {
+        waiter.finish();
+        flight.waiters -= 1;
+        if (flight.waiters === 0) {
+          flight.budget.abort();
+          if (flights.get(cwd) === flight) flights.delete(cwd);
+        }
+      }
     },
     onDynamicDidChange: (scope) => (listener) => {
       if (disposed) throw new Error("ModelSelectionService 已 dispose");
@@ -98,6 +154,9 @@ export function createNekModelSelectionService(
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      for (const flight of flights.values())
+        flight.budget.abort(new Error("ModelSelectionService 已 dispose"));
+      flights.clear();
       unsubscribe();
       source.dispose();
     },

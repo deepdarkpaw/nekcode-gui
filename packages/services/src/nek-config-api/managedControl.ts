@@ -6,6 +6,7 @@
  * reload (measured ~1 s on a cold start). Any change inside that window disables the seed.
  */
 import type {
+  NekModelReadContext,
   NekConfigTarget,
   NekModelRuntimeHandle,
   NekReloadResult,
@@ -15,6 +16,7 @@ import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import type { NekConfigApiLogger, NekReloadOutcome, NekTargetContext } from "./runtime.js";
 import { modelRuntimeFingerprint, type NekLiveModelRuntime } from "./modelRuntime.js";
 import { NekControlModelReads, withModelReadAdmission } from "./controlModelReads.js";
+import { assertModelRead } from "./modelReadLifetime.js";
 
 /** Content at spawn vs after ACK; equal means no proving reload is required. */
 export async function seededControlFingerprint(
@@ -29,12 +31,14 @@ export async function seededControlFingerprint(
 }
 
 export async function openManagedControl(input: {
+  read?: NekModelReadContext;
   target: NekConfigTarget;
   context: NekTargetContext;
   factory: (args: {
     target: NekConfigTarget;
     executor: NekConfigHostExecutor;
     logger?: NekConfigApiLogger;
+    context?: NekModelReadContext;
   }) => Promise<NekControlClient>;
   logger?: NekConfigApiLogger;
   register: (
@@ -56,8 +60,9 @@ export async function openManagedControl(input: {
     target,
     executor: context.executor,
     logger,
+    context: input.read,
   });
-  if (!input.isCurrent()) {
+  if (!input.isCurrent() || input.read?.signal?.aborted) {
     void client
       .close()
       .catch((error: unknown) => logger?.warn("retired nek control close failed", error));
@@ -67,13 +72,16 @@ export async function openManagedControl(input: {
   const initialFingerprint = await seededControlFingerprint(context.executor, atSpawn);
   let lease: NekLiveModelRuntime;
   try {
+    assertModelRead(input.read);
+    if (!input.isCurrent())
+      throw new Error("nek control retired during fingerprint handshake; retry");
     lease = input.register(
       {
         handle: {
           sessionKey: "control",
           cwd: "",
           isWritable: () => input.isCurrent(),
-          reload: () => client.call({ type: "reload" }),
+          reload: (context) => client.call({ type: "reload" }, context),
           rebindModel: async () => undefined,
           call: ((command) => client.call(command)) as NekModelRuntimeHandle["call"],
         },
@@ -94,6 +102,11 @@ export async function openManagedControl(input: {
       );
     throw error;
   }
+  const invalidate = lease.invalidate;
+  lease.invalidate = () => {
+    reads.invalidate();
+    invalidate();
+  };
   input.setLease(lease);
   return withModelReadAdmission(client, lease, reads);
 }

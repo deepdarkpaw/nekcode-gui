@@ -64,7 +64,7 @@ test("读取期间配置变化不丢：被超车的读取会重读，返回的�
   const readA = service.getView();
   await waitFor(() => countCalls(api, "listAvailableModels") === 1);
   api.setCatalog([CUSTOM, CUSTOM_2], [CUSTOM, CUSTOM_2]);
-  const readB = service.getView();
+  const readB = service.getView({ selection: null, workspacePath: "/other" });
   await waitFor(() => countCalls(api, "listAvailableModels") === 2);
 
   gateB.resolve();
@@ -98,7 +98,7 @@ test("重载失败经 getView 可见：抛重载错误，修好后的重试真�
   api.setReloadError(undefined);
   api.setCatalog([CUSTOM, CUSTOM_2], [CUSTOM, CUSTOM_2]);
   const recovered = await service.getView();
-  assert.equal(countCalls(api, "reloadRunningSessions"), 2);
+  assert.equal(countCalls(api, "refreshModelControl"), 2);
   assert.equal(recovered.providers[0]?.models.length, 2);
   service.dispose();
 });
@@ -109,7 +109,7 @@ test("读取失败同样抛出（不伪装成空表）", async () => {
   const service = serviceOf(api);
   await assert.rejects(
     () => service.getView(),
-    (error: unknown) => error === failure,
+    (error: unknown) => error instanceof Error && error.cause === failure,
   );
   api.setReadError(undefined);
   api.setCatalog([CUSTOM], [CUSTOM]);

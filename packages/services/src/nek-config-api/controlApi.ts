@@ -5,6 +5,7 @@
  * OAuth 与 schema 校验，只做请求与形状映射。nek 不可用时抛 `nek_unavailable`。
  */
 import type {
+  NekModelReadContext,
   NekAuthProviderStatus,
   NekBuiltinTool,
   NekCatalogModel,
@@ -30,8 +31,15 @@ import { settingsPath } from "./paths.js";
 export type ProviderSource = { providerId: string; draft?: NekProviderDraft };
 
 export interface NekControlGroup {
-  getModelCatalog: (target: NekConfigTarget, ids?: string[]) => Promise<NekCatalogModel[]>;
-  listAvailableModels: (target: NekConfigTarget) => Promise<NekCatalogModel[]>;
+  getModelCatalog: (
+    target: NekConfigTarget,
+    ids?: string[],
+    context?: NekModelReadContext,
+  ) => Promise<NekCatalogModel[]>;
+  listAvailableModels: (
+    target: NekConfigTarget,
+    context?: NekModelReadContext,
+  ) => Promise<NekCatalogModel[]>;
   listBuiltinTools: (target: NekConfigTarget) => Promise<NekBuiltinTool[]>;
   fetchProviderModels: (
     target: NekConfigTarget,
@@ -43,7 +51,10 @@ export interface NekControlGroup {
     modelId: string,
   ) => Promise<NekTestProviderResult>;
   testWebSearch: (target: NekConfigTarget, query: string) => Promise<NekTestWebSearchResult>;
-  getAuthStatus: (target: NekConfigTarget) => Promise<NekAuthProviderStatus[]>;
+  getAuthStatus: (
+    target: NekConfigTarget,
+    context?: NekModelReadContext,
+  ) => Promise<NekAuthProviderStatus[]>;
   startLogin: (target: NekConfigTarget, provider: string) => Promise<NekLoginSession>;
   answerLoginPrompt: (loginId: string, promptId: string, value: string) => Promise<void>;
   cancelLogin: (loginId: string) => Promise<void>;
@@ -118,19 +129,22 @@ function overridesOf(draft: NekProviderDraft): NekProviderOverrides {
 
 export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
   return {
-    getModelCatalog: async (target, ids) => {
-      const control = await runtime.control(target);
-      const data = await control.call({
-        type: "get_model_catalog",
-        ...(ids && ids.length > 0 ? { ids } : {}),
-      });
+    getModelCatalog: async (target, ids, context) => {
+      const control = await runtime.control(target, context);
+      const data = await control.call(
+        {
+          type: "get_model_catalog",
+          ...(ids && ids.length > 0 ? { ids } : {}),
+        },
+        context,
+      );
       // `get_model_catalog` 已经是契约形状，不需要再映射。
       return data.models ?? [];
     },
 
-    listAvailableModels: async (target) => {
-      const control = await runtime.control(target);
-      const data = await control.call({ type: "get_available_models" });
+    listAvailableModels: async (target, context) => {
+      const control = await runtime.control(target, context);
+      const data = await control.call({ type: "get_available_models" }, context);
       return (data.models ?? []).map(toCatalogModel);
     },
 
@@ -167,7 +181,7 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
       return await control.call({ type: "test_web_search", query });
     },
 
-    getAuthStatus: async (target) => await runtime.login.authStatus(target),
+    getAuthStatus: async (target, context) => await runtime.login.authStatus(target, context),
 
     startLogin: async (target, provider) => await runtime.login.start(target, provider),
 
