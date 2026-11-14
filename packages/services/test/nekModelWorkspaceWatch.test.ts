@@ -43,7 +43,7 @@ test("MW-I1: real config watch/settings owner updates only the changed workspace
   assert.equal(beforeA.preferredSelection?.options?.reasoningLevel, "low");
   assert.equal(beforeB.preferredSelectionIssue, "configured-default-unavailable");
   events.length = 0;
-  const reloads = facts.calls.filter((call) => call.method === "reloadRunningSessions").length;
+  const reloads = facts.calls.filter((call) => call.method === "refreshModelControl").length;
   harness.remote.setFile(`${B}.tmp`, settings("a", "high"));
   await harness.remote.rename(`${B}.tmp`, B);
   t.mock.timers.tick(1000);
@@ -57,10 +57,7 @@ test("MW-I1: real config watch/settings owner updates only the changed workspace
     beforeA.revision,
     "defaults-only change does not mutate catalog revision",
   );
-  assert.equal(
-    facts.calls.filter((call) => call.method === "reloadRunningSessions").length,
-    reloads,
-  );
+  assert.equal(facts.calls.filter((call) => call.method === "refreshModelControl").length, reloads);
   stopA.dispose();
   events.length = 0;
   harness.remote.setFile(A, settings("gone", "high"));

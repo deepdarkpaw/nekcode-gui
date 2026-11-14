@@ -15,6 +15,7 @@
  * 同名服务回答），因此这里不猜、也不接受“本地表代替远端”的目标参数。
  */
 import type {
+  NekModelReadContext,
   NekAuthProviderStatus,
   NekCatalogModel,
   INekConfigApi,
@@ -24,19 +25,33 @@ import type {
   NekSettingsReadResult,
 } from "@zcode/shared/nek-protocol";
 import { clampNekThinkingLevel } from "./nekThinkingLevel.js";
+import { NekModelReadBudget, waitForModelRead, assertModelRead } from "../nek-config-api/index.js";
 
 /** 事实读取只需要 `INekConfigApi` 的这些方法；生产环境注入真实实现。 */
 export interface NekModelFactsApi extends Pick<
   INekConfigApi,
-  | "listAvailableModels"
-  | "getModelCatalog"
-  | "getAuthStatus"
-  | "readSettings"
-  | "reloadRunningSessions"
-  | "watch"
+  "listAvailableModels" | "getModelCatalog" | "getAuthStatus" | "readSettings" | "watch"
 > {
   /** Content-owning API ports admit their own model RPCs; non-owning ports require explicit reload. */
   readonly ownsModelRuntimeFreshness?: boolean;
+  readonly modelReadMs?: number;
+  refreshModelControl(
+    target: NekConfigTarget,
+    context?: NekModelReadContext,
+  ): Promise<NekSessionReloadOutcome>;
+  listAvailableModels(
+    target: NekConfigTarget,
+    context?: NekModelReadContext,
+  ): Promise<NekCatalogModel[]>;
+  getModelCatalog(
+    target: NekConfigTarget,
+    ids?: string[],
+    context?: NekModelReadContext,
+  ): Promise<NekCatalogModel[]>;
+  getAuthStatus(
+    target: NekConfigTarget,
+    context?: NekModelReadContext,
+  ): Promise<NekAuthProviderStatus[]>;
   readModelsConfig(target: NekConfigTarget): Promise<Pick<NekModelsConfigView, "providers">>;
 }
 
@@ -70,12 +85,15 @@ export interface NekModelFacts {
   readonly defaults: NekModelFactsDefaults;
 }
 
-export interface NekModelFactsReadOptions {
+export interface NekModelFactsReadOptions extends NekModelReadContext {
   /** 目标机器上的 workspace 根目录；提供时按项目级配置合并默认值。 */
   readonly cwd?: string;
 }
 
 export interface NekModelFactsSource {
+  readonly modelReadMs?: number;
+  /** Host-local numeric timing diagnostics; never accepted model facts or persisted state. */
+  reportReadTiming?(timings: Readonly<Record<string, number>>): void;
   /** 总是读最新事实；失败直接抛出 nek 的结构化错误。 */
   read(options?: NekModelFactsReadOptions): Promise<NekModelFacts>;
   /** 事实可能过期的信号（配置变化）；不携带快照，调用方重新 `read()`。 */
@@ -103,12 +121,37 @@ export class NekModelFactsReloadError extends Error {
   }
 }
 
+/** Preserve the failing port/command and original cause, never replace failure with empty facts. */
+export class NekModelFactsReadError extends Error {
+  constructor(
+    readonly stage: string,
+    cause: unknown,
+  ) {
+    super(
+      `nek model facts ${stage} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "NekModelFactsReadError";
+  }
+}
+
+function readStage<T>(stage: string, read: () => Promise<T>): Promise<T> {
+  return Promise.resolve()
+    .then(read)
+    .catch((cause: unknown) => {
+      throw new NekModelFactsReadError(stage, cause);
+    });
+}
+
 /** Scope leases own watch errors; one shared epoch/flight owns control reload admission. */
 export function createNekModelFactsSource(
   api: NekModelFactsApi,
   options: {
     readonly target?: NekConfigTarget;
-    readonly log?: { warn: (traceId: undefined, ...args: unknown[]) => void };
+    readonly log?: {
+      warn: (traceId: undefined, ...args: unknown[]) => void;
+      debug?: (traceId: undefined, ...args: unknown[]) => void;
+    };
   } = {},
 ): NekModelFactsSource {
   const target = options.target ?? NEK_LOCAL_TARGET;
@@ -123,21 +166,30 @@ export function createNekModelFactsSource(
   const globalErrors = new Map<string, string>();
   const globalRevisions = new Map<string, string>();
   let disposed = false;
+  const lifetime = new AbortController();
+  let dirty = false;
   let epoch = 0;
   let loadedEpoch = 0;
   let reloading: Promise<void> | undefined;
 
-  const reload = async (): Promise<void> => {
+  const reload = async (context?: NekModelReadContext): Promise<void> => {
     const generation = epoch;
+    dirty = false;
     let outcome: NekSessionReloadOutcome;
     try {
-      outcome = await api.reloadRunningSessions(target);
+      outcome = await waitForModelRead(api.refreshModelControl(target, context), context);
     } catch (error) {
       throw new NekModelFactsReloadError(error instanceof Error ? error.message : String(error));
     }
     const failures = outcome.failures.filter(
       (failure) => failure.sessionKey === "control" || failure.sessionKey === "runtime",
     );
+    const diagnostics = outcome.diagnostics.filter((item) => item.severity === "error");
+    if (diagnostics.length || outcome.deferred)
+      throw new NekModelFactsReloadError(
+        diagnostics.map((item) => item.message).join("; ") || "control reload deferred",
+        outcome,
+      );
     if (failures.length > 0) {
       throw new NekModelFactsReloadError(
         failures.map((failure) => failure.message).join("; "),
@@ -169,30 +221,65 @@ export function createNekModelFactsSource(
   };
 
   return {
+    modelReadMs: api.modelReadMs,
+    reportReadTiming: (timings) =>
+      options.log?.debug?.(undefined, "[model-selection] view timing", { timings }),
     read: async (readOptions) => {
-      const cwd = readOptions?.cwd?.trim() ?? "";
-      assertHealthy(cwd);
-      for (let attempt = 0; loadedEpoch !== epoch; attempt += 1) {
-        if (attempt === 3)
-          throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
-        if (!reloading)
-          reloading = reload().finally(() => {
-            reloading = undefined;
-          });
-        await reloading;
+      const budget = new NekModelReadBudget(api.modelReadMs, {
+        ...readOptions,
+        signal: readOptions?.signal
+          ? AbortSignal.any([lifetime.signal, readOptions.signal])
+          : lifetime.signal,
+      });
+      const context = budget.context;
+      try {
+        assertModelRead(context);
+        const cwd = readOptions?.cwd?.trim() ?? "";
         assertHealthy(cwd);
+        for (let attempt = 0; loadedEpoch !== epoch; attempt += 1) {
+          if (attempt === 3)
+            throw new NekModelFactsReloadError("Configuration kept changing; retry the read");
+          if (!reloading) {
+            const refreshBudget = new NekModelReadBudget(api.modelReadMs, {
+              signal: lifetime.signal,
+              deadline: context.deadline,
+              stage: context.stage,
+            });
+            reloading = reload(refreshBudget.context).finally(() => {
+              refreshBudget.finish();
+              refreshBudget.abort();
+              reloading = undefined;
+            });
+          }
+          await waitForModelRead(reloading, context);
+          assertHealthy(cwd);
+        }
+        context?.stage?.("facts");
+        const [available, catalog, authStatus, modelsConfig, settings] = await waitForModelRead(
+          Promise.all([
+            readStage("get_available_models", () => api.listAvailableModels(target, context)),
+            readStage("get_model_catalog", () => api.getModelCatalog(target, undefined, context)),
+            readStage("auth_status", () => api.getAuthStatus(target, context)),
+            readStage("models-config", () => api.readModelsConfig(target)),
+            readStage("settings", () =>
+              cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
+            ),
+          ]),
+          context,
+        );
+        assertModelRead(context);
+        assertHealthy(cwd);
+        if (settings.diagnostics.length > 0)
+          throw new NekModelFactsReadError(
+            "settings",
+            new Error(settings.diagnostics.map((item) => item.message).join("; ")),
+          );
+        return composeFacts({ available, catalog, authStatus, modelsConfig, settings });
+      } finally {
+        const timings = budget.finish();
+        budget.abort();
+        options.log?.debug?.(undefined, "[model-selection] read timing", { timings });
       }
-      const [available, catalog, authStatus, modelsConfig, settings] = await Promise.all([
-        api.listAvailableModels(target),
-        api.getModelCatalog(target),
-        api.getAuthStatus(target),
-        api.readModelsConfig(target),
-        cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
-      ]);
-      assertHealthy(cwd);
-      if (settings.diagnostics.length > 0)
-        throw new Error(settings.diagnostics.map((item) => item.message).join("; "));
-      return composeFacts({ available, catalog, authStatus, modelsConfig, settings });
     },
     onDidChange: (listener, readOptions) => {
       if (disposed) throw new Error("NekModelFactsSource 已 dispose");
@@ -229,7 +316,10 @@ export function createNekModelFactsSource(
                 else globalErrors.delete(change.file);
                 // Only models.json has content-fenced RPC admission. Auth/settings changes
                 // still need the existing reload path (including external OAuth login/logout).
-                if (!api.ownsModelRuntimeFreshness || name !== "models.json") epoch += 1;
+                if (!api.ownsModelRuntimeFreshness || name !== "models.json") {
+                  if (!dirty) epoch += 1;
+                  dirty = true;
+                }
                 for (const scope of scopes.values()) {
                   notifyListeners(scope.listeners);
                 }
@@ -266,6 +356,7 @@ export function createNekModelFactsSource(
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      lifetime.abort(new Error("NekModelFactsSource 已 dispose"));
       for (const state of scopes.values()) state.stop();
       scopes.clear();
       globalErrors.clear();

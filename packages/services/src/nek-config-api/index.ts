@@ -15,6 +15,12 @@
  * - `nekConfigApi.ts`：把上面拼成 `INekConfigApi`。
  */
 export { NekConfigApi } from "./nekConfigApi.js";
+export {
+  DEFAULT_MODEL_READ_MS,
+  NekModelReadBudget,
+  assertModelRead,
+  waitForModelRead,
+} from "./modelReadLifetime.js";
 export { NekConfigError } from "./errors.js";
 export type { NekConfigErrorShape } from "./errors.js";
 export {

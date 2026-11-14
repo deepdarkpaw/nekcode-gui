@@ -1,4 +1,9 @@
-import type { NekModelRuntimeLease, NekRpcCommand } from "@zcode/shared/nek-protocol";
+import type {
+  NekModelReadContext,
+  NekModelRuntimeLease,
+  NekRpcCommand,
+} from "@zcode/shared/nek-protocol";
+import { assertModelRead, NekModelReadBudget, waitForModelRead } from "./modelReadLifetime.js";
 import type { NekControlClient } from "./control.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { modelRuntimeFingerprint } from "./modelRuntime.js";
@@ -14,13 +19,34 @@ export function withModelReadAdmission(
     respondExtensionUi: (response) => client.respondExtensionUi(response),
     setStructuredHandler: (handler) => client.setStructuredHandler(handler),
     close: () => client.close(),
-    call: ((command: NekRpcCommand) => {
-      const call = () => client.call(command);
+    call: ((command: NekRpcCommand, context?: NekModelReadContext) => {
+      const call = () => client.call(command, context);
       if (command.type === "get_available_models" || command.type === "get_model_catalog")
-        return reads.run(command, () => lease.run("selection", call));
+        return reads.run(
+          command,
+          (shared) =>
+            lease.run(
+              "selection",
+              () => {
+                shared.stage?.("facts");
+                return client.call(command, shared);
+              },
+              shared,
+            ),
+          context,
+        );
+      if (command.type === "auth_status" && context)
+        return lease.run(
+          "selection",
+          () => {
+            context.stage?.("facts");
+            return call();
+          },
+          context,
+        );
       if (command.type === "reload") {
         reads.invalidate();
-        return lease.reload();
+        return lease.reload(context);
       }
       if (command.type === "auth_login" || command.type === "auth_logout") {
         reads.invalidate();
@@ -38,7 +64,10 @@ type ModelReadCommand =
 
 /** Coalesce identical readonly model RPCs, never selections/inputs or settled results. */
 export class NekControlModelReads {
-  private readonly flights = new Map<string, Promise<unknown>>();
+  private readonly flights = new Map<
+    string,
+    { promise: Promise<unknown>; budget: NekModelReadBudget; waiters: number }
+  >();
   private generation = 0;
   private disposed = false;
 
@@ -49,31 +78,66 @@ export class NekControlModelReads {
     this.generation += 1;
   }
 
-  async run<T>(command: ModelReadCommand, read: () => Promise<T>): Promise<T> {
+  async run<T>(
+    command: ModelReadCommand,
+    read: (context: NekModelReadContext) => Promise<T>,
+    context?: NekModelReadContext,
+  ): Promise<T> {
+    assertModelRead(context);
     if (this.disposed) throw new Error("nek model reads disposed");
     const generation = this.generation;
-    const fingerprint = await modelRuntimeFingerprint(this.executor);
+    const fingerprint = await waitForModelRead(modelRuntimeFingerprint(this.executor), context);
+    assertModelRead(context);
     if (this.disposed) throw new Error("nek model reads disposed");
     const key = JSON.stringify([generation, fingerprint, command]);
-    const existing = this.flights.get(key);
-    if (existing) return (await existing) as T;
-    if (this.flights.size >= MAX_READ_FLIGHTS)
-      throw new Error("nek model read capacity exceeded; retry the read");
-    const pending = Promise.resolve()
-      .then(read)
-      .then((result) => {
-        if (this.disposed) throw new Error("nek model reads disposed");
-        return result;
-      })
-      .finally(() => {
-        if (this.flights.get(key) === pending) this.flights.delete(key);
+    let flight = this.flights.get(key);
+    if (!flight) {
+      if (this.flights.size >= MAX_READ_FLIGHTS)
+        throw new Error("nek model read capacity exceeded; retry the read");
+      // Shared work has its own deadline, not the cancellation signal of its first consumer.
+      const remaining =
+        context?.deadline === undefined ? undefined : Math.max(0, context.deadline - Date.now());
+      const budget = new NekModelReadBudget(remaining, {
+        deadline: context?.deadline,
+        stage: context?.stage,
       });
-    this.flights.set(key, pending);
-    return await pending;
+      flight = { promise: Promise.resolve(), budget, waiters: 0 };
+      const owned = flight;
+      owned.promise = waitForModelRead(
+        Promise.resolve().then(() => {
+          assertModelRead(budget.context);
+          return read(budget.context);
+        }),
+        budget.context,
+      )
+        .then((result) => {
+          if (this.disposed) throw new Error("nek model reads disposed");
+          assertModelRead(budget.context);
+          return result;
+        })
+        .finally(() => {
+          budget.finish();
+          if (this.flights.get(key) === owned) this.flights.delete(key);
+        });
+      this.flights.set(key, owned);
+    }
+    if (flight.waiters >= 1024) throw new Error("nek model read waiter capacity exceeded; retry");
+    flight.waiters += 1;
+    try {
+      return (await waitForModelRead(flight.promise, context)) as T;
+    } finally {
+      flight.waiters -= 1;
+      if (flight.waiters === 0) {
+        flight.budget.abort();
+        if (this.flights.get(key) === flight) this.flights.delete(key);
+      }
+    }
   }
 
   dispose(): void {
     this.disposed = true;
+    for (const flight of this.flights.values())
+      flight.budget.abort(new Error("nek model reads disposed"));
     this.flights.clear();
   }
 }

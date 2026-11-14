@@ -16,7 +16,7 @@ function gate<T>() {
 }
 
 /** Opening/restoring views fans out Root/composer/readiness reads while a control process is busy. */
-test("concurrent model views share control reads instead of exhausting model admission slots", async () => {
+test("ML3: concurrent model views share control reads instead of exhausting model admission slots", async () => {
   const h = runtimeHarness();
   const service = createNekModelSelectionService({ facts: createNekModelFactsSource(h.configApi) });
   try {
@@ -146,7 +146,7 @@ test("unique in-flight work is bounded and dispose rejects late completion", asy
   }
 });
 
-test("a freshly spawned control process already loaded models.json, so its first read needs no proving reload", async () => {
+test("ML1: a freshly spawned control process already loaded models.json, so its first read needs no proving reload", async () => {
   const h = runtimeHarness();
   try {
     await h.configApi.listAvailableModels({ kind: "local" });
@@ -160,7 +160,7 @@ test("a freshly spawned control process already loaded models.json, so its first
   }
 });
 
-test("content changed between spawn and ACK is never seeded, so freshness still needs a reload", async () => {
+test("ML1: content changed between spawn and ACK is never seeded, so freshness still needs a reload", async () => {
   const h = runtimeHarness();
   try {
     // Resolve the spawn-time fingerprint first, then rewrite the file: the pair now differs.

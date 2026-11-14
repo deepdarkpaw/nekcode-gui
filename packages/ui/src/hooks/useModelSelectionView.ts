@@ -27,19 +27,6 @@ interface OwnedModelSelectionState {
   state: ModelSelectionState;
 }
 
-// 首读的临时 IO 失败未必产生失效信号；只重读两次，不轮询业务状态或重试写操作。
-const INITIAL_READ_RETRY_DELAYS = [500, 1500] as const;
-
-function isTransientReadError(cause: unknown): boolean {
-  if (!cause || typeof cause !== "object") return false;
-  const error = cause as { code?: unknown; name?: unknown; message?: unknown };
-  return (
-    ["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EAI_AGAIN"].includes(String(error.code)) ||
-    (error.name === "TypeError" &&
-      ["Failed to fetch", "fetch failed", "Load failed"].includes(String(error.message)))
-  );
-}
-
 function initialState(
   service: IModelSelectionService | null,
   enabled: boolean,
@@ -87,45 +74,63 @@ export function useModelSelectionServiceView(
     const owner = { service: normalizedService, enabled, unavailableReason, inputKey };
     let disposed = false;
     let request = 0;
-    let retryCount = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    const cancelRetry = () => {
-      if (retryTimer !== undefined) clearTimeout(retryTimer);
-      retryTimer = undefined;
-    };
+    let active = false;
+    let dirty = false;
+    let batchStartedAt = Date.now();
     setOwned({
       ...owner,
       state: initialState(normalizedService, enabled, unavailableReason),
     });
     if (!enabled || !normalizedService) return;
 
-    const read = (): void => {
-      cancelRetry();
+    const read = (followUp = false): void => {
+      if (!followUp) batchStartedAt = Date.now();
+      active = true;
+      dirty = false;
       const current = ++request;
       setOwned({ ...owner, state: { status: "loading" } });
-      void normalizedService.getView(stableInput).then(
+      void normalizedService.getView(stableInput, { elapsedMs: Date.now() - batchStartedAt }).then(
         (view) => {
           if (disposed || current !== request) return;
+          active = false;
+          if (dirty && !followUp) {
+            read(true);
+            return;
+          }
+          if (dirty) {
+            setOwned({
+              ...owner,
+              state: {
+                status: "error",
+                error: new Error("Model configuration kept changing; retry the read"),
+              },
+            });
+            return;
+          }
           setOwned({ ...owner, state: { status: "ready", view } });
         },
         (cause: unknown) => {
           if (disposed || current !== request) return;
+          active = false;
           const error = cause instanceof Error ? cause : new Error(String(cause));
           logger.warn("[model-selection] 目标 Host View 读取失败", { error });
           setOwned({ ...owner, state: { status: "error", error } });
-          const delay = INITIAL_READ_RETRY_DELAYS[retryCount];
-          if (delay !== undefined && isTransientReadError(cause)) {
-            retryCount += 1;
-            retryTimer = setTimeout(read, delay);
-          }
         },
       );
+    };
+    const invalidate = (): void => {
+      if (disposed) return;
+      if (active) {
+        dirty = true;
+        return;
+      }
+      read();
     };
     let subscription: { dispose(): void };
     try {
       subscription = normalizedService.onDynamicDidChange({
         workspacePath: stableInput?.workspacePath,
-      })(read);
+      })(invalidate);
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       logger.warn("[model-selection] 目标 Host watch 订阅失败", { error });
@@ -135,7 +140,7 @@ export function useModelSelectionServiceView(
     read();
     return () => {
       disposed = true;
-      cancelRetry();
+      request += 1;
       subscription.dispose();
     };
   }, [enabled, normalizedService, reloadVersion, unavailableReason, inputKey, stableInput]);

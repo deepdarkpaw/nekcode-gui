@@ -6,6 +6,7 @@
  * `mcp_test` 这类"读配置、试连接"的命令（见 `NEK_CONTROL_COMMANDS`）。
  */
 import type {
+  NekModelReadContext,
   NekAuthEventRecord,
   NekConfigTarget,
   NekExtensionUiResponse,
@@ -21,6 +22,7 @@ import { NekProcessPool } from "../nek-agent/nekProcessPool.js";
 import type { NekPooledProcess } from "../nek-agent/nekProcessPool.js";
 import { asNekConfigError, nekUnavailable } from "./errors.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
+import { assertModelRead, waitForModelRead } from "./modelReadLifetime.js";
 
 /** 结构化交互处理器（登录期间挂在控制进程上）。`signal` 在 nek 侧撤销请求时 abort。 */
 export type NekStructuredHandler = (
@@ -32,6 +34,7 @@ export type NekStructuredHandler = (
 export interface NekControlClient {
   call: <C extends NekRpcCommandType>(
     command: NekRpcCommandOfType<C>,
+    context?: NekModelReadContext,
   ) => Promise<NekRpcResponseDataFor<C>>;
   onAuthEvent: (listener: (record: NekAuthEventRecord) => void) => () => void;
   respondExtensionUi: (response: NekExtensionUiResponse) => void;
@@ -71,8 +74,10 @@ export async function createNekControlClient(options: {
   target: NekConfigTarget;
   executor: NekConfigHostExecutor;
   logger?: NekControlClientLogger;
+  context?: NekModelReadContext;
 }): Promise<NekControlClient> {
   const { executor, logger } = options;
+  let startupContext = options.context;
   let structuredHandler: NekStructuredHandler | undefined;
   const authListeners = new Set<(record: NekAuthEventRecord) => void>();
   const pool = new NekProcessPool<ControlProcess>({
@@ -81,8 +86,16 @@ export async function createNekControlClient(options: {
     },
     createControlProcess: async () => {
       let handle;
+      const context = startupContext;
       try {
+        assertModelRead(context);
+        // Locator/executor ports may not be interruptible. Fence before spawn and retire a late
+        // handle; never let a cancelled startup register a usable control process.
         handle = await executor.spawnNek(["--mode", "rpc", "--control"]);
+        if (context?.signal?.aborted) {
+          handle.kill();
+          context.signal.throwIfAborted();
+        }
       } catch (error) {
         throw unavailable(error);
       }
@@ -113,9 +126,16 @@ export async function createNekControlClient(options: {
     void pool.dispose();
     throw unavailable(error);
   });
+  // The initial read's deadline must not poison later crash recovery of this reusable client.
+  startupContext = undefined;
   return {
     // 每次调用都取当前进程：控制进程崩过之后，退避重启出来的新进程会接上。
-    call: async (command) => (await pool.ensureControl()).client.call(command),
+    call: async (command, context) => {
+      assertModelRead(context);
+      const process = await waitForModelRead(pool.ensureControl(), context);
+      assertModelRead(context);
+      return await process.client.call(command, context);
+    },
     onAuthEvent: (listener) => {
       authListeners.add(listener);
       return () => {

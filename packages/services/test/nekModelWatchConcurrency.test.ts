@@ -23,7 +23,7 @@ test("MW-C1: one inflight invalidated without a second reader cannot commit stal
   const view = await pending;
   assert.equal(view.providers[0]?.models[0]?.modelId, "b");
   assert.equal(view.revision, 1, "stale facts never committed a revision");
-  assert.equal(countCalls(api, "reloadRunningSessions"), 1);
+  assert.equal(countCalls(api, "refreshModelControl"), 1);
   service.dispose();
 });
 
@@ -31,8 +31,12 @@ test("MW-C2: a newer failed read fences an older successful snapshot", async () 
   const { api, service } = setup();
   const gate = api.gateNextRead();
   const older = service.getView();
+  await waitFor(() => countCalls(api, "listAvailableModels") === 1);
   api.setReadError(new Error("newer read failed"));
-  await assert.rejects(service.getView(), /newer read failed/);
+  await assert.rejects(
+    service.getView({ selection: null, workspacePath: "/other" }),
+    /newer read failed/,
+  );
   api.setReadError(undefined);
   api.setCatalog([B], [B]);
   gate.resolve();
@@ -46,7 +50,7 @@ test("MW-C6: a superseded old failure cannot overwrite a newer successful observ
   const gate = api.gateNextRead();
   const older = service.getView();
   api.setCatalog([B], [B]);
-  const newer = await service.getView();
+  const newer = await service.getView({ selection: null, workspacePath: "/other" });
   gate.reject(new Error("outdated failure"));
   assert.equal((await older).providers[0]?.models[0]?.modelId, "b");
   assert.equal((await service.getView()).revision, newer.revision);
@@ -69,7 +73,7 @@ test("MW-C7: a throwing invalidation listener cannot prevent inflight epoch fenc
 
 test("MW-C3: retry exhaustion is visible, not a last stale view", async () => {
   const { api, service } = setup();
-  const gates = [api.gateNextRead(), api.gateNextRead(), api.gateNextRead()];
+  const gates = [api.gateNextRead(), api.gateNextRead()];
   const pending = service.getView();
   const rejected = assert.rejects(pending, /changed during every read/);
   for (const [index, gate] of gates.entries()) {
@@ -91,14 +95,14 @@ test("MW-C4: concurrent readers share reload; invalidation during reload repeats
   const secondGate = api.gateNextReload();
   const first = service.getView();
   const second = service.getView();
-  assert.equal(countCalls(api, "reloadRunningSessions"), 1);
+  assert.equal(countCalls(api, "refreshModelControl"), 1);
   api.notifyWatch();
   firstGate.resolve();
-  await waitFor(() => countCalls(api, "reloadRunningSessions") === 2);
+  await waitFor(() => countCalls(api, "refreshModelControl") === 2);
   assert.equal(countCalls(api, "listAvailableModels"), 1, "no facts IO between outdated reloads");
   secondGate.resolve();
   await Promise.all([first, second]);
-  assert.equal(countCalls(api, "reloadRunningSessions"), 2);
+  assert.equal(countCalls(api, "refreshModelControl"), 2);
   service.dispose();
 });
 
@@ -116,7 +120,7 @@ test("MW-W1: global + two workspace leases are scoped, reference counted and rel
   api.notifyWatch("/a");
   assert.deepEqual(notifications, ["a", "a2"]);
   assert.equal(
-    countCalls(api, "reloadRunningSessions"),
+    countCalls(api, "refreshModelControl"),
     0,
     "project defaults do not reload other sessions",
   );

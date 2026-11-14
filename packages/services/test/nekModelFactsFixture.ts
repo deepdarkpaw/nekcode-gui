@@ -161,8 +161,8 @@ export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFacts
       const view = cwd ? (options.effectiveByCwd?.[cwd] ?? effective) : effective;
       return settingsView(view);
     },
-    reloadRunningSessions: async (target, cwd) => {
-      calls.push({ method: "reloadRunningSessions", target, cwd });
+    refreshModelControl: async (target, cwd) => {
+      calls.push({ method: "refreshModelControl", target, cwd });
       const gate = reloadGates.shift();
       if (gate) await gate.promise;
       if (reloadError) throw reloadError;

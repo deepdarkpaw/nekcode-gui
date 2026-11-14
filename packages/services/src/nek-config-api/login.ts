@@ -11,6 +11,7 @@
  * `auth_event` → `{type:"auth_event"}`；RPC 结果 → `done` / `failed`。
  */
 import type {
+  NekModelReadContext,
   NekAuthPromptPayload,
   NekAuthProviderStatus,
   NekAuthProviderStatusWire,
@@ -70,7 +71,7 @@ interface LoginRun {
 
 export interface NekLoginManagerOptions {
   /** 取目标机器的控制进程（懒启动）。 */
-  control: (target: NekConfigTarget) => Promise<NekControlClient>;
+  control: (target: NekConfigTarget, context?: NekModelReadContext) => Promise<NekControlClient>;
   /** 登录在没有待答复提示时被取消：终止控制进程以中断 nek 侧的流程。 */
   abort?: (target: NekConfigTarget) => Promise<void>;
   /** 远程目标需要端口转发时由 host 提供；调用方拥有并释放返回的 lease。 */
@@ -90,9 +91,12 @@ export class NekLoginManager {
 
   constructor(private readonly options: NekLoginManagerOptions) {}
 
-  async authStatus(target: NekConfigTarget): Promise<NekAuthProviderStatus[]> {
-    const control = await this.options.control(target);
-    const data = await control.call({ type: "auth_status" });
+  async authStatus(
+    target: NekConfigTarget,
+    context?: NekModelReadContext,
+  ): Promise<NekAuthProviderStatus[]> {
+    const control = await this.options.control(target, context);
+    const data = await control.call({ type: "auth_status" }, context);
     return data.providers.map(normalizeAuthStatus);
   }
 

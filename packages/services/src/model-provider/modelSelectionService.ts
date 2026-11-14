@@ -16,8 +16,15 @@ export interface IModelSelectionService {
   readonly onDidChange: Event<void>;
   /** Global + this workspace's invalidations. */
   onDynamicDidChange(scope: { readonly workspacePath?: string }): Event<void>;
-  /** Temporary read lease only; no historical workspace watch/cache is retained. */
-  getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView>;
+  /**
+   * Temporary workspace read lease only; no settled facts/cache is retained.
+   * `elapsedMs` carries renderer dirty-follow-up time across RPC without comparing remote clocks.
+   * Each caller keeps its remaining budget even when joining another caller's shared work.
+   */
+  getView(
+    input?: ModelSelectionViewInput,
+    read?: { readonly elapsedMs: number },
+  ): Promise<ModelSelectionView>;
 }
 
 export const IModelSelectionService = createServiceDescriptor<IModelSelectionService>(

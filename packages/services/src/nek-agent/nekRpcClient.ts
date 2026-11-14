@@ -1,5 +1,6 @@
 import type { Readable, Writable } from "node:stream";
 import type {
+  NekModelReadContext,
   NekAuthEventRecord,
   NekExtensionEvent,
   NekExtensionEvents,
@@ -85,6 +86,7 @@ export type NekRpcClientState = "open" | "closing" | "closed";
 interface PendingCall {
   command: string;
   timer: ReturnType<typeof setTimeout>;
+  detach: () => void;
   resolve: (data: unknown) => void;
   reject: (error: Error) => void;
 }
@@ -168,7 +170,9 @@ export class NekRpcClient {
    */
   async call<C extends NekRpcCommandType>(
     command: NekRpcCommandOfType<C>,
+    context?: NekModelReadContext,
   ): Promise<NekRpcResponseDataFor<C>> {
+    context?.signal?.throwIfAborted();
     const id = typeof command.id === "string" && command.id !== "" ? command.id : this.allocateId();
     const payload = { ...command, id };
     return await new Promise<NekRpcResponseDataFor<C>>((resolve, reject) => {
@@ -176,25 +180,39 @@ export class NekRpcClient {
         reject(new NekRpcClosedError(`nek RPC client is ${this.stateValue}`));
         return;
       }
-      const timeoutMs = resolveNekRpcTimeoutMs(
-        command.type,
-        this.options.timeouts,
-        this.options.defaultTimeoutMs,
+      const timeoutMs = Math.min(
+        resolveNekRpcTimeoutMs(command.type, this.options.timeouts, this.options.defaultTimeoutMs),
+        context?.deadline === undefined ? Infinity : Math.max(0, context.deadline - Date.now()),
       );
+      if (timeoutMs === 0) {
+        reject(new NekRpcTimeoutError(command.type, timeoutMs, id));
+        return;
+      }
+      const abort = () => {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        detach();
+        reject(context?.signal?.reason ?? new Error("nek RPC read cancelled"));
+      };
+      const detach = () => context?.signal?.removeEventListener("abort", abort);
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        detach();
         reject(new NekRpcTimeoutError(command.type, timeoutMs, id));
       }, timeoutMs);
       timer.unref?.();
       this.pending.set(id, {
         command: command.type,
         timer,
+        detach,
         resolve: (data) => resolve(data as NekRpcResponseDataFor<C>),
         reject,
       });
+      context?.signal?.addEventListener("abort", abort, { once: true });
       try {
         this.write(payload);
       } catch (error) {
+        detach();
         clearTimeout(timer);
         this.pending.delete(id);
         reject(error instanceof Error ? error : new Error(String(error)));
@@ -352,6 +370,7 @@ export class NekRpcClient {
     }
     this.pending.delete(id);
     clearTimeout(pending.timer);
+    pending.detach();
     if (record.success === true) {
       pending.resolve(record.data);
       return;
@@ -430,6 +449,7 @@ export class NekRpcClient {
     this.pending.clear();
     for (const entry of entries) {
       clearTimeout(entry.timer);
+      entry.detach();
       entry.reject(error instanceof Error ? error : new Error(String(error)));
     }
   }

@@ -1,12 +1,29 @@
 import type { NekReloadResult } from "./gui-rpc.js";
 import type { NekRpcCommandOfType, NekRpcCommandType, NekRpcResponseDataFor } from "./rpc.js";
 
+/** Bounded diagnostic vocabulary; never a model ID, path, credential or command body. */
+type NekModelReadStage =
+  | "start"
+  | "control-start"
+  | "control-ready"
+  | "queue"
+  | "reload"
+  | "facts"
+  | "shared-read";
+
+/** Host-local read lifetime; never serialized through renderer RPC. */
+export interface NekModelReadContext {
+  readonly signal?: AbortSignal;
+  readonly deadline?: number;
+  readonly stage?: (stage: NekModelReadStage) => void;
+}
+
 /** A live CLI writer, never a recipe for starting/reopening a session. */
 export interface NekModelRuntimeHandle {
   readonly sessionKey: string;
   readonly cwd: string;
   isWritable(): boolean;
-  reload(): Promise<NekReloadResult>;
+  reload(context?: NekModelReadContext): Promise<NekReloadResult>;
   rebindModel(): Promise<void>;
   call<C extends NekRpcCommandType>(
     command: NekRpcCommandOfType<C>,
@@ -15,8 +32,12 @@ export interface NekModelRuntimeHandle {
 
 /** Process-identity scoped admission; release it before detaching/replacing the process. */
 export interface NekModelRuntimeLease {
-  run<T>(kind: "selection" | "input", command: () => Promise<T>): Promise<T>;
-  reload(): Promise<NekReloadResult>;
+  run<T>(
+    kind: "selection" | "input",
+    command: () => Promise<T>,
+    context?: NekModelReadContext,
+  ): Promise<T>;
+  reload(context?: NekModelReadContext): Promise<NekReloadResult>;
   dispose(): void;
 }
 

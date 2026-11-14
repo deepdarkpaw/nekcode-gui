@@ -58,6 +58,13 @@ export class NekConfigApi implements INekConfigApi {
   /** Facts use content-fenced control admission rather than a second watcher epoch owner. */
   readonly ownsModelRuntimeFreshness = true;
 
+  /** Host-local read budget, wired by the existing GUI runtime config assembly. */
+  get modelReadMs(): number | undefined {
+    return this.options.config?.modelReadMs;
+  }
+  refreshModelControl: NekConfigRuntime["refreshModelControl"] = (...args) =>
+    this.runtime.refreshModelControl(...args);
+
   // ---- 目标 ----
 
   listTargets: INekConfigApi["listTargets"] = async () => await this.options.hosts.listTargets();
@@ -82,9 +89,9 @@ export class NekConfigApi implements INekConfigApi {
   fetchProviderModels: INekConfigApi["fetchProviderModels"] = (...args) =>
     this.control.fetchProviderModels(...args);
   testProvider: INekConfigApi["testProvider"] = (...args) => this.control.testProvider(...args);
-  getModelCatalog: INekConfigApi["getModelCatalog"] = (...args) =>
+  getModelCatalog: NekControlGroup["getModelCatalog"] = (...args) =>
     this.control.getModelCatalog(...args);
-  listAvailableModels: INekConfigApi["listAvailableModels"] = (...args) =>
+  listAvailableModels: NekControlGroup["listAvailableModels"] = (...args) =>
     this.control.listAvailableModels(...args);
   listBuiltinTools: INekConfigApi["listBuiltinTools"] = (...args) =>
     this.control.listBuiltinTools(...args);
@@ -97,7 +104,8 @@ export class NekConfigApi implements INekConfigApi {
 
   // ---- 账号登录 ----
 
-  getAuthStatus: INekConfigApi["getAuthStatus"] = (...args) => this.control.getAuthStatus(...args);
+  getAuthStatus: NekControlGroup["getAuthStatus"] = (...args) =>
+    this.control.getAuthStatus(...args);
   startLogin: INekConfigApi["startLogin"] = (...args) => this.control.startLogin(...args);
   answerLoginPrompt: INekConfigApi["answerLoginPrompt"] = (...args) =>
     this.control.answerLoginPrompt(...args);
