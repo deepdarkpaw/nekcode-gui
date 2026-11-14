@@ -4,6 +4,7 @@ import type { NekSessionLockHolder, NekSessionSummary } from "./gui-rpc.js";
 
 /** The CLI currently exposes a total count, not an enumerable persisted child directory. */
 export interface NekHistoryStatusSnapshot extends NekStatusSnapshot {
+  /** Persisted total and known persisted IDs in the bounded view; completeness is conservative. */
   historyChildren?: { total: number; loaded: number; complete: boolean };
 }
 

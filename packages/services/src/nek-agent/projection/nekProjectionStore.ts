@@ -10,6 +10,7 @@ import type {
   StreamablePath,
   StatePatch,
 } from "@zcode/shared/zcode-protocol-v4";
+import { streamAppendJsonBytes } from "./nekProjectionBytes.js";
 import { buildControlProjection, buildConversationSnapshot } from "./nekProjectionSnapshot.js";
 
 /**
@@ -238,7 +239,9 @@ export class NekProjectionStore {
     if (!current) return;
     const next = applyAppend(current, path, append);
     if (next === current) return;
-    this.reserveRow(next);
+    const bytes = this.rowBytes.get(rowId);
+    if (bytes === undefined) throw new Error("nek stream row is missing its byte ledger");
+    this.reserveRow(next, bytes + streamAppendJsonBytes(current, path, append));
     this.rows[this.rows.findIndex((row) => row.rowId === rowId)] = next;
     if (this.needsUpsert.has(rowId)) return;
     const list = this.pendingStream.get(rowId) ?? [];
@@ -356,8 +359,8 @@ export class NekProjectionStore {
   }
 
   /** Evict refetchable inactive bodies; a live turn that alone exceeds budget fails visibly. */
-  private reserveRow(row: ConversationRow): void {
-    const bytes = Buffer.byteLength(JSON.stringify(row), "utf8");
+  private reserveRow(row: ConversationRow, encodedBytes?: number): void {
+    const bytes = encodedBytes ?? Buffer.byteLength(JSON.stringify(row), "utf8");
     const previous = this.rowBytes.get(row.rowId) ?? 0;
     if (bytes > this.maxWindowBytes)
       throw new Error("nek live row exceeds 16 MB; bounded CLI content refs are required");

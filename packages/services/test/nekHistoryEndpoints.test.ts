@@ -83,6 +83,8 @@ const childSnapshot: NekSessionSnapshot = {
 test("HS5: old child outside20 is authorized in parent before bounded child read, without resume or parent body traversal", async () => {
   const h = harness({ entries: parentEntries(), childSnapshots: [childSnapshot] });
   try {
+    const status = await h.adapter.getNekStatusSnapshot(params);
+    assert.deepEqual(status.historyChildren, { total: 1, loaded: 0, complete: false });
     const preview = await h.adapter.getSubagentConversation({ ...params, id: child.id });
     assert.equal(preview.history.turns.length, 1);
     assert.equal(preview.status, "completed");

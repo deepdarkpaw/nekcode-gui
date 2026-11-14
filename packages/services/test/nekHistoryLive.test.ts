@@ -168,6 +168,40 @@ test("HS4: append-compatible rebuild keeps epoch, truncation rotates it", () => 
   }
 });
 
+test("HS4: independent projector generations never reuse the same epoch", () => {
+  const first = projectorFor();
+  const second = projectorFor();
+  try {
+    assert.notEqual(first.snapshot().logEpoch, second.snapshot().logEpoch);
+  } finally {
+    first.dispose();
+    second.dispose();
+  }
+});
+
+test("HS4: changed persisted bytes with the same leaf identity invalidate the old epoch", () => {
+  const projector = projectorFor();
+  try {
+    const before = projector.snapshot();
+    const changed = [{ ...entry, message: { ...entry.message, content: "replacement bytes" } }];
+    const page = fixtureHistory(changed, { type: "read_history_page" }) as NekHistoryPage;
+    const metadata = fixtureHistory(changed, {
+      type: "read_session_metadata",
+    }) as NekHistoryMetadata;
+    page.branchRevision = metadata.branchRevision = "changed-prefix-fingerprint";
+    assert.equal(projector.acceptsHistoryPage(page), false);
+    projector.loadHistory({ page, metadata });
+    assert.notEqual(projector.snapshot().logEpoch, before.logEpoch);
+    assert.ok(
+      projector
+        .snapshot()
+        .rows.window.some((row) => row.kind === "userInput" && row.text === "replacement bytes"),
+    );
+  } finally {
+    projector.dispose();
+  }
+});
+
 test("HS2: public-row helper removes private deferred read capabilities", () => {
   const projector = projectorFor();
   try {

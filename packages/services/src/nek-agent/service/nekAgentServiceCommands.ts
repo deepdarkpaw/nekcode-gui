@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { NEK_STATUS_FRAME_MAX_SUBAGENTS } from "@zcode/shared/nek-protocol";
 import type {
   NekAgentTypeInfo,
   NekBashResult,
@@ -137,7 +138,7 @@ export async function abortRetry(
 
 /**
  * 状态 feed 的权威快照：`nek.get_state`（运行态）、`get_session_stats`（用量）、
- * `extension_call nek.get_state`（todos/计划/子代理）与 `get_entries`（持久化子代理）一次取齐。
+ * `extension_call nek.get_state`（todos/计划/子代理）与 有界 history_page（持久化子代理）一次取齐。
  *
  * 四份事实里任何一份失败都会让整次快照失败：状态卡宁可继续显示上一份，也不拼半个快照。
  */
@@ -179,17 +180,23 @@ export async function getStatusSnapshot(
       branchRevision: page.branchRevision,
     }),
   );
+  const combined = [...live.subagents, ...restored];
+  const visible = new Set(
+    combined.slice(-NEK_STATUS_FRAME_MAX_SUBAGENTS).map((record) => record.id),
+  );
+  const loaded = [...persisted.keys()].filter((id) => visible.has(id)).length;
   return {
     historyChildren: {
       total: metadata.children.count,
-      loaded: live.subagents.length + restored.length,
-      complete: metadata.children.count <= live.subagents.length + restored.length,
+      loaded,
+      complete:
+        metadata.children.count === loaded && combined.length <= NEK_STATUS_FRAME_MAX_SUBAGENTS,
     },
     sessionKey: state.sessionId,
     running: state.isStreaming,
     compacting: state.isCompacting,
     pendingMessageCount: state.pendingMessageCount,
-    state: restored.length === 0 ? live : { ...live, subagents: [...live.subagents, ...restored] },
+    state: restored.length === 0 ? live : { ...live, subagents: combined },
     stats,
   };
 }

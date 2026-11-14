@@ -9,7 +9,7 @@ import { isNekState, type NekSessionPhase, type NekSessionRecord } from "./types
 /**
  * 会话状态与投影快照的装载，以及"生命周期世代"fence。
  *
- * `get_state` / `get_entries` / `get_session_stats` 是并行取的，各自耗时不同：
+ * `get_state` / `read_history_page` / `get_session_stats` 是并行取的，各自耗时不同：
  * `get_state` 可能在压缩开始之前就取到 `isCompacting=false`，而整批要到压缩开始之后
  * 才完成。这不是 CLI 误报，而是真实的异步陈旧结果。因此快照只在捕获的世代没有变化时
  * 才允许落地（覆盖 `state`、重建投影、收口待发输入）；世代变了就整批作废重取。
@@ -91,7 +91,7 @@ export async function initializeSessionState(
   );
 }
 
-/** 用 get_entries / get_state / get_session_stats 重建投影器快照（带世代 fence）。 */
+/** 用 read_history_page / metadata / state / stats 重建投影器快照（带世代 fence）。 */
 export async function reloadSessionSnapshot(
   context: NekSessionSnapshotContext,
   process: NekRpcProcess,
