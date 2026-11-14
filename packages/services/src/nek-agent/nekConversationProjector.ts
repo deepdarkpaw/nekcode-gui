@@ -203,6 +203,10 @@ export class NekConversationProjector {
     this.emitSnapshotToAll();
   }
 
+  get observedHistoryEntries(): number | undefined {
+    return this.history.observedEntries;
+  }
+
   resetHistoryProcessSeeds(): void {
     this.history.resetProcessSeeds();
   }

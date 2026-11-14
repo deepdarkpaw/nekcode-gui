@@ -13,6 +13,23 @@ import { boundHistoryResult, NekHistoryReadError } from "../service/nekHistoryRp
 import type { NekHistoryReadContext } from "../service/nekHistoryService.js";
 import type { NekAgentServiceAdapterLegacyTarget } from "./nekAgentServiceAdapterLegacySupport.js";
 
+function assertObservedEntries(
+  entries: readonly { position: number }[],
+  context: NekHistoryReadContext,
+  child: boolean,
+): void {
+  if (
+    !child &&
+    !context.readonly &&
+    context.observedEntries !== undefined &&
+    entries.some((entry) => entry.position >= context.observedEntries!)
+  )
+    throw new NekHistoryReadError(
+      "STALE_CURSOR",
+      "persisted history is ahead of the captured live owner; refetch after the live checkpoint",
+    );
+}
+
 type HistoryMethods = Pick<
   IZCodeAgentService,
   | "conversationHistoryPageV4"
@@ -21,13 +38,10 @@ type HistoryMethods = Pick<
   | "conversationHistoryContentV4"
 >;
 
-/** Never write persisted page bytes into the live owner. Existing live entities win on overlap. */
+/** Overlay the CAPTURED emitted owner view, never unflushed bytes that a later delta will append. */
 function preserveLive(rows: ConversationRow[], context: NekHistoryReadContext): ConversationRow[] {
   const live = new Map(
-    context.projector
-      .snapshot()
-      .rows.window.filter((row) => row.entityId)
-      .map((row) => [row.entityId, row]),
+    context.snapshot.rows.window.filter((row) => row.entityId).map((row) => [row.entityId, row]),
   );
   return rows.map((row) => {
     const current = live.get(row.entityId);
@@ -60,6 +74,11 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           aroundEntryId,
           turnLimit,
         });
+        assertObservedEntries(
+          [...page.entries, ...page.turns.map((turn) => turn.header)],
+          context,
+          Boolean(input.subagentId),
+        );
         if (
           !input.subagentId &&
           !beforeCursor &&
@@ -105,6 +124,11 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           turnId: input.turnId,
           cursor: input.cursor,
         });
+        assertObservedEntries(
+          [...page.entries, page.turn.header],
+          context,
+          Boolean(input.subagentId),
+        );
         const scope = input.subagentId
           ? `${page.sessionId}\0${page.branchRevision}`
           : page.sessionId;

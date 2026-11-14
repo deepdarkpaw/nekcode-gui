@@ -6,7 +6,10 @@ import type {
   NekHistoryResult,
   NekHistorySubagentRecord,
 } from "@zcode/shared/nek-protocol";
-import type { ConversationHistoryWatermark } from "@zcode/shared/zcode-protocol-v4";
+import type {
+  ConversationSnapshot,
+  ConversationHistoryWatermark,
+} from "@zcode/shared/zcode-protocol-v4";
 import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
 import {
   historyResult,
@@ -26,6 +29,9 @@ export interface NekHistoryReadContext {
   ): Promise<Extract<NekHistoryResponseData[C["type"]], { ok: true }>>;
   projector: NekConversationProjector;
   watermark: ConversationHistoryWatermark;
+  snapshot: ConversationSnapshot;
+  readonly: boolean;
+  observedEntries?: number;
   child?: Pick<NekHistorySubagentRecord, "id" | "sessionFile" | "status"> &
     Partial<NekHistorySubagentRecord>;
 }
@@ -68,6 +74,7 @@ export abstract class NekHistoryServiceBase extends NekAgentServiceRuntimeBase {
         if (!projector) throw new Error("nek history projection is not loaded");
         projector.flushNow();
         const initial = projector.snapshot();
+        const observedEntries = projector.observedHistoryEntries;
         const generation = record.historyGeneration;
         const epoch = record.stateEpoch;
         const path = record.path;
@@ -142,6 +149,9 @@ export abstract class NekHistoryServiceBase extends NekAgentServiceRuntimeBase {
           read,
           projector,
           child,
+          snapshot: initial,
+          readonly: record.readonly,
+          observedEntries,
           watermark: {
             atSeq: initial.seq,
             atRevision: initial.revision,

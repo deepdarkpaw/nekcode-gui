@@ -133,6 +133,10 @@ export class NekProjectorHistory {
     return page.entries.some((entry) => entry.id === this.source!.leafId);
   }
 
+  get observedEntries(): number | undefined {
+    return this.source?.nextPosition;
+  }
+
   resetProcessSeeds(): void {
     this.anchors.clear();
     this.pendingUserStarts.clear();

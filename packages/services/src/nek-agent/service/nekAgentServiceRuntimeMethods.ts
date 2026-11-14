@@ -299,7 +299,7 @@ export abstract class NekAgentServiceRuntimeBase {
     );
   }
 
-  /** 用 get_entries / get_state / get_session_stats 重建投影器快照（带生命周期世代 fence）。 */
+  /** 用 bounded history_page / metadata / state / stats 重建投影器快照（带生命周期世代 fence）。 */
   protected async refreshProcessSnapshot(
     record: NekSessionRecord,
     openTiming?: ConversationOpenTiming,

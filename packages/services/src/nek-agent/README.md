@@ -6,7 +6,9 @@
   `historyPages=1` is mandatory on the execution target; no full-read fallback.
 - `nekHistoryService.ts` holds the existing process lease, admits at most 16 reads,
   captures the projector watermark and rejects retired session/process/branch owners.
-  Page reads are request-local: no completed body cache and no prefix traversal.
+  Page bodies are request-local: no completed-output history cache and no prefix traversal.
+  A projector-owned six-page / 1 MB seed cache keeps only tool inputs and child anchors;
+  admitted old-target continuations can reuse these without retaining their output bodies.
 - `nekHistoryProjection.ts` derives sparse numeric identities from authoritative entry
   position + semantic block slot. Overflows and missing tool/spawn seeds fail explicitly.
   Display omissions (including null roots) become deferred rows with private refs,
@@ -18,8 +20,10 @@
 - Child reads validate the parent persisted relation or current live registry first,
   then read a bounded child page without resuming it. No raw child transcript API is
   used by the conversation preview. Status uses a source page, not `get_entries`.
-- Public share/export owners must call shared `stripPrivateHistoryRow` before public
-  serialization; normal private transport intentionally retains deferred references.
+- Public share/export owners must call shared `stripPrivateHistoryRow` or
+  `stripPrivateHistorySnapshot` before public serialization, in addition to existing
+  sanitizers. Those modules are outside this worker's edit boundary: helper invocation
+  is an explicit main-integration requirement. Private transport retains deferred refs.
 - **CLI gaps:** current history wire cannot enumerate old persisted child IDs (status
   exposes `historyChildren.{total,loaded,complete}`), or supply original spawn turn/tool
   anchors outside the page. Cold partial-turn reads without loaded tool anchors reject
