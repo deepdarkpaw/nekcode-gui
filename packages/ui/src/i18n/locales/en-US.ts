@@ -2947,6 +2947,8 @@ const enUS: Record<string, string> = {
   "nek.status.subagent.stop": "Stop",
   "nek.status.subagent.openPreview": "Preview {description} in side pane",
   "nek.status.subagent.previewTruncated": "{count} earlier rows omitted",
+  "nek.status.subagent.historyMore":
+    "{count} more subagents can be opened from links in the conversation",
   "nek.status.subagent.stopNamed": "Stop {description}",
   "nek.status.subagent.stopTimeout": "The stop request did not respond. Try again",
   "nek.status.subagent.stopAll": "Stop all",

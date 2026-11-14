@@ -10,6 +10,7 @@ import type { NekState } from "./gui-extension-api.js";
 import type { NekSessionStats } from "./rpc.js";
 import type { NekAgentSessionEvent } from "./rpc-events.js";
 import type { NekStoredAttachment } from "./rpc-messages.js";
+import type { NekHistoryChildren } from "./history.js";
 
 export const NEK_STATUS_FRAME_MAX_TODOS = 100;
 export const NEK_STATUS_FRAME_MAX_PLANS = 50;
@@ -47,6 +48,7 @@ export interface NekStatusSnapshot {
   pendingMessageCount: number;
   state: NekState;
   stats: NekSessionStats;
+  historyChildren?: NekHistoryChildren;
 }
 
 /**

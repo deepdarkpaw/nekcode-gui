@@ -681,7 +681,6 @@ export function SessionPane({
     setSharePreflightRetryToken((token) => token + 1);
     setSharePreflightVersion((version) => version + 1);
   }, [selectedShareProductTurnIds, sharePreflightCacheKey]);
-  const shareHydratedSessionRef = useRef<string | null>(null);
   const sharePreflight = useMemo<ConversationShareSelectionPreflightState>(() => {
     if (!shareInSelectionStage || !sessionId) {
       return { status: "idle" };
@@ -1532,13 +1531,14 @@ export function SessionPane({
   const handleFocusNekSubagent = useCallback(
     (id: string) => {
       if (!sessionId) return;
-      const record = useNekStatusStore.getState().sessions[sessionId]?.subagents.byId[id];
+      const status = useNekStatusStore.getState().sessions[sessionId];
+      const record = status?.subagents.byId[id] ?? status?.historyChildren?.items?.find((item) => item.id === id);
       if (!record) return;
       handleOpenSubagentSession({
         parentSessionId: sessionId,
         childSessionId: id,
-        subagentType: record.type,
-        title: record.description,
+        subagentType: record.type ?? "",
+        title: record.description ?? id,
       });
     },
     [handleOpenSubagentSession, sessionId],
@@ -3249,26 +3249,6 @@ export function SessionPane({
   const handleLoadOlder = useCallback(() => {
     return lease?.store.loadOlder();
   }, [lease]);
-
-  const handleLoadAllOlder = useCallback(() => {
-    return lease
-      ? lease.store.loadAllOlder()
-      : Promise.resolve({
-          status: "stale" as const,
-          logEpoch: snapshot?.logEpoch ?? "unknown",
-        });
-  }, [lease, snapshot?.logEpoch]);
-
-  useEffect(() => {
-    if (!shareActive || !sessionId || !hasOlderRows(snapshot)) return;
-    const key = `${sessionId}:${snapshot?.logEpoch ?? "unknown"}`;
-    if (shareHydratedSessionRef.current === key) return;
-    shareHydratedSessionRef.current = key;
-    void handleLoadAllOlder().catch((error) => {
-      shareHydratedSessionRef.current = null;
-      logger.warn("[conversation-share] 补齐分享目录失败", { error });
-    });
-  }, [handleLoadAllOlder, sessionId, shareActive, snapshot]);
 
   // subscribe ACK 会先把 store 置 live，initial snapshot 稍后才到；只看
   // status 会在无投影窗口提前启用编辑器。正式 session 必须等首个 snapshot 才可输入。

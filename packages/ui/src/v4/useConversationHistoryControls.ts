@@ -83,7 +83,8 @@ export function useConversationHistoryControls(
     [store],
   );
   const retry = useCallback(async () => {
-    if (lastAction.current?.store === store) return await lastAction.current.run();
+    const previous = lastAction.current;
+    if (previous && previous.store === store) return await previous.run();
     return await store?.loadOlder();
   }, [store]);
   return useMemo(

@@ -94,7 +94,31 @@ export function boundNekStatusState(state: NekState): NekState {
 }
 
 export function boundNekStatusSnapshot(snapshot: NekStatusSnapshot): NekStatusSnapshot {
-  return { ...snapshot, state: boundNekStatusState(snapshot.state) };
+  const children = snapshot.historyChildren;
+  const items = children?.items?.slice(0, NEK_STATUS_FRAME_MAX_SUBAGENTS).map((item) => {
+    if (item.id.length > 256) throw new Error("nek history child identity exceeds status budget");
+    const { sessionFile: _privatePath, ...record } = item;
+    return {
+      ...record,
+      type: record.type?.slice(0, 256),
+      description: record.description?.slice(0, 256),
+      model: record.model?.slice(0, 256),
+    };
+  });
+  return {
+    ...snapshot,
+    state: boundNekStatusState(snapshot.state),
+    ...(children
+      ? {
+          historyChildren: {
+            ...children,
+            items,
+            loaded: items?.length ?? children.loaded,
+            complete: children.complete && (items?.length ?? 0) === children.total,
+          },
+        }
+      : {}),
+  };
 }
 
 /** 撤回结果不能像状态预览一样截断；CLI 在撤回前按同一预算拒绝超限输入。 */

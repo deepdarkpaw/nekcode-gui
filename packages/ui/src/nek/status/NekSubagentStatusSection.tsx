@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import type { NekHistorySubagentRecord } from "@zcode/shared/nek-protocol";
+import { AsyncButton } from "@/components/ui/async-button.js";
 import { AlertCircle, Bot, CheckCircle2, CircleSlash, LoaderCircle, Square } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Fold, FoldContent, FoldTrigger } from "@/components/ui/fold.js";
@@ -49,6 +51,11 @@ export function NekSubagentStatusSection({
   const { intl } = useZCodeIntl();
   const status = useNekStatusStore((state) => state.sessions[sessionKey]);
   const records = useMemo(() => subagentRecords(status), [status]);
+  const history = useMemo(
+    () => (status?.historyChildren?.items ?? []).filter((item) => !status?.subagents.byId[item.id]),
+    [status],
+  );
+  const visibleCount = records.length + history.length;
   const running = useMemo(() => records.filter((record) => record.status === "running"), [records]);
   const now = useNowTicker(running.length > 0);
   const longestElapsedMs = running.reduce(
@@ -62,16 +69,22 @@ export function NekSubagentStatusSection({
     onStop,
     onFocusSubagent: onOpenTranscript,
   });
-  if (records.length === 0) return null;
+  if (visibleCount === 0) return null;
   const title = intl.formatMessage({ id: "settings.nek.project.resource.agents" });
   const stopAllLabel = intl.formatMessage({ id: "nek.status.subagent.stopAll" });
-  const endedCount = records.length - running.length;
+  const endedCount =
+    records.length -
+    running.length +
+    history.filter(
+      (item) =>
+        item.status === "completed" || item.status === "errored" || item.status === "aborted",
+    ).length;
   return (
     <Fold
       defaultOpen={false}
       className="rounded-lg border border-card-border bg-card px-2 py-1"
       data-status-view="subagent-status-section"
-      data-subagent-count={records.length}
+      data-subagent-count={visibleCount}
     >
       <div className="flex min-w-0 items-center gap-2">
         <FoldTrigger chevron="start" className="min-w-0 flex-1">
@@ -125,9 +138,69 @@ export function NekSubagentStatusSection({
               onOpenTranscript={onOpenTranscript}
             />
           ))}
+          {history.map((record) => (
+            <NekHistoricalSubagentRow
+              key={record.id}
+              record={record}
+              onOpenTranscript={onOpenTranscript}
+            />
+          ))}
         </ul>
+        {status?.historyChildren?.hasMore ? (
+          <p className="pt-1 text-ui-xs text-foreground-subtle">
+            {intl.formatMessage(
+              { id: "nek.status.subagent.historyMore" },
+              { count: Math.max(0, status.historyChildren.total - status.historyChildren.loaded) },
+            )}
+          </p>
+        ) : null}
       </FoldContent>
     </Fold>
+  );
+}
+
+/** Stored metadata is deliberately not promoted into a fabricated live/stoppable child record. */
+function NekHistoricalSubagentRow({
+  record,
+  onOpenTranscript,
+}: {
+  record: NekHistorySubagentRecord;
+  onOpenTranscript: (id: string) => void;
+}) {
+  const { intl } = useZCodeIntl();
+  const title = record.description || record.id;
+  const status =
+    record.status === "completed" || record.status === "errored" || record.status === "aborted"
+      ? record.status
+      : undefined;
+  return (
+    <li
+      className="flex min-h-8 min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-ui-base hover:bg-hover"
+      data-subagent-id={record.id}
+    >
+      <Bot aria-hidden="true" className="size-3.5 shrink-0 text-foreground-subtle" />
+      <AsyncButton
+        variant="ghost"
+        size="sm"
+        successFeedback="none"
+        className="min-w-0 flex-1 justify-start px-0"
+        onClick={() => onOpenTranscript(record.id)}
+        aria-label={intl.formatMessage(
+          { id: "nek.status.subagent.openPreview" },
+          { description: title },
+        )}
+      >
+        <span className="block min-w-0 truncate">{title}</span>
+      </AsyncButton>
+      {record.type ? (
+        <span className="shrink-0 text-ui-xs text-foreground-subtle">{record.type}</span>
+      ) : null}
+      {status ? (
+        <span className="shrink-0 text-ui-xs text-foreground-subtle">
+          {intl.formatMessage({ id: `nek.status.subagent.${status}` })}
+        </span>
+      ) : null}
+    </li>
   );
 }
 

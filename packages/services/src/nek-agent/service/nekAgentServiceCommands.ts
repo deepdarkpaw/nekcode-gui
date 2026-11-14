@@ -21,9 +21,7 @@ import type {
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 import { historyChildDirectory, historyChildPreview } from "./nekHistoryChildren.js";
-import { historyResult, requireHistoryPages } from "./nekHistoryRpc.js";
-import { validateHistoryDisplay } from "../projection/nekHistoryDisplay.js";
-import { collectPersistedSubagentRecords } from "../projection/nekSubagentRecords.js";
+import { requireHistoryPages } from "./nekHistoryRpc.js";
 import { isNekState, type NekMode, type NekPromptInput, type NekThoughtLevel } from "./types.js";
 export { clearQueue, retrieveQueue, requeueQueue } from "./nekQueueCommands.js";
 
@@ -138,7 +136,7 @@ export async function abortRetry(
 
 /**
  * 状态 feed 的权威快照：`nek.get_state`（运行态）、`get_session_stats`（用量）、
- * `extension_call nek.get_state`（todos/计划/子代理）与 有界 history_page（持久化子代理）一次取齐。
+ * `extension_call nek.get_state`（todos/计划/子代理）与轻量子代理目录一次取齐，不为状态卡读取对话正文。
  *
  * 四份事实里任何一份失败都会让整次快照失败：状态卡宁可继续显示上一份，也不拼半个快照。
  */
@@ -148,54 +146,28 @@ export async function getStatusSnapshot(
 ): Promise<NekHistoryStatusSnapshot> {
   const target = context.target(sessionKey);
   requireHistoryPages(target);
-  const [state, stats, pageResult] = await Promise.all([
+  const [state, stats, directoryResult] = await Promise.all([
     target.client.call({ type: "get_state" }),
     target.client.call({ type: "get_session_stats" }),
-    // nek 的 subagent registry 是纯内存表：重开 GUI 后只剩 entries 里 toolResult 的 details。
-    target.client.call({ type: "read_history_page", turnLimit: 20 }),
+    target.client.call({ type: "read_history_subagent", limit: 50 }),
   ]);
-  const directory = historyChildDirectory(
-    await target.client.call({
-      type: "read_history_subagent",
-      limit: 50,
-      branchRevision: historyResult(pageResult).branchRevision,
-    }),
-  );
-  // Read the registry after entries: a child registered before its persisted spawn result
+  const directory = historyChildDirectory(directoryResult);
+  // Read the live registry after stored identities: a child registered before its spawn result
   // must be visible here. Parent isStreaming alone never proves a historical child is alive.
   const extension = await target.client.call({ type: "extension_call", method: "nek.get_state" });
   if (!isNekState(extension.result)) {
     throw new Error("nek returned an invalid status state snapshot");
   }
   const live = extension.result;
-  // 内存里的子代理是活的权威：histories 只补它没有的 id，绝不覆盖实时状态。
-  const page = historyResult(pageResult);
-  const persisted = collectPersistedSubagentRecords(
-    page.entries
-      .filter((entry) => entry.omissions.length === 0)
-      .map((entry) => validateHistoryDisplay(entry.entry)),
-  );
-  const liveIds = new Set(live.subagents.map((record) => record.id));
-  const restored = [...persisted.values()]
-    .filter((entry) => !liveIds.has(entry.record.id))
-    .map((entry) => entry.record);
-  const metadata = historyResult(
-    await target.client.call({
-      type: "read_session_metadata",
-      branchRevision: page.branchRevision,
-    }),
-  );
-  const combined = [...live.subagents, ...restored];
+  // Stored summaries remain distinct from live/stoppable records; no fabricated background or model facts.
   const children = historyChildPreview(directory, live.subagents);
-  if (children.total !== metadata.children.count)
-    throw new Error("nek child directory metadata changed during status read");
   return {
     historyChildren: children,
     sessionKey: state.sessionId,
     running: state.isStreaming,
     compacting: state.isCompacting,
     pendingMessageCount: state.pendingMessageCount,
-    state: restored.length === 0 ? live : { ...live, subagents: combined },
+    state: live,
     stats,
   };
 }

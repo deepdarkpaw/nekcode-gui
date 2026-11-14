@@ -26,6 +26,7 @@ import { MessageActions } from "@/components/ai-elements/message.js";
 import { SubagentLinkProvider } from "@/components/ai-elements/subagent-link.js";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { ConversationDeferredContent } from "./ConversationDeferredContent.js";
+import { ConversationWorkWindow } from "./ConversationWorkWindow.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -257,8 +258,10 @@ function ConversationAssistantWorkItems({
   // 连续工作项（工具/explore/reasoning）统一 gap-4 组容器（对齐旧版 tool-call-group），
   // 取代继承父级 gap-5/gap-2 + 每行 py-2 的双重且不一致的间距。
   const content = (
-    <div className="flex flex-col gap-4">
-      {items.map((item) =>
+    <ConversationWorkWindow
+      items={items}
+      pinTail={stageTailIsRunning}
+      renderItem={(item) =>
         item.kind === "row" || item.kind === "reasoningGroup" ? (
           <div key={item.key} data-reasoning-group={item.kind === "reasoningGroup" || undefined}>
             {item.kind === "reasoningGroup"
@@ -280,9 +283,9 @@ function ConversationAssistantWorkItems({
           <ConversationExploreGroupRow key={item.key} item={item} context={context} />
         ) : (
           <ConversationToolGroupRow key={item.key} item={item} context={context} />
-        ),
-      )}
-    </div>
+        )
+      }
+    />
   );
 
   if (!historyContainer) {

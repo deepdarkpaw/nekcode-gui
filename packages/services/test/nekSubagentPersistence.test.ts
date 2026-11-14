@@ -331,10 +331,12 @@ test("SP-4: a reopened session backfills the status snapshot and previews histor
   try {
     const snapshot = await h.adapter.getNekStatusSnapshot(params);
     assert.deepEqual(
-      snapshot.state.subagents.map((child) => child.id),
+      snapshot.historyChildren?.items?.map((child) => child.id),
       [...CHILD_IDS],
     );
-    for (const child of snapshot.state.subagents) {
+    assert.equal(snapshot.state.subagents.length, 0);
+    assert.equal(snapshot.historyChildren?.complete, true);
+    for (const child of snapshot.historyChildren!.items!) {
       assert.equal(child.status, "completed");
       assert.equal(child.description, `Inspect ${child.id}`);
     }
@@ -370,7 +372,12 @@ test("SP-5: a live registry record still wins over the persisted history for the
   });
   try {
     const snapshot = await h.adapter.getNekStatusSnapshot(params);
-    assert.equal(snapshot.state.subagents.length, CHILD_IDS.length);
+    assert.equal(snapshot.state.subagents.length, 1);
+    assert.equal(snapshot.historyChildren?.items?.length, CHILD_IDS.length);
+    assert.equal(
+      snapshot.historyChildren?.items?.find((child) => child.id === "child-a")?.status,
+      "running",
+    );
     assert.equal(
       snapshot.state.subagents.find((child) => child.id === "child-a")?.status,
       "running",

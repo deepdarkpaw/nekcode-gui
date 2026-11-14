@@ -2,6 +2,7 @@ import type { NekRpcEvent, NekState, NekSubagentRecord } from "@zcode/shared/nek
 import {
   NEK_STATUS_MAX_PLANS,
   NEK_STATUS_MAX_QUEUE_ITEMS,
+  NEK_STATUS_MAX_SUBAGENTS,
   NEK_STATUS_MAX_TODOS,
   type NekSessionStatus,
   type NekStatusDirectEvent,
@@ -165,6 +166,12 @@ export function reduceNekStatusEvent(
           {
             ...merged.state,
             running: event.payload.running,
+            historyChildren: event.payload.historyChildren
+              ? {
+                  ...event.payload.historyChildren,
+                  items: event.payload.historyChildren.items?.slice(0, NEK_STATUS_MAX_SUBAGENTS),
+                }
+              : undefined,
             mode: event.payload.state.mode,
             todos: event.payload.state.todos.slice(0, NEK_STATUS_MAX_TODOS),
             plans: event.payload.state.plans.slice(-NEK_STATUS_MAX_PLANS),

@@ -57,12 +57,12 @@ function fixture(running: boolean, live: NekSubagentRecord[], beforeEntries = as
     events.push(command.type === "extension_call" ? command.method : command.type);
     if (command.type === "get_state") return runtime(running);
     if (command.type === "get_session_stats") return {};
-    if (command.type === "read_history_page") {
+    if (command.type === "read_history_subagent") {
       await beforeEntries();
-      events.push("entries-read");
+      events.push("directory-read");
       return fixtureHistory([entry], command, { ...historySummary, id: "parent" });
     }
-    if (command.type === "read_session_metadata" || command.type === "read_history_subagent")
+    if (command.type === "read_session_metadata")
       return fixtureHistory([entry], command, { ...historySummary, id: "parent" });
     if (command.type === "extension_call" && command.method === "nek.get_state")
       return { result: state(live) };
@@ -90,8 +90,13 @@ for (const running of [false, true]) {
     try {
       const snapshot = await getStatusSnapshot(context, "parent");
       assert.equal(snapshot.running, running);
-      assert.equal(snapshot.state.subagents[0]?.status, "aborted");
-      assert.equal(snapshot.state.subagents[0]?.id, child.id);
+      assert.equal(
+        snapshot.state.subagents.length,
+        0,
+        "stored metadata is not a live/stoppable record",
+      );
+      assert.equal(snapshot.historyChildren?.items?.[0]?.status, "aborted");
+      assert.equal(snapshot.historyChildren?.items?.[0]?.id, child.id);
     } finally {
       await p.process.dispose();
     }
@@ -110,19 +115,23 @@ test("SS-1/SS-3: idle parent still has a running child when the registry says so
   }
 });
 
-test("SS-2: registry is sampled after entries, so a newly spawned child is never falsely aborted", async () => {
+test("SS-2: registry is sampled after stored child identities, so a newly spawned child is never falsely aborted", async () => {
   const gate = Promise.withResolvers<void>();
   const live: NekSubagentRecord[] = [];
   const { p, context, events } = fixture(true, live, () => gate.promise);
   const pending = getStatusSnapshot(context, "parent");
   try {
     await new Promise<void>((ok) => setTimeout(ok, 5));
-    assert.ok(events.includes("read_history_page"));
-    assert.ok(!events.includes("nek.get_state"), "registry must not be older than entries");
+    assert.ok(events.includes("read_history_subagent"));
+    assert.ok(!events.includes("read_history_page"), "status must not read any transcript bodies");
+    assert.ok(
+      !events.includes("nek.get_state"),
+      "registry must not be older than stored child identities",
+    );
     live.push(child);
     gate.resolve();
     const snapshot = await pending;
-    assert.ok(events.indexOf("entries-read") < events.indexOf("nek.get_state"));
+    assert.ok(events.indexOf("directory-read") < events.indexOf("nek.get_state"));
     assert.equal(snapshot.state.subagents[0]?.status, "running");
   } finally {
     gate.resolve();

@@ -10,6 +10,7 @@ import {
   type NekSessionStats,
   type NekState,
   type NekStatusSnapshot,
+  type NekHistoryChildren,
   type NekSubagentRecord,
   type NekTodo,
 } from "@zcode/shared/nek-protocol";
@@ -83,6 +84,7 @@ export interface NekSessionStatus {
   plans: NekPlanSummary[];
   activePlanPath?: string;
   subagents: NekStatusSubagents;
+  historyChildren?: NekHistoryChildren;
   queue: NekStatusQueue;
   retry: RetryState | null;
   compaction: CompactionState | null;

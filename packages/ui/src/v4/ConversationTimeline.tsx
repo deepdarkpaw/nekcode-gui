@@ -1901,6 +1901,7 @@ function ConversationTimelineImpl({
                     <ConversationHistoryHeader
                       controls={historyControls}
                       navigationError={historyNavigationError}
+                      selectionOnly={Boolean(shareSelection)}
                     />
                   ) : null}
                   {headerSlot}

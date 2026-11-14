@@ -6,9 +6,11 @@ import type { ConversationHistoryControls } from "./useConversationHistoryContro
 export function ConversationHistoryHeader({
   controls,
   navigationError,
+  selectionOnly = false,
 }: {
   controls: ConversationHistoryControls;
   navigationError?: string | null;
+  selectionOnly?: boolean;
 }) {
   const { intl } = useZCodeIntl();
   const error = navigationError ?? controls.error ?? controls.directory.error;
@@ -38,6 +40,9 @@ export function ConversationHistoryHeader({
           </AsyncButton>
         ) : null}
       </div>
+      {selectionOnly ? (
+        <p>{intl.formatMessage({ id: "chat.history.shareSelectionOnly" })}</p>
+      ) : null}
       {controls.directoryQuery && controls.directory.hasMore ? (
         <AsyncButton
           variant="ghost"

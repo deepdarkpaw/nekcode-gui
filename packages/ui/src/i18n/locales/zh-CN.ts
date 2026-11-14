@@ -2792,6 +2792,7 @@ const zhCN: Record<string, string> = {
   "nek.status.subagent.stop": "停止",
   "nek.status.subagent.openPreview": "在右侧预览 {description}",
   "nek.status.subagent.previewTruncated": "已省略较早的 {count} 行",
+  "nek.status.subagent.historyMore": "另有 {count} 个子代理，可从对话中的链接打开",
   "nek.status.subagent.stopNamed": "停止 {description}",
   "nek.status.subagent.stopTimeout": "停止请求没有响应，可以再试一次",
   "nek.status.subagent.stopAll": "全部停止",

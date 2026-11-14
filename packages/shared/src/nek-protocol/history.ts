@@ -2,18 +2,16 @@
 import type { NekStatusSnapshot } from "./status.js";
 import type { NekSessionLockHolder, NekSessionSummary } from "./gui-rpc.js";
 
-/** The CLI currently exposes a total count, not an enumerable persisted child directory. */
-export interface NekHistoryStatusSnapshot extends NekStatusSnapshot {
-  /** Persisted total and known persisted IDs in the bounded view; completeness is conservative. */
-  historyChildren?: {
-    total: number;
-    loaded: number;
-    complete: boolean;
-    items?: NekHistorySubagentRecord[];
-    hasMore?: boolean;
-    nextCursor?: string;
-  };
+/** Persisted child metadata is a bounded directory, not a second live registry. */
+export interface NekHistoryChildren {
+  total: number;
+  loaded: number;
+  complete: boolean;
+  items?: NekHistorySubagentRecord[];
+  hasMore?: boolean;
+  nextCursor?: string;
 }
+export type NekHistoryStatusSnapshot = NekStatusSnapshot;
 
 export interface NekHistoryOptions {
   sessionPath?: string;
