@@ -115,7 +115,10 @@ describe("LR bounded live history renderer", () => {
     const request = h.store.loadOlder();
     h.send([
       { op: "row.delta", rowId: 301, path: "text", append: " streamed" },
-      { op: "state.updated", patch: { history: { ...livePage(31, 51).history, observationCursor: "observation:51" } } },
+      {
+        op: "state.updated",
+        patch: { history: { ...livePage(31, 51).history, observationCursor: "observation:51" } },
+      },
     ]);
     const older = livePage(10, 30, 50);
     older.history.observationCursor = "observation:50";
@@ -133,13 +136,40 @@ describe("LR bounded live history renderer", () => {
     const delayedTurn = deferredValue<V4ConversationHistoryTurnResult>();
     h.transport.historyTurn.mockImplementationOnce(() => delayedTurn.promise);
     const turnRequest = h.store.loadHistoryTurn("turn:30", "remaining:1");
-    h.send([{ op: "row.delta", rowId: 301, path: "text", append: " newer" }, { op: "state.updated", patch: { history: { ...livePage(32, 52).history, observationCursor: "observation:52" } } }]);
-    delayedTurn.resolve({ atSeq: 2, atRevision: 2, atLogEpoch: "epoch", branchRevision: "source:51", observationCursor: "observation:51", rows: [liveRow(30)], turn: after.history!.turns.find((turn) => turn.turnId === "turn:30")!, hasMore: true, continuationCursor: "remaining:2" });
+    h.send([
+      { op: "row.delta", rowId: 301, path: "text", append: " newer" },
+      {
+        op: "state.updated",
+        patch: { history: { ...livePage(32, 52).history, observationCursor: "observation:52" } },
+      },
+    ]);
+    delayedTurn.resolve({
+      atSeq: 2,
+      atRevision: 2,
+      atLogEpoch: "epoch",
+      branchRevision: "source:51",
+      observationCursor: "observation:51",
+      rows: [liveRow(30)],
+      turn: after.history!.turns.find((turn) => turn.turnId === "turn:30")!,
+      hasMore: true,
+      continuationCursor: "remaining:2",
+    });
     await turnRequest;
-    expect(h.transport.historyTurn).toHaveBeenCalledWith(expect.objectContaining({ observationCursor: "observation:51" }));
-    expect(h.store.getState().snapshot!.history).toMatchObject({ branchRevision: "source:52", observationCursor: "observation:52", totalTurns: 52 });
-    expect(h.store.getState().snapshot!.history!.turns.find((turn) => turn.turnId === "turn:30")!.continuationCursor).toBe("remaining:2");
-    expect(h.store.getState().snapshot!.rows.window.find((row) => row.rowId === 301)).toMatchObject({ text: "answer 30 streamed newer" });
+    expect(h.transport.historyTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ observationCursor: "observation:51" }),
+    );
+    expect(h.store.getState().snapshot!.history).toMatchObject({
+      branchRevision: "source:52",
+      observationCursor: "observation:52",
+      totalTurns: 52,
+    });
+    expect(
+      h.store.getState().snapshot!.history!.turns.find((turn) => turn.turnId === "turn:30")!
+        .continuationCursor,
+    ).toBe("remaining:2");
+    expect(h.store.getState().snapshot!.rows.window.find((row) => row.rowId === 301)).toMatchObject(
+      { text: "answer 30 streamed newer" },
+    );
     expect(h.store.getState().historyError).toBeNull();
   });
 
@@ -325,11 +355,18 @@ describe("LR bounded live history renderer", () => {
     const owner = h.store.getHistoryOwnerKey();
     const boundary = livePage(30, 40, 40).history;
     boundary.olderCursor = "NEW-BRANCH-BEFORE-30";
-    h.send([{ op: "row.removed", fromRowId: 400 }, { op: "state.updated", patch: { history: boundary } }]);
+    h.send([
+      { op: "row.removed", fromRowId: 400 },
+      { op: "state.updated", patch: { history: boundary } },
+    ]);
     expect(h.store.getHistoryOwnerKey()).not.toBe(owner);
     h.transport.historyPage.mockResolvedValueOnce(h.atCurrent(livePage(10, 30, 40)));
     await h.store.loadOlder();
-    expect(h.transport.historyPage).toHaveBeenCalledExactlyOnceWith({ sessionId: "parent", turnLimit: 20, beforeCursor: "NEW-BRANCH-BEFORE-30" });
+    expect(h.transport.historyPage).toHaveBeenCalledExactlyOnceWith({
+      sessionId: "parent",
+      turnLimit: 20,
+      beforeCursor: "NEW-BRANCH-BEFORE-30",
+    });
     expect(h.store.getState().historyError).toBeNull();
   });
 

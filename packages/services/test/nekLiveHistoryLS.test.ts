@@ -648,7 +648,9 @@ test("LS6: bounded locator slice discards future persisted bodies and summary wa
 });
 
 test("LS6: a bounded reload during live locators never rewinds the observed source behind applied entries", async () => {
-  const h = await integration([stored("u", null, { role: "user", timestamp: 1, content: "hello" })]);
+  const h = await integration([
+    stored("u", null, { role: "user", timestamp: 1, content: "hello" }),
+  ]);
   try {
     const summary = { ...historySummary, id: sessionId, path: sessionPath };
     const appended = (entry: NekSessionEntry) => {

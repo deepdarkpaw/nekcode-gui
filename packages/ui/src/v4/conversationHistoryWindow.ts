@@ -279,7 +279,10 @@ export class ConversationHistoryWindow {
     }
     const turn = { ...result.turn, continuationCursor: result.continuationCursor };
     const boundary = this.latestBoundary;
-    const source = boundary && (result.atSeq < boundary.seq || result.atRevision < boundary.revision) ? boundary.history : result;
+    const source =
+      boundary && (result.atSeq < boundary.seq || result.atRevision < boundary.revision)
+        ? boundary.history
+        : result;
     this.readingTurnId = turn.turnId;
     this.retentionDirection = "turn";
     const turns = current.history.turns.map((item) => (item.turnId === turn.turnId ? turn : item));

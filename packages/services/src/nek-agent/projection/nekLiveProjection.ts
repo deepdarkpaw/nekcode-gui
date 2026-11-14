@@ -1,6 +1,6 @@
 import type { NekRpcEvent } from "@zcode/shared/nek-protocol";
 import type { NekLiveContext } from "./nekLiveTurn.js";
-import { applyTurnLifecycleEvent, closeTurn, createNekLiveContext } from "./nekLiveTurn.js";
+import { applyTurnLifecycleEvent } from "./nekLiveTurn.js";
 import { applyMessageEnd, applyMessageStart, applyMessageUpdate } from "./nekLiveMessages.js";
 import {
   applyToolExecutionEnd,
@@ -19,7 +19,7 @@ import { buildQueueItems, withNekModelSelection } from "./nekProjectionSnapshot.
 
 export { applySubagentRecord } from "./nekLiveTools.js";
 export { applyBashCommandResultRow, applySessionState } from "./nekLiveMarkers.js";
-export { closeTurn, createNekLiveContext } from "./nekLiveTurn.js";
+export { closeTurn } from "./nekLiveTurn.js";
 export type { NekLiveContext, NekLiveTurn } from "./nekLiveTurn.js";
 
 /**

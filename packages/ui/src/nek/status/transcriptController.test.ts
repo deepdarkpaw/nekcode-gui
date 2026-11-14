@@ -6,7 +6,9 @@ import { NEK_STATUS_TRANSCRIPT_REFRESH_MS } from "./types.js";
 import type { ConversationHistoryWatermark } from "@zcode/shared/zcode-protocol-v4";
 
 const running: SubagentConversation & ConversationHistoryWatermark = {
-  atSeq: 1, atRevision: 1, atLogEpoch: "epoch",
+  atSeq: 1,
+  atRevision: 1,
+  atLogEpoch: "epoch",
   rows: [],
   totalCount: 0,
   status: "running",

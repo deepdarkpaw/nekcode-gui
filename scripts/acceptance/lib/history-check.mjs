@@ -8,8 +8,8 @@ import { join, resolve } from "node:path";
 import { evaluate, waitForPage } from "./cdp.mjs";
 import { clickTaskItem, waitForText } from "./ui.mjs";
 
-export const LONG_HISTORY_TURNS = 70;
-export const LONG_HISTORY_TITLE = "long history prompt 1";
+const LONG_HISTORY_TURNS = 70;
+const LONG_HISTORY_TITLE = "long history prompt 1";
 const JSONL_RECORD_LIMIT = 64 * 1024 * 1024;
 const SUBAGENT_ID = "0f8e4a52-6b1d-4c3e-9a7f-2d5b8c1e4f60";
 const TIMELINE = '[data-testid="v4-timeline"]';
@@ -18,7 +18,9 @@ const GIANT = "界😀".repeat(160_000);
 
 /** 与 nek getDefaultSessionDirPath 相同的 cwd 编码。 */
 function sessionDir(agentDir, cwd) {
-  const safe = `--${resolve(cwd).replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+  const safe = `--${resolve(cwd)
+    .replace(/^[/\\]/, "")
+    .replace(/[/\\:]/g, "-")}--`;
   return join(resolve(agentDir), "sessions", safe);
 }
 
