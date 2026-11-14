@@ -40,7 +40,7 @@ export async function loadNekHistoryStream(
     if (repairing) {
       await stream.negotiate();
       await stream.requireRecoveryBoundary();
-    }
+    } else await stream?.pause();
     await load();
     stream?.resume();
   } catch (error) {
@@ -142,6 +142,14 @@ export class NekHistoryStreamSession {
       this.decoder.fail(error);
       throw error;
     }
+  }
+  /**
+   * A reload must read its page after every applied locator, or an older page would rewind the
+   * observed source past entries already marked seen. Later frames stay queued until resume().
+   */
+  async pause(): Promise<void> {
+    this.ready = false;
+    await this.drain();
   }
   /** Bootstrap/resync is the only full bounded load; queued facts then resume in wire order. */
   resume(): void {

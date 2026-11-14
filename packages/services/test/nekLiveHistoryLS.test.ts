@@ -17,7 +17,10 @@ import {
   NekHistoryStreamDecoder,
   LIVE_EVENT_BYTES,
 } from "../src/nek-agent/nekHistoryStreamDecoder.js";
-import { NekHistoryStreamSession } from "../src/nek-agent/service/nekHistoryStreamSession.js";
+import {
+  loadNekHistoryStream,
+  NekHistoryStreamSession,
+} from "../src/nek-agent/service/nekHistoryStreamSession.js";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
 import type { NekSessionRecord } from "../src/nek-agent/service/types.js";
 import { fixtureHistory, historySummary } from "./nekHistoryFixture.js";
@@ -639,6 +642,45 @@ test("LS6: bounded locator slice discards future persisted bodies and summary wa
     await h.stream.drain();
     assert.equal(h.projector.snapshot().history!.totalTurns, 1);
     assert.equal(h.stream.failed, false);
+  } finally {
+    await h.close();
+  }
+});
+
+test("LS6: a bounded reload during live locators never rewinds the observed source behind applied entries", async () => {
+  const h = await integration([stored("u", null, { role: "user", timestamp: 1, content: "hello" })]);
+  try {
+    const summary = { ...historySummary, id: sessionId, path: sessionPath };
+    const appended = (entry: NekSessionEntry) => {
+      h.entries.push(entry);
+      h.wire({
+        type: "history_entry_appended",
+        sessionPath,
+        sessionId,
+        entryId: entry.id,
+        leafId: entry.id,
+        ref: { command: "read_history_page", sessionPath, aroundEntryId: entry.id },
+      });
+    };
+    // The reload reads its page, then an entry commits and its locator arrives before the page lands.
+    await loadNekHistoryStream(h.record, async () => {
+      const read = [...h.entries];
+      appended(stored("a", "u", assistant([{ type: "text", text: "answer" }])));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      h.projector.loadHistory({
+        page: fixtureHistory(read, { type: "read_history_page" }, summary) as NekHistoryPage,
+        metadata: fixtureHistory(
+          read,
+          { type: "read_session_metadata" },
+          summary,
+        ) as NekHistoryMetadata,
+      });
+    });
+    appended(stored("u2", "a", { role: "user", timestamp: 2, content: "next" }));
+    await h.stream.drain();
+    assert.equal(h.stream.failed, false);
+    assert.equal(h.projector.observedHistoryEntries, 3);
+    assert.equal(h.projector.snapshot().control.lastError ?? null, null);
   } finally {
     await h.close();
   }

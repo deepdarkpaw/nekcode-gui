@@ -164,7 +164,7 @@ export class NekHistoryStreamProjection {
     if (target.position < source.nextPosition) return; // Already present in bootstrap/duplicate locator.
     if (target.position !== source.nextPosition || target.parentId !== source.leafId)
       throw new Error(
-        "history locator is not contiguous with observed source; explicitly reload bounded history",
+        `history locator is not contiguous with observed source (target ${target.id}@${target.position} parent ${target.parentId}; observed next ${source.nextPosition} leaf ${source.leafId}); explicitly reload bounded history`,
       );
     const turn = page.turns.find((item) => item.id === target.turnId);
     if (!turn) throw new Error("history target has no owning turn descriptor");
