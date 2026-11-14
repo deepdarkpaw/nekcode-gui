@@ -70,6 +70,8 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
       ),
     );
     this.assertAlive();
+    if (existing && existing.sessionId !== snapshot.session.id)
+      throw new Error("nek history session identity changed at the bound path; reopen the session");
     if (snapshot.session.locked) {
       const page = historyResult(
         await measureNekOpenRequest(openTiming, () =>

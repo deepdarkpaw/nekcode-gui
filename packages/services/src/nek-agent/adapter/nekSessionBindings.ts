@@ -50,7 +50,7 @@ export class NekSessionBindings {
     if (pending) return await pending;
     if (this.restoreFlights.size >= MAX_RESTORE_FLIGHTS)
       throw new Error(`nek session restore limit exceeded (${MAX_RESTORE_FLIGHTS})`);
-    const flight = this.restore(target, sessionId);
+    const flight = this.restore(target, sessionId, session?.sessionPath ?? existing?.sessionPath);
     this.restoreFlights.set(key, flight);
     try {
       return await flight;
@@ -91,15 +91,18 @@ export class NekSessionBindings {
     return this.entries.get(sessionMapKey(target, sessionId));
   }
 
-  private async restore(target: NekWorkspaceTarget, sessionId: string): Promise<NekSessionBinding> {
+  private async restore(target: NekWorkspaceTarget, sessionId: string, knownPath?: string): Promise<NekSessionBinding> {
     const lookupStartedAt = performance.now();
-    const summary = (await this.ports.listSessions(target)).find((item) => item.id === sessionId);
+    // A known binding already owns a trusted path. Rechecking its lock must not scan the catalog,
+    // which can be large and need not include an explicitly opened session outside the default root.
+    const sessionPath = knownPath ?? (await this.ports.listSessions(target)).find((item) => item.id === sessionId)?.path;
     const taskMetaReadMs = nekOpenDurationMs(lookupStartedAt);
-    if (!summary) throw new Error(`nek session ${sessionId} was not found`);
+    if (!sessionPath) throw new Error(`nek session ${sessionId} was not found`);
     const result = await this.ports.resumeSession({
       workspacePath: target.workspacePath,
-      sessionPath: summary.path,
+      sessionPath,
     });
+    if (result.sessionId !== sessionId) throw new Error("nek history session identity changed during restore");
     this.assertAlive();
     // 返回副本：共享在途恢复可共享本次 timing，之后 warm ensure 只读不带 timing 的表项。
     return {
