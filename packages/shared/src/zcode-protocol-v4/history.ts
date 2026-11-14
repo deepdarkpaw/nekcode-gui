@@ -30,6 +30,16 @@ export const conversationHistorySchema = z.object({
   hasNewer: z.boolean(),
 });
 export type ConversationHistory = z.infer<typeof conversationHistorySchema>;
+/** Raw bounded transport excerpt, never a fabricated semantic answer/result. */
+export const liveHistoryPreviewSchema = z.object({
+  epoch: z.string(),
+  eventId: z.number().int(),
+  eventType: z.string(),
+  preview: z.string().max(32768),
+  receivedBytes: z.number().int().nonnegative(),
+  incomplete: z.literal(true),
+});
+export type LiveHistoryPreview = z.infer<typeof liveHistoryPreviewSchema>;
 /** Public share/export must remove local read capabilities, even when deferred previews remain. */
 export function stripPrivateHistoryRow(row: ConversationRow): ConversationRow {
   const { historyContent: _privateRefs, ...publicRow } = row;

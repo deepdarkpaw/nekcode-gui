@@ -136,7 +136,7 @@ export const assistantTextRowSchema = z.object({
   // 同一模型 response 的正文与工具共享此 ID；optional 兼容旧 snapshot。
   assistantResponseId: z.string().min(1).optional(),
   text: z.string(),
-  state: z.enum(["streaming", "complete", "interrupted", "failed"]),
+  state: z.enum(["streaming", "complete", "interrupted", "failed", "deferred"]),
   model: z.string().optional(),
   feedback: z.enum(["like", "dislike"]).optional(),
 });
@@ -163,6 +163,8 @@ export const toolCallRowSchema = z.object({
   assistantResponseId: z.string().min(1).optional(),
   toolCallId: z.string(),
   toolName: z.string(),
+  /** Exact bounded nonpersisted execution extras (structuredContent/terminate), not result text. */
+  liveResult: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["inputStreaming", "running", "success", "error", "cancelled"]),
   inputText: z.string(),
   input: z.unknown().optional(),

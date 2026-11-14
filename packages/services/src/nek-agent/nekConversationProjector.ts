@@ -12,7 +12,13 @@ import type {
   NekState,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
-import type { NekBashResult } from "@zcode/shared/nek-protocol";
+import type {
+  NekBashResult,
+  NekHistoryPage,
+  NekHistorySummaryPage,
+  NekHistoryStreamOmission,
+} from "@zcode/shared/nek-protocol";
+import type { LiveHistoryPreview } from "@zcode/shared/zcode-protocol-v4";
 import type { NekSnapshotInput } from "./projection/nekEntryProjection.js";
 import {
   NekProjectorHistory,
@@ -34,7 +40,6 @@ import {
   applyNekLiveEvent,
   applySessionState,
   applySubagentRecord,
-  createNekLiveContext,
 } from "./projection/nekLiveProjection.js";
 
 /**
@@ -126,7 +131,7 @@ export class NekConversationProjector {
         queue: { items: [], autoDrain: true },
       },
     });
-    this.live = this.createLiveContext();
+    this.live = this.history.createLiveContext(this.store, this.now);
   }
 
   get sessionId(): string {
@@ -185,7 +190,7 @@ export class NekConversationProjector {
       plan: input.nekState ? projected.plan : this.store.state.plan,
       control: buildControlState(input.state, this.store.state.control.phase),
     });
-    this.live = this.createLiveContext();
+    this.live = this.history.createLiveContext(this.store, this.now);
     // 快照本身就包含全部行，所以不再额外发增量帧。
     this.emitSnapshotToAll();
   }
@@ -197,7 +202,7 @@ export class NekConversationProjector {
         ? this.live
         : undefined;
     this.history.load(this.store, input, active);
-    this.live = active ?? this.createLiveContext();
+    this.live = active ?? this.history.createLiveContext(this.store, this.now);
     this.live.historyPages = true;
     this.extensionErrors.project(this.store, this.store.window.at(-1)?.turnId ?? "preamble");
     this.emitSnapshotToAll();
@@ -211,13 +216,12 @@ export class NekConversationProjector {
     this.history.resetProcessSeeds();
   }
 
+  resetHistoryStreamSeeds(): void {
+    this.history.resetStreamSeeds(this.live.assistantResponseKey);
+  }
+
   historyAnchors(scope = this.sessionId): ConversationRow[] {
-    return [
-      ...this.history.anchors.read(scope),
-      ...(scope === this.sessionId
-        ? this.store.window.filter((row) => row.kind === "toolCall" || row.kind === "subagent")
-        : []),
-    ];
+    return this.history.historyAnchors(this.store, scope);
   }
 
   rememberHistoryAnchors(scope: string, key: string, rows: readonly ConversationRow[]): void {
@@ -232,14 +236,41 @@ export class NekConversationProjector {
     return this.history.accepts(page);
   }
 
+  applyHistoryTarget(page: NekHistoryPage, entryId: string): void {
+    this.history.applyTarget(page, entryId, this.live);
+    this.scheduleFlush();
+  }
+
+  applyHistorySummary(page: NekHistorySummaryPage): boolean {
+    const applied = this.history.applySummary(page, this.store);
+    if (applied) this.scheduleFlush();
+    return applied;
+  }
+
+  applyHistoryPreview(preview: LiveHistoryPreview | null): void {
+    this.store.setLivePreview(preview);
+    this.scheduleFlush();
+  }
+
+  handleHistoryEvent(
+    event: Record<string, unknown>,
+    omissions: NekHistoryStreamOmission[],
+    key: string,
+  ): void {
+    if (!this.history.applyStreamEvent(event, omissions, key, this.live))
+      this.handleEvent(event as unknown as NekRpcEvent, true);
+    else this.scheduleFlush();
+  }
+
   /** 并入一条 RPC 事件；有变化时按合并窗口下发增量帧。 */
-  handleEvent(event: NekRpcEvent): void {
+  handleEvent(event: NekRpcEvent, strict = false): void {
     if (this.disposed) return;
     try {
       const applied = this.history.apply(event, this.live);
-      if (applied === "snapshot") this.emitSnapshotToAll();
+      if (applied === "changed") this.scheduleFlush();
       if (applied) return;
     } catch (error) {
+      if (strict) throw error;
       this.historyFault(error);
       return;
     }
@@ -258,7 +289,7 @@ export class NekConversationProjector {
       try {
         applyNekLiveEvent(this.live, event);
       } catch (error) {
-        if (!this.history.metadata) throw error;
+        if (strict || !this.history.metadata) throw error;
         this.historyFault(error);
         return;
       }
@@ -268,23 +299,7 @@ export class NekConversationProjector {
 
   /** 合并 `get_state` / `get_session_stats` 的结果（含上下文窗口用量）。 */
   applySessionState(state: NekRpcSessionState, stats?: NekSessionStats): void {
-    applySessionState(this.live, state);
-    this.store.setState({ control: buildControlState(state, this.store.state.control.phase) });
-    // 窗口大小只能从 nek 报告里取：`get_session_stats.contextUsage` 优先，其次模型元数据。
-    const maxTokens = stats?.contextUsage?.contextWindow ?? state.model?.contextWindow;
-    if (maxTokens !== undefined && maxTokens > 0) {
-      this.store.setState({
-        usage: {
-          ...this.store.state.usage,
-          contextWindow: {
-            usedTokens:
-              stats?.contextUsage?.tokens ?? this.store.state.usage.contextWindow?.usedTokens ?? 0,
-            maxTokens,
-            autoCompactThresholdTokens: null,
-          },
-        },
-      });
-    }
+    applySessionState(this.live, state, stats);
     this.scheduleFlush();
   }
 
@@ -351,6 +366,7 @@ export class NekConversationProjector {
     return {
       ...this.store.snapshot(this.seq, this.revisionValue),
       ...(this.history.metadata ? { history: this.history.metadata } : {}),
+      liveHistoryPreview: this.store.historyPreview,
     };
   }
 
@@ -383,13 +399,6 @@ export class NekConversationProjector {
       },
     });
     this.flushNow();
-  }
-
-  private createLiveContext(): NekLiveContext {
-    const live = createNekLiveContext(this.store, this.now);
-    live.historyPages = this.history.metadata !== undefined;
-    live.historyAnchors = () => this.historyAnchors();
-    return live;
   }
 
   private scheduleFlush(): void {

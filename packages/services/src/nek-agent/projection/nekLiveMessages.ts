@@ -317,7 +317,7 @@ export function applyAssistantErrorMarker(
 ): void {
   const marker = buildModelErrorMarker(assistant);
   if (!marker) return;
-  const entityId = `model-error:${assistant.timestamp}`;
+  const entityId = `model-error:${ctx.assistantErrorKey ?? assistant.timestamp}`;
   const rowId = ctx.store.allocate(entityId);
   const previous = ctx.store.getRow(rowId);
   if (

@@ -25,14 +25,19 @@ import {
 import { HISTORY_ROW_STRIDE as STRIDE, historyRowId } from "./nekHistoryIdentity.js";
 import { partialToolCalls, partialToolResult } from "./nekHistoryPartial.js";
 export { historyRowId } from "./nekHistoryIdentity.js";
-export const historyTurn = (turn: NekHistoryTurn): ConversationHistoryTurn => ({
+export const historyTurn = (turn: Omit<NekHistoryTurn, "header">): ConversationHistoryTurn => ({
   turnId: turn.id,
   userEntryId: turn.userEntryId,
   position: turn.position,
   preview: turn.preview,
   ...(turn.continuationCursor ? { continuationCursor: turn.continuationCursor } : {}),
 });
-export function historyMetadata(page: NekHistoryPage): ConversationHistory {
+export function historyMetadata(
+  page: Pick<
+    NekHistoryPage,
+    "branchRevision" | "totalTurns" | "olderCursor" | "newerCursor" | "hasOlder" | "hasNewer"
+  > & { turns: Array<Omit<NekHistoryTurn, "header">> },
+): ConversationHistory {
   return {
     branchRevision: page.branchRevision,
     totalTurns: page.totalTurns,
@@ -114,7 +119,7 @@ function deferred(source: NekHistoryEntry): ConversationRow {
   const row =
     source.role === "user"
       ? buildUserInputRow(identity, { text: source.preview })
-      : buildAssistantTextRow(identity, { text: source.preview, state: "interrupted" });
+      : buildAssistantTextRow(identity, { text: source.preview, state: "deferred" });
   return {
     ...row,
     historyContent: source.omissions.map((omission) => ({ ...omission, entryId: source.id })),

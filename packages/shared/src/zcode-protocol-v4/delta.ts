@@ -1,8 +1,10 @@
 // ConversationDelta：快照增量与插件 UI 的 live-only 通知，操作集合封闭。
 // 没有 row.inserted（中间插入）、没有 row.moved、没有字段级 JSON patch——
 // 凡此模型表达不了的结构变化，服务端一律发 snapshot resync，刻意压缩客户端错误面。
+// Source-history canonical migration uses exact rows.removed + ordered row.appended, not branch truncation.
 import { z } from "zod";
 import { streamablePathSchema } from "./core.js";
+import { conversationHistorySchema, liveHistoryPreviewSchema } from "./history.js";
 import { conversationRowSchema } from "./rows.js";
 import { sharedContextImportStateSchema } from "./shared-context-import.js";
 import {
@@ -26,6 +28,9 @@ import {
 // StatePatch：键级整体替换（Object.assign），键集合封闭。键内绝不深合并。
 export const statePatchSchema = z.object({
   revision: z.number().optional(),
+  /** Boundary metadata only; summary cursors do not mark bodies loaded. */
+  history: conversationHistorySchema.optional(),
+  liveHistoryPreview: liveHistoryPreviewSchema.nullable().optional(),
   control: sessionControlSchema.optional(),
   sharedContextImport: sharedContextImportStateSchema.optional(),
   availability: sessionActionAvailabilitySchema.optional(),
@@ -53,6 +58,8 @@ export const conversationDeltaSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("row.upserted"), row: conversationRowSchema }),
   // 删除该行及之后所有（edit/retry 分支）。作用于客户端已加载集合中所有 rowId >= fromRowId 的行。
   z.object({ op: z.literal("row.removed"), fromRowId: z.number() }),
+  /** Exact canonical migration/eviction, not branch truncation. */
+  z.object({ op: z.literal("rows.removed"), rowIds: z.array(z.number()).max(5000) }),
   // 流式文本追加。仅允许作用于流式态行（服务端保证，客户端可断言）。
   z.object({
     op: z.literal("row.delta"),

@@ -116,6 +116,7 @@ export class NekConversationSubscriptions {
   async resync(input: NekConversationResyncParams): Promise<V4ConversationResyncResult> {
     const subscription = this.subscriptions.get(input.subscriptionId);
     if (!subscription) throw new Error(`unknown conversation subscription ${input.subscriptionId}`);
+    await this.service.recoverHistoryStream(subscription.sessionKey);
     const snapshot = this.service.conversationSnapshot(subscription.sessionKey);
     const frame: ConversationTopicFrame = {
       topic: subscription.topic,

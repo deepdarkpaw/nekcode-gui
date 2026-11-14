@@ -16,6 +16,7 @@ import type {
   NekThinkingLevel,
 } from "./gui-rpc.js";
 import type { NekHistoryResponseData } from "./history.js";
+import type { NekHistoryStreamCommand, NekHistoryStreamState } from "./history-stream.js";
 import type { NekMentionTargetInfo } from "./mentions.js";
 import type { NekStatusQueue } from "./status.js";
 import type {
@@ -233,7 +234,11 @@ export type NekSessionRpcCommand =
 export type NekMentionRpcCommand = { id?: string; type: "get_mention_targets" };
 
 /** 完整命令联合：nek 既有命令 + 点名目标 + `gui-rpc.ts` 的 GUI 扩展命令。 */
-export type NekRpcCommand = NekSessionRpcCommand | NekMentionRpcCommand | NekGuiRpcCommand;
+export type NekRpcCommand =
+  | NekSessionRpcCommand
+  | NekMentionRpcCommand
+  | NekGuiRpcCommand
+  | NekHistoryStreamCommand;
 
 export type NekRpcCommandType = NekRpcCommand["type"];
 export type NekSessionRpcCommandType = NekSessionRpcCommand["type"];
@@ -260,6 +265,7 @@ export interface NekCycleModelResult {
  * 这样 nek 新增命令时 GUI 不会因为类型收窄而误判"一定有数据"。
  */
 export interface NekRpcResponseDataMap extends NekHistoryResponseData {
+  set_history_stream: NekHistoryStreamState;
   // ---- 既有命令 ----
   prompt: { disposition: NekPromptDisposition };
   steer: { disposition: NekQueuedInputDisposition };
