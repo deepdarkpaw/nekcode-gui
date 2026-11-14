@@ -25,6 +25,7 @@ import type {
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekRpcProcessExit } from "../nekRpcClient.js";
+import type { NekHistoryStreamSession } from "./nekHistoryStreamSession.js";
 import type { NekProcessPool } from "../nekProcessPool.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 
@@ -60,6 +61,7 @@ export interface NekSessionRecord {
   stateEpoch?: number;
   eventEpoch?: number;
   historyGeneration?: number;
+  historyStream?: NekHistoryStreamSession;
   historyMetadata?: NekHistoryMetadata;
   readonly: boolean;
   /** 只读快照的占用者，人类可读；nek 不报持有者时为 `"nek"`。 */

@@ -1,3 +1,5 @@
+import { NekHistoryStreamProjection } from "./nekHistoryStreamProjection.js";
+import type { NekHistorySummaryPage, NekHistoryStreamOmission } from "@zcode/shared/nek-protocol";
 import { NekHistoryAnchorCache } from "./nekHistoryAnchorCache.js";
 import { randomUUID } from "node:crypto";
 import type {
@@ -8,9 +10,9 @@ import type {
   NekState,
   NekRpcEvent,
 } from "@zcode/shared/nek-protocol";
-import type { ConversationHistory } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationHistory, ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import type { NekProjectionStore } from "./nekProjectionStore.js";
-import type { NekLiveContext } from "./nekLiveTurn.js";
+import { createNekLiveContext, type NekLiveContext } from "./nekLiveTurn.js";
 import {
   historyLiveSource,
   mergeStreamingHistory,
@@ -37,9 +39,50 @@ export class NekProjectorHistory {
   metadata: ConversationHistory | undefined;
   private source: NekHistoryLiveSource | undefined;
   private readonly pendingUserStarts = new Set<string>();
+  private readonly stream = new NekHistoryStreamProjection();
+
+  historyAnchors(store: NekProjectionStore, scope = store.sessionId): ConversationRow[] {
+    return [
+      ...this.anchors.read(scope),
+      ...(scope === store.sessionId
+        ? store.window.filter((row) => row.kind === "toolCall" || row.kind === "subagent")
+        : []),
+    ];
+  }
+
+  createLiveContext(store: NekProjectionStore, now: () => number): NekLiveContext {
+    const live = createNekLiveContext(store, now);
+    live.historyPages = this.metadata !== undefined;
+    live.historyAnchors = () => this.historyAnchors(store);
+    return live;
+  }
+
+  applyStreamEvent(
+    event: Record<string, unknown>,
+    omissions: NekHistoryStreamOmission[],
+    key: string,
+    ctx: NekLiveContext,
+  ): boolean {
+    return this.stream.event(event, omissions, key, ctx);
+  }
+
+  applyTarget(page: NekHistoryPage, entryId: string, ctx: NekLiveContext): void {
+    if (!this.source) throw new Error("history source is not bootstrapped");
+    this.stream.target(this.source, page, entryId, ctx);
+  }
+
+  applySummary(page: NekHistorySummaryPage, store: NekProjectionStore): boolean {
+    if (!this.source || page.totalEntries > this.source.nextPosition) return false;
+    if (page.totalEntries !== this.source.nextPosition || page.leafId !== this.source.leafId)
+      throw new Error("history summary source moved backwards or changed branch; reload history");
+    this.metadata = historyMetadata(page);
+    store.setHistory(this.metadata);
+    return true;
+  }
 
   load(store: NekProjectionStore, input: NekHistorySnapshotInput, live?: NekLiveContext): void {
     const { page, metadata, state, stats, nekState } = input;
+    if (!live) this.stream.clear();
     const previousRows = [...store.window];
     const compatible = this.accepts(page);
     const previousAliases = compatible ? this.source?.aliases : undefined;
@@ -137,14 +180,21 @@ export class NekProjectorHistory {
     return this.source?.nextPosition;
   }
 
+  resetStreamSeeds(activeResponse?: string): void {
+    this.stream.clear(activeResponse);
+    this.pendingUserStarts.clear();
+    this.source?.aliases.clear();
+  }
+
   resetProcessSeeds(): void {
+    this.stream.clear();
     this.anchors.clear();
     this.pendingUserStarts.clear();
     this.source?.aliases.clear();
   }
 
-  /** True means the caller must emit an authoritative snapshot to retire ephemeral IDs. */
-  apply(event: NekRpcEvent, ctx: NekLiveContext): "snapshot" | "duplicate" | undefined {
+  /** Legacy synthetic entry tests share the same incremental canonical owner. */
+  apply(event: NekRpcEvent, ctx: NekLiveContext): "changed" | "duplicate" | undefined {
     if (!this.metadata) return;
     if (Buffer.byteLength(JSON.stringify(event), "utf8") > 1024 * 1024)
       throw new Error(
@@ -189,7 +239,7 @@ export class NekProjectorHistory {
     const entities = new Map(
       rows.filter((row) => row.entityId).map((row) => [row.entityId!, row.rowId]),
     );
-    ctx.store.replaceRows(
+    ctx.store.reconcileRows(
       rows,
       entities,
       Math.max(ctx.store.nextRowIdValue, ...rows.map((row) => row.rowId + 1)),
@@ -213,6 +263,7 @@ export class NekProjectorHistory {
         ].slice(-20),
       };
     }
-    return "snapshot";
+    ctx.store.setHistory(this.metadata);
+    return "changed";
   }
 }

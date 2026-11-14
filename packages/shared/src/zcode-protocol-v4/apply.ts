@@ -40,7 +40,11 @@ export function createMutableConversationSnapshotAccumulator(
 
 // row.delta 只允许作用于流式态行（不变量，服务端保证）。
 // 本函数按协议语义实现为：路径不存在/行不存在时 no-op（patch 命中未加载行 = no-op）。
-function appendToRow(row: ConversationRow, path: StreamablePath, append: string): ConversationRow {
+export function appendConversationRowStream(
+  row: ConversationRow,
+  path: StreamablePath,
+  append: string,
+): ConversationRow {
   switch (path) {
     case "text":
       if (row.kind === "assistantText" || row.kind === "reasoning") {
@@ -68,6 +72,13 @@ function appendToRow(row: ConversationRow, path: StreamablePath, append: string)
   }
 }
 
+/** Canonical source IDs may replace an earlier ephemeral identity within the same frame. */
+function appendOrdered(rows: ConversationRow[], row: ConversationRow): ConversationRow[] {
+  const next = [...rows, row];
+  if ((rows.at(-1)?.rowId ?? -Infinity) > row.rowId) next.sort((a, b) => a.rowId - b.rowId);
+  return next;
+}
+
 /** 应用单条 delta，返回新快照（入参不被修改）。 */
 export function applyConversationDelta(
   snapshot: ConversationSnapshot,
@@ -79,9 +90,9 @@ export function applyConversationDelta(
         ...snapshot,
         rows: {
           ...snapshot.rows,
-          window: [...snapshot.rows.window, delta.row],
+          window: appendOrdered(snapshot.rows.window, delta.row),
           totalCount: snapshot.rows.totalCount + 1,
-          firstRowId: snapshot.rows.firstRowId ?? delta.row.rowId,
+          firstRowId: Math.min(snapshot.rows.firstRowId ?? delta.row.rowId, delta.row.rowId),
         },
       };
     case "row.upserted": {
@@ -91,6 +102,22 @@ export function applyConversationDelta(
       const window = [...snapshot.rows.window];
       window[index] = delta.row;
       return { ...snapshot, rows: { ...snapshot.rows, window } };
+    }
+    case "rows.removed": {
+      const ids = new Set(delta.rowIds);
+      const window = snapshot.rows.window.filter((row) => !ids.has(row.rowId));
+      return {
+        ...snapshot,
+        rows: {
+          ...snapshot.rows,
+          window,
+          totalCount: Math.max(
+            0,
+            snapshot.rows.totalCount - (snapshot.rows.window.length - window.length),
+          ),
+          firstRowId: window[0]?.rowId ?? null,
+        },
+      };
     }
     case "row.removed": {
       const window = snapshot.rows.window.filter((row) => row.rowId < delta.fromRowId);
@@ -117,7 +144,7 @@ export function applyConversationDelta(
       const target = snapshot.rows.window[index];
       if (index === -1 || target === undefined) return snapshot;
       const window = [...snapshot.rows.window];
-      window[index] = appendToRow(target, delta.path, delta.append);
+      window[index] = appendConversationRowStream(target, delta.path, delta.append);
       return { ...snapshot, rows: { ...snapshot.rows, window } };
     }
     case "state.updated":
@@ -162,16 +189,35 @@ export function applyConversationDeltaMutable(
 ): void {
   const snapshot = accumulator.snapshot;
   switch (delta.op) {
-    case "row.appended":
+    case "row.appended": {
+      const outOfOrder = (snapshot.rows.window.at(-1)?.rowId ?? -Infinity) > delta.row.rowId;
       accumulator.rowIndexById.set(delta.row.rowId, snapshot.rows.window.length);
       snapshot.rows.window.push(delta.row);
+      if (outOfOrder) {
+        snapshot.rows.window.sort((a, b) => a.rowId - b.rowId);
+        accumulator.rowIndexById.clear();
+        snapshot.rows.window.forEach((row, index) =>
+          accumulator.rowIndexById.set(row.rowId, index),
+        );
+      }
       snapshot.rows.totalCount += 1;
-      snapshot.rows.firstRowId ??= delta.row.rowId;
+      snapshot.rows.firstRowId = Math.min(
+        snapshot.rows.firstRowId ?? delta.row.rowId,
+        delta.row.rowId,
+      );
       return;
+    }
     case "row.upserted": {
       const index = accumulator.rowIndexById.get(delta.row.rowId);
       if (index === undefined) return;
       snapshot.rows.window[index] = delta.row;
+      return;
+    }
+    case "rows.removed": {
+      const next = applyConversationDelta(snapshot, delta);
+      snapshot.rows = next.rows;
+      accumulator.rowIndexById.clear();
+      snapshot.rows.window.forEach((row, index) => accumulator.rowIndexById.set(row.rowId, index));
       return;
     }
     case "row.removed": {
@@ -198,7 +244,7 @@ export function applyConversationDeltaMutable(
       if (index === undefined) return;
       const target = snapshot.rows.window[index];
       if (target === undefined) return;
-      snapshot.rows.window[index] = appendToRow(target, delta.path, delta.append);
+      snapshot.rows.window[index] = appendConversationRowStream(target, delta.path, delta.append);
       return;
     }
     case "state.updated":

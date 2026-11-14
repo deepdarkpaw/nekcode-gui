@@ -9,7 +9,10 @@ import type {
   SessionUsageState,
   StreamablePath,
   StatePatch,
+  ConversationHistory,
+  LiveHistoryPreview,
 } from "@zcode/shared/zcode-protocol-v4";
+import { appendConversationRowStream } from "@zcode/shared/zcode-protocol-v4";
 import { streamAppendJsonBytes } from "./nekProjectionBytes.js";
 import { buildControlProjection, buildConversationSnapshot } from "./nekProjectionSnapshot.js";
 
@@ -65,6 +68,21 @@ export class NekProjectionStore {
   private epochValue: string;
   private stateValue: NekProjectionState;
   private pendingState: StatePatch | undefined;
+  private readonly pendingRemoved = new Set<number>();
+  private livePreview: LiveHistoryPreview | null = null;
+
+  setHistory(history: ConversationHistory): void {
+    this.pendingState = { ...this.pendingState, history };
+  }
+
+  setLivePreview(preview: LiveHistoryPreview | null): void {
+    this.livePreview = preview;
+    this.pendingState = { ...this.pendingState, liveHistoryPreview: preview };
+  }
+
+  get historyPreview(): LiveHistoryPreview | null {
+    return this.livePreview;
+  }
 
   constructor(private readonly options: NekProjectionStoreOptions) {
     this.rows = [...(options.existing?.rows ?? [])];
@@ -237,7 +255,7 @@ export class NekProjectionStore {
     if (index === -1) return;
     const current = this.rows[index];
     if (!current) return;
-    const next = applyAppend(current, path, append);
+    const next = appendConversationRowStream(current, path, append);
     if (next === current) return;
     const bytes = this.rowBytes.get(rowId);
     if (bytes === undefined) throw new Error("nek stream row is missing its byte ledger");
@@ -285,6 +303,10 @@ export class NekProjectionStore {
         (left.op === "row.delta" ? left.rowId : left.row.rowId) -
         (right.op === "row.delta" ? right.rowId : right.row.rowId),
     );
+    if (this.pendingRemoved.size) {
+      deltas.unshift({ op: "rows.removed", rowIds: [...this.pendingRemoved] });
+      this.pendingRemoved.clear();
+    }
     if (this.pendingState) {
       deltas.push({ op: "state.updated", patch: this.pendingState });
       this.pendingState = undefined;
@@ -295,6 +317,7 @@ export class NekProjectionStore {
   /** 是否还有未下发的增量（调度器据此决定要不要 flush）。 */
   get hasPendingDeltas(): boolean {
     return (
+      this.pendingRemoved.size > 0 ||
       this.pendingState !== undefined ||
       this.needsUpsert.size > 0 ||
       this.pendingStream.size > 0 ||
@@ -323,10 +346,36 @@ export class NekProjectionStore {
 
   /** 发过快照后：所有行都视为客户端已持有，且待发增量作废（已包含在快照里）。 */
   markAllEmitted(): void {
+    this.pendingRemoved.clear();
     this.pendingState = undefined;
     for (const row of this.rows) this.emitted.add(row.rowId);
     this.needsUpsert.clear();
     this.pendingStream.clear();
+  }
+
+  /** Canonical migration keeps the emitted ledger; publish only changed identities, never a snapshot. */
+  reconcileRows(
+    rows: readonly ConversationRow[],
+    byEntity: Map<string, number>,
+    nextRowId: number,
+  ): void {
+    const previous = new Map(this.rows.map((row) => [row.rowId, row]));
+    const emitted = new Set(this.emitted);
+    const pending = new Map(this.pendingStream);
+    const upserts = new Set(this.needsUpsert);
+    const state = this.pendingState;
+    this.replaceRows(rows, byEntity, nextRowId);
+    this.pendingState = state;
+    for (const row of rows) {
+      const old = previous.get(row.rowId);
+      previous.delete(row.rowId);
+      if (!emitted.has(row.rowId)) continue;
+      this.emitted.add(row.rowId);
+      if (upserts.has(row.rowId) || (old !== row && JSON.stringify(old) !== JSON.stringify(row)))
+        this.needsUpsert.add(row.rowId);
+      else if (pending.has(row.rowId)) this.pendingStream.set(row.rowId, pending.get(row.rowId)!);
+    }
+    for (const id of previous.keys()) if (emitted.has(id)) this.pendingRemoved.add(id);
   }
 
   /** 整份状态替换（重新读取 entries 后）。 */
@@ -381,6 +430,7 @@ export class NekProjectionStore {
   }
 
   private forgetRow(row: ConversationRow): void {
+    if (this.emitted.has(row.rowId)) this.pendingRemoved.add(row.rowId);
     this.renderedBytes -= this.rowBytes.get(row.rowId) ?? 0;
     this.rowBytes.delete(row.rowId);
     this.emitted.delete(row.rowId);
@@ -414,24 +464,5 @@ export class NekProjectionStore {
     }
     // Legacy range sees loaded rows only; history consumers use source cursors, never firstRowId.
     this.firstRowId = this.rows[0]?.rowId ?? this.firstRowId;
-  }
-}
-
-function applyAppend(row: ConversationRow, path: StreamablePath, append: string): ConversationRow {
-  switch (path) {
-    case "text":
-      if (row.kind === "assistantText" || row.kind === "reasoning")
-        return { ...row, text: row.text + append };
-      return row;
-    case "inputText":
-      if (row.kind === "toolCall") return { ...row, inputText: row.inputText + append };
-      return row;
-    case "output.text":
-      if (row.kind === "toolCall" && row.output)
-        return { ...row, output: { ...row.output, text: row.output.text + append } };
-      return row;
-    case "summaryText":
-      if (row.kind === "subagent") return { ...row, summaryText: row.summaryText + append };
-      return row;
   }
 }

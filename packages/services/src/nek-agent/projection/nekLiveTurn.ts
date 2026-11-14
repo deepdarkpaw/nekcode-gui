@@ -36,6 +36,8 @@ export interface NekLiveContext {
   turn?: NekLiveTurn;
   /** 当前 assistant response 的身份前缀（来自 `message_start.message.timestamp`）。 */
   assistantResponseKey?: string;
+  assistantErrorKey?: string;
+  nextTurnIdentity?: string;
   assistantModel?: string;
   /** `resp:<...>:text:<i>` / `...:thinking:<i>` → rowId。 */
   streamRows: Map<string, number>;
@@ -100,7 +102,8 @@ export function currentTurnId(ctx: NekLiveContext): string {
 export function ensureTurn(ctx: NekLiveContext, startedAt: number): NekLiveTurn {
   if (ctx.turn?.open) return ctx.turn;
   closeTurn(ctx, "completedSuccess");
-  const liveEntityId = `turn:${startedAt}`;
+  const liveEntityId = ctx.nextTurnIdentity ?? `turn:${startedAt}`;
+  ctx.nextTurnIdentity = undefined;
   const rowId = ctx.store.allocate(liveEntityId);
   const previous = ctx.store.getRow(rowId);
   const entityId = previous?.kind === "turnHeader" ? previous.turnId : liveEntityId;

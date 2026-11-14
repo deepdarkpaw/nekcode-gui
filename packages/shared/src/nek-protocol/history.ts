@@ -24,6 +24,7 @@ export type NekHistoryCommand =
   | ({
       id?: string;
       type: "read_history_page";
+      view?: "entries" | "summary";
       beforeCursor?: string;
       afterCursor?: string;
       aroundEntryId?: string;
@@ -141,6 +142,7 @@ export interface NekHistoryMetadata extends NekHistoryIdentity {
   status: "persisted";
 }
 export interface NekHistoryPage extends NekHistoryIdentity {
+  view?: "entries";
   turns: NekHistoryTurn[];
   entries: NekHistoryEntry[];
   olderCursor?: string;
@@ -150,6 +152,17 @@ export interface NekHistoryPage extends NekHistoryIdentity {
   totalTurns: number;
   totalEntries: number;
   seed: NekHistorySelection;
+}
+/** Metadata-only boundary: no bodies, seed or omission capabilities; cursors cover FULL turns. */
+export interface NekHistorySummaryPage extends NekHistoryIdentity {
+  view: "summary";
+  turns: Array<Omit<NekHistoryTurn, "header"> & { headerEntryId: string; headerPosition: number }>;
+  olderCursor?: string;
+  newerCursor?: string;
+  hasOlder: boolean;
+  hasNewer: boolean;
+  totalTurns: number;
+  totalEntries: number;
 }
 export interface NekHistoryTurnPage extends NekHistoryIdentity {
   turn: NekHistoryTurn;

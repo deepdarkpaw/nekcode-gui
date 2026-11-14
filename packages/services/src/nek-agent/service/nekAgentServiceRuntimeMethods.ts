@@ -12,6 +12,7 @@ import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js"
 import type { NekProcessPool, NekProcessPoolEvent } from "../nekProcessPool.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
+import { attachNekHistoryStream, loadNekHistoryStream } from "./nekHistoryStreamSession.js";
 import { NekGuiInteractionBridge } from "./guiInteractionBridge.js";
 import { createProjectTrustPrompt, requestProjectApproval } from "./projectTrustPrompt.js";
 import { bindNekSessionModelRuntime, detachNekSessionProcess } from "./nekSessionModelRuntime.js";
@@ -263,9 +264,9 @@ export abstract class NekAgentServiceRuntimeBase {
     if (record.process === process) return;
     this.detachProcess(record);
     record.process = process;
-    record.projector?.resetHistoryProcessSeeds();
-    record.readonly = false;
-    record.detachEvents = process.client.onAnyEvent((event) => this.handleEvent(record, event));
+    attachNekHistoryStream(record, process, (event, project) =>
+      this.handleEvent(record, event, project),
+    );
     record.detachExit = process.client.onExit((exit) => this.handleProcessExit(record, exit));
     // 进程可用性升级为公开事实：workspace runtime 生命周期与 sessions-index 都只认这一条
     // 信号，不再从 phase 抖动反推。
@@ -294,6 +295,7 @@ export abstract class NekAgentServiceRuntimeBase {
     process: NekRpcProcess,
     openTiming?: ConversationOpenTiming,
   ): Promise<void> {
+    await record.historyStream!.negotiate();
     await measureNekOpenRequest(openTiming, () =>
       initializeSessionState(this.snapshotContext(record), process),
     );
@@ -306,7 +308,9 @@ export abstract class NekAgentServiceRuntimeBase {
   ): Promise<void> {
     const process = record.process;
     if (!process) throw new Error(`nek session ${record.key} has no live process`);
-    await reloadSessionSnapshot(this.snapshotContext(record), process, openTiming);
+    await loadNekHistoryStream(record, () =>
+      reloadSessionSnapshot(this.snapshotContext(record), process, openTiming),
+    );
   }
 
   protected createProjector(record: NekSessionRecord): NekConversationProjector {
@@ -345,7 +349,7 @@ export abstract class NekAgentServiceRuntimeBase {
     return this.result(record);
   }
 
-  protected handleEvent(record: NekSessionRecord, event: NekRpcEvent): void {
+  protected handleEvent(record: NekSessionRecord, event: NekRpcEvent, project?: () => void): void {
     record.eventEpoch = (record.eventEpoch ?? 0) + 1;
     // 顺序固定：先状态机、再投影、最后广播；快照重建读的是同一份 record.state。
     applyNekSessionEvent(
@@ -357,15 +361,11 @@ export abstract class NekAgentServiceRuntimeBase {
         endTurn: (sessionKey) => this.pool.endTurn(sessionKey),
         settlePendingInputs: (target) => this.pendingInputs.settle(target),
         cancelPendingInputs: (target, reason) => this.pendingInputs.cancel(target, reason),
-        refreshSnapshot: (target) =>
-          void this.refreshProcessSnapshot(target).catch((error) => {
-            this.logger?.warn("failed to refresh bounded nek history snapshot", error);
-            target.projector?.reportHistoryFailure(error);
-          }),
+        refreshSnapshot: (target) => void target.historyStream?.refreshState(),
       },
       event,
     );
-    record.projector?.handleEvent(event);
+    (project ?? (() => record.projector?.handleEvent(event)))();
     this.emit({ type: "rpc_event", session: this.publicSession(record), event });
   }
 

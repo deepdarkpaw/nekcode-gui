@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { assertNekHistoryInputReady } from "./nekHistoryStreamSession.js";
 import type {
   NekExtensionUiResponse,
   NekInteractionFrame,
@@ -92,6 +93,12 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     return (sessionKey) => invoke({ sessionKey });
   }
 
+  /** Explicit subscription recovery repairs history only, without prompt replay/abort. */
+  async recoverHistoryStream(sessionKey: string): Promise<void> {
+    const record = this.requireRecord(sessionKey);
+    await record.historyStream?.recover(() => this.refreshProcessSnapshot(record));
+  }
+
   // ---- 输入 ----
   /**
    * 发送输入。压缩进行中 GUI 自己暂存（不发给 CLI），压缩收口后按提交顺序提交。
@@ -101,16 +108,14 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
    */
   readonly sendPrompt: Methods["sendPrompt"] = async (input) => {
     const record = this.requireRecord(input.sessionKey);
+    await record.historyStream?.drain();
     // 经过 GUI 待发队列的输入在提交时可能已经有一轮在跑（前一条待发输入起了新回合）：
     // 用户那次"发送"默认按排队投递，不把它变成准入错误；显式投递方式始终优先。
     const delivery = (queued: boolean) =>
       queued && input.streamingBehavior === undefined
         ? { ...input, streamingBehavior: "followUp" as const }
         : input;
-    return await this.pendingInputs.defer(
-      record,
-      async (queued) => await this.submitAdmittedInput(delivery(queued)),
-    );
+    return this.pendingInputs.defer(record, (queued) => this.submitAdmittedInput(delivery(queued)));
   };
 
   /**
@@ -122,10 +127,10 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   async submitAdmittedInput(
     input: Parameters<Methods["sendPrompt"]>[0],
   ): Promise<{ disposition: string }> {
-    return await this.withSession(
-      input.sessionKey,
-      async () => await commands.sendPrompt(this.commandContext(), input),
-    );
+    return await this.withSession(input.sessionKey, async () => {
+      assertNekHistoryInputReady(this.requireRecord(input.sessionKey));
+      return await commands.sendPrompt(this.commandContext(), input);
+    });
   }
   readonly abort: Methods["abort"] = async (sessionKey) => {
     const record = this.requireRecord(sessionKey);
@@ -152,6 +157,7 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
    * 要么把本次输入框的选择错写到另一半；附件解析也留到真正接纳之前。
    */
   async deferInput<T>(sessionKey: string, run: () => Promise<T>): Promise<T> {
+    await this.requireRecord(sessionKey).historyStream?.drain();
     return await this.pendingInputs.defer(this.requireRecord(sessionKey), run);
   }
 

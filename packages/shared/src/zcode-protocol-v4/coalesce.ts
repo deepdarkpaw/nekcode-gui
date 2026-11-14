@@ -10,7 +10,7 @@
 import type { ConversationDelta } from "./delta.js";
 
 function isBarrier(delta: ConversationDelta): boolean {
-  return delta.op === "row.removed";
+  return delta.op === "row.removed" || delta.op === "rows.removed";
 }
 
 /**

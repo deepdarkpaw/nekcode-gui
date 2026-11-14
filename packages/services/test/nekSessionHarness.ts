@@ -22,7 +22,7 @@ export const sessionId = "disk-session";
 export const sessionPath = "/sessions/disk.jsonl";
 export const guiInfo: NekGuiInfo = {
   protocolVersion: 1,
-  capabilities: { promptAttachments: 1, historyPages: 1 },
+  capabilities: { promptAttachments: 1, historyPages: 1, historyStream: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -58,6 +58,10 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
   const commands: NekRpcCommand[] = [];
   const exits = new Set<(exit: NekRpcProcessExit) => void>();
   let input = "";
+  let streamEpoch = "";
+  let streamSeq = 0;
+  let streamEventId = 0;
+  let streamGeneration = 0;
   stdin.on("data", (chunk: Buffer) => {
     input += chunk.toString();
     for (;;) {
@@ -70,7 +74,16 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
       commands.push(command);
       if (!command.id) continue;
       void Promise.resolve()
-        .then(() => reply(command))
+        .then(() => {
+          if (command.type !== "set_history_stream") return reply(command);
+          streamEpoch = `fixture:${++streamGeneration}`;
+          streamSeq = 1;
+          streamEventId = 0;
+          stdout.write(
+            `${JSON.stringify({ type: "history_stream_reset", version: 1, epoch: streamEpoch, seq: 1, sessionId, sessionPath })}\n`,
+          );
+          return { version: 1, epoch: streamEpoch, maxEventBytes: 1048576 };
+        })
         .then(
           (data) =>
             stdout.write(
@@ -109,7 +122,26 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
     },
   };
   /** 模拟 nek 主动推送的 RPC 事件（JSONL 一行）。 */
-  const emit = (record: Record<string, unknown>) => stdout.write(`${JSON.stringify(record)}\n`);
+  const emit = (record: Record<string, unknown>) => {
+    // Existing synthetic tests deliberately supply complete small semantic events. LS tests
+    // separately exercise the real producer's exact omission/locator normalization.
+    const type = String(record.type);
+    const event =
+      streamEpoch &&
+      !type.startsWith("history_") &&
+      !["auth_event", "extension_ui_request", "extension_ui_cancel"].includes(type)
+        ? {
+            type: "history_event",
+            version: 1,
+            epoch: streamEpoch,
+            seq: ++streamSeq,
+            eventId: ++streamEventId,
+            event: record,
+            omissions: [],
+          }
+        : record;
+    return stdout.write(`${JSON.stringify(event)}\n`);
+  };
   return { process, commands, emit, isDisposed: () => disposed };
 }
 

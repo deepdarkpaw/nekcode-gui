@@ -15,6 +15,7 @@ import type {
   NekUsage,
 } from "./rpc-messages.js";
 import type { NekAuthEventRecord, NekExtensionEvent, NekStructuredUiRequest } from "./gui-rpc.js";
+import type { NekHistoryStreamEvent } from "./history-stream.js";
 
 // ============================================================================
 // 流式增量（`message_update.assistantMessageEvent`）
@@ -253,6 +254,7 @@ export type NekInteractionFrame =
 
 /** stdout 上除了 `response` 之外的所有记录。 */
 export type NekRpcEvent =
+  | NekHistoryStreamEvent
   | NekAgentSessionEvent
   | NekExtensionUiRequest
   | NekExtensionEvent

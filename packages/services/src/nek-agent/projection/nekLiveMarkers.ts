@@ -6,6 +6,7 @@ import type {
   NekRpcSessionState,
   NekSessionEntry,
   NekSubagentRecord,
+  NekSessionStats,
 } from "@zcode/shared/nek-protocol";
 import type { TimelineMarkerPayload, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { buildTimelineMarkerRow, buildToolCallRow, toEpochMs } from "./nekRows.js";
@@ -14,7 +15,7 @@ import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentRecord } from "./nekLiveTools.js";
 import { applyAssistantErrorMarker, applyCustomMessage } from "./nekLiveMessages.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
-import { withNekModelSelection, withNekMode } from "./nekProjectionSnapshot.js";
+import { buildControlState, withNekModelSelection, withNekMode } from "./nekProjectionSnapshot.js";
 
 /**
  * 时间线标记、扩展追加的条目、直接 bash 的结果与扩展状态。
@@ -78,25 +79,15 @@ export function applyCompactionStart(
 export function applyCompactionEnd(
   ctx: NekLiveContext,
   event: Extract<NekRpcEvent, { type: "compaction_end" }>,
+  resultPersisted = false,
 ): void {
   const result = event.result as NekCompactionResult | undefined;
-  // `willRetry` 的 end 只是这一轮尝试结束，压缩仍在进行（随后会有重试轮 start）：
-  // 保留 running 行与 compact 停止目标，等下一次 `compaction_end` 才收口。
-  if (event.willRetry === true && !event.aborted) {
-    ctx.store.setState({
-      control: {
-        ...ctx.store.state.control,
-        stopTargetKind: "compact",
-        canStop: true,
-      },
-    });
-    return;
-  }
+  /** willRetry resumes the model request, not the already ended compaction lease. */
   const status: "success" | "cancelled" | "failed" | "noop" = event.aborted
     ? "cancelled"
     : event.errorMessage
       ? "failed"
-      : result
+      : result || resultPersisted
         ? "success"
         : "noop";
   const origin = event.reason === "manual" ? "manual" : "auto";
@@ -116,7 +107,9 @@ export function applyCompactionEnd(
     ctx.store.update(rowId, (prev) =>
       buildTimelineMarkerRow(
         rowIdentity(activeEntityId, rowId, prev.turnId, prev.createdAt),
-        marker,
+        prev.kind === "timelineMarker" && prev.marker.type === "compact" && prev.marker.summaryRef
+          ? { ...prev.marker, ...marker, summaryRef: prev.marker.summaryRef }
+          : marker,
         "assistantWork",
       ),
     );
@@ -368,7 +361,37 @@ export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEven
 }
 
 /** `get_state` 的响应合并进快照字段。 */
-export function applySessionState(ctx: NekLiveContext, state: NekRpcSessionState): void {
+export function applySessionState(
+  ctx: NekLiveContext,
+  state: NekRpcSessionState,
+  stats?: NekSessionStats,
+): void {
+  ctx.store.setState({ control: buildControlState(state, ctx.store.state.control.phase) });
+  if (stats)
+    ctx.store.setState({
+      usage: {
+        ...ctx.store.state.usage,
+        cumulative: {
+          inputTokens: stats.tokens.input,
+          outputTokens: stats.tokens.output,
+          cacheReadTokens: stats.tokens.cacheRead,
+          cacheWriteTokens: stats.tokens.cacheWrite,
+        },
+      },
+    });
+  const maxTokens = stats?.contextUsage?.contextWindow ?? state.model?.contextWindow;
+  if (maxTokens !== undefined && maxTokens > 0)
+    ctx.store.setState({
+      usage: {
+        ...ctx.store.state.usage,
+        contextWindow: {
+          usedTokens:
+            stats?.contextUsage?.tokens ?? ctx.store.state.usage.contextWindow?.usedTokens ?? 0,
+          maxTokens,
+          autoCompactThresholdTokens: null,
+        },
+      },
+    });
   const current = ctx.store.state.config;
   ctx.store.setState({
     config: withNekModelSelection({

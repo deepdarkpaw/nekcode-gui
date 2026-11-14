@@ -1,6 +1,8 @@
 import type { Readable, Writable } from "node:stream";
 import type {
   NekModelReadContext,
+  NekHistoryResult,
+  NekHistorySummaryPage,
   NekAuthEventRecord,
   NekExtensionEvent,
   NekExtensionEvents,
@@ -168,10 +170,18 @@ export class NekRpcClient {
    * 注意 `prompt` 的语义：resolve 表示 nek 已受理（见 `disposition`），不代表回合结束；
    * 回合推进要订阅 `agent_*` / `message_*` / `tool_execution_*` 事件。
    */
+  call(
+    command: NekRpcCommandOfType<"read_history_page"> & { view: "summary" },
+    context?: NekModelReadContext,
+  ): Promise<NekHistoryResult<NekHistorySummaryPage>>;
+  call<C extends NekRpcCommandType>(
+    command: NekRpcCommandOfType<C>,
+    context?: NekModelReadContext,
+  ): Promise<NekRpcResponseDataFor<C>>;
   async call<C extends NekRpcCommandType>(
     command: NekRpcCommandOfType<C>,
     context?: NekModelReadContext,
-  ): Promise<NekRpcResponseDataFor<C>> {
+  ): Promise<unknown> {
     context?.signal?.throwIfAborted();
     const id = typeof command.id === "string" && command.id !== "" ? command.id : this.allocateId();
     const payload = { ...command, id };

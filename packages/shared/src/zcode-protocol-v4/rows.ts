@@ -163,6 +163,8 @@ export const toolCallRowSchema = z.object({
   assistantResponseId: z.string().min(1).optional(),
   toolCallId: z.string(),
   toolName: z.string(),
+  /** Exact bounded nonpersisted execution extras (structuredContent/terminate), not result text. */
+  liveResult: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["inputStreaming", "running", "success", "error", "cancelled"]),
   inputText: z.string(),
   input: z.unknown().optional(),

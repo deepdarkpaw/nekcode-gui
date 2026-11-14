@@ -4,6 +4,8 @@ import type { NekSessionRecord } from "./types.js";
 
 /** Retire the model admission lease before releasing event subscriptions/process identity. */
 export function detachNekSessionProcess(record: NekSessionRecord): void {
+  record.historyStream?.dispose();
+  record.historyStream = undefined;
   record.modelRuntime?.dispose();
   record.modelRuntime = undefined;
   record.detachEvents?.();

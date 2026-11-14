@@ -112,15 +112,27 @@ export function fixtureHistory(
     const selected = turns.slice(start, end);
     return {
       ...identity,
-      turns: selected,
-      entries: sources.filter((source) => selected.some((turn) => turn.id === source.turnId)),
+      ...(query.view === "summary"
+        ? {
+            view: "summary",
+            turns: selected.map(({ header, ...turn }) => ({
+              ...turn,
+              headerEntryId: header.id,
+              headerPosition: header.position,
+              continuationCursor: `full:${turn.id}`,
+            })),
+          }
+        : {
+            turns: selected,
+            entries: sources.filter((source) => selected.some((turn) => turn.id === source.turnId)),
+            seed: {},
+          }),
       olderCursor: start > 0 ? String(start) : undefined,
       newerCursor: end < turns.length ? String(end) : undefined,
       hasOlder: start > 0,
       hasNewer: end < turns.length,
       totalTurns: turns.length,
       totalEntries: sources.length,
-      seed: {},
     };
   }
   if (
