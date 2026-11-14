@@ -341,6 +341,7 @@ export class NekConversationProjector {
     const deltas = this.store.drainDeltas();
     if (deltas.length === 0) return;
     this.revisionValue += 1;
+    deltas.push({ op: "state.updated", patch: { revision: this.revisionValue } });
     const fromSeq = this.seq;
     this.seq += 1;
     this.lastFlushAt = this.now();

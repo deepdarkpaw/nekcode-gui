@@ -88,6 +88,32 @@ function decoderHarness(timeout = 30000) {
   return { decoder, frame, events, previews, errors };
 }
 
+test("LR6: live deltas publish the actual revision needed by renderer history watermark fences", () => {
+  const projector = new NekConversationProjector({ sessionId: "revision-proof" });
+  let rendered = projector.snapshot();
+  const detach = projector.subscribe((frame) => {
+    rendered =
+      frame.payload.kind === "snapshot"
+        ? frame.payload.snapshot
+        : { ...applyConversationDeltas(rendered, frame.payload.deltas), seq: frame.toSeq };
+  });
+  try {
+    projector.handleEvent({ type: "agent_start" });
+    projector.flushNow();
+    expectRevision();
+    projector.handleEvent({ type: "agent_settled", outcome: "success" });
+    projector.flushNow();
+    expectRevision();
+  } finally {
+    detach();
+    projector.dispose();
+  }
+  function expectRevision() {
+    assert.equal(rendered.revision, projector.snapshot().revision);
+    assert.equal(rendered.seq, projector.snapshot().seq);
+  }
+});
+
 test("LS2: chunked normal UTF8 JSON is exact; malformed offset/base64/final/interleaving fails visibly", () => {
   const h = decoderHarness();
   const event = {
