@@ -64,7 +64,7 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
-      if (command.type === "read_history_page" || command.type === "read_session_metadata") {
+      if (command.type === "read_history_page" || command.type === "read_session_metadata" || command.type === "read_history_subagent") {
         data = fixtureHistory([], command);
       } else if (kind === "control") {
         if (command.type === "get_project_trust") {

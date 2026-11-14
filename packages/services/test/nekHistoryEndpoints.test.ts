@@ -84,7 +84,10 @@ test("HS5: old child outside20 is authorized in parent before bounded child read
   const h = harness({ entries: parentEntries(), childSnapshots: [childSnapshot] });
   try {
     const status = await h.adapter.getNekStatusSnapshot(params);
-    assert.deepEqual(status.historyChildren, { total: 1, loaded: 0, complete: false });
+    assert.equal(status.historyChildren?.total, 1);
+    assert.equal(status.historyChildren?.loaded, 1);
+    assert.equal(status.historyChildren?.complete, true);
+    assert.equal(status.historyChildren?.items?.[0]?.id, child.id);
     const preview = await h.adapter.getSubagentConversation({ ...params, id: child.id });
     assert.equal(preview.history.turns.length, 1);
     assert.equal(preview.status, "completed");

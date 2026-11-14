@@ -63,7 +63,7 @@ export function partialToolResult(
     return;
   const anchor = anchors.findLast(
     (row) => row.kind === "toolCall" && row.toolCallId === message.toolCallId,
-  );
+  ) ?? (source.toolCallOrigin === null ? buildToolCallRow({ entityId: `tool:${message.toolCallId}`, rowId: historyRowId(source.position, 2), turnId: source.turnId, createdAt: toEpochMs(source.timestamp) }, { toolCallId: message.toolCallId, toolName: message.toolName, status: "inputStreaming" }) : undefined);
   if (anchor?.kind !== "toolCall")
     throw new Error("nek HISTORY_ANCHOR_REQUIRED: deferred result has no original tool call seed");
   const text = Array.isArray(message.content)

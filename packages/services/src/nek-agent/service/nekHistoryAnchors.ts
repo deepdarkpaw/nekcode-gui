@@ -1,7 +1,7 @@
 import type {
   NekHistoryEntry,
-  NekHistoryResult,
-  NekHistorySubagent,
+  NekHistoryResponseData,
+  NekHistorySubagentRecord,
   NekSessionEntry,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
@@ -15,11 +15,13 @@ import { historyResult, NekHistoryReadError } from "./nekHistoryRpc.js";
  */
 export async function verifyHistorySpawnAnchors(
   entries: NekHistoryEntry[],
-  lookup: (id: string) => Promise<NekHistoryResult<NekHistorySubagent>>,
+  lookup: (id: string) => Promise<NekHistoryResponseData["read_history_subagent"]>,
   anchors: readonly ConversationRow[] = [],
 ): Promise<void> {
   const ids = new Set<string>();
+  const summaries = new Map<string, NekHistorySubagentRecord>();
   for (const source of entries) {
+    for (const record of source.subagents ?? []) { ids.add(record.id); summaries.set(record.id, record); }
     if (source.omissions.length) continue;
     const entry: NekSessionEntry = validateHistoryDisplay(source.entry);
     if (entry.type !== "message" || entry.message.role !== "toolResult") continue;
@@ -30,14 +32,19 @@ export async function verifyHistorySpawnAnchors(
     ))
       ids.add(record.id);
   }
-  if (ids.size > 50)
+  if (ids.size > 2048)
     throw new NekHistoryReadError(
       "INDEX_LIMIT",
-      "nek history page has more than 50 child identities; request a smaller page",
+      "nek history page has more than 2048 child identities; request a smaller page",
     );
   const sourceIds = new Set(entries.map((entry) => entry.id));
   for (const id of ids) {
-    const { subagent } = historyResult(await lookup(id));
+    let subagent = summaries.get(id);
+    if (!subagent) {
+      const result = historyResult(await lookup(id));
+      if (!("subagent" in result)) throw new NekHistoryReadError("INVALID_RESPONSE", "nek returned a directory for a child identity lookup");
+      subagent = result.subagent;
+    }
     if (
       sourceIds.has(subagent.spawnEntryId) ||
       anchors.some((row) => row.kind === "subagent" && row.childSessionId === id)

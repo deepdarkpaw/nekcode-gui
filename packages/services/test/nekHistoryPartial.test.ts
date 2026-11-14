@@ -89,7 +89,7 @@ test("HS2/HS3: huge omitted arguments/output retain tool identity and explicit r
     tools[0]?.historyContent?.map((ref) => ref.ref),
     ["args-ref", "output-ref"],
   );
-  assert.equal(rows.filter((row) => row.entityId?.startsWith("history-deferred:")).length, 2);
+  assert.equal(rows.filter((row) => row.entityId?.startsWith("history-deferred:")).length, 0);
   assert.ok(
     call.type === "message" &&
       call.message.role === "assistant" &&

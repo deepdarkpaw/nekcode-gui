@@ -173,7 +173,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
           // CLI 将附件消息紧接在所属 user 后落盘；按 parentId 配对，不靠文本/时间/并发顺序猜。
           const parentRowId = allocator.resolve(`entry:${entry.parentId}:user`);
           const parentIndex = rowIndexById.get(parentRowId);
-          const parent = parentIndex === undefined ? undefined : rows[parentIndex];
+          const parent = parentIndex === undefined ? allocator.previous(parentRowId) : rows[parentIndex];
           if (parent?.kind !== "userInput")
             throw new Error("nek attachments have no owning user entry");
           push(withNekUserFiles(parent, projectNekUserFiles(input.sessionId, files)));

@@ -119,7 +119,7 @@ function fakeProcess(kind: "control" | "session"): FakeProcess {
 }
 
 function respond(kind: "control" | "session", command: NekRpcCommand): unknown {
-  if (command.type === "read_history_page" || command.type === "read_session_metadata")
+  if (command.type === "read_history_page" || command.type === "read_session_metadata" || command.type === "read_history_subagent")
     return fixtureHistory([], command);
   if (kind === "control") {
     if (command.type === "get_project_trust")
@@ -305,6 +305,7 @@ test("routes status actions to nek RPCs and returns bounded queue contents", asy
         "get_session_stats",
         // Registry sampled after entries distinguishes a live spawn from stale history.
         "read_history_page",
+        "read_history_subagent",
         "extension_call",
         "read_session_metadata",
       ],
