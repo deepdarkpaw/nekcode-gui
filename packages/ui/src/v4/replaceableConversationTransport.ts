@@ -30,6 +30,7 @@ async function unsubscribeIgnoringFailure(
  * 最新 proxy，旧 proxy 的监听先同步解除，避免新旧 Store 竞争同一 topic ownership。
  */
 export class ReplaceableConversationTransport implements ConversationTransport {
+  private historyGeneration = 0;
   private readonly frameListeners = new Set<FrameListener>();
   private readonly assemblyFaultListeners = new Set<AssemblyFaultListener>();
   private readonly runtimeRestartListeners = new Set<RuntimeRestartListener>();
@@ -67,6 +68,7 @@ export class ReplaceableConversationTransport implements ConversationTransport {
     if (transport === this.current) return;
 
     const previous = this.current;
+    this.historyGeneration++;
     this.detachCurrentListeners();
     // 旧 proxy 上的 active subscription 必须先释放，但断线 RPC 可能永久
     // pending；cleanup 只做 best-effort，不能阻塞新 proxy 的重订阅接管。
@@ -131,6 +133,30 @@ export class ReplaceableConversationTransport implements ConversationTransport {
     params: Parameters<ConversationTransport["rowsRange"]>[0],
   ): ReturnType<ConversationTransport["rowsRange"]> {
     return this.current.rowsRange(params);
+  }
+
+  historyPage(
+    params: Parameters<ConversationTransport["historyPage"]>[0],
+  ): ReturnType<ConversationTransport["historyPage"]> {
+    return this.readHistory((owner) => owner.historyPage(params));
+  }
+
+  historyTurn(
+    params: Parameters<ConversationTransport["historyTurn"]>[0],
+  ): ReturnType<ConversationTransport["historyTurn"]> {
+    return this.readHistory((owner) => owner.historyTurn(params));
+  }
+
+  historyDirectory(
+    params: Parameters<ConversationTransport["historyDirectory"]>[0],
+  ): ReturnType<ConversationTransport["historyDirectory"]> {
+    return this.readHistory((owner) => owner.historyDirectory(params));
+  }
+
+  historyContent(
+    params: Parameters<ConversationTransport["historyContent"]>[0],
+  ): ReturnType<ConversationTransport["historyContent"]> {
+    return this.readHistory((owner) => owner.historyContent(params));
   }
 
   plans(
@@ -204,6 +230,15 @@ export class ReplaceableConversationTransport implements ConversationTransport {
         this.offRuntimeRestart = null;
       }
     };
+  }
+
+  private async readHistory<T>(read: (owner: ConversationTransport) => Promise<T>): Promise<T> {
+    const owner = this.current;
+    const generation = this.historyGeneration;
+    const result = await read(owner);
+    if (generation !== this.historyGeneration)
+      throw new Error("History transport was replaced; reload explicitly");
+    return result;
   }
 
   private bindCurrentListeners(): void {

@@ -60,6 +60,10 @@ type ConversationV4AgentService = Pick<
   | "sendConversationCommandV4"
   | "queryConversationCommandsV4"
   | "conversationRowsRangeV4"
+  | "conversationHistoryPageV4"
+  | "conversationHistoryTurnV4"
+  | "conversationHistoryDirectoryV4"
+  | "conversationHistoryContentV4"
   | "conversationPlansV4"
   | "conversationFileChangesV4"
   | "conversationFileRewindPreviewV4"
@@ -378,6 +382,22 @@ export function createAgentConversationTransport(
         ...(params.beforeRowId !== undefined ? { beforeRowId: params.beforeRowId } : {}),
         limit: params.limit,
       });
+    },
+    async historyPage(params) {
+      await ensureHandshake();
+      return agentService.conversationHistoryPageV4({ ...params, ...workspace });
+    },
+    async historyTurn(params) {
+      await ensureHandshake();
+      return agentService.conversationHistoryTurnV4({ ...params, ...workspace });
+    },
+    async historyDirectory(params) {
+      await ensureHandshake();
+      return agentService.conversationHistoryDirectoryV4({ ...params, ...workspace });
+    },
+    async historyContent(params) {
+      await ensureHandshake();
+      return agentService.conversationHistoryContentV4({ ...params, ...workspace });
     },
     async plans(params: V4ConversationPlansParams): Promise<V4ConversationPlansResult> {
       await ensureHandshake();

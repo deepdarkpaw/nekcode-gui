@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- projection/base/recovery/optimistic 必须共享一个原子 store 状态机，拆分会重新引入跨对象竞态。 */
 // Per-session projection store（只读 projection store）。
-// 唯一写入方是订阅推送；UI 只读。客户端遵守三条规则：
+// 权威事实只来自订阅推送或显式有界历史读取；UI 不生成对话事实。订阅遵守三条规则：
 //   1. snapshot → 整体替换，绝不 merge；
 //   2. delta 帧仅在区间衔接（frame.fromSeq === snapshot.seq）时 apply，断档不猜、不缓存补偿；
 //   3. base 与状态同生共死——断档时状态未被污染，携当前水位重订阅，由服务端裁决 resume/snapshot。
@@ -11,6 +11,12 @@ import {
   parseConversationTopic,
   PROTOCOL_V4_LIMITS,
   SUBSCRIPTION_CONTENT_REJECTED,
+  type ConversationHistoryPageOptions,
+  type ConversationHistoryDirectoryOptions,
+  type ConversationHistoryContentOptions,
+  type ConversationHistoryWatermark,
+  type V4ConversationHistoryPageResult,
+  type V4ConversationHistoryTurnResult,
   type ConversationRow,
   type ConversationSnapshot,
   type ConversationOpenTiming,
@@ -20,6 +26,14 @@ import {
   type TopicFrameDeliveryKind,
 } from "@zcode/shared/zcode-protocol-v4";
 import { logger } from "@/logger.js";
+import {
+  ConversationHistoryWindow,
+  HISTORY_BOUNDARY_REFRESH_REQUIRED,
+  historyRowKey,
+  historyRowWasChanged,
+  type HistoryDirection,
+  type HistoryOmission,
+} from "@/v4/conversationHistoryWindow.js";
 import type { ConversationTurnNavigatorHydrationResult } from "@/v4/conversationTurnNavigatorHelpers.js";
 import type { ConversationTransport } from "@/v4/transport.js";
 import { uiMemoryDiagnosticsRegistry } from "@/lib/memoryDiagnostics.js";
@@ -44,6 +58,8 @@ const RUNTIME_RECYCLE_RETRY_DELAYS_MS = [250, 1_000, 3_000] as const;
  */
 const ACCEPTED_INPUT_PROJECTION_GRACE_MS = 2_000;
 const ACCEPTED_INPUT_COMMAND_TYPES = new Set(["sendText"]);
+/** A stalled read cannot retain an unbounded mutation journal. */
+const HISTORY_MUTATION_FENCE_KEYS = 16_384;
 
 /** 退避耗尽时展示给用户的 lastError（无底层 error 对象可引用的换代路径）。 */
 const RUNTIME_RECYCLED_ERROR = "ZCode agent runtime 已被回收，重连未成功";
@@ -116,6 +132,9 @@ export interface ConversationStoreState {
   optimisticCommands: readonly OptimisticCommand[];
   /** loadOlder 在途标记（自动预取防重入）。 */
   loadingOlder: boolean;
+  historyError: string | null;
+  historyRequest: HistoryDirection | null;
+  historyTruncatedTurns: readonly HistoryOmission[];
   /** CLI 完整有效 projection 返回的终态计划目录。 */
   sessionPlans: readonly ToolCallRow[];
   /** 只用于触发计划目录只读 query，不属于 conversation 协议事实。 */
@@ -146,6 +165,9 @@ const INITIAL_STATE: ConversationStoreState = {
   rendererTiming: undefined,
   optimisticCommands: [],
   loadingOlder: false,
+  historyError: null,
+  historyRequest: null,
+  historyTruncatedTurns: [],
   sessionPlans: [],
   planDirectoryRevision: 0,
   plansLoading: false,
@@ -226,6 +248,7 @@ function logSubagentProjectionTransition(
  */
 export function hasOlderRows(snapshot: ConversationSnapshot | null): boolean {
   if (!snapshot) return false;
+  if (snapshot.history) return snapshot.history.hasOlder;
   const first = snapshot.rows.window[0];
   if (!first || snapshot.rows.firstRowId === null) return false;
   return first.rowId > snapshot.rows.firstRowId;
@@ -239,7 +262,7 @@ export function shouldAutoLoadIncompleteLeadingTurn(
   snapshot: ConversationSnapshot | null,
   loadingOlder: boolean,
 ): boolean {
-  if (loadingOlder || !hasOlderRows(snapshot) || !snapshot) return false;
+  if (snapshot?.history || loadingOlder || !hasOlderRows(snapshot) || !snapshot) return false;
   const leadingTurnId = snapshot.rows.window[0]?.turnId;
   if (!leadingTurnId) return false;
   return !snapshot.rows.window.some(
@@ -330,6 +353,9 @@ export class ConversationProjectionStore {
       > & { directoryRevision: number })
     | null = null;
   private closed = false;
+  private readonly historyWindow = new ConversationHistoryWindow();
+  private historyGeneration = 0;
+  private historyFlight: { owner: string; changed: Set<string> } | null = null;
 
   constructor(
     readonly topic: string,
@@ -402,6 +428,7 @@ export class ConversationProjectionStore {
   ): Promise<void> {
     if (this.closed) return;
     const generation = ++this.generation;
+    this.invalidateHistory();
     this.discardRecovery();
     const snapshot = options.forceSnapshot ? null : this.state.snapshot;
     const connectStartedAt = options.rendererPrepareStartedAt ?? monotonicNow();
@@ -561,6 +588,7 @@ export class ConversationProjectionStore {
     this.awaitingInitial = null;
     this.subscriptionHasAppliedBase = false;
     this.generation += 1;
+    this.invalidateHistory();
     // 旧 subscriptionId 属于已死 runtime，不得再 unsubscribe（host 侧 owner 已失效）。
     this.setState({ status: "connecting", subscriptionId: null });
     // 不能只 dormant 等 available：agent 懒启动，dispose 后无人拉起时该信号永不到达，
@@ -662,9 +690,12 @@ export class ConversationProjectionStore {
         frame.payload.snapshot,
         "snapshot",
       );
-      // 规则 1：整体替换，扔掉手里的一切换新的。
+      // Subscription snapshots replace the owner; request-local history reads never do.
+      this.invalidateHistory();
+      const boundedSnapshot = this.historyWindow.reset(frame.payload.snapshot);
       this.setState({
-        snapshot: frame.payload.snapshot,
+        snapshot: boundedSnapshot,
+        historyTruncatedTurns: this.historyWindow.omissions,
         planDirectoryRevision: this.state.planDirectoryRevision + 1,
         // snapshot 整体替换后 real-user query 集合可能已变，终态缓存必须失效。
         turnNavigatorDirectoryRevision: this.state.turnNavigatorDirectoryRevision + 1,
@@ -719,9 +750,32 @@ export class ConversationProjectionStore {
       }
       return;
     }
+    if (frame.payload.deltas.some((delta) => delta.op === "row.removed")) this.invalidateHistory();
+    const flight = this.historyFlight;
+    if (flight) {
+      for (const delta of frame.payload.deltas) {
+        if (delta.op === "row.appended" || delta.op === "row.upserted") {
+          flight.changed.add(historyRowKey(delta.row));
+          flight.changed.add(`row:${delta.row.rowId}`);
+        }
+        if (delta.op === "row.delta") {
+          flight.changed.add(`row:${delta.rowId}`);
+          const row = current.rows.window.find((item) => item.rowId === delta.rowId);
+          if (row) flight.changed.add(historyRowKey(row));
+        }
+      }
+    }
+    if (flight && flight.changed.size > HISTORY_MUTATION_FENCE_KEYS) {
+      this.invalidateHistory();
+      this.state = {
+        ...this.state,
+        historyError: "History changed beyond its bounded request fence; retry explicitly",
+      };
+    }
     const applied = applyConversationDeltas(current, frame.payload.deltas);
-    // seq 是快照对齐水位，delta 帧应用完推进到帧右端点。
-    const next = { ...applied, seq: frame.toSeq };
+    if (current.history) this.historyWindow.accountDeltas(current, applied, frame.payload.deltas);
+    // seq is exclusively advanced by the subscription, never by history reads.
+    const next = this.historyWindow.bound({ ...applied, seq: frame.toSeq });
     logSubagentProjectionTransition(this.topic, current, next, "deltas");
     const removedFromRowId = frame.payload.deltas.reduce<number | null>(
       (earliest, delta) =>
@@ -732,6 +786,10 @@ export class ConversationProjectionStore {
     );
     this.setState({
       snapshot: next,
+      historyTruncatedTurns: this.historyWindow.omissions,
+      ...(this.historyWindow.needsBoundaryRefresh
+        ? { historyError: HISTORY_BOUNDARY_REFRESH_REQUIRED }
+        : {}),
       // row.removed 已给出权威裁剪边界，可以同步删掉缓存目录中的旧分支计划；
       // 完整 query 继续负责补回 wire tail 之外、但仍属于当前分支的早期计划。
       ...(removedFromRowId === null
@@ -966,6 +1024,7 @@ export class ConversationProjectionStore {
     // transport 已先失效旧 ownership/assembler；旧 transport/runtime subId 不得再 unsubscribe，
     // 直接 fresh subscribe，保留旧 snapshot 直到新 snapshot 原子替换。
     this.generation += 1;
+    this.invalidateHistory();
     this.discardRecovery();
     this.awaitingInitial = null;
     this.subscriptionHasAppliedBase = false;
@@ -985,6 +1044,10 @@ export class ConversationProjectionStore {
    *   在途期间到达的 delta 帧不受影响（它们只动 ≥ 窗口首行的行）。
    */
   async loadOlder(limit: number = PROTOCOL_V4_LIMITS.snapshotTailWindowRows): Promise<void> {
+    if (this.state.snapshot?.history) {
+      await this.loadHistoryPage("older");
+      return;
+    }
     if (this.closed || this.state.loadingOlder) return;
     const snapshot = this.state.snapshot;
     if (!hasOlderRows(snapshot) || !snapshot) return;
@@ -992,7 +1055,7 @@ export class ConversationProjectionStore {
     if (!sessionId) return;
     const beforeRowId = snapshot.rows.window[0]?.rowId;
     if (beforeRowId === undefined) return;
-    this.setState({ loadingOlder: true });
+    this.setState({ loadingOlder: true, historyError: null });
     try {
       const result = await this.transport.rowsRange({
         sessionId,
@@ -1016,12 +1079,243 @@ export class ConversationProjectionStore {
         snapshot: { ...current, rows: { ...current.rows, window } },
       });
     } catch (error) {
-      // query 只读且可重发：失败不进 error 态，留给下次触发重试。
+      this.setState({ historyError: error instanceof Error ? error.message : String(error) });
       logger.warn(
         `[v4-store] rowsRange ${this.topic} 失败: ${error instanceof Error ? error.message : String(error)}`,
       );
     } finally {
       if (!this.closed) this.setState({ loadingOlder: false });
+    }
+  }
+
+  /** Stable renderer owner identity; ordinary token/appended events do not retire it. */
+  getHistoryOwnerKey(): string {
+    const snapshot = this.state.snapshot;
+    return JSON.stringify([
+      this.generation,
+      this.historyGeneration,
+      snapshot?.logEpoch,
+      snapshot?.history?.branchRevision,
+    ]);
+  }
+
+  private invalidateHistory(): void {
+    this.historyGeneration++;
+    this.historyFlight = null;
+    // Every caller publishes its owner transition immediately afterwards. Do not expose
+    // an intermediate old snapshot/new generation to metadata subscribers.
+    this.state = { ...this.state, historyRequest: null, loadingOlder: false, historyError: null };
+  }
+
+  private historyTarget(): { sessionId: string } {
+    const sessionId = parseConversationTopic(this.topic);
+    if (!sessionId || this.closed || !this.state.snapshot?.history)
+      throw new Error("History owner is unavailable");
+    return { sessionId };
+  }
+
+  private assertHistoryResult(
+    owner: string,
+    watermark: ConversationHistoryWatermark,
+    atSeq: number,
+    atRevision: number,
+  ): void {
+    if (
+      this.closed ||
+      owner !== this.getHistoryOwnerKey() ||
+      watermark.atLogEpoch !== this.state.snapshot?.logEpoch ||
+      watermark.atSeq < atSeq ||
+      watermark.atRevision < atRevision
+    ) {
+      throw new Error("History response belongs to a stale owner; reload explicitly");
+    }
+  }
+
+  private assertHistoryRows(
+    rows: readonly ConversationRow[],
+    changed: ReadonlySet<string>,
+    watermark: ConversationHistoryWatermark,
+  ): void {
+    const snapshot = this.state.snapshot!;
+    if (watermark.atSeq > snapshot.seq || watermark.atRevision > snapshot.revision)
+      throw new Error(
+        "History response is ahead of the live subscription; retry explicitly after it catches up",
+      );
+    const current = snapshot.rows.window;
+    const keys = new Set(current.map(historyRowKey));
+    for (const row of rows) {
+      if (historyRowWasChanged(row, changed) && !keys.has(historyRowKey(row)))
+        throw new Error("History read overlapped an unloaded live mutation; retry explicitly");
+    }
+  }
+
+  async readHistoryDirectory(options: ConversationHistoryDirectoryOptions) {
+    const target = this.historyTarget();
+    const owner = this.getHistoryOwnerKey();
+    const snapshot = this.state.snapshot!;
+    const result = await this.transport.historyDirectory({
+      ...options,
+      ...target,
+      limit: Math.min(100, Math.max(1, options.limit ?? 100)),
+    });
+    this.assertHistoryResult(owner, result, snapshot.seq, snapshot.revision);
+    return result;
+  }
+
+  async readHistoryContent(options: ConversationHistoryContentOptions) {
+    const target = this.historyTarget();
+    const owner = this.getHistoryOwnerKey();
+    const snapshot = this.state.snapshot!;
+    const result = await this.transport.historyContent({ ...options, ...target });
+    this.assertHistoryResult(owner, result, snapshot.seq, snapshot.revision);
+    return result;
+  }
+
+  async loadNewer(): Promise<void> {
+    await this.loadHistoryPage("newer");
+  }
+  loadAround(entryId: string): Promise<V4ConversationHistoryPageResult | null> {
+    return this.loadHistoryPage("around", { aroundEntryId: entryId });
+  }
+  loadLatest(): Promise<V4ConversationHistoryPageResult | null> {
+    return this.loadHistoryPage("latest");
+  }
+
+  private async loadHistoryPage(
+    direction: HistoryDirection,
+    options: ConversationHistoryPageOptions = {},
+  ): Promise<V4ConversationHistoryPageResult | null> {
+    const snapshot = this.state.snapshot;
+    if (this.closed || this.historyFlight || !snapshot?.history) return null;
+    const history = snapshot.history;
+    if (
+      (direction === "older" && !history.hasOlder) ||
+      (direction === "newer" && !history.hasNewer)
+    )
+      return null;
+    return this.runHistoryRequest(direction, async (flight) => {
+      if (
+        (direction === "older" || direction === "newer") &&
+        this.historyWindow.needsBoundaryRefresh
+      )
+        throw new Error(HISTORY_BOUNDARY_REFRESH_REQUIRED);
+      const cursor =
+        direction === "older"
+          ? history.olderCursor
+          : direction === "newer"
+            ? history.newerCursor
+            : undefined;
+      if ((direction === "older" || direction === "newer") && !cursor)
+        throw new Error("History page cursor is missing; reload explicitly");
+      const result = await this.transport.historyPage({
+        ...options,
+        ...this.historyTarget(),
+        ...(direction === "older" ? { beforeCursor: cursor } : {}),
+        ...(direction === "newer" ? { afterCursor: cursor } : {}),
+        turnLimit: 20,
+      });
+      this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
+      if (result.history.branchRevision !== history.branchRevision)
+        throw new Error("History branch changed; reload the subscription");
+      if (
+        (direction === "older" &&
+          result.history.hasOlder &&
+          result.history.olderCursor === cursor) ||
+        (direction === "newer" && result.history.hasNewer && result.history.newerCursor === cursor)
+      )
+        throw new Error("History cursor did not advance");
+      if (
+        (result.history.hasOlder && !result.history.olderCursor) ||
+        (result.history.hasNewer && !result.history.newerCursor)
+      )
+        throw new Error("History response omitted a continuation cursor");
+      const positions = history.turns.map((turn) => turn.position);
+      if (
+        (direction === "older" &&
+          !result.history.turns.some((turn) => turn.position < Math.min(...positions))) ||
+        (direction === "newer" &&
+          !result.history.turns.some((turn) => turn.position > Math.max(...positions)))
+      )
+        throw new Error("History page did not advance the reading window");
+      const current = this.state.snapshot!;
+      this.assertHistoryRows(result.rows, flight.changed, result);
+      const next = this.historyWindow.mergePage(current, result, direction, flight.changed);
+      this.setState({
+        snapshot: next,
+        historyTruncatedTurns: this.historyWindow.omissions,
+        historyError: this.historyWindow.needsBoundaryRefresh
+          ? HISTORY_BOUNDARY_REFRESH_REQUIRED
+          : null,
+      });
+      return result;
+    });
+  }
+
+  async loadHistoryTurn(
+    turnId: string,
+    cursor?: string,
+  ): Promise<V4ConversationHistoryTurnResult | null> {
+    const snapshot = this.state.snapshot;
+    if (
+      this.closed ||
+      this.historyFlight ||
+      !snapshot?.history?.turns.some((turn) => turn.turnId === turnId)
+    )
+      return null;
+    return this.runHistoryRequest("turn", async (flight) => {
+      const result = await this.transport.historyTurn({
+        ...this.historyTarget(),
+        turnId,
+        ...(cursor ? { cursor } : {}),
+      });
+      this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
+      if (result.turn.turnId !== turnId) throw new Error("History turn identity mismatch");
+      if (result.hasMore && (!result.continuationCursor || result.continuationCursor === cursor))
+        throw new Error("History turn cursor did not advance");
+      this.assertHistoryRows(result.rows, flight.changed, result);
+      const next = this.historyWindow.mergeTurn(
+        this.state.snapshot!,
+        result,
+        flight.changed,
+        cursor === undefined,
+      );
+      this.setState({
+        snapshot: next,
+        historyTruncatedTurns: this.historyWindow.omissions,
+        historyError: this.historyWindow.needsBoundaryRefresh
+          ? HISTORY_BOUNDARY_REFRESH_REQUIRED
+          : null,
+      });
+      return result;
+    });
+  }
+
+  private async runHistoryRequest<T>(
+    direction: HistoryDirection,
+    read: (flight: { owner: string; changed: Set<string> }) => Promise<T>,
+  ): Promise<T | null> {
+    const flight = { owner: this.getHistoryOwnerKey(), changed: new Set<string>() };
+    this.historyFlight = flight;
+    this.setState({
+      historyRequest: direction,
+      loadingOlder: direction === "older",
+      historyError: null,
+    });
+    try {
+      return await read(flight);
+    } catch (error) {
+      if (
+        !this.closed &&
+        this.historyFlight === flight &&
+        flight.owner === this.getHistoryOwnerKey()
+      )
+        this.setState({ historyError: error instanceof Error ? error.message : String(error) });
+      return null;
+    } finally {
+      if (this.historyFlight === flight) {
+        this.historyFlight = null;
+        if (!this.closed) this.setState({ historyRequest: null, loadingOlder: false });
+      }
     }
   }
 
@@ -1040,6 +1334,10 @@ export class ConversationProjectionStore {
     if (this.closed || this.state.loadingOlder) return stale();
     const snapshot = this.state.snapshot;
     if (!snapshot) return stale();
+    if (snapshot.history) {
+      this.setState({ historyError: "History export requires an explicit host export operation" });
+      return { status: "retryable-failure", logEpoch: snapshot.logEpoch };
+    }
     // 终态必须同时匹配 logEpoch 与 directoryRevision。logEpoch 表示日志代际，
     // 不表示内容静止——real-user query 增删会递增 revision 使终态失效，允许重新探测。
     const directoryRevision = this.state.turnNavigatorDirectoryRevision;
@@ -1354,6 +1652,7 @@ export class ConversationProjectionStore {
     this.awaitingInitial = null;
     this.subscriptionHasAppliedBase = false;
     this.generation++;
+    this.invalidateHistory();
     const { subscriptionId } = this.state;
     this.setState({ status: "closed", subscriptionId: null });
     if (subscriptionId) {
