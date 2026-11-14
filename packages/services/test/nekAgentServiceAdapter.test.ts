@@ -1,3 +1,4 @@
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -17,6 +18,7 @@ import type { NekExtensionUiHandler } from "../src/nek-agent/nekExtensionUiRoute
 
 const guiInfo = {
   protocolVersion: 1,
+  capabilities: { historyPages: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -73,7 +75,9 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
-      if (kind === "control") {
+      if (command.type === "read_history_page" || command.type === "read_session_metadata") {
+        data = fixtureHistory([], command);
+      } else if (kind === "control") {
         if (command.type === "get_project_trust")
           data = {
             cwd: command.cwd,
@@ -336,7 +340,7 @@ test("maps a nek session to v4 and requires the target nek attachment capability
   } finally {
     await adapter.dispose();
   }
-  assert.ok(session.commands.some((command) => command.type === "get_entries"));
+  assert.ok(session.commands.some((command) => command.type === "read_history_page"));
 });
 
 const IZCODE_METHODS = [

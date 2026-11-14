@@ -1,3 +1,4 @@
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -13,6 +14,7 @@ import type { NekAgentServiceOptions } from "../src/nek-agent/service/types.js";
 
 const guiInfo = {
   protocolVersion: 1,
+  capabilities: { historyPages: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -62,7 +64,9 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
-      if (kind === "control") {
+      if (command.type === "read_history_page" || command.type === "read_session_metadata") {
+        data = fixtureHistory([], command);
+      } else if (kind === "control") {
         if (command.type === "get_project_trust") {
           data = { cwd: command.cwd, resources: [], ...projectTrust };
         } else if (command.type === "list_sessions") {

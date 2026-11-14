@@ -340,7 +340,6 @@ function applyToolResultMessage(ctx: NekLiveContext, result: NekToolResultMessag
   const entityId = `tool:${result.toolCallId}`;
   const rowId = ctx.store.allocate(entityId);
   ctx.toolRows.set(result.toolCallId, rowId);
-  if (result.details !== undefined) ctx.toolDetails.set(result.toolCallId, result.details);
   ctx.store.add(
     mergeToolResultRow(
       rowIdentity(entityId, rowId, currentTurnId(ctx), toEpochMs(result.timestamp)),

@@ -55,9 +55,13 @@ export class NekProjectionStore {
     Array<{ path: StreamablePath; append: string }>
   >();
   private readonly maxWindowRows: number;
+  private readonly rowBytes = new Map<number, number>();
+  private renderedBytes = 0;
+  private readonly maxWindowBytes = 16 * 1024 * 1024;
   private nextRowId: number;
   private firstRowId: number | null;
   private totalCount: number;
+  private epochValue: string;
   private stateValue: NekProjectionState;
   private pendingState: StatePatch | undefined;
 
@@ -69,6 +73,12 @@ export class NekProjectionStore {
     this.firstRowId = this.rows[0]?.rowId ?? null;
     this.totalCount = this.rows.length;
     this.stateValue = options.initialState;
+    this.epochValue = options.logEpoch;
+    for (const row of this.rows) {
+      const bytes = Buffer.byteLength(JSON.stringify(row), "utf8");
+      this.rowBytes.set(row.rowId, bytes);
+      this.renderedBytes += bytes;
+    }
     if (this.rows.length > 0) {
       // 已存在的行视为"客户端已经持有"：之后只发 upsert/delta。
       for (const row of this.rows) this.emitted.add(row.rowId);
@@ -105,11 +115,19 @@ export class NekProjectionStore {
   }
 
   get logEpoch(): string {
-    return this.options.logEpoch;
+    return this.epochValue;
+  }
+
+  rotateLogEpoch(epoch: string): void {
+    this.epochValue = epoch;
   }
 
   get window(): readonly ConversationRow[] {
     return this.rows;
+  }
+
+  get windowRowLimit(): number {
+    return this.maxWindowRows;
   }
 
   get rowCount(): number {
@@ -131,9 +149,16 @@ export class NekProjectionStore {
     const known = this.byEntity.get(entityId);
     if (known !== undefined) return known;
     const rowId = this.nextRowId;
+    if (!Number.isSafeInteger(rowId)) throw new Error("nek live row identity overflow");
     this.nextRowId += 1;
     this.byEntity.set(entityId, rowId);
     return rowId;
+  }
+
+  /** Bounded live aliases point at canonical persisted identities, never a second row. */
+  bindEntityAlias(alias: string, entity: string): void {
+    const id = this.byEntity.get(entity);
+    if (id !== undefined) this.byEntity.set(alias, id);
   }
 
   findRowId(entityId: string): number | undefined {
@@ -145,12 +170,45 @@ export class NekProjectionStore {
     return found as T | undefined;
   }
 
+  /** Restore an already authorized cached source anchor without allocating a page-local identity. */
+  restoreAnchor(row: ConversationRow): void {
+    const existing = this.getRow(row.rowId);
+    if (existing && existing.entityId !== row.entityId)
+      throw new Error("nek history anchor row identity collision");
+    if (row.entityId) this.byEntity.set(row.entityId, row.rowId);
+    this.nextRowId = Math.max(this.nextRowId, row.rowId + 1);
+    this.add(row);
+    this.rows.sort((a, b) => a.rowId - b.rowId);
+    this.firstRowId = this.rows[0]?.rowId ?? null;
+  }
+
   /** 追加一行（尾部）；同一 rowId 再追加会被忽略。 */
   add(row: ConversationRow): void {
+    const previous = this.getRow(row.rowId);
+    const ownerId = this.byEntity.get(row.turnId);
+    const owner = ownerId === undefined ? undefined : this.getRow(ownerId);
+    if (previous?.entityId && previous.entityId !== row.entityId)
+      row = {
+        ...row,
+        entityId: previous.entityId,
+        turnId: previous.turnId,
+        productTurnId: previous.turnId,
+      };
+    else if (owner?.kind === "turnHeader" && owner.turnId !== row.turnId)
+      row = { ...row, turnId: owner.turnId, productTurnId: owner.turnId };
     if (this.rows.some((existing) => existing.rowId === row.rowId)) {
       this.update(row.rowId, () => row);
       return;
     }
+    const activeTurn = this.activeTurnId();
+    if (
+      this.rows.length >= this.maxWindowRows &&
+      this.rows.every((item) => this.isPinned(item, activeTurn))
+    )
+      throw new Error(
+        "nek live rows exceed the rendered window; bounded CLI turn continuation is required",
+      );
+    this.reserveRow(row);
     this.rows.push(row);
     this.totalCount += 1;
     this.firstRowId ??= row.rowId;
@@ -165,7 +223,8 @@ export class NekProjectionStore {
     if (!current) return;
     const next = updater(current);
     if (next === current) return;
-    this.rows[index] = next;
+    this.reserveRow(next);
+    this.rows[this.rows.findIndex((row) => row.rowId === rowId)] = next;
     this.needsUpsert.add(rowId);
     this.pendingStream.delete(rowId);
   }
@@ -179,7 +238,8 @@ export class NekProjectionStore {
     if (!current) return;
     const next = applyAppend(current, path, append);
     if (next === current) return;
-    this.rows[index] = next;
+    this.reserveRow(next);
+    this.rows[this.rows.findIndex((row) => row.rowId === rowId)] = next;
     if (this.needsUpsert.has(rowId)) return;
     const list = this.pendingStream.get(rowId) ?? [];
     list.push({ path, append });
@@ -188,6 +248,8 @@ export class NekProjectionStore {
 
   /** 取走待下发增量（按 rowId 升序，保证确定性）。 */
   drainDeltas(): ConversationDelta[] {
+    const retained = new Set(this.rows.map((row) => row.rowId));
+    for (const [entity, id] of this.byEntity) if (!retained.has(id)) this.byEntity.delete(entity);
     const rowDeltas: Extract<
       ConversationDelta,
       { op: "row.appended" | "row.upserted" | "row.delta" }
@@ -241,7 +303,7 @@ export class NekProjectionStore {
   snapshot(seq: number, revision: number): ConversationSnapshot {
     return buildConversationSnapshot({
       sessionId: this.options.sessionId,
-      logEpoch: this.options.logEpoch,
+      logEpoch: this.logEpoch,
       seq,
       revision,
       rows: [...this.rows],
@@ -270,6 +332,17 @@ export class NekProjectionStore {
     byEntity: Map<string, number>,
     nextRowId: number,
   ): void {
+    if (rows.length > this.maxWindowRows)
+      throw new Error("nek projected row limit exceeded; bounded source continuation is required");
+    const sizes = rows.map((row) => Buffer.byteLength(JSON.stringify(row), "utf8"));
+    if (sizes.reduce((total, size) => total + size, 0) > this.maxWindowBytes)
+      throw new Error("nek rendered history exceeds 16 MB; deferred CLI live content is required");
+    this.rowBytes.clear();
+    this.renderedBytes = 0;
+    rows.forEach((row, index) => {
+      this.rowBytes.set(row.rowId, sizes[index]!);
+      this.renderedBytes += sizes[index]!;
+    });
     this.rows.length = 0;
     this.rows.push(...rows);
     this.byEntity.clear();
@@ -282,13 +355,62 @@ export class NekProjectionStore {
     this.pendingStream.clear();
   }
 
+  /** Evict refetchable inactive bodies; a live turn that alone exceeds budget fails visibly. */
+  private reserveRow(row: ConversationRow): void {
+    const bytes = Buffer.byteLength(JSON.stringify(row), "utf8");
+    const previous = this.rowBytes.get(row.rowId) ?? 0;
+    if (bytes > this.maxWindowBytes)
+      throw new Error("nek live row exceeds 16 MB; bounded CLI content refs are required");
+    const activeTurn = this.activeTurnId();
+    while (this.renderedBytes - previous + bytes > this.maxWindowBytes) {
+      const index = this.rows.findIndex(
+        (item) => item.rowId !== row.rowId && !this.isPinned(item, activeTurn),
+      );
+      if (index < 0)
+        throw new Error("nek live turn exceeds 16 MB; bounded CLI continuation is required");
+      const [removed] = this.rows.splice(index, 1);
+      this.forgetRow(removed!);
+      this.totalCount -= 1;
+      this.firstRowId = this.rows[0]?.rowId ?? null;
+    }
+    this.rowBytes.set(row.rowId, bytes);
+    this.renderedBytes += bytes - previous;
+  }
+
+  private forgetRow(row: ConversationRow): void {
+    this.renderedBytes -= this.rowBytes.get(row.rowId) ?? 0;
+    this.rowBytes.delete(row.rowId);
+    this.emitted.delete(row.rowId);
+    this.needsUpsert.delete(row.rowId);
+    this.pendingStream.delete(row.rowId);
+    for (const [entity, id] of this.byEntity) if (id === row.rowId) this.byEntity.delete(entity);
+  }
+
+  private activeTurnId(): string | undefined {
+    return this.rows.findLast((item) => item.kind === "turnHeader" && item.state === "running")
+      ?.turnId;
+  }
+
+  private isPinned(row: ConversationRow, activeTurn: string | undefined): boolean {
+    return (
+      row.turnId === activeTurn ||
+      (row.kind === "toolCall" && (row.status === "running" || row.status === "inputStreaming")) ||
+      (row.kind === "subagent" && row.status === "running") ||
+      ((row.kind === "assistantText" || row.kind === "reasoning") && row.state === "streaming")
+    );
+  }
+
   private trim(): void {
-    if (this.rows.length <= this.maxWindowRows) return;
-    const drop = this.rows.length - this.maxWindowRows;
-    this.rows.splice(0, drop);
-    // 没有 rows/range 分页端点：裁剪后把窗口首行当作"已到顶"，UI 不会去请求不存在的更早分页。
+    const activeTurn = this.activeTurnId();
+    while (this.rows.length > this.maxWindowRows) {
+      const index = this.rows.findIndex((row) => !this.isPinned(row, activeTurn));
+      if (index < 0) throw new Error("nek pinned live rows exceed the rendered window");
+      const [row] = this.rows.splice(index, 1);
+      this.forgetRow(row!);
+      this.totalCount -= 1;
+    }
+    // Legacy range sees loaded rows only; history consumers use source cursors, never firstRowId.
     this.firstRowId = this.rows[0]?.rowId ?? this.firstRowId;
-    this.totalCount = Math.max(this.rows.length, this.totalCount - drop);
   }
 }
 

@@ -12,6 +12,7 @@ import type {
   NekSessionEntry,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 import { NekRpcClient, type NekRpcProcessExit } from "../src/nek-agent/nekRpcClient.js";
 import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
@@ -21,7 +22,7 @@ export const sessionId = "disk-session";
 export const sessionPath = "/sessions/disk.jsonl";
 export const guiInfo: NekGuiInfo = {
   protocolVersion: 1,
-  capabilities: { promptAttachments: 1 },
+  capabilities: { promptAttachments: 1, historyPages: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -127,6 +128,7 @@ export function harness(
     subagents?: NekSubagentRecord[];
     childSnapshots?: NekSessionSnapshot[];
     subagentMessages?: unknown[];
+    historyOverride?: (command: NekRpcCommand) => unknown;
   } = {},
 ) {
   let failEntries = options.failEntries ?? false;
@@ -142,11 +144,25 @@ export function harness(
     leafId: entries.at(-1)?.id ?? null,
   };
   const control = createProcess(async (command) => {
+    const overridden = options.historyOverride?.(command);
+    if (overridden !== undefined) return overridden;
     if (command.type === "list_sessions")
       return { sessions: [snapshot.session, ...(options.extraSessions ?? [])] };
     // 与 nek 一致：会话进程还活着（持锁）时拒绝删除。
     if (command.type === "delete_session" && sessions.some((session) => !session.isDisposed()))
       throw new Error(`Session is locked by a live process: ${command.sessionPath}`);
+    if (
+      command.type === "read_session_metadata" ||
+      command.type === "read_history_page" ||
+      command.type === "read_history_subagent"
+    ) {
+      await barrier;
+      if (snapshotFailure) throw snapshotFailure;
+      const source =
+        options.childSnapshots?.find((item) => item.session.path === command.sessionPath) ??
+        snapshot;
+      return fixtureHistory(source.entries, command, source.session, source.lockedBy);
+    }
     if (command.type === "read_session_snapshot") {
       const child = options.childSnapshots?.find(
         (item) => item.session.path === command.sessionPath,
@@ -176,6 +192,22 @@ export function harness(
       // 新建会话没有 sessionPath；恢复只能恢复这一个磁盘会话。
       if (request.sessionPath !== undefined) assert.equal(request.sessionPath, sessionPath);
       const session = createProcess((command) => {
+        const overridden = options.historyOverride?.(command);
+        if (overridden !== undefined) return overridden;
+        if (
+          command.type === "read_history_page" ||
+          command.type === "read_session_metadata" ||
+          command.type === "read_history_subagent"
+        ) {
+          if (command.type === "read_history_page" && failEntries) {
+            failEntries = false;
+            throw new Error("entries load failed");
+          }
+          const source =
+            options.childSnapshots?.find((item) => item.session.path === command.sessionPath) ??
+            snapshot;
+          return fixtureHistory(source.entries, command, source.session, source.lockedBy);
+        }
         if (command.type === "get_state")
           return {
             sessionId,

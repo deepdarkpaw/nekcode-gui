@@ -93,14 +93,12 @@ test("S2: oversized live deltas use the same logical sequence as initial and rec
     assert.equal(frames[0]?.kind, "complete", "small snapshots remain complete frames");
     const initialOrdinal = frames[0]!.logicalFrameOrdinal;
     for (const frame of frames.splice(0)) assembler.accept(frame);
-    h.sessions[0]!.emit({
-      type: "message_start",
-      message: {
-        role: "user",
-        content: text.repeat(8),
-        timestamp: 2,
-      },
-    });
+    // Each CLI event is bounded; coalescing may still produce a fragmented logical frame.
+    for (let index = 0; index < 8; index++)
+      h.sessions[0]!.emit({
+        type: "message_start",
+        message: { role: "user", content: text, timestamp: index + 2 },
+      });
     const deadline = Date.now() + 2_000;
     while (frames.length === 0 && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 10));

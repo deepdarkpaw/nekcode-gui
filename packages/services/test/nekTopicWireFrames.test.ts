@@ -95,8 +95,14 @@ test("S4: an over-limit snapshot rejects subscription instead of acknowledging a
     ],
   });
   try {
-    await assert.rejects(h.adapter.subscribeConversationV4(params), /proto.frameAssemblyTooLarge/u);
-    await assert.rejects(h.adapter.subscribeConversationV4(params), /proto.frameAssemblyTooLarge/u);
+    await assert.rejects(
+      h.adapter.subscribeConversationV4(params),
+      /history projection exceeds 4 MB/u,
+    );
+    await assert.rejects(
+      h.adapter.subscribeConversationV4(params),
+      /history projection exceeds 4 MB/u,
+    );
   } finally {
     await h.adapter.dispose();
   }

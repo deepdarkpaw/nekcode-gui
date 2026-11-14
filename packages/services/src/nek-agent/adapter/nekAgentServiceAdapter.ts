@@ -29,6 +29,7 @@ import {
   queryConversationCommands,
   sendConversationCommand,
 } from "./nekAgentServiceAdapterCommands.js";
+import { createNekHistoryMethods } from "./nekHistoryMethods.js";
 import { createNekLegacyMethods } from "./nekAgentServiceAdapterLegacy.js";
 import { NekAgentInteractionChannel } from "./nekAgentInteractionChannel.js";
 import type { NekAgentStatusChannel } from "./nekAgentStatusChannel.js";
@@ -94,6 +95,10 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly helloConversationV4: IZCodeAgentService["helloConversationV4"];
   declare readonly initializeConversationV4: IZCodeAgentService["initializeConversationV4"];
   declare readonly setConnectionFlowStateV4: IZCodeAgentService["setConnectionFlowStateV4"];
+  declare readonly conversationHistoryPageV4: IZCodeAgentService["conversationHistoryPageV4"];
+  declare readonly conversationHistoryTurnV4: IZCodeAgentService["conversationHistoryTurnV4"];
+  declare readonly conversationHistoryDirectoryV4: IZCodeAgentService["conversationHistoryDirectoryV4"];
+  declare readonly conversationHistoryContentV4: IZCodeAgentService["conversationHistoryContentV4"];
   declare readonly conversationRowsRangeV4: IZCodeAgentService["conversationRowsRangeV4"];
   declare readonly conversationPlansV4: IZCodeAgentService["conversationPlansV4"];
   declare readonly backgroundBashOutputV4: IZCodeAgentService["backgroundBashOutputV4"];
@@ -173,6 +178,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     Object.assign(
       this,
       statusFeed.methods,
+      createNekHistoryMethods(this),
       createNekLegacyMethods(this, options.runtimeConfig?.events.eventBufferEntries),
     );
   }
@@ -252,7 +258,10 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   ): Promise<NekAgentMessage[]> {
     const binding = await this.ensureNekSessionBinding(target, target.sessionId);
     const session = this.service.getSession(binding.sessionKey);
-    if (session?.readonly) return (session.snapshot?.messages ?? []) as NekAgentMessage[];
+    if (session?.readonly)
+      throw new Error(
+        "Use conversationHistoryPageV4 for bounded readonly history; raw messages are not exposed",
+      );
     return (
       await this.service
         .commandContext()

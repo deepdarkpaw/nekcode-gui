@@ -1,3 +1,4 @@
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -16,6 +17,7 @@ import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 
 const guiInfo = {
   protocolVersion: 1,
+  capabilities: { historyPages: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -117,6 +119,8 @@ function fakeProcess(kind: "control" | "session"): FakeProcess {
 }
 
 function respond(kind: "control" | "session", command: NekRpcCommand): unknown {
+  if (command.type === "read_history_page" || command.type === "read_session_metadata")
+    return fixtureHistory([], command);
   if (kind === "control") {
     if (command.type === "get_project_trust")
       return { cwd: command.cwd, resources: [], trusted: true, defaultProjectTrust: "always" };
@@ -284,8 +288,9 @@ test("routes status actions to nek RPCs and returns bounded queue contents", asy
       [
         "get_state",
         "get_state",
-        "get_entries",
+        "read_history_page",
         "get_session_stats",
+        "read_session_metadata",
         "extension_call",
         "clear_queue",
         "steer",
@@ -299,8 +304,9 @@ test("routes status actions to nek RPCs and returns bounded queue contents", asy
         "get_state",
         "get_session_stats",
         // Registry sampled after entries distinguishes a live spawn from stale history.
-        "get_entries",
+        "read_history_page",
         "extension_call",
+        "read_session_metadata",
       ],
     );
     assert.deepEqual(

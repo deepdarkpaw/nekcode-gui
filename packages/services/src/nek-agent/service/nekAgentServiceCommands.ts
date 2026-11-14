@@ -20,6 +20,8 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
+import { historyResult, requireHistoryPages } from "./nekHistoryRpc.js";
+import { validateHistoryDisplay } from "../projection/nekHistoryDisplay.js";
 import { collectPersistedSubagentRecords } from "../projection/nekSubagentRecords.js";
 import { isNekState, type NekMode, type NekPromptInput, type NekThoughtLevel } from "./types.js";
 export { clearQueue, retrieveQueue, requeueQueue } from "./nekQueueCommands.js";
@@ -142,13 +144,16 @@ export async function abortRetry(
 export async function getStatusSnapshot(
   context: NekAgentCommandContext,
   sessionKey: string,
-): Promise<NekStatusSnapshot> {
+): Promise<
+  NekStatusSnapshot & { historyChildren: { total: number; loaded: number; complete: boolean } }
+> {
   const target = context.target(sessionKey);
-  const [state, stats, entries] = await Promise.all([
+  requireHistoryPages(target);
+  const [state, stats, pageResult] = await Promise.all([
     target.client.call({ type: "get_state" }),
     target.client.call({ type: "get_session_stats" }),
     // nek 的 subagent registry 是纯内存表：重开 GUI 后只剩 entries 里 toolResult 的 details。
-    target.client.call({ type: "get_entries" }),
+    target.client.call({ type: "read_history_page", turnLimit: 20 }),
   ]);
   // Read the registry after entries: a child registered before its persisted spawn result
   // must be visible here. Parent isStreaming alone never proves a historical child is alive.
@@ -158,12 +163,28 @@ export async function getStatusSnapshot(
   }
   const live = extension.result;
   // 内存里的子代理是活的权威：histories 只补它没有的 id，绝不覆盖实时状态。
-  const persisted = collectPersistedSubagentRecords(entries.entries);
+  const page = historyResult(pageResult);
+  const persisted = collectPersistedSubagentRecords(
+    page.entries
+      .filter((entry) => entry.omissions.length === 0)
+      .map((entry) => validateHistoryDisplay(entry.entry)),
+  );
   const liveIds = new Set(live.subagents.map((record) => record.id));
   const restored = [...persisted.values()]
     .filter((entry) => !liveIds.has(entry.record.id))
     .map((entry) => entry.record);
+  const metadata = historyResult(
+    await target.client.call({
+      type: "read_session_metadata",
+      branchRevision: page.branchRevision,
+    }),
+  );
   return {
+    historyChildren: {
+      total: metadata.children.count,
+      loaded: live.subagents.length + restored.length,
+      complete: metadata.children.count <= live.subagents.length + restored.length,
+    },
     sessionKey: state.sessionId,
     running: state.isStreaming,
     compacting: state.isCompacting,

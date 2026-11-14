@@ -15,6 +15,7 @@ import type {
   NekMode,
   NekThinkingLevel,
 } from "./gui-rpc.js";
+import type { NekHistoryResponseData } from "./history.js";
 import type { NekMentionTargetInfo } from "./mentions.js";
 import type { NekStatusQueue } from "./status.js";
 import type {
@@ -258,7 +259,7 @@ export interface NekCycleModelResult {
  * 无数据的命令显式标 `undefined`；映射表里没有的类型统一按 `unknown` 处理，
  * 这样 nek 新增命令时 GUI 不会因为类型收窄而误判"一定有数据"。
  */
-export interface NekRpcResponseDataMap {
+export interface NekRpcResponseDataMap extends NekHistoryResponseData {
   // ---- 既有命令 ----
   prompt: { disposition: NekPromptDisposition };
   steer: { disposition: NekQueuedInputDisposition };

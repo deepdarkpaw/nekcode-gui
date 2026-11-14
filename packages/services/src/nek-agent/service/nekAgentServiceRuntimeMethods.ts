@@ -2,11 +2,10 @@ import { DEFAULT_GUI_RUNTIME_CONFIG, type GuiRuntimeConfig } from "@zcode/shared
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { measureNekOpenBootstrap, measureNekOpenRequest } from "./nekSessionOpenTiming.js";
 import type {
-  NekAgentMessage,
+  NekHistoryMetadata,
+  NekHistoryPage,
   NekInteractionScope,
   NekRpcEvent,
-  NekSessionEntry,
-  NekSessionSnapshot,
 } from "@zcode/shared/nek-protocol";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js";
@@ -264,6 +263,7 @@ export abstract class NekAgentServiceRuntimeBase {
     if (record.process === process) return;
     this.detachProcess(record);
     record.process = process;
+    record.projector?.resetHistoryProcessSeeds();
     record.readonly = false;
     record.detachEvents = process.client.onAnyEvent((event) => this.handleEvent(record, event));
     record.detachExit = process.client.onExit((exit) => this.handleProcessExit(record, exit));
@@ -319,7 +319,11 @@ export abstract class NekAgentServiceRuntimeBase {
    * nek 从 P2c 起在快照里报出锁持有者（`lockedBy`），这里原样透传给会话记录和
    * `NekSession.lockHolder`；更早的 nek 只报 `locked: true`，此时占用者仍记为 `"nek"`。
    */
-  protected openLockedSnapshot(snapshot: NekSessionSnapshot, cwd?: string): NekSessionResult {
+  protected openLockedHistory(
+    snapshot: NekHistoryMetadata,
+    page: NekHistoryPage,
+    cwd?: string,
+  ): NekSessionResult {
     const existing = this.byPath.get(snapshot.session.path);
     if (existing) this.removeRecord(existing);
     const holder = snapshot.lockedBy;
@@ -332,21 +336,17 @@ export abstract class NekAgentServiceRuntimeBase {
       readonly: true,
       lockedBy: nekLockLabel(holder),
       ...(holder ? { lockHolder: holder } : {}),
-      snapshot,
+      historyMetadata: snapshot,
       closing: false,
     });
     record.projector = this.createProjector(record);
-    record.projector.loadSnapshot({
-      entries: snapshot.entries as NekSessionEntry[],
-      messages: snapshot.messages as NekAgentMessage[],
-      leafId: snapshot.leafId,
-      title: snapshot.session.name,
-    });
+    record.projector.loadHistory({ page, metadata: snapshot });
     record.projector.applyReadOnly({ reason: "locked", ...(holder ? { holder } : {}) });
     return this.result(record);
   }
 
   protected handleEvent(record: NekSessionRecord, event: NekRpcEvent): void {
+    record.eventEpoch = (record.eventEpoch ?? 0) + 1;
     // 顺序固定：先状态机、再投影、最后广播；快照重建读的是同一份 record.state。
     applyNekSessionEvent(
       {
@@ -359,7 +359,8 @@ export abstract class NekAgentServiceRuntimeBase {
         cancelPendingInputs: (target, reason) => this.pendingInputs.cancel(target, reason),
         refreshSnapshot: (target) =>
           void this.refreshProcessSnapshot(target).catch((error) => {
-            this.logger?.warn("failed to refresh nek snapshot after agent_settled", error);
+            this.logger?.warn("failed to refresh bounded nek history snapshot", error);
+            target.projector?.reportHistoryFailure(error);
           }),
       },
       event,
@@ -447,7 +448,6 @@ export abstract class NekAgentServiceRuntimeBase {
       ...(record.lockedBy ? { lockedBy: record.lockedBy } : {}),
       ...(record.lockHolder ? { lockHolder: record.lockHolder } : {}),
       ...(record.process?.pid ? { processId: record.process.pid } : {}),
-      ...(record.snapshot ? { snapshot: record.snapshot } : {}),
     };
   }
 

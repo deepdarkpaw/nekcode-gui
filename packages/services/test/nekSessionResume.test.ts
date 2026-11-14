@@ -53,7 +53,7 @@ test("SR-2: simultaneous subscribe/read/legacy resume share one restore, includi
     assert.equal(h.sessions.length, 1);
     assert.equal(h.control.commands.filter((cmd) => cmd.type === "list_sessions").length, 1);
     assert.equal(
-      h.control.commands.filter((cmd) => cmd.type === "read_session_snapshot").length,
+      h.control.commands.filter((cmd) => cmd.type === "read_session_metadata").length,
       1,
     );
   } finally {
@@ -71,14 +71,14 @@ test("SR-3: failed snapshot restore is visible and the same subscription request
     ]);
     assert.equal(h.adapter.resolveSessionKey(target, sessionId), undefined);
     assert.equal(
-      h.control.commands.filter((cmd) => cmd.type === "read_session_snapshot").length,
+      h.control.commands.filter((cmd) => cmd.type === "read_session_metadata").length,
       1,
     );
     h.failSnapshot();
     await h.adapter.subscribeConversationV4(params);
     assert.equal(h.sessions.length, 1);
     assert.equal(
-      h.control.commands.filter((cmd) => cmd.type === "read_session_snapshot").length,
+      h.control.commands.filter((cmd) => cmd.type === "read_session_metadata").length,
       2,
     );
   } finally {
@@ -149,7 +149,7 @@ test("SR-5: reconnect after process exit reuses restore admission", async () => 
     await h.adapter.subscribeConversationV4(params);
     assert.equal(h.sessions.length, 2);
     assert.equal(
-      h.control.commands.filter((cmd) => cmd.type === "read_session_snapshot").length,
+      h.control.commands.filter((cmd) => cmd.type === "read_session_metadata").length,
       2,
     );
     await h.adapter.sendNekConversationCommandV4({ target, envelope: command });
@@ -186,7 +186,7 @@ test("SR-2: direct service resumes share a path flight", async () => {
     assert.equal(first.sessionKey, second.sessionKey);
     assert.equal(h.sessions.length, 1);
     assert.equal(
-      h.control.commands.filter((cmd) => cmd.type === "read_session_snapshot").length,
+      h.control.commands.filter((cmd) => cmd.type === "read_session_metadata").length,
       1,
     );
   } finally {

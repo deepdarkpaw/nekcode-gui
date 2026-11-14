@@ -64,6 +64,15 @@ import type {
   V4ConversationFileRewindPreviewResult,
   V4ConversationPlansResult,
   V4ConversationRowsRangeResult,
+  ConversationHistory,
+  ConversationHistoryPageOptions,
+  ConversationHistoryTurnOptions,
+  ConversationHistoryDirectoryOptions,
+  ConversationHistoryContentOptions,
+  V4ConversationHistoryPageResult,
+  V4ConversationHistoryTurnResult,
+  V4ConversationHistoryDirectoryResult,
+  V4ConversationHistoryContentResult,
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
   V4SessionsIndexSubscribeResult,
@@ -77,7 +86,7 @@ import type {
   NekSessionStats,
   NekStatusFrame,
   NekStatusQueue,
-  NekStatusSnapshot,
+  NekHistoryStatusSnapshot as NekStatusSnapshot,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
 import { createServiceDescriptor } from "../descriptors.js";
@@ -168,9 +177,23 @@ export interface ZCodeAgentStopSubagentParams extends ZCodeAgentSessionTarget {
   id: string;
 }
 
-export interface ZCodeAgentSubagentTranscriptParams extends ZCodeAgentSessionTarget {
+export interface ZCodeAgentSubagentTranscriptParams
+  extends ZCodeAgentSessionTarget, ConversationHistoryPageOptions {
   id: string;
 }
+
+/** Child reads retain the parent target and reauthorize subagentId on every request. */
+export interface ZCodeAgentConversationHistoryTarget extends ZCodeAgentSessionTarget {
+  subagentId?: string;
+}
+export interface ZCodeAgentConversationHistoryPageParams
+  extends ZCodeAgentConversationHistoryTarget, ConversationHistoryPageOptions {}
+export interface ZCodeAgentConversationHistoryTurnParams
+  extends ZCodeAgentConversationHistoryTarget, ConversationHistoryTurnOptions {}
+export interface ZCodeAgentConversationHistoryDirectoryParams
+  extends ZCodeAgentConversationHistoryTarget, ConversationHistoryDirectoryOptions {}
+export interface ZCodeAgentConversationHistoryContentParams
+  extends ZCodeAgentConversationHistoryTarget, ConversationHistoryContentOptions {}
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
 
@@ -483,6 +506,7 @@ export interface IZCodeAgentService {
   /** 父会话授权的只读子代理预览；不得以 child id 恢复/启动普通会话。 */
   getSubagentConversation(params: ZCodeAgentSubagentTranscriptParams): Promise<{
     rows: ConversationRow[];
+    history: ConversationHistory;
     totalCount: number;
     status: NekSubagentRecord["status"];
   }>;
@@ -600,7 +624,19 @@ export interface IZCodeAgentService {
     params: ZCodeAgentConversationResyncParams,
   ): Promise<V4ConversationResyncResult>;
   unsubscribeConversationV4(params: ZCodeAgentConversationUnsubscribeParams): Promise<void>;
-  /** rows/range 行分页 query（loadOlder 游标向上补历史）。 */
+  conversationHistoryPageV4(
+    params: ZCodeAgentConversationHistoryPageParams,
+  ): Promise<V4ConversationHistoryPageResult>;
+  conversationHistoryTurnV4(
+    params: ZCodeAgentConversationHistoryTurnParams,
+  ): Promise<V4ConversationHistoryTurnResult>;
+  conversationHistoryDirectoryV4(
+    params: ZCodeAgentConversationHistoryDirectoryParams,
+  ): Promise<V4ConversationHistoryDirectoryResult>;
+  conversationHistoryContentV4(
+    params: ZCodeAgentConversationHistoryContentParams,
+  ): Promise<V4ConversationHistoryContentResult>;
+  /** Legacy loaded-window query only. Nek source history uses the explicit history APIs above. */
   conversationRowsRangeV4(
     params: ZCodeAgentConversationRowsRangeParams,
   ): Promise<V4ConversationRowsRangeResult>;

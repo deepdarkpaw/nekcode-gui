@@ -5,7 +5,7 @@ import { harness, params, target } from "./nekSessionHarness.js";
 
 async function waitForSnapshotRead(h: ReturnType<typeof harness>): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt++) {
-    if (h.control.commands.some((command) => command.type === "read_session_snapshot")) return;
+    if (h.control.commands.some((command) => command.type === "read_session_metadata")) return;
     await new Promise((resolve) => setImmediate(resolve));
   }
   throw new Error("snapshot read did not start");
@@ -70,7 +70,7 @@ test("OT-2: a warm subscribe never reuses an earlier cold restore's timings", as
     assert.equal(warm.snapshotRowCount, 2);
     assert.equal(h.sessions.length, 1);
     assert.equal(
-      h.control.commands.filter((command) => command.type === "read_session_snapshot").length,
+      h.control.commands.filter((command) => command.type === "read_session_metadata").length,
       1,
     );
   } finally {
@@ -100,7 +100,7 @@ test("OT-2: concurrent subscribers share one restore and only its in-flight timi
     }
     assert.equal(h.sessions.length, 1);
     assert.equal(
-      h.control.commands.filter((command) => command.type === "read_session_snapshot").length,
+      h.control.commands.filter((command) => command.type === "read_session_metadata").length,
       1,
     );
     assert.equal(

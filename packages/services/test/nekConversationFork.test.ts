@@ -1,3 +1,4 @@
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NekSessionEntry, NekSessionSnapshot } from "@zcode/shared/nek-protocol";
@@ -34,6 +35,10 @@ function forkHarness(outcome: "success" | "cancel" | "error" = "success") {
   });
   snapshots.set(source, snapshot("source", source, entries));
   const control = createProcess((command) => {
+    if (command.type === "read_session_metadata" || command.type === "read_history_page") {
+      const saved = snapshots.get(command.sessionPath!)!;
+      return fixtureHistory(saved.entries, command, saved.session);
+    }
     if (command.type === "read_session_snapshot") return snapshots.get(command.sessionPath);
     if (command.type === "list_sessions")
       return { sessions: [...snapshots.values()].map((item) => item.session) };
@@ -67,6 +72,8 @@ function forkHarness(outcome: "success" | "cancel" | "error" = "success") {
             messageCount: current.messages.length,
             pendingMessageCount: 0,
           };
+        if (command.type === "read_session_metadata" || command.type === "read_history_page")
+          return fixtureHistory(current.entries, command, current.session);
         if (command.type === "get_entries")
           return { entries: current.entries, leafId: current.leafId };
         if (command.type === "get_session_stats")

@@ -1,12 +1,14 @@
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
-import { NekAgentServiceRuntimeBase } from "./nekAgentServiceRuntimeMethods.js";
+import { NekHistoryServiceBase } from "./nekHistoryService.js";
 import { measureNekOpenRequest, nekOpenDurationMs } from "./nekSessionOpenTiming.js";
-import { isNekSessionSnapshot, type NekSessionRecord, type NekSessionResult } from "./types.js";
+import { verifyHistorySpawnAnchors } from "./nekHistoryAnchors.js";
+import { historyResult, requireHistoryPages, HISTORY_RPC_MAX_BYTES } from "./nekHistoryRpc.js";
+import { type NekSessionRecord, type NekSessionResult } from "./types.js";
 
 const MAX_RESUME_FLIGHTS = 128;
 
 /** Service-owned resume state machine; inherited records, pool and projectors remain one owner. */
-export abstract class NekAgentSessionResumeBase extends NekAgentServiceRuntimeBase {
+export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
   private readonly resumeFlights = new Map<string, Promise<NekSessionResult>>();
 
   /** 同一文件共享一次恢复；失败移除 flight，允许显式重试。 */
@@ -57,17 +59,39 @@ export abstract class NekAgentSessionResumeBase extends NekAgentServiceRuntimeBa
     const openTiming: ConversationOpenTiming = { version: 1, sessionRuntimeState: "cold" };
     const control = await this.pool.ensureControl();
     openTiming.cliBootstrapMs = nekOpenDurationMs(restoreStartedAt);
-    const snapshot = await measureNekOpenRequest(openTiming, () =>
-      control.client.call({
-        type: "read_session_snapshot",
-        sessionPath: input.sessionPath,
-      }),
+    requireHistoryPages(control.guiInfo);
+    const snapshot = historyResult(
+      await measureNekOpenRequest(openTiming, () =>
+        control.client.call({
+          type: "read_session_metadata",
+          sessionPath: input.sessionPath,
+          maxBytes: HISTORY_RPC_MAX_BYTES,
+        }),
+      ),
     );
     this.assertAlive();
-    if (!isNekSessionSnapshot(snapshot))
-      throw new Error("nek returned an invalid session snapshot");
     if (snapshot.session.locked) {
-      const result = this.openLockedSnapshot(snapshot, input.cwd);
+      const page = historyResult(
+        await measureNekOpenRequest(openTiming, () =>
+          control.client.call({
+            type: "read_history_page",
+            sessionPath: input.sessionPath,
+            branchRevision: snapshot.branchRevision,
+            turnLimit: 20,
+            maxBytes: HISTORY_RPC_MAX_BYTES,
+          }),
+        ),
+      );
+      this.assertAlive();
+      await verifyHistorySpawnAnchors(page.entries, (subagentId) =>
+        control.client.call({
+          type: "read_history_subagent",
+          sessionPath: input.sessionPath,
+          subagentId,
+        }),
+      );
+      this.assertAlive();
+      const result = this.openLockedHistory(snapshot, page, input.cwd);
       return {
         ...result,
         openTiming: { ...openTiming, cliSessionRestoreMs: nekOpenDurationMs(restoreStartedAt) },

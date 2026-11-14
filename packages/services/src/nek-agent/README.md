@@ -1,5 +1,34 @@
 # nek-agent: session admission and tool projection
 
+## Bounded source history (HS1–HS7)
+
+- Storage, branch/cursor validation and opaque content authorization belong to nek.
+  `historyPages=1` is mandatory on the execution target; no full-read fallback.
+- `nekHistoryService.ts` holds the existing process lease, admits at most 16 reads,
+  captures the projector watermark and rejects retired session/process/branch owners.
+  Page reads are request-local: no completed body cache and no prefix traversal.
+- `nekHistoryProjection.ts` derives sparse numeric identities from authoritative entry
+  position + semantic block slot. Overflows and missing tool/spawn seeds fail explicitly.
+  Display omissions (including null roots) become deferred rows with private refs,
+  never a cast to complete model entries or an invented successful tool result.
+- The projector retains the latest source window and live tail, bounded by row count
+  and 16 MB rendered bodies; inactive bodies/identity indexes are evicted together.
+  Rebuilds retain the epoch on compatible append and rotate it for incompatible branches.
+  Metadata, not the last20 bodies, supplies cumulative usage and accepted selection.
+- Child reads validate the parent persisted relation or current live registry first,
+  then read a bounded child page without resuming it. No raw child transcript API is
+  used by the conversation preview. Status uses a source page, not `get_entries`.
+- Public share/export owners must call shared `stripPrivateHistoryRow` before public
+  serialization; normal private transport intentionally retains deferred references.
+- **CLI gaps:** current history wire cannot enumerate old persisted child IDs (status
+  exposes `historyChildren.{total,loaded,complete}`), or supply original spawn turn/tool
+  anchors outside the page. Cold partial-turn reads without loaded tool anchors reject
+  `HISTORY_ANCHOR_REQUIRED`; old child IDs can still be authorized directly. Live events
+  and `nek.get_state` registry payloads are not covered by the history page byte budget.
+  The host exposes an error for oversized live display events instead of truncating a
+  successful row; a CLI bounded-live/ref extension is required for full large-frame support.
+  Existing explicit legacy attachment APIs remain distinct from source-history content.
+
 ## Session binding owner (SR)
 
 `renderer input → adapter binding admission → service lifecycle → v4 snapshot/live stream`
@@ -17,7 +46,7 @@
   facts and are removed on completion. Each table admits at most 128 flights; the
   accepted binding table retains its existing 5,000-entry limit.
 - **SR-3 — State/order:** absent binding → shared restore flight → disk list lookup →
-  `read_session_snapshot` → project trust → process initialization + entries projection
+  `read_session_metadata` → project trust → process initialization + latest20 source-page projection
   → publish binding → subscribe/read/command. A binding in service `error` phase is
   re-admitted through that same restore path. Failure is thrown unchanged, no binding
   is published, and a partially initialized process is reclaimed before the flight

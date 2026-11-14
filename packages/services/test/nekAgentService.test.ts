@@ -1,3 +1,4 @@
+import { fixtureHistory } from "./nekHistoryFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -13,6 +14,7 @@ import type { NekAgentServiceEvent } from "../src/nek-agent/service/types.js";
 
 const guiInfo = {
   protocolVersion: 1,
+  capabilities: { historyPages: 1 },
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -123,7 +125,10 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown;
-      if (kind === "control") {
+      if (command.type === "read_history_page" || command.type === "read_session_metadata") {
+        const saved = snapshot(kind === "control" && snapshotLocked, lockHolder);
+        data = fixtureHistory(saved.entries, command, saved.session, saved.lockedBy);
+      } else if (kind === "control") {
         if (command.type === "get_project_trust") {
           data = { cwd: command.cwd, ...projectTrust, resources: [] };
         } else if (command.type === "read_session_snapshot") {
@@ -355,7 +360,7 @@ test("reports the lock holder nek names in a read-only snapshot", async () => {
   assert.equal(result.phase, "locked");
   assert.deepEqual(result.lockHolder, lockHolder);
   assert.equal(result.lockedBy, "nek tui (dev-box:4242)");
-  assert.deepEqual(result.snapshot?.lockedBy, lockHolder);
+  assert.deepEqual(result.conversation.control.readOnly?.holder, lockHolder);
   // 只读拒绝仍然指明占用者。
   await assert.rejects(
     async () => await harness.service.sendPrompt({ sessionKey: result.sessionKey, message: "hi" }),
@@ -382,8 +387,9 @@ test("chooses prompt while idle and steer/follow_up while running, then aborts",
     [
       "get_state",
       "get_state",
-      "get_entries",
+      "read_history_page",
       "get_session_stats",
+      "read_session_metadata",
       "extension_call",
       "prompt",
       "steer",
@@ -712,7 +718,7 @@ test("晚到的旧快照不能把压缩状态覆盖回 false，也不会提前�
     const process = harness.sessions[0]!;
     // agent_settled 触发一次后台快照：get_state 先回来（isCompacting=false），
     // get_entries 挂住；随后压缩开始，快照整批在压缩之后才完成。
-    const held = holdCommandReplies(process, "get_entries");
+    const held = holdCommandReplies(process, "read_history_page");
     process.emit({ type: "agent_settled" });
     await tick();
     process.emit({ type: "compaction_start", reason: "manual" });
@@ -744,7 +750,7 @@ test("会话关闭后迟到的快照不会把已关闭会话写回索引", async
     const { sessionKey } = await harness.service.createSession({ cwd: "/workspace" });
     const process = harness.sessions[0]!;
     // agent_settled 触发后台快照；get_entries 挂住，期间关闭会话。
-    const held = holdCommandReplies(process, "get_entries");
+    const held = holdCommandReplies(process, "read_history_page");
     process.emit({ type: "agent_settled" });
     await tick();
     await harness.service.closeSession(sessionKey);

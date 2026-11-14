@@ -1,3 +1,5 @@
+import { historyResult } from "./nekHistoryRpc.js";
+import { validateHistoryDisplay } from "../projection/nekHistoryDisplay.js";
 import type { NekSessionEntry } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekSessionRecord } from "./types.js";
@@ -6,19 +8,29 @@ import type { NekSessionRecord } from "./types.js";
 export async function resolveNekSessionAttachment<T>(
   record: NekSessionRecord,
   find: (entries: readonly NekSessionEntry[]) => T | undefined,
-  client: () => NekRpcClient,
+  client: () => NekRpcClient | Promise<NekRpcClient>,
   kind: "image" | "file",
 ): Promise<T> {
   const unknown = () => new Error(`Unknown nek ${kind} attachment ref in session`);
   if (record.readonly) {
-    if (!record.snapshot) throw new Error("nek read-only session snapshot is not loaded");
-    const attachment = find(record.snapshot.entries as NekSessionEntry[]);
+    const page = historyResult(
+      await (
+        await client()
+      ).call({ type: "read_history_page", sessionPath: record.path, turnLimit: 20 }),
+    );
+    const attachment = find(
+      page.entries
+        .filter((entry) => entry.omissions.length === 0)
+        .map((entry) => validateHistoryDisplay(entry.entry)),
+    );
     if (attachment) return attachment;
     throw unknown();
   }
   let beforeEntryId: string | undefined;
   for (;;) {
-    const page = await client().call({
+    const page = await (
+      await client()
+    ).call({
       type: "get_entries",
       limit: 8,
       ...(beforeEntryId ? { beforeEntryId } : {}),

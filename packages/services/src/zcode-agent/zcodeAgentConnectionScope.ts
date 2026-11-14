@@ -743,7 +743,9 @@ export function createZCodeAgentConnectionScope(
     },
     async getSubagentConversation(params) {
       assertOpen();
-      return base.getSubagentConversation(params);
+      const result = await base.getSubagentConversation(params);
+      assertOpen();
+      return result;
     },
     async getSubagentTranscript(params) {
       assertOpen();
@@ -797,6 +799,38 @@ export function createZCodeAgentConnectionScope(
       return base.conversationRowsRangeV4(
         withTrustedConnection(params, forwardedConnection(params)),
       );
+    },
+    async conversationHistoryPageV4(params) {
+      assertReady();
+      const result = await base.conversationHistoryPageV4(
+        withTrustedConnection(params, forwardedConnection(params)),
+      );
+      assertReady();
+      return result;
+    },
+    async conversationHistoryTurnV4(params) {
+      assertReady();
+      const result = await base.conversationHistoryTurnV4(
+        withTrustedConnection(params, forwardedConnection(params)),
+      );
+      assertReady();
+      return result;
+    },
+    async conversationHistoryDirectoryV4(params) {
+      assertReady();
+      const result = await base.conversationHistoryDirectoryV4(
+        withTrustedConnection(params, forwardedConnection(params)),
+      );
+      assertReady();
+      return result;
+    },
+    async conversationHistoryContentV4(params) {
+      assertReady();
+      const result = await base.conversationHistoryContentV4(
+        withTrustedConnection(params, forwardedConnection(params)),
+      );
+      assertReady();
+      return result;
     },
     async attachmentBeginV4(params) {
       assertReady();

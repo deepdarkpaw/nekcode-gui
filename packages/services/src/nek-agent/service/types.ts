@@ -6,6 +6,7 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import type {
   NekAgentMessage,
+  NekHistoryMetadata,
   NekGuiInfo,
   NekProjectTrust,
   NekPromptAttachment,
@@ -57,6 +58,9 @@ export interface NekSessionRecord {
    * `get_state` 结果把 `isCompacting` 覆盖回 false。
    */
   stateEpoch?: number;
+  eventEpoch?: number;
+  historyGeneration?: number;
+  historyMetadata?: NekHistoryMetadata;
   readonly: boolean;
   /** 只读快照的占用者，人类可读；nek 不报持有者时为 `"nek"`。 */
   lockedBy?: string;

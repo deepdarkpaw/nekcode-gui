@@ -6,6 +6,7 @@
 export * from "./core.js";
 export * from "../background-bash-output.js";
 export * from "./rows.js";
+export * from "./history.js";
 export * from "./toolDisplay.js";
 export * from "./snapshot.js";
 export * from "./attachment-ref.js";

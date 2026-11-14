@@ -27,6 +27,7 @@ import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProject
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import {
   identity,
+  completedTurnState,
   orderActiveBranch,
   projectCustomMessage,
   RowAllocator,
@@ -39,15 +40,6 @@ import { projectNekUserFiles, readNekStoredAttachments, withNekUserFiles } from 
 export type { NekProjectedSnapshot, NekSnapshotInput } from "./nekEntryShared.js";
 export { orderActiveBranch } from "./nekEntryShared.js";
 
-/** entries → 行的输入；`isSessionRunning` 只在冷恢复时需要显式给出。 */
-interface NekProjectionInput extends NekSnapshotInput {
-  /**
-   * 父会话此刻是否仍在流式运行。缺省按 `state.isStreaming` 判定（拿不到 state 即 false）：
-   * 磁盘里残留的 `"running"` 子代理记录不能在没有活进程时继续显示为运行中。
-   */
-  isSessionRunning?: boolean;
-}
-
 /**
  * entries → 行的投影（快照路径）。
  *
@@ -55,35 +47,32 @@ interface NekProjectionInput extends NekSnapshotInput {
  * 自定义状态，是唯一能完整还原时间线的来源；`messages` 只在 entries 缺失时兜底。
  */
 
-export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot {
-  const allocator = new RowAllocator(input.existing);
-  const branch = orderActiveBranch(input.entries, input.leafId);
+export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
+  const allocator = new RowAllocator(input.existing, input.historyLayout?.resolve);
+  const branch = input.historyLayout
+    ? input.entries
+    : orderActiveBranch(input.entries, input.leafId);
   const rows: ConversationRow[] = [];
   const rowIndexById = new Map<number, number>();
   const toolRows = new Map<string, number>();
   // 子代理行身份 = `subagent:<record.id>`；锚点只在首次出现时确定。
-  let subagentAnchors: ReadonlyMap<string, SubagentRowAnchor> = new Map();
-  const sessionRunning = input.isSessionRunning ?? input.state?.isStreaming === true;
+  let subagentAnchors: ReadonlyMap<string, SubagentRowAnchor> =
+    input.historyLayout?.subagentAnchors ?? new Map();
   const liveSubagents = input.nekState
     ? new Map(input.nekState.subagents.map((record) => [record.id, record]))
     : undefined;
 
-  let turn: TurnContext = { turnId: "turn-0", entityId: "turn-0", startedAt: 0 };
+  const initialTurn = input.historyLayout?.turnId ?? "turn-0";
+  let turn: TurnContext = { turnId: initialTurn, entityId: initialTurn, startedAt: 0 };
   let turnOpen = false;
   let lastActivityAt: number | undefined;
   let lastStopReason: string | undefined;
-  const completedState = () =>
-    lastStopReason === "aborted"
-      ? "completedInterrupted"
-      : lastStopReason === "error"
-        ? "failed"
-        : "completedSuccess";
   let title = input.title ?? "";
   let mode = input.nekState?.mode ?? "agent";
   let provider = input.state?.model?.provider ?? "";
   let model = input.state?.model?.id ?? "";
   let thought: string = input.state?.thinkingLevel ?? "";
-  let selectionCursor: Parameters<typeof projectSelectionEntry>[0] = {};
+  let selectionCursor = input.historyLayout?.selection ?? {};
 
   // 同一 entityId 可能被先后投影两次（例如 toolCall 内容块与对应的 toolResult）：
   // 后者是同一行的状态更新，必须替换而不是再追加一行。
@@ -107,11 +96,11 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
     );
   };
   const startTurn = (message: NekAgentMessage) => {
-    if (turnOpen) pushTurnHeader(completedState());
+    if (turnOpen) pushTurnHeader(completedTurnState(lastStopReason));
     lastActivityAt = undefined;
     lastStopReason = undefined;
     const timestamp = toEpochMs(message.timestamp as number | undefined);
-    const entityId = `turn:${timestamp}:${turn.turnId}`;
+    const entityId = input.historyLayout?.turnId ?? `turn:${timestamp}:${turn.turnId}`;
     turn = { turnId: entityId, entityId, startedAt: timestamp };
     turnOpen = true;
     pushTurnHeader("running");
@@ -271,7 +260,9 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
           }
           const modelError = buildModelErrorMarker(assistant);
           if (modelError) {
-            const entityId = `model-error:${assistant.timestamp}`;
+            const entityId = input.historyLayout
+              ? `model-error:${entry.id}`
+              : `model-error:${assistant.timestamp}`;
             const rowId = allocator.resolve(entityId);
             const previous = rows[rowIndexById.get(rowId) ?? -1];
             const owner = previous?.turnId ?? turn.turnId;
@@ -294,7 +285,7 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
           push(
             mergeToolResultRow(
               identity(`tool:${result.toolCallId}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-              rows[rowIndexById.get(rowId) ?? -1],
+              rows[rowIndexById.get(rowId) ?? -1] ?? allocator.previous(rowId),
               {
                 toolCallId: result.toolCallId,
                 toolName: result.toolName,
@@ -310,7 +301,7 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
             subagentAnchors,
             result,
             turn.turnId,
-            sessionRunning,
+            input.isSessionRunning ?? input.state?.isStreaming === true,
             (entityId) => allocator.resolve(entityId),
             liveSubagents,
           );
@@ -320,7 +311,9 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
         }
         if (message.role === "bashExecution") {
           const bash = message as NekBashExecutionMessage;
-          const entityId = `bash:${bash.timestamp}`;
+          const entityId = input.historyLayout
+            ? `entry:${entry.id}:bash`
+            : `bash:${bash.timestamp}`;
           const rowId = allocator.resolve(entityId);
           const failed = bash.exitCode !== undefined && bash.exitCode !== 0;
           push(
@@ -404,9 +397,11 @@ export function projectEntries(input: NekProjectionInput): NekProjectedSnapshot 
     }
   }
   if (turnOpen) {
-    pushTurnHeader(input.state?.isStreaming === true ? "running" : completedState());
+    pushTurnHeader(
+      input.state?.isStreaming === true ? "running" : completedTurnState(lastStopReason),
+    );
   }
-  settleInactiveNekWorkRows(rows);
+  if (!input.historyLayout?.partial) settleInactiveNekWorkRows(rows);
 
   const usage = summarizeUsage(branch, {
     contextWindow: input.stats?.contextUsage?.contextWindow ?? input.state?.model?.contextWindow,

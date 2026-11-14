@@ -3,10 +3,12 @@
 // 结构变化换整行（row.upserted），文本增长用 append（row.delta）；turn 是 row 上的标签不是容器。
 import { z } from "zod";
 import { executionOutputPreviewSchema } from "../execution-output-preview.js";
+import { historyContentReferenceSchema } from "./history.js";
 import { timestampSchema } from "./core.js";
 
 // RowBase。rowId：session 内单调、永不复用、事件日志的确定性纯函数。
 const rowBaseFields = {
+  historyContent: z.array(historyContentReferenceSchema).optional(),
   rowId: z.number(),
   turnId: z.string(),
   // canonical identity：新 CLI 每行必传；optional 只用于兼容旧版帧。

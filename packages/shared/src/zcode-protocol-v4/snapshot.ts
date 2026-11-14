@@ -11,6 +11,7 @@ import {
   zcodeSessionContextCacheUsageSchema,
 } from "../zcode-protocol-legacy-types.js";
 import { timestampSchema } from "./core.js";
+import { conversationHistorySchema } from "./history.js";
 import { conversationRowSchema } from "./rows.js";
 
 import { workspaceHookReviewRequestPayloadSchema } from "./workspace-hook-review.js";
@@ -474,5 +475,6 @@ export const conversationSnapshotSchema = z.object({
   workspaceHookAdmission: workspaceHookAdmissionStateSchema.nullable().default(null),
   // B 区
   rows: rowsWindowSchema,
+  history: conversationHistorySchema.optional(),
 });
 export type ConversationSnapshot = z.infer<typeof conversationSnapshotSchema>;

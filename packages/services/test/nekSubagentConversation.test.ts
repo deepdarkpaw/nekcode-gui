@@ -19,6 +19,16 @@ const messages = [
   { role: "user", content: "Inspect source", timestamp: 1000 },
   {
     role: "assistant",
+    api: "test",
+    stopReason: "stop",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
     provider: "test",
     model: "model",
     timestamp: 2000,
@@ -37,6 +47,16 @@ const messages = [
   },
   {
     role: "assistant",
+    api: "test",
+    stopReason: "stop",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
     provider: "test",
     model: "model",
     timestamp: 4000,
@@ -99,8 +119,8 @@ test("S2/S3: side preview reads a parent's child through the connection facade w
     const finished = await scope.service.getSubagentConversation({ ...params, id: child.id });
     assert.equal(finished.status, "completed");
     assert.ok(
-      h.control.commands.some(
-        (c) => c.type === "read_session_snapshot" && c.sessionPath === child.sessionFile,
+      h.sessions[0]!.commands.some(
+        (c) => c.type === "read_history_page" && c.sessionPath === child.sessionFile,
       ),
     );
     assert.equal(finished.rows.find((row) => row.kind === "turnHeader")?.state, "completedSuccess");
@@ -126,20 +146,23 @@ test("S3: in-memory children use the parent registry, not the ordinary session l
     subagentMessages: messages,
   });
   try {
-    const result = await h.adapter.getSubagentConversation({ ...params, id: child.id });
-    assert.ok(result.rows.some((row) => row.kind === "assistantText"));
+    await assert.rejects(
+      h.adapter.getSubagentConversation({ ...params, id: child.id }),
+      /no persisted bounded transcript/,
+    );
     assert.equal(h.sessions.length, 1);
-    assert.ok(
+    assert.equal(
       h.sessions[0]!.commands.some(
         (c) => c.type === "extension_call" && c.method === "nek.get_subagent_transcript",
       ),
+      false,
     );
   } finally {
     await h.adapter.dispose();
   }
 });
 
-test("S3: preview retains only the configured row window and reports omitted rows", async () => {
+test("HS5/S3: preview uses explicit source page metadata instead of silently cropping process rows", async () => {
   const h = harness({
     subagents: [{ ...child, status: "completed" }],
     childSnapshots: [snapshot()],
@@ -149,8 +172,10 @@ test("S3: preview retains only the configured row window and reports omitted row
       h.adapter,
       2,
     )({ ...params, id: child.id });
-    assert.equal(result.rows.length, 2);
-    assert.ok(result.totalCount > result.rows.length);
+    assert.ok(result.rows.length > 2);
+    assert.equal(result.totalCount, result.rows.length);
+    assert.equal(result.history.turns.length, 1);
+    assert.equal(result.history.hasOlder, false);
     assert.equal(result.rows.at(-1)?.kind, "assistantText");
   } finally {
     await h.adapter.dispose();
@@ -168,7 +193,7 @@ test("S3: a mismatched child file is rejected, never opened as a writable sessio
   try {
     await assert.rejects(
       h.adapter.getSubagentConversation({ ...params, id: child.id }),
-      /mismatched/,
+      /different session/,
     );
     assert.equal(h.sessions.length, 1);
   } finally {

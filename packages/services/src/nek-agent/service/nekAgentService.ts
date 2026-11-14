@@ -3,7 +3,6 @@ import type {
   NekExtensionUiResponse,
   NekInteractionFrame,
   NekImageContent,
-  NekStoredAttachment,
   NekSessionSummary,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
@@ -15,7 +14,6 @@ import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
 import { NekPendingInputCancelledError } from "./nekPendingInputQueue.js";
 import { bumpStateEpoch } from "./nekSessionSnapshotLoader.js";
 import { findNekUserImage, parseNekUserImageRef } from "../projection/nekUserImages.js";
-import { findNekUserFile } from "../projection/nekUserFiles.js";
 import { resolveNekSessionAttachment } from "./nekSessionAttachments.js";
 
 /** 用户图片缓存上限（base64 字符数，约 24 MB 原始字节）。 */
@@ -237,7 +235,16 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
   readonly listAgentTypes: Methods["listAgentTypes"] = this.forKey(commands.listAgentTypes);
 
   // ---- 会话树与历史 ----
-  readonly navigateTree: Methods["navigateTree"] = this.forInput(commands.navigateTree);
+  readonly navigateTree: Methods["navigateTree"] = async (input) => {
+    const record = this.requireWritable(input.sessionKey);
+    bumpStateEpoch(record);
+    record.historyGeneration = (record.historyGeneration ?? 0) + 1;
+    return await this.withSession(input.sessionKey, async () => {
+      const result = await commands.navigateTree(this.commandContext(), input);
+      if (!result.cancelled) await this.refreshProcessSnapshot(record);
+      return result;
+    });
+  };
   readonly setEntryLabel: Methods["setEntryLabel"] = this.forInput(commands.setEntryLabel);
   readonly fork: Methods["fork"] = this.forInput(commands.fork);
   readonly clone: Methods["clone"] = this.forKey(commands.clone);
@@ -425,19 +432,6 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     return image;
   }
 
-  /** 普通附件只解析会话内的元数据；字节由已授权的分块预览入口按需读取。 */
-  async readUserFile(sessionKey: string, ref: string): Promise<NekStoredAttachment> {
-    const record = this.requireRecord(sessionKey);
-    return await this.withSession(sessionKey, () =>
-      resolveNekSessionAttachment(
-        record,
-        (entries) => findNekUserFile(record.sessionId, ref, entries),
-        () => this.requireProcess(record).client,
-        "file",
-      ),
-    );
-  }
-
   private readonly userImageCache = new Map<string, NekImageContent>();
   private userImageCacheChars = 0;
 
@@ -460,7 +454,8 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
       resolveNekSessionAttachment(
         record,
         (entries) => findNekUserImage(record.sessionId, ref, locator, entries),
-        () => this.requireProcess(record).client,
+        async () =>
+          (record.readonly ? await this.pool.ensureControl() : this.requireProcess(record)).client,
         "image",
       ),
     );
