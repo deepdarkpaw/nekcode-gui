@@ -1,4 +1,5 @@
 import { fixtureHistory } from "./nekHistoryFixture.js";
+import { createHistoryStream, historyStreamCapabilities } from "./nekHistoryStreamFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -14,7 +15,7 @@ import type { NekAgentServiceOptions } from "../src/nek-agent/service/types.js";
 
 const guiInfo = {
   protocolVersion: 1,
-  capabilities: { historyPages: 1 },
+  capabilities: historyStreamCapabilities,
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -44,6 +45,11 @@ function fakeProcess(
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
+  const write = (record: unknown) => stdout.write(`${JSON.stringify(record)}\n`);
+  const historyStream = createHistoryStream(write, {
+    sessionId: "s1",
+    sessionPath: "/tmp/session.jsonl",
+  });
   const commands: NekRpcCommand[] = [];
   const responses: unknown[] = [];
   const exits = new Set<(info: NekRpcProcessExit) => void>();
@@ -64,7 +70,9 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown = {};
-      if (
+      if (command.type === "set_history_stream") {
+        data = historyStream.negotiate();
+      } else if (
         command.type === "read_history_page" ||
         command.type === "read_session_metadata" ||
         command.type === "read_history_subagent"
@@ -103,9 +111,7 @@ function fakeProcess(
       } else if (command.type === "extension_call") {
         data = { result: { mode: "agent", todos: [], plans: [], subagents: [] } };
       }
-      stdout.write(
-        `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: true, data })}\n`,
-      );
+      write({ id: command.id, type: "response", command: command.type, success: true, data });
     }
   });
   const handle: NekRpcProcessHandle = {
@@ -126,7 +132,7 @@ function fakeProcess(
   return {
     commands,
     responses,
-    emit: (record) => stdout.write(`${JSON.stringify(record)}\n`),
+    emit: (record) => historyStream.emit(record as Record<string, unknown>),
     process: {
       client,
       guiInfo,

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
-import type { NekSessionEntry, NekSessionMessageEntry } from "@zcode/shared/nek-protocol";
+import type {
+  NekHistoryStreamOmission,
+  NekSessionEntry,
+  NekSessionMessageEntry,
+} from "@zcode/shared/nek-protocol";
 import {
   PROTOCOL_V4_LIMITS,
   v4AttachmentReadResultSchema,
@@ -10,6 +14,24 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import { nekUserImageRef } from "../src/nek-agent/projection/nekUserImages.js";
 import { harness, params, sessionId } from "./nekSessionHarness.js";
+
+/** 生产端规范化：已落盘的用户正文留在历史里，实时事件只带元数据。 */
+const PERSISTED_BODY: NekHistoryStreamOmission[] = [
+  { pointer: "/message", resolution: "history", reason: "persisted_body" },
+];
+
+/** 有界队列逐条投递实时帧：等可观察的投影落定后再断言。 */
+async function settleLive(
+  h: ReturnType<typeof harness>,
+  check: (rows: { entityId?: string; kind: string }[]) => boolean,
+): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const snapshot = await h.adapter.readNekSession(params);
+    if (check(snapshot.rows.window)) return;
+  }
+  throw new Error("timed out waiting for the queued live projection");
+}
 
 function imageEntry(
   bytes = Buffer.from("image bytes split across chunks"),
@@ -106,24 +128,23 @@ test("a live user image is readable before settlement and keeps its ref after cl
   try {
     await h.adapter.readNekSession(params);
     const entry = imageEntry();
-    entries.push(entry); // nek commits before emitting the user lifecycle events.
-    h.sessions[0]!.emit({ type: "message_start", message: entry.message });
+    entries.push(entry);
+    // nek 先落盘，再用有界定位帧宣告；实时事件只带元数据，正文（图片）由历史提供。
+    h.sessions[0]!.append(entry.id);
+    await settleLive(h, (rows) =>
+      rows.some((row) => row.kind === "userInput" && row.entityId?.startsWith("entry:")),
+    );
     const live = await projectedImage(h);
     const expected = await h.adapter.attachmentReadV4({ ...live, offset: 1, limit: 7 });
     assert.equal(Buffer.from(expected.dataBase64, "base64").toString(), "mage by");
-    h.sessions[0]!.emit({ type: "message_end", message: entry.message });
+    h.sessions[0]!.emit({ type: "message_start", message: entry.message }, PERSISTED_BODY);
+    h.sessions[0]!.emit({ type: "message_end", message: entry.message }, PERSISTED_BODY);
     h.sessions[0]!.emit({ type: "agent_settled" });
-    // Wait for the service's authoritative entry refresh, not for a model response.
-    for (let attempt = 0; attempt < 20; attempt++) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      const row = (await h.adapter.readNekSession(params)).rows.window.find(
-        (row) => row.kind === "userInput",
-      );
-      if (row?.entityId.startsWith("entry:")) break;
-    }
+    await settleLive(h, (rows) => rows.filter((row) => row.kind === "userInput").length === 1);
     const persisted = await projectedImage(h);
     assert.ok(persisted.target.entityId.startsWith("entry:"));
-    assert.notEqual(persisted.target.entityId, live.target.entityId);
+    // 定位帧已把这一轮绑定到落盘条目：收口沿用同一身份，不会多出一行。
+    assert.equal(persisted.target.entityId, live.target.entityId);
     assert.equal(persisted.ref, live.ref);
     await h.adapter.closeNekSession(params);
     const reloaded = await projectedImage(h);

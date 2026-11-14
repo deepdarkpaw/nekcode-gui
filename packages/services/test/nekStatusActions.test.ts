@@ -1,4 +1,5 @@
 import { fixtureHistory } from "./nekHistoryFixture.js";
+import { createHistoryStream, historyStreamCapabilities } from "./nekHistoryStreamFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -17,7 +18,7 @@ import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 
 const guiInfo = {
   protocolVersion: 1,
-  capabilities: { historyPages: 1 },
+  capabilities: historyStreamCapabilities,
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -63,6 +64,11 @@ function fakeProcess(kind: "control" | "session"): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
+  const write = (record: unknown) => stdout.write(`${JSON.stringify(record)}\n`);
+  const historyStream = createHistoryStream(write, {
+    sessionId: "s1",
+    sessionPath: "/tmp/session.jsonl",
+  });
   const commands: NekRpcCommand[] = [];
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let input = "";
@@ -78,10 +84,9 @@ function fakeProcess(kind: "control" | "session"): FakeProcess {
       if (command.type === "extension_ui_response") continue;
       commands.push(command);
       if (!command.id) continue;
-      const data = respond(kind, command);
-      stdout.write(
-        `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: true, data })}\n`,
-      );
+      const data =
+        command.type === "set_history_stream" ? historyStream.negotiate() : respond(kind, command);
+      write({ id: command.id, type: "response", command: command.type, success: true, data });
     }
   });
   let exited = false;
@@ -103,7 +108,7 @@ function fakeProcess(kind: "control" | "session"): FakeProcess {
   const client = new NekRpcClient(handle, { defaultTimeoutMs: 500 });
   return {
     commands,
-    emit: (record) => stdout.write(`${JSON.stringify(record)}\n`),
+    emit: (record) => historyStream.emit(record as Record<string, unknown>),
     process: {
       client,
       guiInfo,
@@ -246,8 +251,9 @@ test("projects nek RPC events into status frames for the workspace", async () =>
         startedAt: 0,
       },
     });
+    // 实时事件经有界队列逐条送达：等到最后一条落地再断言顺序。
     await waitFor(() =>
-      frames.some((frame) => frame.kind === "event" && frame.event.type === "queue_update"),
+      frames.some((frame) => frame.kind === "event" && frame.event.type === "extension_event"),
     );
     const events = frames.flatMap((frame) => (frame.kind === "event" ? [frame.event] : []));
     assert.equal(events[0]?.type, "queue_update");
@@ -290,6 +296,8 @@ test("routes status actions to nek RPCs and returns bounded queue contents", asy
     assert.deepEqual(
       session.commands.map((command) => command.type),
       [
+        // 可写会话先协商有界实时历史，之后才装载快照。
+        "set_history_stream",
         "get_state",
         "get_state",
         "read_history_page",
