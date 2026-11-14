@@ -6,7 +6,6 @@
 //   3. base 与状态同生共死——断档时状态未被污染，携当前水位重订阅，由服务端裁决 resume/snapshot。
 // 除 optimistic overlay（pending 命令展示）外，本 store 不产生任何 conversation 事实。
 import {
-  applyConversationDeltas,
   isDeterministicContentFault,
   parseConversationTopic,
   PROTOCOL_V4_LIMITS,
@@ -26,6 +25,8 @@ import {
   type TopicFrameDeliveryKind,
 } from "@zcode/shared/zcode-protocol-v4";
 import { logger } from "@/logger.js";
+import { applyConversationLiveDeltas } from "./conversationLiveDeltas.js";
+import type { HistoryViewportAnchor } from "./conversationHistoryBoundary.js";
 import {
   ConversationHistoryWindow,
   HISTORY_BOUNDARY_REFRESH_REQUIRED,
@@ -183,7 +184,7 @@ const TERMINAL_PLAN_STATUSES: ReadonlySet<ToolCallRow["status"]> = new Set([
 function shouldInvalidatePlanDirectory(frame: ConversationTopicFrame): boolean {
   if (frame.payload.kind === "snapshot") return true;
   return frame.payload.deltas.some((delta) => {
-    if (delta.op === "row.removed") return true;
+    if (delta.op === "row.removed" || delta.op === "rows.removed") return true;
     if (delta.op !== "row.appended" && delta.op !== "row.upserted") return false;
     const row = delta.row;
     return (
@@ -206,7 +207,7 @@ function shouldInvalidatePlanDirectory(frame: ConversationTopicFrame): boolean {
 function shouldInvalidateTurnNavigatorDirectory(frame: ConversationTopicFrame): boolean {
   if (frame.payload.kind === "snapshot") return true;
   return frame.payload.deltas.some((delta) => {
-    if (delta.op === "row.removed") return true;
+    if (delta.op === "row.removed" || delta.op === "rows.removed") return true;
     if (delta.op !== "row.appended" && delta.op !== "row.upserted") return false;
     const row = delta.row;
     return row.kind === "userInput" && row.origin === "realUser";
@@ -626,6 +627,32 @@ export class ConversationProjectionStore {
     this.requestRecovery();
   }
 
+  /** Stable view intent only; never a source/body mutation or a subscription request. */
+  setViewportAnchor(anchor: HistoryViewportAnchor): void {
+    if (this.closed || !this.state.snapshot?.history) return;
+    if (
+      !anchor.followingLatest &&
+      !this.state.snapshot.rows.window.some((row) => row.turnId === anchor.turnId)
+    )
+      return;
+    if (!this.historyWindow.setViewportAnchor(anchor)) return;
+    this.setState({
+      snapshot: this.historyWindow.bound(this.state.snapshot),
+      historyError: this.boundaryHistoryError(),
+    });
+  }
+
+  private boundaryHistoryError(): string | null {
+    const previous = this.state.historyError;
+    if (previous && previous !== HISTORY_BOUNDARY_REFRESH_REQUIRED) return previous;
+    return this.historyWindow.needsBoundaryRefresh ? HISTORY_BOUNDARY_REFRESH_REQUIRED : null;
+  }
+
+  /** Explicit same-sub history recovery; never sends or replays model input. */
+  resyncHistory(): void {
+    this.requestRecovery();
+  }
+
   /** SessionDataLayer 帧路由入口。 */
   handleFrame(
     frame: ConversationTopicFrame,
@@ -750,7 +777,10 @@ export class ConversationProjectionStore {
       }
       return;
     }
-    if (frame.payload.deltas.some((delta) => delta.op === "row.removed")) this.invalidateHistory();
+    if (frame.payload.deltas.some((delta) => delta.op === "row.removed")) {
+      this.invalidateHistory();
+      this.historyWindow.invalidateSourceBoundaries();
+    }
     const flight = this.historyFlight;
     if (flight) {
       for (const delta of frame.payload.deltas) {
@@ -758,6 +788,12 @@ export class ConversationProjectionStore {
           flight.changed.add(historyRowKey(delta.row));
           flight.changed.add(`row:${delta.row.rowId}`);
         }
+        if (delta.op === "rows.removed")
+          for (const id of delta.rowIds) {
+            flight.changed.add(`row:${id}`);
+            const row = current.rows.window.find((item) => item.rowId === id);
+            if (row) flight.changed.add(historyRowKey(row));
+          }
         if (delta.op === "row.delta") {
           flight.changed.add(`row:${delta.rowId}`);
           const row = current.rows.window.find((item) => item.rowId === delta.rowId);
@@ -772,8 +808,16 @@ export class ConversationProjectionStore {
         historyError: "History changed beyond its bounded request fence; retry explicitly",
       };
     }
-    const applied = applyConversationDeltas(current, frame.payload.deltas);
+    let applied = applyConversationLiveDeltas(current, frame.payload.deltas);
     if (current.history) this.historyWindow.accountDeltas(current, applied, frame.payload.deltas);
+    for (const delta of frame.payload.deltas)
+      if (delta.op === "state.updated" && delta.patch.history)
+        applied = this.historyWindow.observeBoundary(
+          applied,
+          delta.patch.history,
+          frame.toSeq,
+          applied.revision,
+        );
     // seq is exclusively advanced by the subscription, never by history reads.
     const next = this.historyWindow.bound({ ...applied, seq: frame.toSeq });
     logSubagentProjectionTransition(this.topic, current, next, "deltas");
@@ -784,18 +828,23 @@ export class ConversationProjectionStore {
           : earliest,
       null,
     );
+    const removedIds = new Set(
+      frame.payload.deltas.flatMap((delta) => (delta.op === "rows.removed" ? delta.rowIds : [])),
+    );
     this.setState({
       snapshot: next,
       historyTruncatedTurns: this.historyWindow.omissions,
-      ...(this.historyWindow.needsBoundaryRefresh
-        ? { historyError: HISTORY_BOUNDARY_REFRESH_REQUIRED }
-        : {}),
+      historyError: this.boundaryHistoryError(),
       // row.removed 已给出权威裁剪边界，可以同步删掉缓存目录中的旧分支计划；
       // 完整 query 继续负责补回 wire tail 之外、但仍属于当前分支的早期计划。
-      ...(removedFromRowId === null
+      ...(removedFromRowId === null && removedIds.size === 0
         ? {}
         : {
-            sessionPlans: this.state.sessionPlans.filter((row) => row.rowId < removedFromRowId),
+            sessionPlans: this.state.sessionPlans.filter(
+              (row) =>
+                !removedIds.has(row.rowId) &&
+                (removedFromRowId === null || row.rowId < removedFromRowId),
+            ),
           }),
       ...(shouldInvalidatePlanDirectory(frame)
         ? { planDirectoryRevision: this.state.planDirectoryRevision + 1 }
@@ -1091,12 +1140,7 @@ export class ConversationProjectionStore {
   /** Stable renderer owner identity; ordinary token/appended events do not retire it. */
   getHistoryOwnerKey(): string {
     const snapshot = this.state.snapshot;
-    return JSON.stringify([
-      this.generation,
-      this.historyGeneration,
-      snapshot?.logEpoch,
-      snapshot?.history?.branchRevision,
-    ]);
+    return JSON.stringify([this.generation, this.historyGeneration, snapshot?.logEpoch]);
   }
 
   private invalidateHistory(): void {
@@ -1194,24 +1238,14 @@ export class ConversationProjectionStore {
     )
       return null;
     return this.runHistoryRequest(direction, async (flight) => {
-      if (
-        (direction === "older" || direction === "newer") &&
-        this.historyWindow.needsBoundaryRefresh
-      )
-        throw new Error(HISTORY_BOUNDARY_REFRESH_REQUIRED);
-      const cursor =
-        direction === "older"
-          ? history.olderCursor
-          : direction === "newer"
-            ? history.newerCursor
-            : undefined;
-      if ((direction === "older" || direction === "newer") && !cursor)
-        throw new Error("History page cursor is missing; reload explicitly");
+      const paging = direction === "older" || direction === "newer";
+      const navigation = paging ? this.historyWindow.pageOptions(snapshot, direction) : {};
+      const edge = paging ? this.historyWindow.navigationEdge(snapshot, direction) : undefined;
+      const cursor = navigation.beforeCursor ?? navigation.afterCursor;
       const result = await this.transport.historyPage({
         ...options,
+        ...navigation,
         ...this.historyTarget(),
-        ...(direction === "older" ? { beforeCursor: cursor } : {}),
-        ...(direction === "newer" ? { afterCursor: cursor } : {}),
         turnLimit: 20,
       });
       this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
@@ -1219,9 +1253,13 @@ export class ConversationProjectionStore {
         throw new Error("History branch changed; reload the subscription");
       if (
         (direction === "older" &&
+          cursor !== undefined &&
           result.history.hasOlder &&
           result.history.olderCursor === cursor) ||
-        (direction === "newer" && result.history.hasNewer && result.history.newerCursor === cursor)
+        (direction === "newer" &&
+          cursor !== undefined &&
+          result.history.hasNewer &&
+          result.history.newerCursor === cursor)
       )
         throw new Error("History cursor did not advance");
       if (
@@ -1232,9 +1270,13 @@ export class ConversationProjectionStore {
       const positions = history.turns.map((turn) => turn.position);
       if (
         (direction === "older" &&
-          !result.history.turns.some((turn) => turn.position < Math.min(...positions))) ||
+          !result.history.turns.some(
+            (turn) => turn.position < (edge?.position ?? Math.min(...positions)),
+          )) ||
         (direction === "newer" &&
-          !result.history.turns.some((turn) => turn.position > Math.max(...positions)))
+          !result.history.turns.some(
+            (turn) => turn.position > (edge?.position ?? Math.max(...positions)),
+          ))
       )
         throw new Error("History page did not advance the reading window");
       const current = this.state.snapshot!;

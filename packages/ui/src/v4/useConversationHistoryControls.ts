@@ -4,6 +4,7 @@ import type {
   ConversationHistoryContentOptions,
   V4ConversationHistoryContentResult,
 } from "@zcode/shared/zcode-protocol-v4";
+import type { HistoryViewportAnchor } from "./conversationHistoryBoundary.js";
 import type { ConversationProjectionStore } from "./conversationProjectionStore.js";
 import type { ConversationTurnDirectory } from "./ConversationTurnNavigator.js";
 import { useConversationHistoryDirectory } from "./useConversationHistoryDirectory.js";
@@ -25,6 +26,10 @@ export interface ConversationHistoryControls {
     options: ConversationHistoryContentOptions,
   ): Promise<V4ConversationHistoryContentResult>;
   retry(): Promise<unknown>;
+  /** Main Timeline calls from scroll/effect, never render. */
+  setViewportAnchor?(anchor: HistoryViewportAnchor): void;
+  /** Explicit retry for live preview/transport errors; no model input replay. */
+  resyncHistory?(): void;
 }
 
 /** Thin UI actions over the store owner; retry retains the failed user intent, not an accepted queue. */
@@ -82,6 +87,11 @@ export function useConversationHistoryControls(
     },
     [store],
   );
+  const setViewportAnchor = useCallback(
+    (anchor: HistoryViewportAnchor) => store?.setViewportAnchor(anchor),
+    [store],
+  );
+  const resyncHistory = useCallback(() => store?.resyncHistory(), [store]);
   const retry = useCallback(async () => {
     const previous = lastAction.current;
     if (previous && previous.store === store) return await previous.run();
@@ -104,6 +114,8 @@ export function useConversationHistoryControls(
             loadOldest,
             loadTurn,
             readContent,
+            setViewportAnchor,
+            resyncHistory,
             retry,
           }
         : undefined,
@@ -120,6 +132,8 @@ export function useConversationHistoryControls(
       loadOldest,
       loadTurn,
       readContent,
+      setViewportAnchor,
+      resyncHistory,
       retry,
     ],
   );
