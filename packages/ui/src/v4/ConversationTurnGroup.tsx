@@ -27,6 +27,7 @@ import { SubagentLinkProvider } from "@/components/ai-elements/subagent-link.js"
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { ConversationDeferredContent } from "./ConversationDeferredContent.js";
 import { ConversationWorkWindow } from "./ConversationWorkWindow.js";
+import { ConversationLiveToolResults } from "./ConversationLiveToolResults.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -261,30 +262,38 @@ function ConversationAssistantWorkItems({
     <ConversationWorkWindow
       items={items}
       pinTail={stageTailIsRunning}
-      renderItem={(item) =>
-        item.kind === "row" || item.kind === "reasoningGroup" ? (
-          <div key={item.key} data-reasoning-group={item.kind === "reasoningGroup" || undefined}>
-            {item.kind === "reasoningGroup"
-              ? item.rows
-                  .slice(1)
-                  .map((row) => <span key={row.rowId} data-row-id={row.rowId} className="block" />)
-              : null}
-            <ConversationTurnRow
-              key={item.row.rowId}
-              row={item.row}
-              context={context}
-              hideAssistantActions={item.row.kind === "assistantText"}
-              assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
-            />
-          </div>
-        ) : item.kind === "agentToolCall" ? (
-          <ConversationAgentToolCallRow key={item.key} item={item} context={context} />
-        ) : item.kind === "exploreGroup" ? (
-          <ConversationExploreGroupRow key={item.key} item={item} context={context} />
-        ) : (
-          <ConversationToolGroupRow key={item.key} item={item} context={context} />
-        )
-      }
+      renderItem={(item) => (
+        <div key={item.key}>
+          {item.kind === "row" || item.kind === "reasoningGroup" ? (
+            <div key={item.key} data-reasoning-group={item.kind === "reasoningGroup" || undefined}>
+              {item.kind === "reasoningGroup"
+                ? item.rows
+                    .slice(1)
+                    .map((row) => (
+                      <span key={row.rowId} data-row-id={row.rowId} className="block" />
+                    ))
+                : null}
+              <ConversationTurnRow
+                key={item.row.rowId}
+                row={item.row}
+                context={context}
+                hideAssistantActions={item.row.kind === "assistantText"}
+                assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
+              />
+            </div>
+          ) : item.kind === "agentToolCall" ? (
+            <ConversationAgentToolCallRow key={item.key} item={item} context={context} />
+          ) : item.kind === "exploreGroup" ? (
+            <ConversationExploreGroupRow key={item.key} item={item} context={context} />
+          ) : (
+            <ConversationToolGroupRow key={item.key} item={item} context={context} />
+          )}
+          <ConversationLiveToolResults
+            rows={"row" in item ? [item.row] : item.rows}
+            scopeKey={`${context.workspaceIdentity ?? context.workspacePath}:${context.workspaceRemoteSessionId}:${context.sessionId}:${context.logEpoch}:${item.key}`}
+          />
+        </div>
+      )}
     />
   );
 

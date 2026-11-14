@@ -39,7 +39,7 @@ export function applyCompactionStart(
   const origin = reason === "manual" ? "manual" : "auto";
   const activeEntityId = ctx.activeCompactEntityId;
   if (activeEntityId) {
-    // `willRetry` 的重试轮：复用上一次压缩的同一行，保持 running 而不是再挂一条新行。
+    // Repeated start for the same active compaction keeps its identity; an ended operation is not active.
     const retryRowId = ctx.store.allocate(activeEntityId);
     ctx.store.update(retryRowId, (prev) =>
       buildTimelineMarkerRow(

@@ -45,12 +45,20 @@ export type LiveHistoryPreview = z.infer<typeof liveHistoryPreviewSchema>;
 /** Public share/export must remove local read capabilities, even when deferred previews remain. */
 export function stripPrivateHistoryRow(row: ConversationRow): ConversationRow {
   const { historyContent: _privateRefs, ...publicRow } = row;
+  if (publicRow.kind === "toolCall") {
+    const { liveResult: _transientExtras, ...storedRow } = publicRow;
+    return storedRow;
+  }
   return publicRow;
 }
 
 /** History-specific sanitizer; normal public-export sanitizers must still handle other private fields. */
 export function stripPrivateHistorySnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
-  const { history: _historyCapabilities, ...publicSnapshot } = snapshot;
+  const {
+    history: _historyCapabilities,
+    liveHistoryPreview: _rawPreview,
+    ...publicSnapshot
+  } = snapshot;
   return {
     ...publicSnapshot,
     rows: { ...snapshot.rows, window: snapshot.rows.window.map(stripPrivateHistoryRow) },

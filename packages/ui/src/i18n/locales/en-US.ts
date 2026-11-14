@@ -1256,6 +1256,14 @@ const enUS: Record<string, string> = {
   "chat.history.loadedTurns": "Loaded {loaded} / {total} turns",
   "chat.history.shareSelectionOnly":
     "Only explicitly selected loaded turns are shared. Load an earlier turn before selecting it.",
+  "chat.history.liveIncomplete": "Live display is not fully synchronized",
+  "chat.history.liveIncompleteHint":
+    "This is not a complete reply. History has not been deleted. Reload after this turn finishes; your message will not be sent again.",
+  "chat.history.rawPreview": "Incomplete raw excerpt ({size} received)",
+  "chat.history.reloadHistory": "Reload history",
+  "chat.history.liveToolResult": "Live tool extras ({count})",
+  "chat.history.liveToolResultHint":
+    "These values come from live tool events and may not be stored in history. They do not replace the tool output.",
   "chat.pendingCommand.discarded":
     "An input submitted before the CLI restarted did not reach the conversation. Confirm whether to send it again.",
   "chat.pendingCommand.resend": "Send again",
