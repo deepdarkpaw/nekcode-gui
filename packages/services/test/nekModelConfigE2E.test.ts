@@ -1,5 +1,6 @@
 /** Real CLI + production composition + real files. Network requests go only to a loopback fixture. */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -77,32 +78,41 @@ test(
     );
     const previous = process.env.NEK_CODING_AGENT_DIR;
     process.env.NEK_CODING_AGENT_DIR = agentDir;
-    const info: NekGuiInfo = {
-      protocolVersion: 1,
-      nekVersion: "0.5.0-beta.2",
-      piVersion: "1.0.2",
-      node: { path: process.execPath, version: process.version },
-      launch: {
-        args: [
-          "--import",
-          pathToFileURL(join(source!, "packages/coding-agent/src/experimental/source-resolver.ts"))
-            .href,
-          join(source!, "packages/coding-agent/src/cli.ts"),
-        ],
-      },
-      agentDir,
-      sessionDir: join(agentDir, "sessions"),
-      platform: process.platform,
-      arch: process.arch,
+    const env = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) => !/(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|NEK_)/i.test(key),
+        ),
+      ),
+      HOME: dir,
+      USERPROFILE: dir,
+      TMP: dir,
+      TEMP: dir,
+      NEK_CODING_AGENT_DIR: agentDir,
+      NEK_OFFLINE: "1",
     };
+    const probe = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        pathToFileURL(join(source!, "packages/coding-agent/src/experimental/source-resolver.ts"))
+          .href,
+        join(source!, "packages/coding-agent/src/cli.ts"),
+        "gui-info",
+        "--json",
+      ],
+      { cwd: project, encoding: "utf8", timeout: 15000, env },
+    );
+    assert.equal(probe.status, 0, probe.stderr);
+    const info: NekGuiInfo = JSON.parse(probe.stdout);
     const executor = createLocalNekConfigHostExecutor({ agentDir, home: dir });
     executor.spawnNek = async (args) =>
-      spawnNekProcess({ guiInfo: info, cwd: project, args: [...args] }).handle;
+      spawnNekProcess({ guiInfo: info, cwd: project, env, args: [...args] }).handle;
     const hosts = { executor: () => executor, listTargets: async () => [] };
     // A separate config owner models Electron main; the host learns via fs.watch/content admission.
     const settings = new NekConfigApi({ hosts });
     const host = createNekRuntimeServices({
-      agent: { guiInfo: info, cwd: project, askProjectTrust: () => true },
+      agent: { guiInfo: info, cwd: project, env, askProjectTrust: () => true },
       config: { hosts, config: { watchDebounceMs: 60_000 } },
     });
     const local = { kind: "local" } as const;

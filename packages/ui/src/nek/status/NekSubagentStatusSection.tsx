@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import type { NekHistorySubagentRecord } from "@zcode/shared/nek-protocol";
-import { AsyncButton } from "@/components/ui/async-button.js";
 import { AlertCircle, Bot, CheckCircle2, CircleSlash, LoaderCircle, Square } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Fold, FoldContent, FoldTrigger } from "@/components/ui/fold.js";
@@ -179,10 +178,9 @@ function NekHistoricalSubagentRow({
       data-subagent-id={record.id}
     >
       <Bot aria-hidden="true" className="size-3.5 shrink-0 text-foreground-subtle" />
-      <AsyncButton
+      <Button
         variant="ghost"
         size="sm"
-        successFeedback="none"
         className="min-w-0 flex-1 justify-start px-0"
         onClick={() => onOpenTranscript(record.id)}
         aria-label={intl.formatMessage(
@@ -191,7 +189,7 @@ function NekHistoricalSubagentRow({
         )}
       >
         <span className="block min-w-0 truncate">{title}</span>
-      </AsyncButton>
+      </Button>
       {record.type ? (
         <span className="shrink-0 text-ui-xs text-foreground-subtle">{record.type}</span>
       ) : null}
