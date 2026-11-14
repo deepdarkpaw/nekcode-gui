@@ -4,7 +4,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useSubagentConversation, type SubagentConversation } from "./useSubagentConversation.js";
 import { NEK_STATUS_TRANSCRIPT_REFRESH_MS } from "./types.js";
 
-const running: SubagentConversation = { rows: [], totalCount: 0, status: "running" };
+const running: SubagentConversation = {
+  rows: [],
+  totalCount: 0,
+  status: "running",
+  history: { branchRevision: "branch", totalTurns: 0, turns: [], hasOlder: false, hasNewer: false },
+};
 const completed: SubagentConversation = { ...running, status: "completed" };
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {

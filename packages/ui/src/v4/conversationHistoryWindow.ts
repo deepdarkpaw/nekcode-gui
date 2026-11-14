@@ -16,6 +16,8 @@ export interface HistoryOmission {
   turnId: string;
   reason: "budget";
 }
+/** A child transcript has the same body/history window, without parent control/config facts. */
+export type HistoryWindowBody = Pick<ConversationSnapshot, "rows" | "history">;
 interface PageBoundary extends Omit<ConversationHistory, "turns"> {
   turnIds: string[];
 }
@@ -51,7 +53,7 @@ export class ConversationHistoryWindow {
   /** Live events have no new opaque page boundaries; explicit latest/around renews them. */
   needsBoundaryRefresh = false;
 
-  reset(snapshot: ConversationSnapshot): ConversationSnapshot {
+  reset<T extends HistoryWindowBody>(snapshot: T): T {
     this.pages = snapshot.history ? [this.boundary(snapshot.history)] : [];
     this.omissions = [];
     this.needsBoundaryRefresh = false;
@@ -99,12 +101,12 @@ export class ConversationHistoryWindow {
     }
   }
 
-  mergePage(
-    current: ConversationSnapshot,
+  mergePage<T extends HistoryWindowBody>(
+    current: T,
     result: V4ConversationHistoryPageResult,
     direction: HistoryDirection,
     changed: ReadonlySet<string>,
-  ): ConversationSnapshot {
+  ): T {
     const replace = direction === "around" || direction === "latest";
     if (replace) this.needsBoundaryRefresh = false;
     const incoming = this.boundary(result.history);
@@ -143,12 +145,12 @@ export class ConversationHistoryWindow {
     );
   }
 
-  mergeTurn(
-    current: ConversationSnapshot,
+  mergeTurn<T extends HistoryWindowBody>(
+    current: T,
     result: V4ConversationHistoryTurnResult,
     changed: ReadonlySet<string>,
     restart = false,
-  ): ConversationSnapshot {
+  ): T {
     if (!current.history) return current;
     const base = restart
       ? current.rows.window.filter(
@@ -188,11 +190,11 @@ export class ConversationHistoryWindow {
   }
 
   /** Whole-page eviction retains the exact host capabilities of the surviving boundaries. */
-  bound(
-    snapshot: ConversationSnapshot,
+  bound<T extends HistoryWindowBody>(
+    snapshot: T,
     direction: HistoryDirection = this.retentionDirection,
     requestedTurnId: string | undefined = this.readingTurnId,
-  ): ConversationSnapshot {
+  ): T {
     if (!snapshot.history) return snapshot;
     let rows = snapshot.rows.window;
     let turns = snapshot.history.turns;

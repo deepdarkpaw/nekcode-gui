@@ -1,9 +1,22 @@
 import type {
+  ConversationHistory,
   ConversationHistoryDirectoryOptions,
   V4ConversationHistoryDirectoryResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { ASYNC_ACTION_IDLE, reduceAsyncAction, type AsyncActionState } from "@/lib/asyncAction.js";
-import type { ConversationProjectionStore } from "@/v4/conversationProjectionStore.js";
+/** Minimal metadata owner port shared by parent stores and read-only child controllers. */
+export interface HistoryDirectorySource {
+  getState(): {
+    status: string;
+    snapshot: { history?: ConversationHistory } | null;
+    turnNavigatorDirectoryRevision: number;
+  };
+  subscribe(listener: () => void): () => void;
+  getHistoryOwnerKey(): string;
+  readHistoryDirectory(
+    options: ConversationHistoryDirectoryOptions,
+  ): Promise<V4ConversationHistoryDirectoryResult>;
+}
 
 export const HISTORY_DIRECTORY_LIMITS = { page: 100, retained: 1000 } as const;
 export type HistoryDirectoryQuery = Omit<ConversationHistoryDirectoryOptions, "cursor">;
@@ -14,10 +27,20 @@ export interface HistoryDirectoryState {
   error: string | null;
   totalTurns: number;
 }
-type DirectorySource = Pick<
-  ConversationProjectionStore,
-  "getState" | "subscribe" | "getHistoryOwnerKey" | "readHistoryDirectory"
->;
+/** Validate before publishing metadata; owners may reuse it to retain the exact retry intent. */
+export function assertHistoryDirectoryPage(
+  result: V4ConversationHistoryDirectoryResult,
+  cursor?: string,
+): void {
+  if (result.items.length > HISTORY_DIRECTORY_LIMITS.page)
+    throw new Error("History directory page exceeds 100 summaries");
+  if (
+    result.hasMore &&
+    (!result.nextCursor || result.nextCursor === cursor || !result.items.length)
+  )
+    throw new Error("History directory cursor did not advance");
+}
+
 const emptyState = (): HistoryDirectoryState => ({
   items: [],
   hasMore: false,
@@ -35,7 +58,7 @@ const queryKey = (query: HistoryDirectoryQuery) =>
 
 /** Query + owner generation fences metadata only. It never hydrates a conversation body. */
 export function createHistoryDirectoryController(
-  source: DirectorySource,
+  source: HistoryDirectorySource,
   initial: HistoryDirectoryQuery = {},
 ) {
   let query = initial;
@@ -87,10 +110,7 @@ export function createHistoryDirectoryController(
         requestOwner !== source.getHistoryOwnerKey()
       )
         return;
-      if (result.items.length > HISTORY_DIRECTORY_LIMITS.page)
-        throw new Error("History directory page exceeds 100 summaries");
-      if (result.hasMore && (!result.nextCursor || result.nextCursor === requestCursor))
-        throw new Error("History directory cursor did not advance");
+      assertHistoryDirectoryPage(result, requestCursor);
       const items = new Map((append ? state.items : []).map((item) => [item.entryId, item]));
       for (const item of result.items) items.set(item.entryId, item);
       /** Retain the requested end of the directory, not an unbounded completed-page cache. */
@@ -144,7 +164,8 @@ export function createHistoryDirectoryController(
       query = next;
       reset();
       publish({});
-      void read(false);
+      if (source.getState().snapshot?.history && source.getState().status === "live")
+        void read(false);
     },
     close() {
       if (closed) return;
