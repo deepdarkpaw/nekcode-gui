@@ -2,6 +2,14 @@
 // desktop 走 preload/MessagePort，web 走 ws relay——数据层对两者零感知，
 // 这是「依赖注入解决 desktop/web 兼容」原则在 v4 数据层的落点。
 import type {
+  ConversationHistoryPageOptions,
+  ConversationHistoryTurnOptions,
+  ConversationHistoryDirectoryOptions,
+  ConversationHistoryContentOptions,
+  V4ConversationHistoryPageResult,
+  V4ConversationHistoryTurnResult,
+  V4ConversationHistoryDirectoryResult,
+  V4ConversationHistoryContentResult,
   CommandAck,
   CommandEnvelope,
   CommandsQueryParams,
@@ -46,6 +54,19 @@ export interface ConversationTransport {
   queryCommands(params: CommandsQueryParams): Promise<CommandsQueryResult>;
   /** v4/conversation/rowsRange（loadOlder）：按游标向上取一窗历史行。 */
   rowsRange(params: V4ConversationRowsRangeParams): Promise<V4ConversationRowsRangeResult>;
+  /** Source history capabilities stay scoped to their parent session and optional child. */
+  historyPage(
+    params: ConversationHistoryPageOptions & HistorySessionTarget,
+  ): Promise<V4ConversationHistoryPageResult>;
+  historyTurn(
+    params: ConversationHistoryTurnOptions & HistorySessionTarget,
+  ): Promise<V4ConversationHistoryTurnResult>;
+  historyDirectory(
+    params: ConversationHistoryDirectoryOptions & HistorySessionTarget,
+  ): Promise<V4ConversationHistoryDirectoryResult>;
+  historyContent(
+    params: ConversationHistoryContentOptions & HistorySessionTarget,
+  ): Promise<V4ConversationHistoryContentResult>;
   /** v4/conversation/plans：当前有效分支里的全部终态计划。 */
   plans(params: V4ConversationPlansParams): Promise<V4ConversationPlansResult>;
   /** v4/conversation/fileChanges：按 turn row 展开文件摘要详情与只读 diff。 */
@@ -102,6 +123,12 @@ export interface ConversationTransport {
    * 避免同一次换代被两条通道各处理一次。承载方未暴露 runtime lifecycle 时本方法不存在。
    */
   onRuntimeLifecycle?(listener: (state: "available" | "unavailable") => void): () => void;
+}
+
+/** Renderer-local target only; trusted adapter stamps workspace/identity. */
+interface HistorySessionTarget {
+  sessionId: string;
+  subagentId?: string;
 }
 
 export interface ConversationAttachmentReadParams {
