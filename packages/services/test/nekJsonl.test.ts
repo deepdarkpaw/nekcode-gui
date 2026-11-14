@@ -85,6 +85,52 @@ test("default ceiling is 64 MB", () => {
   assert.equal(NEK_JSONL_MAX_LINE_BYTES, 64 * 1024 * 1024);
 });
 
+test("HP4: oversized unterminated records retain no later chunks and recover exactly at LF", () => {
+  const { decoder, lines, overflows } = createDecoder(16);
+  decoder.write(Buffer.alloc(17, 120));
+  for (let index = 0; index < 1000; index += 1) {
+    decoder.write(Buffer.alloc(1024, 120));
+    assert.equal(decoder.retainedByteCount, 0);
+  }
+  assert.equal(overflows.length, 1);
+  assert.equal(decoder.pendingByteCount, 17 + 1000 * 1024);
+  decoder.write('\n{"ok":true}\n');
+  assert.deepEqual(lines, ['{"ok":true}']);
+  assert.equal(decoder.pendingByteCount, 0);
+});
+
+test("HP4: tiny chunks cross slab boundaries without rescanning or changing UTF8 records", () => {
+  const text = `中文${LS}${PS}🙂`.repeat(10_000);
+  const bytes = Buffer.from(JSON.stringify({ text }));
+  const { decoder, lines, overflows } = createDecoder(bytes.length);
+  for (let start = 0; start < bytes.length; start += 17)
+    decoder.write(bytes.subarray(start, start + 17));
+  assert.equal(decoder.retainedByteCount, bytes.length);
+  decoder.write("\n");
+  assert.deepEqual(lines, [bytes.toString("utf8")]);
+  assert.deepEqual(overflows, []);
+  assert.equal(decoder.retainedByteCount, 0);
+});
+
+test("HP4: actual wire bytes, not UTF8 replacement size, decide the record ceiling", () => {
+  const { decoder, lines, overflows } = createDecoder(2);
+  decoder.write(Buffer.from([0xff, 0xff, 10, 0x61, 10]));
+  assert.deepEqual(lines, ["��", "a"]);
+  assert.deepEqual(overflows, []);
+});
+
+test("HP4: end flushes a partial UTF8 sequence once and releases an overflowing record", () => {
+  const { decoder, lines } = createDecoder(4);
+  decoder.write(Buffer.from([0xe4, 0xb8]));
+  decoder.end();
+  decoder.end();
+  assert.deepEqual(lines, ["�"]);
+  decoder.write("too long");
+  decoder.end();
+  assert.equal(decoder.retainedByteCount, 0);
+  assert.equal(decoder.pendingByteCount, 0);
+});
+
 test("attachNekJsonlReader parses records, skips blanks and reports bad JSON", async () => {
   const stream = new PassThrough();
   const records: unknown[] = [];

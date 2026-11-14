@@ -1,12 +1,12 @@
-import { StringDecoder } from "node:string_decoder";
 import type { Readable } from "node:stream";
 
 /**
  * nek RPC 的 JSONL 分帧（严格 LF）。
  *
  * 为什么不用 `node:readline`：readline 还会在 `U+2028` / `U+2029` 处断行，而这两个字符在 JSON
- * 字符串里完全合法（见 nek `docs/json.md`、`docs/rpc.md`）。这里用 `StringDecoder` 保证跨块的
- * UTF-8 序列不被打断，只按 `\n` 切分，并剥掉可选的 `\r` 以兼容 CRLF 写入端。
+ * 字符串里完全合法（见 nek `docs/json.md`、`docs/rpc.md`）。只扫描新收到字节里的 LF，
+ * 整行收齐后才解码 UTF-8，避免跨块字符被打断或对累积长字符串反复扫描、拷贝。
+ * 剥掉可选的 `\r` 以兼容 CRLF 写入端。
  */
 
 /** 单行上限：超过即视为对端异常（正常一条记录远小于此）。 */
@@ -43,78 +43,90 @@ export interface NekJsonlDecoderOptions {
  * 增量 JSONL 解码器：`write()` 喂块，`end()` 收尾（尾部未以 LF 结束的残余按一条记录处理）。
  * 超限的残余不会被当成记录投递。
  */
+const LINE_BUFFER_BLOCK_BYTES = 64 * 1024;
+
 export class NekJsonlDecoder {
-  private readonly decoder = new StringDecoder("utf8");
   private readonly maxLineBytes: number;
-  private buffer = "";
+  private readonly blocks: Buffer[] = [];
+  private lastBlockUsed = 0;
   private pendingBytes = 0;
   private overflowed = false;
 
   constructor(private readonly options: NekJsonlDecoderOptions) {
     this.maxLineBytes = options.maxLineBytes ?? NEK_JSONL_MAX_LINE_BYTES;
+    if (!Number.isSafeInteger(this.maxLineBytes) || this.maxLineBytes < 1)
+      throw new RangeError("nek JSONL line limit must be a positive safe integer");
   }
 
-  /** 当前未完成行的字节数（诊断用）。 */
+  /** 当前未完成行的实际字节数；非法 UTF-8 不会让替换字符改变限额记账。 */
   get pendingByteCount(): number {
     return this.pendingBytes;
   }
 
+  /** 超限后等待 LF 期间必须为零，不能继续积累被丢弃的正文。 */
+  get retainedByteCount(): number {
+    return this.overflowed ? 0 : this.pendingBytes;
+  }
+
   write(chunk: Buffer | string): void {
-    const text = typeof chunk === "string" ? chunk : this.decoder.write(chunk);
-    this.pendingBytes +=
-      typeof chunk === "string" ? Buffer.byteLength(chunk, "utf8") : chunk.length;
-    this.buffer += text;
-    while (true) {
-      const newlineIndex = this.buffer.indexOf("\n");
-      if (newlineIndex === -1) break;
-      const rawLine = this.buffer.slice(0, newlineIndex);
-      this.buffer = this.buffer.slice(newlineIndex + 1);
-      // 记账用解码后文本的字节数：合法 UTF-8 与原始字节一致；非法序列会被替换符放大，
-      // 但这里只服务于"单行上限"这个粗粒度守卫，漂移被 clamp 掉。
-      this.pendingBytes = Math.max(0, this.pendingBytes - (Buffer.byteLength(rawLine, "utf8") + 1));
-      if (this.overflowed) {
-        // 超限的残余在这里丢弃，后面的记录照常切分。
-        this.overflowed = false;
-        continue;
-      }
-      const lineBytes = Buffer.byteLength(rawLine, "utf8");
-      if (lineBytes > this.maxLineBytes) {
-        this.options.onLineTooLong?.(new NekJsonlLineTooLongError(lineBytes, this.maxLineBytes));
-        continue;
-      }
-      this.emitLine(rawLine);
-    }
-    if (!this.overflowed && this.pendingBytes > this.maxLineBytes) {
-      this.overflowed = true;
-      this.options.onLineTooLong?.(
-        new NekJsonlLineTooLongError(this.pendingBytes, this.maxLineBytes),
-      );
-      this.buffer = "";
+    const bytes = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
+    let start = 0;
+    while (start < bytes.length) {
+      const newline = bytes.indexOf(10, start);
+      const stop = newline < 0 ? bytes.length : newline;
+      this.append(bytes.subarray(start, stop));
+      if (newline < 0) return;
+      this.finishLine();
+      start = newline + 1;
     }
   }
 
   end(): void {
-    this.buffer += this.decoder.end();
-    if (!this.overflowed && this.buffer.length > 0) {
-      const rawLine = this.buffer;
-      this.buffer = "";
-      this.pendingBytes = 0;
-      if (Buffer.byteLength(rawLine, "utf8") > this.maxLineBytes) {
-        this.options.onLineTooLong?.(
-          new NekJsonlLineTooLongError(Buffer.byteLength(rawLine, "utf8"), this.maxLineBytes),
-        );
-        return;
-      }
-      this.emitLine(rawLine);
-      return;
-    }
-    this.buffer = "";
-    this.pendingBytes = 0;
-    this.overflowed = false;
+    if (this.pendingBytes > 0) this.finishLine();
   }
 
-  private emitLine(rawLine: string): void {
-    this.options.onLine(rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine);
+  private append(bytes: Buffer): void {
+    this.pendingBytes = Math.min(Number.MAX_SAFE_INTEGER, this.pendingBytes + bytes.length);
+    if (this.overflowed) return;
+    if (this.pendingBytes > this.maxLineBytes) {
+      this.overflowed = true;
+      this.blocks.length = 0;
+      this.lastBlockUsed = 0;
+      this.options.onLineTooLong?.(
+        new NekJsonlLineTooLongError(this.pendingBytes, this.maxLineBytes),
+      );
+      return;
+    }
+    let offset = 0;
+    while (offset < bytes.length) {
+      let block = this.blocks.at(-1);
+      if (!block || this.lastBlockUsed === block.length) {
+        block = Buffer.allocUnsafe(Math.min(LINE_BUFFER_BLOCK_BYTES, this.maxLineBytes));
+        this.blocks.push(block);
+        this.lastBlockUsed = 0;
+      }
+      const count = Math.min(bytes.length - offset, block.length - this.lastBlockUsed);
+      bytes.copy(block, this.lastBlockUsed, offset, offset + count);
+      this.lastBlockUsed += count;
+      offset += count;
+    }
+  }
+
+  /** Join/decode once per accepted record; reset ownership before invoking user callbacks. */
+  private finishLine(): void {
+    let line: string | undefined;
+    if (!this.overflowed) {
+      const bytes =
+        this.blocks.length === 1
+          ? this.blocks[0]!.subarray(0, this.lastBlockUsed)
+          : Buffer.concat(this.blocks, this.pendingBytes);
+      line = bytes.toString("utf8");
+    }
+    this.blocks.length = 0;
+    this.lastBlockUsed = 0;
+    this.pendingBytes = 0;
+    this.overflowed = false;
+    if (line !== undefined) this.options.onLine(line.endsWith("\r") ? line.slice(0, -1) : line);
   }
 }
 
