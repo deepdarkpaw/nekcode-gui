@@ -81,6 +81,15 @@ async function projectedFile(h: ReturnType<typeof harness>) {
   };
 }
 
+/** 实时事件经有界队列逐条投递：等投影落定后再读快照。 */
+async function settleLive(h: ReturnType<typeof harness>, check: () => Promise<boolean>) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (await check()) return;
+  }
+  throw new Error("timed out waiting for the queued live projection");
+}
+
 test("persisted files project original text and support authorized bounded read/stat after reopen", async () => {
   await withFile(async (file, bytes) => {
     const h = harness({ entries: entriesFor(file) });
@@ -208,6 +217,12 @@ test("live attachment metadata updates its user once and reconstructs identicall
       h.sessions[0]!.emit({ type: "message_end", message: user.message });
       h.sessions[0]!.emit({ type: "message_start", message });
       h.sessions[0]!.emit({ type: "message_end", message });
+      await settleLive(h, async () => {
+        const snapshot = await h.adapter.readNekSession(params);
+        return snapshot.rows.window.some(
+          (row) => row.kind === "userInput" && (row.attachments?.length ?? 0) === 1,
+        );
+      });
       const live = await projectedFile(h);
       assert.equal(live.ref, nekUserFileRef(sessionId, file));
       await h.adapter.closeNekSession(params);

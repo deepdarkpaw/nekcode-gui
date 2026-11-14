@@ -119,14 +119,19 @@ export async function reloadSessionSnapshot(
     const page = historyResult(pageResult);
     await verifyHistorySpawnAnchors(
       page.entries,
-      (subagentId) => process.client.call({ type: "read_history_subagent", subagentId }),
+      (subagentId) =>
+        process.client.call({
+          type: "read_history_subagent",
+          subagentId,
+          observationCursor: page.observationCursor,
+        }),
       record.projector?.acceptsHistoryPage(page) ? record.projector.historyAnchors() : [],
     );
     const metadata = historyResult(
       await measureNekOpenRequest(openTiming, () =>
         process.client.call({
           type: "read_session_metadata",
-          branchRevision: page.branchRevision,
+          observationCursor: page.observationCursor,
           maxBytes: HISTORY_RPC_MAX_BYTES,
         }),
       ),

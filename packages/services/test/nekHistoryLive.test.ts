@@ -6,6 +6,7 @@ import type {
   NekSessionEntry,
 } from "@zcode/shared/nek-protocol";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
+import { buildToolCallRow } from "../src/nek-agent/projection/nekRows.js";
 import { historyRowId } from "../src/nek-agent/projection/nekHistoryProjection.js";
 import {
   stripPrivateHistoryRow,
@@ -222,10 +223,36 @@ test("HS2: public-row helper removes private deferred read capabilities", () => 
     assert.equal(row.historyContent[0]?.ref, "secret-ref");
     const safe = stripPrivateHistorySnapshot({
       ...projector.snapshot(),
+      liveHistoryPreview: {
+        epoch: "epoch",
+        eventId: 1,
+        eventType: "message_update",
+        preview: "private-transient",
+        receivedBytes: 1048576,
+        incomplete: true,
+      },
       rows: { window: [row], firstRowId: row.rowId, totalCount: 1 },
     });
     assert.equal(safe.history, undefined);
+    assert.equal(safe.liveHistoryPreview, undefined);
+    assert.equal(JSON.stringify(safe).includes("private-transient"), false);
     assert.equal(JSON.stringify(safe).includes("secret-ref"), false);
+    const tool = {
+      ...buildToolCallRow(
+        { rowId: 99, entityId: "tool:extra", turnId: "turn:1", createdAt: 1 },
+        {
+          toolCallId: "extra",
+          toolName: "mcp_fixture",
+          status: "success",
+          output: { text: "stored output" },
+        },
+      ),
+      liveResult: { structuredContent: "private-transient" },
+    };
+    const stored = stripPrivateHistoryRow(tool);
+    assert.equal(JSON.stringify(stored).includes("private-transient"), false);
+    assert.equal(stored.kind === "toolCall" && stored.output?.text, "stored output");
+    assert.equal(tool.liveResult.structuredContent, "private-transient");
   } finally {
     projector.dispose();
   }

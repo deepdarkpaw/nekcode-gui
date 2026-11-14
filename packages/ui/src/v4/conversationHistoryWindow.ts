@@ -278,6 +278,8 @@ export class ConversationHistoryWindow {
       rows = mergeHistoryRows(keep, result.rows, changed, false);
     }
     const turn = { ...result.turn, continuationCursor: result.continuationCursor };
+    const boundary = this.latestBoundary;
+    const source = boundary && (result.atSeq < boundary.seq || result.atRevision < boundary.revision) ? boundary.history : result;
     this.readingTurnId = turn.turnId;
     this.retentionDirection = "turn";
     const turns = current.history.turns.map((item) => (item.turnId === turn.turnId ? turn : item));
@@ -288,7 +290,12 @@ export class ConversationHistoryWindow {
       {
         ...current,
         rows: { ...current.rows, window: rows, totalCount: rows.length },
-        history: { ...current.history, turns },
+        history: {
+          ...current.history,
+          branchRevision: source.branchRevision ?? current.history.branchRevision,
+          observationCursor: source.observationCursor ?? current.history.observationCursor,
+          turns,
+        },
       },
       "turn",
       turn.turnId,

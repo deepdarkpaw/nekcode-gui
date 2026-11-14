@@ -9,6 +9,8 @@ import test from "node:test";
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 import { createLocalNekConfigHostExecutor, NekConfigApi } from "../src/nek-config-api/index.js";
 import { spawnNekProcess } from "../src/nek-agent/nekProcessLauncher.js";
+import { createNekModelFactsSource } from "../src/model-provider/nekModelFacts.js";
+import { createNekModelSelectionService } from "../src/model-provider/nekModelSelectionService.js";
 
 const source = process.env.NEK_RPC_WORKTREE;
 const enabled = process.env.NEK_E2E === "1" && Boolean(source);
@@ -16,7 +18,7 @@ const enabled = process.env.NEK_E2E === "1" && Boolean(source);
 test(
   "real nek: settings owner writes -> existing host session selects and sends new/same-ID models without restart",
   { skip: enabled ? false : "set NEK_E2E=1 and NEK_RPC_WORKTREE", timeout: 120_000 },
-  async () => {
+  async (t) => {
     const { createNekRuntimeServices } = await import("../src/createNekRuntimeServices.js");
     const root = resolve(process.env.NEK_E2E_TMP ?? ".tmp");
     await mkdir(root, { recursive: true });
@@ -116,7 +118,38 @@ test(
       config: { hosts, config: { watchDebounceMs: 60_000 } },
     });
     const local = { kind: "local" } as const;
+    const facts = createNekModelFactsSource(host.configApi);
+    const menu = createNekModelSelectionService({ facts });
     try {
+      const started = performance.now();
+      const cold = await menu.getView({ selection: null, workspacePath: project });
+      const coldMs = performance.now() - started;
+      assert.ok(
+        cold.providers.some((provider) => provider.models.some((model) => model.modelId === "old")),
+      );
+      const warmStart = performance.now();
+      const views = await Promise.all(
+        Array.from({ length: 32 }, () => menu.getView({ selection: null, workspacePath: project })),
+      );
+      const warm32Ms = performance.now() - warmStart;
+      assert.equal(views.length, 32);
+      assert.ok(
+        views.every((view) =>
+          view.providers.some((provider) =>
+            provider.models.some((model) => model.modelId === "old"),
+          ),
+        ),
+      );
+      const timings = {
+        coldMs,
+        warm32Ms,
+        coldGoalMs: 5000,
+        warmGoalMs: 500,
+        realCli: true,
+        concurrentReads: 32,
+      };
+      t.diagnostic(JSON.stringify(timings));
+      await writeFile(join(dir, "model-menu-evidence.json"), JSON.stringify(timings, null, 2));
       const created = await host.agentService.service.createSession({
         cwd: project,
         model: { provider: "CPA", modelId: "old" },
@@ -166,6 +199,12 @@ test(
         ],
         initial,
       );
+      const refreshed = await menu.getView({ selection: null, workspacePath: project });
+      assert.ok(
+        refreshed.providers.some((provider) =>
+          provider.models.some((model) => model.modelId === "gemini-4-carbon"),
+        ),
+      );
       await host.agentService.service.setModel({
         sessionKey: key,
         provider: "CPA",
@@ -198,6 +237,8 @@ test(
       );
       assert.equal(requests.length, 2, "only the loopback requests were made");
     } finally {
+      menu.dispose();
+      facts.dispose();
       await host.agentService.dispose();
       host.configApi.dispose();
       settings.dispose();

@@ -55,7 +55,8 @@ export function childPreview(
   status: SubagentConversation["status"] = "completed",
   page = childPage(),
 ): SubagentConversation {
-  return { rows: page.rows, history: page.history, totalCount: page.rows.length, status };
+  const owner = { atSeq: page.atSeq, atRevision: page.atRevision, atLogEpoch: page.atLogEpoch };
+  return { ...owner, rows: page.rows, history: page.history, totalCount: page.rows.length, status };
 }
 export function childDirectory(
   start = 0,

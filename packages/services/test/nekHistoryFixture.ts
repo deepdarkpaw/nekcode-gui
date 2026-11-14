@@ -30,6 +30,7 @@ export function fixtureHistory(
     sessionId: session.id,
     sessionPath: session.path,
     branchRevision: `branch:${entries.length}`,
+    observationCursor: `observation:${session.id}:${entries.length}`,
     leafId: entries.at(-1)?.id ?? null,
     watermark: { entryId: entries.length, conversationId: 1, nextSeq: entries.length },
   };

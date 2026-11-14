@@ -4,6 +4,7 @@ import type {
   V4ConversationHistoryPageResult,
   V4ConversationHistoryTurnResult,
 } from "@zcode/shared/zcode-protocol-v4";
+import { assertHistoryObservation, withHistoryObservation } from "@zcode/shared/zcode-protocol-v4";
 import { ConversationHistoryWindow } from "@/v4/conversationHistoryWindow.js";
 import type { SubagentConversation } from "./useSubagentConversation.js";
 
@@ -33,6 +34,22 @@ const watermarkOf = (result: ConversationHistoryWatermark): ConversationHistoryW
   atRevision: result.atRevision,
   atLogEpoch: result.atLogEpoch,
 });
+
+function previewWatermark(preview: SubagentConversation): ConversationHistoryWatermark | undefined {
+  if (!("atSeq" in preview || "atRevision" in preview || "atLogEpoch" in preview)) return undefined;
+  if (
+    !(
+      "atSeq" in preview &&
+      typeof preview.atSeq === "number" &&
+      "atRevision" in preview &&
+      typeof preview.atRevision === "number" &&
+      "atLogEpoch" in preview &&
+      typeof preview.atLogEpoch === "string"
+    )
+  )
+    throw new Error("Child preview omitted its owner watermark");
+  return { atSeq: preview.atSeq, atRevision: preview.atRevision, atLogEpoch: preview.atLogEpoch };
+}
 
 function assertChildPage(result: Pick<V4ConversationHistoryPageResult, "history" | "rows">): void {
   const history = result.history;
@@ -64,15 +81,22 @@ export class SubagentHistoryBody {
       totalCount: body.rows.window.length,
     };
   }
+  private observeWatermark(watermark: ConversationHistoryWatermark): void {
+    this.watermark = watermark;
+    if (this.data) this.data = { ...this.data, ...watermark };
+  }
   get history() {
     return this.data
       ? { ...this.data.history, hasNewer: this.data.history.hasNewer || this.latestDirty }
       : undefined;
   }
-  applyPreview(preview: SubagentConversation, fresh = false): void {
+  applyPreview(preview: SubagentConversation, fresh = false, observationCursor?: string): void {
     assertChildPage(preview);
-    if (!fresh && this.data && preview.history.branchRevision !== this.data.history.branchRevision)
-      throw new Error("Child history branch changed; load latest explicitly");
+    const watermark = previewWatermark(preview);
+    if (watermark && (!fresh || watermark.atLogEpoch === this.watermark?.atLogEpoch))
+      assertChildWatermark(watermark, this.watermark);
+    if (!fresh && this.data)
+      assertHistoryObservation(this.data.history, preview.history, observationCursor);
     const changed = this.data?.history.totalTurns !== preview.history.totalTurns;
     if (!this.data || this.readingLatest || fresh) {
       this.data = { ...preview, totalCount: preview.rows.length };
@@ -87,10 +111,16 @@ export class SubagentHistoryBody {
       this.data = {
         ...this.data,
         status: preview.status,
-        history: { ...this.data.history, totalTurns: preview.history.totalTurns },
+        history: {
+          ...this.data.history,
+          totalTurns: preview.history.totalTurns,
+          branchRevision: preview.history.branchRevision,
+          observationCursor: preview.history.observationCursor,
+        },
       };
       this.latestDirty = true;
     }
+    if (watermark) this.observeWatermark(watermark);
     if (changed) this.directoryRevision++;
   }
   pageOptions(
@@ -111,17 +141,28 @@ export class SubagentHistoryBody {
     if (direction === "older") {
       if (!history.olderCursor)
         throw new Error("Child history cursor is missing; load latest explicitly");
-      return { beforeCursor: history.olderCursor };
+      return withHistoryObservation(
+        { beforeCursor: history.olderCursor },
+        history.observationCursor,
+      );
     }
     if (direction === "newer") {
-      if (history.newerCursor) return { afterCursor: history.newerCursor };
+      if (history.newerCursor)
+        return withHistoryObservation(
+          { afterCursor: history.newerCursor },
+          history.observationCursor,
+        );
       // A live status poll has no new page capability. Explicit forward navigation may
       // resolve from the last authoritative entry without touching the older viewport first.
       const entryId = history.turns.at(-1)?.userEntryId;
-      if (this.latestDirty && entryId) return { aroundEntryId: entryId };
+      if (this.latestDirty && entryId)
+        return withHistoryObservation({ aroundEntryId: entryId }, history.observationCursor);
       throw new Error("Child history cursor is missing; load latest explicitly");
     }
-    return options;
+    return withHistoryObservation(
+      options,
+      direction === "latest" ? undefined : history.observationCursor,
+    );
   }
   applyPage(
     result: V4ConversationHistoryPageResult,
@@ -133,8 +174,7 @@ export class SubagentHistoryBody {
       assertChildWatermark(result, this.watermark);
     if (direction !== "latest") {
       assertChildWatermark(result, this.watermark);
-      if (result.history.branchRevision !== history.branchRevision)
-        throw new Error("Child history branch changed; load latest explicitly");
+      assertHistoryObservation(history, result.history, options.observationCursor);
     }
     assertChildPage(result);
     if (
@@ -157,16 +197,22 @@ export class SubagentHistoryBody {
     )
       throw new Error("Child history page did not advance the reading window");
     this.commit(this.window.mergePage(bodyOf(this.data!), result, direction, new Set()));
-    this.watermark = watermarkOf(result);
+    this.observeWatermark(watermarkOf(result));
     this.stale = false;
     this.latestDirty = false;
     this.readingLatest =
       direction === "latest" || (direction === "newer" && !result.history.hasNewer);
   }
-  applyTurn(result: V4ConversationHistoryTurnResult, turnId: string, cursor?: string): void {
+  applyTurn(
+    result: V4ConversationHistoryTurnResult,
+    turnId: string,
+    cursor?: string,
+    observationCursor?: string,
+  ): void {
     if (!this.data || this.stale)
       throw new Error("Child history is unavailable; load latest explicitly");
     assertChildWatermark(result, this.watermark);
+    assertHistoryObservation(this.data.history, result, observationCursor);
     if (!this.data.history.turns.some((turn) => turn.turnId === turnId) || !result.rows.length)
       throw new Error("Child history turn is not loaded or omitted rows; load around explicitly");
     if (
@@ -175,7 +221,7 @@ export class SubagentHistoryBody {
     )
       throw new Error("Child history turn identity/cursor did not advance");
     this.commit(this.window.mergeTurn(bodyOf(this.data), result, new Set(), cursor === undefined));
-    this.watermark = watermarkOf(result);
+    this.observeWatermark(watermarkOf(result));
     this.readingLatest = false;
   }
 }

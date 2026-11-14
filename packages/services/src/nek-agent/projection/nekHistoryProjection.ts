@@ -36,11 +36,19 @@ export const historyTurn = (turn: Omit<NekHistoryTurn, "header">): ConversationH
 export function historyMetadata(
   page: Pick<
     NekHistoryPage,
-    "branchRevision" | "totalTurns" | "olderCursor" | "newerCursor" | "hasOlder" | "hasNewer"
+    | "branchRevision"
+    | "observationCursor"
+    | "totalTurns"
+    | "olderCursor"
+    | "newerCursor"
+    | "hasOlder"
+    | "hasNewer"
   > & { turns: Array<Omit<NekHistoryTurn, "header">> },
 ): ConversationHistory {
   return {
     branchRevision: page.branchRevision,
+    // The source observation travels with every host boundary so later guarded reads can prove append-only progress.
+    observationCursor: page.observationCursor,
     totalTurns: page.totalTurns,
     turns: page.turns.map(historyTurn),
     olderCursor: page.olderCursor,

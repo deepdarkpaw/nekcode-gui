@@ -560,7 +560,7 @@ test("the compaction entry appended after compaction_end fills the same marker r
   assert.equal(compacts[0]?.marker.tokensBefore, 880);
 });
 
-test("a retried compaction still converges to a single marker row", () => {
+test("model retry closes the failed compaction; a later compaction gets its own marker", () => {
   const { projector, frames, scheduler, advance } = createProjector();
   projector.loadSnapshot({ entries: [], leafId: null });
   projector.handleEvent({ type: "agent_start" });
@@ -569,7 +569,7 @@ test("a retried compaction still converges to a single marker row", () => {
   scheduler.flushAll();
   const runningRowId = compactMarkerRows(replay(frames))[0]?.rowId;
 
-  // willRetry：这一轮尝试失败但会自动重试，压缩仍在进行，保持 running 与 compact 停止目标。
+  // willRetry retries the model, not the finished compaction (the accepted nek lifecycle contract).
   projector.handleEvent({
     type: "compaction_end",
     reason: "overflow",
@@ -583,15 +583,23 @@ test("a retried compaction still converges to a single marker row", () => {
   const retryingCompacts = compactMarkerRows(retrying);
   assert.equal(retryingCompacts.length, 1);
   assert.equal(retryingCompacts[0]?.rowId, runningRowId);
-  assert.equal(retryingCompacts[0]?.marker.status, "running");
-  assert.equal(retrying.control.stopTargetKind, "compact");
+  assert.equal(retryingCompacts[0]?.marker.status, "failed");
+  assert.equal(retrying.control.stopTargetKind, "assistant");
   assert.equal(retrying.control.canStop, true);
+  assert.equal(
+    retrying.control.activeWorks.some((work) => work.kind === "compact"),
+    false,
+  );
 
-  // 重试轮复用同一行：start 只把该行刷新回 running，end 才写终态。
+  // A subsequent compaction is a new operation; its start/end still share one stable marker.
   projector.handleEvent({ type: "compaction_start", reason: "overflow" });
   advance(10);
   scheduler.flushAll();
-  assert.equal(compactMarkerRows(replay(frames)).length, 1);
+  const nextCompacts = compactMarkerRows(replay(frames));
+  assert.equal(nextCompacts.length, 2);
+  const secondRowId = nextCompacts[1]!.rowId;
+  assert.notEqual(secondRowId, runningRowId);
+  assert.equal(nextCompacts[1]!.marker.status, "running");
   projector.handleEvent({
     type: "compaction_end",
     reason: "overflow",
@@ -604,11 +612,13 @@ test("a retried compaction still converges to a single marker row", () => {
 
   const settled = replay(frames);
   const settledCompacts = compactMarkerRows(settled);
-  assert.equal(settledCompacts.length, 1);
+  assert.equal(settledCompacts.length, 2);
   assert.equal(settledCompacts[0]?.rowId, runningRowId);
-  assert.equal(settledCompacts[0]?.marker.status, "success");
-  assert.equal(settledCompacts[0]?.marker.tokensBefore, 700);
-  assert.equal(settledCompacts[0]?.marker.tokensAfter, 200);
+  assert.equal(settledCompacts[0]?.marker.status, "failed");
+  assert.equal(settledCompacts[1]?.rowId, secondRowId);
+  assert.equal(settledCompacts[1]?.marker.status, "success");
+  assert.equal(settledCompacts[1]?.marker.tokensBefore, 700);
+  assert.equal(settledCompacts[1]?.marker.tokensAfter, 200);
 });
 
 test("streaming appends are coalesced into at most 20 flushes per second", () => {

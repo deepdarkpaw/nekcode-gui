@@ -16,6 +16,8 @@ export type NekHistoryStatusSnapshot = NekStatusSnapshot;
 export interface NekHistoryOptions {
   sessionPath?: string;
   branchRevision?: string;
+  /** Signed prefix observation; compatible append is allowed, observed rewrites are rejected. */
+  observationCursor?: string;
   /** Full UTF8 RPC envelope: default 1 MB, range 64 KB..4 MB. */
   maxBytes?: number;
 }
@@ -84,6 +86,7 @@ export interface NekHistoryIdentity {
   sessionPath: string;
   sessionId: string;
   branchRevision: string;
+  observationCursor: string;
   leafId: string | null;
   /** Persisted storage watermark, NOT the host live seq. */
   watermark: { entryId: number; conversationId: number; nextSeq: number };

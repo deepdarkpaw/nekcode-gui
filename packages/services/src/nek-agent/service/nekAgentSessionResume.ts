@@ -78,7 +78,7 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
           control.client.call({
             type: "read_history_page",
             sessionPath: input.sessionPath,
-            branchRevision: snapshot.branchRevision,
+            observationCursor: snapshot.observationCursor,
             turnLimit: 20,
             maxBytes: HISTORY_RPC_MAX_BYTES,
           }),
@@ -90,6 +90,7 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
           type: "read_history_subagent",
           sessionPath: input.sessionPath,
           subagentId,
+          observationCursor: page.observationCursor,
         }),
       );
       this.assertAlive();

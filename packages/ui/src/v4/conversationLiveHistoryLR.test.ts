@@ -3,6 +3,7 @@ import {
   coalesceConversationDeltas,
   type ConversationDelta,
   type V4ConversationHistoryPageResult,
+  type V4ConversationHistoryTurnResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { applyConversationLiveDeltas } from "./conversationLiveDeltas.js";
 import { historyAppendJsonBytes } from "./conversationHistoryBoundary.js";
@@ -106,23 +107,39 @@ describe("LR bounded live history renderer", () => {
   });
 
   it("LR2/LR6: a late guarded page cannot regress newer accepted host boundary metadata or newer text", async () => {
-    const h = await setup(livePage(30, 50, 50));
+    const initial = livePage(30, 50, 50);
+    initial.history.observationCursor = "observation:50";
+    const h = await setup(initial);
     const pending = deferredValue<V4ConversationHistoryPageResult>();
     h.transport.historyPage.mockImplementationOnce(() => pending.promise);
     const request = h.store.loadOlder();
     h.send([
       { op: "row.delta", rowId: 301, path: "text", append: " streamed" },
-      { op: "state.updated", patch: { history: livePage(31, 51).history } },
+      { op: "state.updated", patch: { history: { ...livePage(31, 51).history, observationCursor: "observation:51" } } },
     ]);
-    pending.resolve(livePage(10, 30, 50));
+    const older = livePage(10, 30, 50);
+    older.history.observationCursor = "observation:50";
+    pending.resolve(older);
     await request;
     const after = h.store.getState().snapshot!;
     expect(after.history!.totalTurns).toBe(51);
     expect(after.history!.branchRevision).toBe("source:51");
+    expect(after.history!.observationCursor).toBe("observation:51");
     expect(after.rows.window.find((row) => row.rowId === 301)).toMatchObject({
       text: "answer 30 streamed",
     });
     expect(after.rows.window.some((row) => row.rowId === 101)).toBe(true);
+    expect(h.store.getState().historyError).toBeNull();
+    const delayedTurn = deferredValue<V4ConversationHistoryTurnResult>();
+    h.transport.historyTurn.mockImplementationOnce(() => delayedTurn.promise);
+    const turnRequest = h.store.loadHistoryTurn("turn:30", "remaining:1");
+    h.send([{ op: "row.delta", rowId: 301, path: "text", append: " newer" }, { op: "state.updated", patch: { history: { ...livePage(32, 52).history, observationCursor: "observation:52" } } }]);
+    delayedTurn.resolve({ atSeq: 2, atRevision: 2, atLogEpoch: "epoch", branchRevision: "source:51", observationCursor: "observation:51", rows: [liveRow(30)], turn: after.history!.turns.find((turn) => turn.turnId === "turn:30")!, hasMore: true, continuationCursor: "remaining:2" });
+    await turnRequest;
+    expect(h.transport.historyTurn).toHaveBeenCalledWith(expect.objectContaining({ observationCursor: "observation:51" }));
+    expect(h.store.getState().snapshot!.history).toMatchObject({ branchRevision: "source:52", observationCursor: "observation:52", totalTurns: 52 });
+    expect(h.store.getState().snapshot!.history!.turns.find((turn) => turn.turnId === "turn:30")!.continuationCursor).toBe("remaining:2");
+    expect(h.store.getState().snapshot!.rows.window.find((row) => row.rowId === 301)).toMatchObject({ text: "answer 30 streamed newer" });
     expect(h.store.getState().historyError).toBeNull();
   });
 

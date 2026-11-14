@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import type {
   NekGuiInfo,
+  NekHistoryStreamOmission,
   NekRpcCommand,
   NekSessionSnapshot,
   NekSessionSummary,
@@ -121,8 +122,8 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
       await client.close();
     },
   };
-  /** 模拟 nek 主动推送的 RPC 事件（JSONL 一行）。 */
-  const emit = (record: Record<string, unknown>) => {
+  /** 模拟 nek 主动推送的 RPC 事件（JSONL 一行）；`omissions` 表达生产端省略的正文。 */
+  const emit = (record: Record<string, unknown>, omissions: NekHistoryStreamOmission[] = []) => {
     // Existing synthetic tests deliberately supply complete small semantic events. LS tests
     // separately exercise the real producer's exact omission/locator normalization.
     const type = String(record.type);
@@ -137,12 +138,29 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
             seq: ++streamSeq,
             eventId: ++streamEventId,
             event: record,
-            omissions: [],
+            omissions,
           }
         : record;
     return stdout.write(`${JSON.stringify(event)}\n`);
   };
-  return { process, commands, emit, isDisposed: () => disposed };
+  /** 模拟 nek 落盘一条条目并推送有界定位帧（生产端的持久化顺序：先定位，再语义事件）。 */
+  const append = (entryId: string, leafId: string | null = null) => {
+    if (!streamEpoch) throw new Error("history stream is not negotiated");
+    return stdout.write(
+      `${JSON.stringify({
+        type: "history_entry_appended",
+        version: 1,
+        epoch: streamEpoch,
+        seq: ++streamSeq,
+        sessionId,
+        sessionPath,
+        entryId,
+        leafId,
+        ref: { command: "read_history_page", sessionPath, aroundEntryId: entryId },
+      })}\n`,
+    );
+  };
+  return { process, commands, emit, append, isDisposed: () => disposed };
 }
 
 export function harness(

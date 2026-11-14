@@ -1,4 +1,5 @@
 import { fixtureHistory } from "./nekHistoryFixture.js";
+import { createHistoryStream, historyStreamCapabilities } from "./nekHistoryStreamFixture.js";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
@@ -14,7 +15,7 @@ import type { NekAgentServiceEvent } from "../src/nek-agent/service/types.js";
 
 const guiInfo = {
   protocolVersion: 1,
-  capabilities: { historyPages: 1 },
+  capabilities: historyStreamCapabilities,
   nekVersion: "test",
   piVersion: "test",
   node: { path: process.execPath, version: process.versions.node },
@@ -105,6 +106,8 @@ function fakeProcess(
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
+  const write = (record: unknown) => stdout.write(`${JSON.stringify(record)}\n`);
+  const historyStream = createHistoryStream(write, { sessionId: "s1", sessionPath: sessionFile });
   const commands: NekRpcCommand[] = [];
   const exits = new Set<(info: NekRpcProcessExit) => void>();
   let exited = false;
@@ -125,7 +128,9 @@ function fakeProcess(
       commands.push(command);
       if (!command.id) continue;
       let data: unknown;
-      if (command.type === "read_history_page" || command.type === "read_session_metadata") {
+      if (command.type === "set_history_stream") {
+        data = historyStream.negotiate();
+      } else if (command.type === "read_history_page" || command.type === "read_session_metadata") {
         const saved = snapshot(kind === "control" && snapshotLocked, lockHolder);
         data = fixtureHistory(saved.entries, command, saved.session, saved.lockedBy);
       } else if (kind === "control") {
@@ -204,9 +209,7 @@ function fakeProcess(
       } else {
         data = {};
       }
-      stdout.write(
-        `${JSON.stringify({ id: command.id, type: "response", command: command.type, success: true, data })}\n`,
-      );
+      write({ id: command.id, type: "response", command: command.type, success: true, data });
     }
   });
   const handle: NekRpcProcessHandle = {
@@ -248,7 +251,7 @@ function fakeProcess(
         if (record.type === "compaction_start") compacting = true;
         if (record.type === "compaction_end") compacting = false;
       }
-      stdout.write(`${JSON.stringify(record)}\n`);
+      historyStream.emit(record as Record<string, unknown>);
     },
     exit: (info = {}) => emitExit({ code: info.code ?? 1, signal: info.signal ?? null, ...info }),
   };
@@ -385,6 +388,8 @@ test("chooses prompt while idle and steer/follow_up while running, then aborts",
   assert.deepEqual(
     harness.sessions[0]!.commands.map((command) => command.type),
     [
+      // 可写会话先协商有界实时历史，再装载快照。
+      "set_history_stream",
       "get_state",
       "get_state",
       "read_history_page",

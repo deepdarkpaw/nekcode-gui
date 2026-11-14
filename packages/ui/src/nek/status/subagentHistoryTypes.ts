@@ -32,6 +32,24 @@ export interface SubagentHistoryState {
   retry(): Promise<unknown>;
   historyControls?: ConversationHistoryControls;
 }
+/** Default timer port defers global lookup so injected/fake clocks remain effective. */
+export const SUBAGENT_HISTORY_CLOCK: SubagentHistoryClock = {
+  setTimeout: (callback, delay) => setTimeout(callback, delay),
+  clearTimeout: (timer) => clearTimeout(timer),
+};
+/** Trusted routing never substitutes the root/child identity for the authorizing parent. */
+export function subagentHistoryTarget(scope: SubagentHistoryScope) {
+  return {
+    workspacePath: scope.workspacePath,
+    workspaceIdentity: scope.workspaceIdentity,
+    remoteSessionId: scope.remoteSessionId,
+    sessionId: scope.parentSessionId,
+  };
+}
+export function subagentHistoryReadTarget(scope: SubagentHistoryScope) {
+  return { ...subagentHistoryTarget(scope), subagentId: scope.childSessionId };
+}
+
 /** Include root and remote identities even though the authorizing service target is the parent. */
 export function subagentHistoryScopeKey(scope: SubagentHistoryScope): string {
   return JSON.stringify([

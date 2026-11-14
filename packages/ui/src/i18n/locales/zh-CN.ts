@@ -1171,6 +1171,14 @@ const zhCN: Record<string, string> = {
   "chat.history.searchMore": "继续查找更早内容",
   "chat.history.loadedTurns": "已加载 {loaded} / {total} 轮",
   "chat.history.shareSelectionOnly": "仅分享明确选中的已加载轮次；如需更早内容，请先加载对应轮次。",
+  "chat.history.liveIncomplete": "实时显示未完整同步",
+  "chat.history.liveIncompleteHint":
+    "下方不是完整回复。历史未被删除；本轮结束后可重新读取，不会重发消息。",
+  "chat.history.rawPreview": "不完整的原始片段（已接收 {size}）",
+  "chat.history.reloadHistory": "重新读取历史",
+  "chat.history.liveToolResult": "实时工具附加数据（{count} 项）",
+  "chat.history.liveToolResultHint":
+    "此数据来自实时工具事件，可能未写入会话历史。它不替代工具的正文输出。",
   "chat.pendingCommand.discarded": "CLI 重启前已提交的输入没有进入对话。请确认是否重新发送。",
   "chat.pendingCommand.resend": "重新发送",
   "chat.pendingCommand.dismiss": "稍后",
