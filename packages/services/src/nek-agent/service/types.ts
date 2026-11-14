@@ -195,21 +195,8 @@ export function isNekState(value: unknown): value is NekState {
   );
 }
 
-export function isNekSessionSnapshot(value: unknown): value is NekSessionSnapshot {
-  if (typeof value !== "object" || value === null) return false;
-  const snapshot = value as Partial<NekSessionSnapshot>;
-  return (
-    typeof snapshot.session === "object" &&
-    snapshot.session !== null &&
-    Array.isArray(snapshot.entries) &&
-    Array.isArray(snapshot.messages) &&
-    (typeof snapshot.leafId === "string" || snapshot.leafId === null) &&
-    (snapshot.lockedBy === undefined || isNekSessionLockHolder(snapshot.lockedBy))
-  );
-}
-
 /** 锁持有者的形状校验：协议漂移要报错，不能让半个持有者混进会话记录。 */
-function isNekSessionLockHolder(value: unknown): value is NekSessionLockHolder {
+export function isNekSessionLockHolder(value: unknown): value is NekSessionLockHolder {
   if (typeof value !== "object" || value === null) return false;
   const holder = value as NekSessionLockHolder;
   return (

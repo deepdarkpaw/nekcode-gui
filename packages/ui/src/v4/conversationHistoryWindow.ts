@@ -17,7 +17,7 @@ export interface HistoryOmission {
   reason: "budget";
 }
 /** A child transcript has the same body/history window, without parent control/config facts. */
-export type HistoryWindowBody = Pick<ConversationSnapshot, "rows" | "history">;
+type HistoryWindowBody = Pick<ConversationSnapshot, "rows" | "history">;
 interface PageBoundary extends Omit<ConversationHistory, "turns"> {
   turnIds: string[];
 }

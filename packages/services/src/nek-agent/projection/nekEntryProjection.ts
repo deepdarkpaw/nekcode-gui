@@ -134,23 +134,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         }
         break;
       }
-      case "compaction": {
-        const rowId = allocator.resolve(`entry:${entry.id}`);
-        push(
-          buildTimelineMarkerRow(
-            identity(`entry:${entry.id}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-            {
-              type: "compact",
-              origin: entry.fromHook === true ? "manual" : "auto",
-              status: "success",
-              tokensBefore: entry.tokensBefore,
-              summaryRef: entry.id,
-            },
-            "assistantWork",
-          ),
-        );
-        break;
-      }
+      case "compaction":
       case "branch_summary": {
         const rowId = allocator.resolve(`entry:${entry.id}`);
         push(
@@ -158,8 +142,10 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
             identity(`entry:${entry.id}`, rowId, turn.turnId, toEpochMs(entry.timestamp)),
             {
               type: "compact",
-              origin: "manual",
+              origin:
+                entry.type === "branch_summary" || entry.fromHook === true ? "manual" : "auto",
               status: "success",
+              ...(entry.type === "compaction" ? { tokensBefore: entry.tokensBefore } : {}),
               summaryRef: entry.id,
             },
             "assistantWork",

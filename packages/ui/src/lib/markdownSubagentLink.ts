@@ -31,7 +31,7 @@ export function subagentLinkRehypePlugin() {
   };
 }
 
-export type SubagentTextPart = { text: string } | { id: string; label: string };
+type SubagentTextPart = { text: string } | { id: string; label: string };
 
 /** Cheap inline references for plaintext thinking; code spans/fences and escaped links stay literal. */
 export function splitSubagentText(text: string): SubagentTextPart[] {

@@ -1,7 +1,8 @@
 import type { NekGuiInfo, NekHistoryResult } from "@zcode/shared/nek-protocol";
+import { isNekSessionLockHolder } from "./types.js";
 
 export const HISTORY_RPC_MAX_BYTES = 1024 * 1024;
-export const HISTORY_RENDER_MAX_BYTES = 4 * 1024 * 1024;
+const HISTORY_RENDER_MAX_BYTES = 4 * 1024 * 1024;
 export function requireHistoryPages(info: Pick<NekGuiInfo, "capabilities">): void {
   if (info.capabilities?.historyPages !== 1)
     throw new Error(
@@ -21,6 +22,12 @@ export function historyResult<T>(result: NekHistoryResult<T>): T {
   if (!result || typeof result.ok !== "boolean")
     throw new NekHistoryReadError("INVALID_RESPONSE", "nek returned an invalid history response");
   if (!result.ok) throw new NekHistoryReadError(result.error.code, result.error.message);
+  if (
+    "lockedBy" in result &&
+    result.lockedBy !== undefined &&
+    !isNekSessionLockHolder(result.lockedBy)
+  )
+    throw new NekHistoryReadError("INVALID_RESPONSE", "nek returned invalid history lock metadata");
   return result;
 }
 /** Measure actual encoded public result, allowing envelope headroom below the 16 MB transport cap. */

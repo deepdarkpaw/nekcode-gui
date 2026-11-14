@@ -5,7 +5,7 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { ASYNC_ACTION_IDLE, reduceAsyncAction, type AsyncActionState } from "@/lib/asyncAction.js";
 /** Minimal metadata owner port shared by parent stores and read-only child controllers. */
-export interface HistoryDirectorySource {
+interface HistoryDirectorySource {
   getState(): {
     status: string;
     snapshot: { history?: ConversationHistory } | null;
@@ -18,8 +18,8 @@ export interface HistoryDirectorySource {
   ): Promise<V4ConversationHistoryDirectoryResult>;
 }
 
-export const HISTORY_DIRECTORY_LIMITS = { page: 100, retained: 1000 } as const;
-export type HistoryDirectoryQuery = Omit<ConversationHistoryDirectoryOptions, "cursor">;
+const HISTORY_DIRECTORY_LIMITS = { page: 100, retained: 1000 } as const;
+type HistoryDirectoryQuery = Omit<ConversationHistoryDirectoryOptions, "cursor">;
 export interface HistoryDirectoryState {
   items: V4ConversationHistoryDirectoryResult["items"];
   hasMore: boolean;

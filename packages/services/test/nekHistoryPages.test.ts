@@ -7,7 +7,11 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
 import { projectHistory, historyRowId } from "../src/nek-agent/projection/nekHistoryProjection.js";
-import { boundHistoryResult, requireHistoryPages } from "../src/nek-agent/service/nekHistoryRpc.js";
+import {
+  boundHistoryResult,
+  requireHistoryPages,
+  historyResult,
+} from "../src/nek-agent/service/nekHistoryRpc.js";
 import { fixtureHistory, historySummary } from "./nekHistoryFixture.js";
 import { entry, harness, params, sessionId, sessionPath } from "./nekSessionHarness.js";
 
@@ -24,6 +28,24 @@ function page(entries: NekSessionEntry[], extra = {}): NekHistoryPage {
 function metadata(entries: NekSessionEntry[]): NekHistoryMetadata {
   return fixtureHistory(entries, { type: "read_session_metadata" }) as NekHistoryMetadata;
 }
+
+test("HS1: metadata-only restore still rejects a partial lock holder", () => {
+  assert.throws(
+    () => historyResult({ ok: true, lockedBy: { pid: 42 } }),
+    /invalid history lock metadata/,
+  );
+  assert.doesNotThrow(() =>
+    historyResult({
+      ok: true,
+      lockedBy: {
+        pid: 42,
+        hostname: "fixture",
+        kind: "rpc",
+        startedAt: "2026-11-14T00:00:00.000Z",
+      },
+    }),
+  );
+});
 
 for (const count of [70, 1000])
   test(`HS1/HS6: ${count} rounds open latest20 without old APIs or body cache growth`, async () => {

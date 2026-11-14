@@ -3,10 +3,14 @@ import test from "node:test";
 import { harness, params, sessionPath, target } from "./nekSessionHarness.js";
 
 test("HS1: refreshing a known readonly history uses its trusted path, not an unrelated full catalog", async () => {
-  const h = harness({ lockedBy: { pid: process.pid, hostname: "fixture", kind: "rpc", startedAt: "2026-11-01" } });
+  const h = harness({
+    lockedBy: { pid: process.pid, hostname: "fixture", kind: "rpc", startedAt: "2026-11-01" },
+  });
   try {
     await h.adapter.resumeNekSession({ ...target, sessionPath });
-    h.adapter.listNekSessions = async () => { throw new Error("known session must not query full catalog"); };
+    h.adapter.listNekSessions = async () => {
+      throw new Error("known session must not query full catalog");
+    };
     const result = await h.adapter.subscribeConversationV4(params);
     assert.ok(result.ack.subscriptionId);
     assert.equal(h.sessions.length, 0);
@@ -16,7 +20,9 @@ test("HS1: refreshing a known readonly history uses its trusted path, not an unr
 });
 
 test("HS4: a replaced file cannot publish another session under an existing readonly binding", async () => {
-  const h = harness({ lockedBy: { pid: process.pid, hostname: "fixture", kind: "rpc", startedAt: "2026-11-01" } });
+  const h = harness({
+    lockedBy: { pid: process.pid, hostname: "fixture", kind: "rpc", startedAt: "2026-11-01" },
+  });
   try {
     await h.adapter.resumeNekSession({ ...target, sessionPath });
     const before = await h.adapter.readNekSession(params);

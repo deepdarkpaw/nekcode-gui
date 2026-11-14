@@ -91,18 +91,25 @@ export class NekSessionBindings {
     return this.entries.get(sessionMapKey(target, sessionId));
   }
 
-  private async restore(target: NekWorkspaceTarget, sessionId: string, knownPath?: string): Promise<NekSessionBinding> {
+  private async restore(
+    target: NekWorkspaceTarget,
+    sessionId: string,
+    knownPath?: string,
+  ): Promise<NekSessionBinding> {
     const lookupStartedAt = performance.now();
     // A known binding already owns a trusted path. Rechecking its lock must not scan the catalog,
     // which can be large and need not include an explicitly opened session outside the default root.
-    const sessionPath = knownPath ?? (await this.ports.listSessions(target)).find((item) => item.id === sessionId)?.path;
+    const sessionPath =
+      knownPath ??
+      (await this.ports.listSessions(target)).find((item) => item.id === sessionId)?.path;
     const taskMetaReadMs = nekOpenDurationMs(lookupStartedAt);
     if (!sessionPath) throw new Error(`nek session ${sessionId} was not found`);
     const result = await this.ports.resumeSession({
       workspacePath: target.workspacePath,
       sessionPath,
     });
-    if (result.sessionId !== sessionId) throw new Error("nek history session identity changed during restore");
+    if (result.sessionId !== sessionId)
+      throw new Error("nek history session identity changed during restore");
     this.assertAlive();
     // 返回副本：共享在途恢复可共享本次 timing，之后 warm ensure 只读不带 timing 的表项。
     return {
