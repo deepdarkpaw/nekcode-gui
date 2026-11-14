@@ -19,7 +19,6 @@ import {
 } from "@zcode/shared";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import {
-  PROTOCOL_V4_LIMITS,
   ZCODE_ATTACHMENT_FAULT_CODES,
   readZCodeAttachmentFaultCode,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -56,6 +55,12 @@ import {
   encodeConversationArchive,
 } from "./conversationArchive.js";
 import { ConversationArchiveExports } from "./conversationArchiveExports.js";
+import {
+  ConversationShareHistoryReader,
+  type ConversationShareHistoryReadMode,
+} from "./conversationShareHistory.js";
+import { assertCompleteShareHistory } from "./conversationShareHistoryPolicy.js";
+import type { ConversationShareRowsRead } from "./conversationShareHistoryRows.js";
 import { conversationArchiveCapabilities } from "./conversationArchiveCapabilities.js";
 import { buildConversationSharePublicProjection } from "./conversationSharePublicProjection.js";
 import type { ConversationShareArtifactSource } from "./conversationShareArtifactSource.js";
@@ -118,6 +123,8 @@ function isMissingArtifactReadError(error: unknown): boolean {
 
 interface ConversationShareServiceOptions {
   zcodeAgentService: ConversationShareAgentService;
+  /** Source history by default. Explicit non-nek owners/fixtures alone may use complete projection reads. */
+  historyReadMode?: ConversationShareHistoryReadMode;
   artifactSource: ConversationShareArtifactSource;
   zcodeSessionService?: Pick<IZCodeSessionService, "createSession" | "listSessions">;
   conversationWorkspaceRoot?: string;
@@ -199,21 +206,6 @@ const importedConversationShareFileSchema = z
   })
   .strip();
 
-interface ConversationRowsRead {
-  rows: ConversationRow[];
-  revision: number;
-  logEpoch: string;
-}
-
-function turnOrdinalByProductTurn(rows: readonly ConversationRow[]): Map<string, number> {
-  const result = new Map<string, number>();
-  for (const row of rows) {
-    if (row.kind !== "turnHeader" || !row.productTurnId || result.has(row.productTurnId)) continue;
-    result.set(row.productTurnId, result.size + 1);
-  }
-  return result;
-}
-
 function rowTurnOrdinal(row: ConversationRow, ordinals: Map<string, number>): number | undefined {
   return row.productTurnId ? ordinals.get(row.productTurnId) : undefined;
 }
@@ -294,9 +286,8 @@ function sanitizeUnsupportedShareStructures(rows: readonly ConversationRow[]): C
 function sanitizeUnsupportedShareArtifacts(
   rows: readonly ConversationRow[],
   capabilities: ConversationShareCapabilities,
-  ordinalRows: readonly ConversationRow[],
+  ordinals: Map<string, number>,
 ): { rows: ConversationRow[]; warnings: ConversationShareFailureIssue[] } {
-  const ordinals = turnOrdinalByProductTurn(ordinalRows);
   const warnings: ConversationShareFailureIssue[] = [];
   const retained = rows.filter((row) => {
     if (row.kind !== "artifact") return true;
@@ -333,10 +324,9 @@ function sanitizeUnsupportedShareArtifacts(
 
 function collectShareStructureIssues(
   rows: readonly ConversationRow[],
-  ordinalRows: readonly ConversationRow[] = rows,
+  ordinals: Map<string, number>,
 ): ConversationShareFailureIssue[] {
   const issues: ConversationShareFailureIssue[] = [];
-  const ordinals = turnOrdinalByProductTurn(ordinalRows);
   const add = (row: ConversationRow, code: ConversationShareFailureIssue["code"]) => {
     issues.push({
       code,
@@ -579,6 +569,9 @@ function selectRows(
 
 export class ConversationShareService implements IConversationShareService {
   private readonly archiveExports = new ConversationArchiveExports();
+  private readonly historyReader = new ConversationShareHistoryReader();
+  private readonly historyReadMode: ConversationShareHistoryReadMode;
+  private activePreflights = 0;
   private readonly exportOwner = Symbol("conversation-export");
   private readonly zcodeAgentService: ConversationShareAgentService;
   private readonly artifactSource: ConversationShareArtifactSource;
@@ -604,6 +597,7 @@ export class ConversationShareService implements IConversationShareService {
 
   constructor(options: ConversationShareServiceOptions) {
     this.zcodeAgentService = options.zcodeAgentService;
+    this.historyReadMode = options.historyReadMode ?? "source";
     this.artifactSource = options.artifactSource;
     this.logger = options.logger ?? createServiceLogger("conversation-share");
     if (options.zcodeSessionService) {
@@ -666,9 +660,26 @@ export class ConversationShareService implements IConversationShareService {
     input: ConversationSharePreflightInput,
     agentService: ConversationShareAgentService,
   ): Promise<ConversationSharePreflightResult> {
+    if (this.activePreflights >= 2)
+      throw new ConversationShareServiceError(
+        "operation_busy",
+        "Conversation share preflight is busy",
+      );
+    this.activePreflights++;
+    try {
+      return await this.collectPreflightWithAgent(input, agentService);
+    } finally {
+      this.activePreflights--;
+    }
+  }
+
+  private async collectPreflightWithAgent(
+    input: ConversationSharePreflightInput,
+    agentService: ConversationShareAgentService,
+  ): Promise<ConversationSharePreflightResult> {
     const capabilities = await this.getCapabilities();
     const supportedArtifactTypes = allowedArtifactSummaries(capabilities);
-    const conversation = await this.loadAllRows(input, agentService);
+    const conversation = await this.loadRows(input, agentService);
     const blockingIssues: ConversationShareFailureIssue[] = [];
     const skippableWarnings: ConversationShareFailureIssue[] = [];
     const deferredIssues: ConversationShareFailureIssue[] = [];
@@ -697,15 +708,16 @@ export class ConversationShareService implements IConversationShareService {
       };
     }
 
+    assertCompleteShareHistory(selected.rows);
     const structureSanitized = sanitizeUnsupportedShareStructures(selected.rows);
     const artifactSanitized = sanitizeUnsupportedShareArtifacts(
       removeIndependentArtifactRows(structureSanitized),
       capabilities,
-      conversation.rows,
+      conversation.turnOrdinals,
     );
     const selectedRows = artifactSanitized.rows;
     skippableWarnings.push(...artifactSanitized.warnings);
-    blockingIssues.push(...collectShareStructureIssues(selectedRows, conversation.rows));
+    blockingIssues.push(...collectShareStructureIssues(selectedRows, conversation.turnOrdinals));
     let hasShareableContent = selectedRows.some((row) => {
       if (row.kind === "turnHeader" || row.kind === "timelineMarker") return false;
       if (row.kind === "assistantText" || row.kind === "reasoning")
@@ -719,7 +731,7 @@ export class ConversationShareService implements IConversationShareService {
       return true;
     });
 
-    const turnOrdinalByProductTurnId = turnOrdinalByProductTurn(conversation.rows);
+    const turnOrdinalByProductTurnId = conversation.turnOrdinals;
     // 先把需要 stat 的附件收集齐，再有界并发跑，最后按原顺序分类。
     // 拆成两轮是为了在拿到远程并发收益的同时，让 issue 的产生顺序与串行实现一致。
     const attachmentChecks: {
@@ -1362,21 +1374,22 @@ export class ConversationShareService implements IConversationShareService {
     }
 
     const capabilities = await this.getCapabilities();
-    const conversation = await this.loadAllRows(input, agentService);
+    const conversation = await this.loadRows(input, agentService);
     const selected = selectRows(conversation.rows, input.selection);
     // 无法公开承载的已定稿结构先降级：删字段或丢整行，换成非阻断提示，
     // 后续所有投影与产物发现都基于这份 sanitized rows。
+    assertCompleteShareHistory(selected.rows);
     const structureSanitized = sanitizeUnsupportedShareStructures(selected.rows);
     const artifactSanitized = sanitizeUnsupportedShareArtifacts(
       removeIndependentArtifactRows(structureSanitized),
       capabilities,
-      conversation.rows,
+      conversation.turnOrdinals,
     );
     const selectedRows = artifactSanitized.rows;
     const publishWarnings: ConversationShareFailureIssue[] = [...artifactSanitized.warnings];
     // 公开投影不能遇到第一个不支持结构就直接退出，用户要知道还有哪些轮次需要取消；
     // 先完成整组选中内容的结构预检，返回脱敏 issues 让 UI 给出逐项可操作建议。
-    const structureIssues = collectShareStructureIssues(selectedRows, conversation.rows);
+    const structureIssues = collectShareStructureIssues(selectedRows, conversation.turnOrdinals);
     if (structureIssues.length > 0) {
       const structureKind = structureIssues.some(
         (issue) => issue.code === "artifact_protocol_not_ready",
@@ -1414,7 +1427,7 @@ export class ConversationShareService implements IConversationShareService {
       capabilities,
       revision: conversation.revision,
       logEpoch: conversation.logEpoch,
-      turnOrdinalByProductTurnId: turnOrdinalByProductTurn(conversation.rows),
+      turnOrdinalByProductTurnId: conversation.turnOrdinals,
       preflightPreviewSnapshots,
       currentCapabilitiesFingerprint: capabilitiesFingerprint(capabilities),
     });
@@ -1595,55 +1608,10 @@ export class ConversationShareService implements IConversationShareService {
     }
   }
 
-  private async loadAllRows(
-    input: Pick<
-      PublishTextConversationInput,
-      "workspacePath" | "workspaceIdentity" | "remoteSessionId" | "sessionId"
-    >,
+  private loadRows(
+    input: ConversationSharePreflightInput,
     agentService: ConversationShareAgentService,
-  ): Promise<ConversationRowsRead> {
-    const pages: ConversationRow[][] = [];
-    let beforeRowId: number | undefined;
-    let logEpoch: string | undefined;
-    let revision: number | undefined;
-
-    while (true) {
-      const result = await agentService.conversationRowsRangeV4({
-        workspacePath: input.workspacePath,
-        ...(input.workspaceIdentity ? { workspaceIdentity: input.workspaceIdentity } : {}),
-        ...(input.remoteSessionId ? { remoteSessionId: input.remoteSessionId } : {}),
-        sessionId: input.sessionId,
-        ...(beforeRowId === undefined ? {} : { beforeRowId }),
-        limit: PROTOCOL_V4_LIMITS.rowsRangeMaxLimit,
-      });
-      if (
-        (logEpoch !== undefined && result.atLogEpoch !== logEpoch) ||
-        (revision !== undefined && result.atRevision !== revision)
-      ) {
-        throwServiceError("invalid_conversation", "Conversation changed while preparing share");
-      }
-      logEpoch = result.atLogEpoch;
-      revision = result.atRevision;
-      pages.unshift(result.rows);
-      if (!result.hasMore) break;
-      const firstRowId = result.rows[0]?.rowId;
-      if (firstRowId === undefined || firstRowId === beforeRowId) {
-        throwServiceError("invalid_contract", "Conversation row pagination did not advance");
-      }
-      beforeRowId = firstRowId;
-    }
-
-    const rows = pages.flat();
-    for (let index = 1; index < rows.length; index += 1) {
-      const previous = rows[index - 1]!;
-      const current = rows[index]!;
-      if (previous.rowId >= current.rowId) {
-        throwServiceError("invalid_contract", "Conversation rows are not globally ordered");
-      }
-    }
-    if (logEpoch === undefined || revision === undefined) {
-      throwServiceError("invalid_contract", "Conversation rows are missing a read watermark");
-    }
-    return { rows, revision, logEpoch };
+  ): Promise<ConversationShareRowsRead> {
+    return this.historyReader.read(input, agentService, this.historyReadMode);
   }
 }

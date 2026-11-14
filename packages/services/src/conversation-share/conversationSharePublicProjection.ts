@@ -3,6 +3,10 @@ import type { ConversationShareArtifactDescriptor } from "@zcode/shared";
 import type { ArtifactRow, ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 
 import { ConversationShareServiceError } from "./conversationShare.js";
+import {
+  assertCompleteShareHistory,
+  stripShareHistoryCapabilities,
+} from "./conversationShareHistoryPolicy.js";
 
 interface ConversationSharePublicProjection {
   rows: ConversationRow[];
@@ -599,7 +603,9 @@ export function buildConversationSharePublicProjection(input: {
   selectedProductTurnIds: string[];
   additionalArtifacts?: ConversationSharePublicArtifact[];
 }): ConversationSharePublicProjection {
-  assertTerminalAndSafe(input.rows);
+  assertCompleteShareHistory(input.rows);
+  const sourceRows = input.rows.map((row) => stripShareHistoryCapabilities(row));
+  assertTerminalAndSafe(sourceRows);
   assertUnique(input.selectedProductTurnIds, "source product turn");
   if (input.selectedProductTurnIds.length === 0) {
     throwProjectionError(
@@ -610,7 +616,7 @@ export function buildConversationSharePublicProjection(input: {
 
   const selectedProductTurnIds = new Set(input.selectedProductTurnIds);
   if (
-    input.rows.some((row) => !row.productTurnId || !selectedProductTurnIds.has(row.productTurnId))
+    sourceRows.some((row) => !row.productTurnId || !selectedProductTurnIds.has(row.productTurnId))
   ) {
     throwProjectionError(
       "invalid_conversation",
@@ -620,7 +626,7 @@ export function buildConversationSharePublicProjection(input: {
 
   // 本地运行投影包含 subagent 详情和写入态标识，不能直接作为公开载荷；
   // 必须先过滤非 V1 Row，再基于剩余内容生成一套闭合的公开 ID。
-  const retainedRows = input.rows.filter(
+  const retainedRows = sourceRows.filter(
     (row) => row.kind !== "subagent" && row.kind !== "hookInvocation",
   );
   const sourceArtifactRows = retainedRows.filter(
