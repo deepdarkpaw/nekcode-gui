@@ -21,6 +21,15 @@ export function historyResult<T>(result: NekHistoryResult<T>): T {
   if (!result || typeof result.ok !== "boolean")
     throw new NekHistoryReadError("INVALID_RESPONSE", "nek returned an invalid history response");
   if (!result.ok) throw new NekHistoryReadError(result.error.code, result.error.message);
+  if (
+    !("observationCursor" in result) ||
+    typeof result.observationCursor !== "string" ||
+    !result.observationCursor
+  )
+    throw new NekHistoryReadError(
+      "INVALID_RESPONSE",
+      "nek history response omitted observationCursor",
+    );
   return result;
 }
 /** Measure actual encoded public result, allowing envelope headroom below the 16 MB transport cap. */

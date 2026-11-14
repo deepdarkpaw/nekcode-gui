@@ -30,6 +30,7 @@ export function fixtureHistory(
     sessionId: session.id,
     sessionPath: session.path,
     branchRevision: `branch:${entries.length}`,
+    observationCursor: `observation:${session.id}:${entries.length}`,
     leafId: entries.at(-1)?.id ?? null,
     watermark: { entryId: entries.length, conversationId: 1, nextSeq: entries.length },
   };
@@ -123,16 +124,48 @@ export function fixtureHistory(
       seed: {},
     };
   }
-  if (command.type === "read_history_subagent" && (!("subagentId" in command) || command.subagentId === undefined)) {
+  if (
+    command.type === "read_history_subagent" &&
+    (!("subagentId" in command) || command.subagentId === undefined)
+  ) {
     const records = [...collectPersistedSubagentRecords(entries).values()].map(({ record }) => {
-      const position = entries.findIndex((entry) => entry.type === "message" && entry.message.role === "toolResult" && JSON.stringify(entry.message.details).includes(record.id));
+      const position = entries.findIndex(
+        (entry) =>
+          entry.type === "message" &&
+          entry.message.role === "toolResult" &&
+          JSON.stringify(entry.message.details).includes(record.id),
+      );
       const { id, type, description, status, sessionFile, model, startedAt, endedAt } = record;
-      return { id, type, description, status, sessionFile, model, startedAt, endedAt, spawnEntryId: entries[position]!.id, spawnPosition: position, detached: true as const };
+      return {
+        id,
+        type,
+        description,
+        status,
+        sessionFile,
+        model,
+        startedAt,
+        endedAt,
+        spawnEntryId: entries[position]!.id,
+        spawnPosition: position,
+        detached: true as const,
+      };
     });
-    const query = command as Extract<NekRpcCommand, { type: "read_history_subagent"; subagentId?: undefined }>;
+    const query = command as Extract<
+      NekRpcCommand,
+      { type: "read_history_subagent"; subagentId?: undefined }
+    >;
     const start = Number(query.cursor ?? 0);
     const selected = records.slice(start, start + (query.limit ?? 20));
-    return { ...identity, kind: "subagents", subagents: selected, total: records.length, count: selected.length, hasMore: start + selected.length < records.length, nextCursor: start + selected.length < records.length ? String(start + selected.length) : undefined };
+    return {
+      ...identity,
+      kind: "subagents",
+      subagents: selected,
+      total: records.length,
+      count: selected.length,
+      hasMore: start + selected.length < records.length,
+      nextCursor:
+        start + selected.length < records.length ? String(start + selected.length) : undefined,
+    };
   }
   if (command.type === "read_history_subagent" && "subagentId" in command) {
     const record = collectPersistedSubagentRecords(entries).get(String(command.subagentId))?.record;

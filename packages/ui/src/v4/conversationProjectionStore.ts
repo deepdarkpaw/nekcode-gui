@@ -7,6 +7,8 @@
 // 除 optimistic overlay（pending 命令展示）外，本 store 不产生任何 conversation 事实。
 import {
   applyConversationDeltas,
+  assertHistoryObservation,
+  withHistoryObservation,
   isDeterministicContentFault,
   parseConversationTopic,
   PROTOCOL_V4_LIMITS,
@@ -1091,12 +1093,7 @@ export class ConversationProjectionStore {
   /** Stable renderer owner identity; ordinary token/appended events do not retire it. */
   getHistoryOwnerKey(): string {
     const snapshot = this.state.snapshot;
-    return JSON.stringify([
-      this.generation,
-      this.historyGeneration,
-      snapshot?.logEpoch,
-      snapshot?.history?.branchRevision,
-    ]);
+    return JSON.stringify([this.generation, this.historyGeneration, snapshot?.logEpoch]);
   }
 
   private invalidateHistory(): void {
@@ -1153,12 +1150,14 @@ export class ConversationProjectionStore {
     const target = this.historyTarget();
     const owner = this.getHistoryOwnerKey();
     const snapshot = this.state.snapshot!;
-    const result = await this.transport.historyDirectory({
-      ...options,
-      ...target,
-      limit: Math.min(100, Math.max(1, options.limit ?? 100)),
-    });
+    const history = snapshot.history!;
+    const params = withHistoryObservation(
+      { ...options, ...target, limit: Math.min(100, Math.max(1, options.limit ?? 100)) },
+      history.observationCursor,
+    );
+    const result = await this.transport.historyDirectory(params);
     this.assertHistoryResult(owner, result, snapshot.seq, snapshot.revision);
+    assertHistoryObservation(history, result, params.observationCursor);
     return result;
   }
 
@@ -1166,8 +1165,11 @@ export class ConversationProjectionStore {
     const target = this.historyTarget();
     const owner = this.getHistoryOwnerKey();
     const snapshot = this.state.snapshot!;
-    const result = await this.transport.historyContent({ ...options, ...target });
+    const history = snapshot.history!;
+    const params = withHistoryObservation({ ...options, ...target }, history.observationCursor);
+    const result = await this.transport.historyContent(params);
     this.assertHistoryResult(owner, result, snapshot.seq, snapshot.revision);
+    assertHistoryObservation(history, result, params.observationCursor);
     return result;
   }
 
@@ -1193,6 +1195,7 @@ export class ConversationProjectionStore {
       (direction === "newer" && !history.hasNewer)
     )
       return null;
+    if (direction === "latest") this.invalidateHistory();
     return this.runHistoryRequest(direction, async (flight) => {
       if (
         (direction === "older" || direction === "newer") &&
@@ -1207,16 +1210,20 @@ export class ConversationProjectionStore {
             : undefined;
       if ((direction === "older" || direction === "newer") && !cursor)
         throw new Error("History page cursor is missing; reload explicitly");
-      const result = await this.transport.historyPage({
-        ...options,
-        ...this.historyTarget(),
-        ...(direction === "older" ? { beforeCursor: cursor } : {}),
-        ...(direction === "newer" ? { afterCursor: cursor } : {}),
-        turnLimit: 20,
-      });
+      const params = withHistoryObservation(
+        {
+          ...options,
+          ...this.historyTarget(),
+          ...(direction === "older" ? { beforeCursor: cursor } : {}),
+          ...(direction === "newer" ? { afterCursor: cursor } : {}),
+          turnLimit: 20,
+        },
+        direction === "latest" ? undefined : history.observationCursor,
+      );
+      const result = await this.transport.historyPage(params);
       this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
-      if (result.history.branchRevision !== history.branchRevision)
-        throw new Error("History branch changed; reload the subscription");
+      if (direction !== "latest")
+        assertHistoryObservation(history, result.history, params.observationCursor);
       if (
         (direction === "older" &&
           result.history.hasOlder &&
@@ -1240,6 +1247,7 @@ export class ConversationProjectionStore {
       const current = this.state.snapshot!;
       this.assertHistoryRows(result.rows, flight.changed, result);
       const next = this.historyWindow.mergePage(current, result, direction, flight.changed);
+      if (direction === "latest") this.invalidateHistory();
       this.setState({
         snapshot: next,
         historyTruncatedTurns: this.historyWindow.omissions,
@@ -1263,12 +1271,13 @@ export class ConversationProjectionStore {
     )
       return null;
     return this.runHistoryRequest("turn", async (flight) => {
-      const result = await this.transport.historyTurn({
-        ...this.historyTarget(),
-        turnId,
-        ...(cursor ? { cursor } : {}),
-      });
+      const params = withHistoryObservation(
+        { ...this.historyTarget(), turnId, ...(cursor ? { cursor } : {}) },
+        snapshot.history!.observationCursor,
+      );
+      const result = await this.transport.historyTurn(params);
       this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
+      assertHistoryObservation(snapshot.history!, result, params.observationCursor);
       if (result.turn.turnId !== turnId) throw new Error("History turn identity mismatch");
       if (result.hasMore && (!result.continuationCursor || result.continuationCursor === cursor))
         throw new Error("History turn cursor did not advance");

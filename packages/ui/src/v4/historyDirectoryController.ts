@@ -10,6 +10,8 @@ export interface HistoryDirectorySource {
     status: string;
     snapshot: { history?: ConversationHistory } | null;
     turnNavigatorDirectoryRevision: number;
+    historyRequest?: string | null;
+    historyError?: string | null;
   };
   subscribe(listener: () => void): () => void;
   getHistoryOwnerKey(): string;
@@ -70,6 +72,15 @@ export function createHistoryDirectoryController(
   let cursor: string | undefined;
   let owner = source.getHistoryOwnerKey();
   let directoryRevision = source.getState().turnNavigatorDirectoryRevision;
+  const ready = () => {
+    const ownerState = source.getState();
+    return Boolean(
+      ownerState.snapshot?.history &&
+      ownerState.status === "live" &&
+      ownerState.historyRequest !== "latest" &&
+      !ownerState.historyError,
+    );
+  };
   const listeners = new Set<() => void>();
   const publish = (patch: Partial<HistoryDirectoryState>) => {
     state = {
@@ -136,19 +147,17 @@ export function createHistoryDirectoryController(
     const nextOwner = source.getHistoryOwnerKey();
     const nextRevision = source.getState().turnNavigatorDirectoryRevision;
     if (owner === nextOwner && directoryRevision === nextRevision) {
-      if (!started && source.getState().snapshot?.history && source.getState().status === "live")
-        void read(false);
+      if (!started && ready()) void read(false);
       return;
     }
     owner = nextOwner;
     directoryRevision = nextRevision;
     reset();
     publish({});
-    if (source.getState().snapshot?.history && source.getState().status === "live")
-      void read(false);
+    if (ready()) void read(false);
   });
   /** Factory creation is an effect: create/close it at the scope's commit boundary, not render. */
-  if (source.getState().snapshot?.history && source.getState().status === "live") void read(false);
+  if (ready()) void read(false);
   return {
     getState: () => state,
     subscribe(listener: () => void) {
@@ -164,8 +173,7 @@ export function createHistoryDirectoryController(
       query = next;
       reset();
       publish({});
-      if (source.getState().snapshot?.history && source.getState().status === "live")
-        void read(false);
+      if (ready()) void read(false);
     },
     close() {
       if (closed) return;

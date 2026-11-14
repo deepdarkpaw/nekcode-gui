@@ -12,19 +12,25 @@ export function createNekSubagentConversationReader(
   return async (input) => {
     const { sessionKey } = await owner.ensureNekSessionBinding(input, input.sessionId);
     return await owner.service.runHistoryRead(sessionKey, input.id, async (context) => {
-      const { beforeCursor, afterCursor, aroundEntryId, turnLimit = 20 } = input;
+      const { beforeCursor, afterCursor, aroundEntryId, turnLimit = 20, observationCursor } = input;
       const page = await context.read({
         type: "read_history_page",
         beforeCursor,
         afterCursor,
         aroundEntryId,
         turnLimit,
+        observationCursor,
       });
       const scope = `${page.sessionId}\0${page.branchRevision}`;
       const anchors = context.projector.historyAnchors(scope);
       await verifyHistorySpawnAnchors(
         page.entries,
-        (subagentId) => context.read({ type: "read_history_subagent", subagentId }),
+        (subagentId) =>
+          context.read({
+            type: "read_history_subagent",
+            subagentId,
+            observationCursor: page.observationCursor,
+          }),
         anchors,
       );
       const record = context.child!;
@@ -55,9 +61,10 @@ export function createNekSubagentConversationReader(
                 : "completedSuccess";
       const result = boundHistoryResult({
         rows,
-        history: historyMetadata(page),
+        history: { ...historyMetadata(page), observationCursor: page.observationCursor },
         totalCount: rows.length,
         status,
+        ...context.watermark,
       } satisfies Awaited<ReturnType<IZCodeAgentService["getSubagentConversation"]>>);
       context.projector.rememberHistoryAnchors(
         scope,
