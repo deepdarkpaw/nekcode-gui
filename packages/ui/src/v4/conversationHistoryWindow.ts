@@ -182,7 +182,12 @@ export class ConversationHistoryWindow {
       {
         ...current,
         rows: { ...current.rows, window: rows, totalCount: rows.length },
-        history: { ...current.history, turns },
+        history: {
+          ...current.history,
+          branchRevision: result.branchRevision ?? current.history.branchRevision,
+          observationCursor: result.observationCursor ?? current.history.observationCursor,
+          turns,
+        },
       },
       "turn",
       turn.turnId,

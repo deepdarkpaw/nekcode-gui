@@ -3,8 +3,10 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useSubagentConversation, type SubagentConversation } from "./useSubagentConversation.js";
 import { NEK_STATUS_TRANSCRIPT_REFRESH_MS } from "./types.js";
+import type { ConversationHistoryWatermark } from "@zcode/shared/zcode-protocol-v4";
 
-const running: SubagentConversation = {
+const running: SubagentConversation & ConversationHistoryWatermark = {
+  atSeq: 1, atRevision: 1, atLogEpoch: "epoch",
   rows: [],
   totalCount: 0,
   status: "running",

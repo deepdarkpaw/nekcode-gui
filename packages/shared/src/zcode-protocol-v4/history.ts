@@ -23,6 +23,7 @@ export const conversationHistoryTurnSchema = z.object({
 export type ConversationHistoryTurn = z.infer<typeof conversationHistoryTurnSchema>;
 export const conversationHistorySchema = z.object({
   branchRevision: z.string(),
+  observationCursor: z.string().optional(),
   totalTurns: z.number().int().nonnegative(),
   /** A source page is at most20; a renderer window may retain six such pages. */
   turns: z.array(conversationHistoryTurnSchema).max(120),
@@ -70,45 +71,57 @@ export interface ConversationHistoryWatermark {
   atRevision: number;
   atLogEpoch: string;
 }
-export interface ConversationHistoryPageOptions {
+/** Source observation is distinct from the host live watermark. Optional for bounded fixtures. */
+export interface ConversationHistoryObservation {
+  branchRevision?: string;
+  observationCursor?: string;
+}
+export interface ConversationHistoryReadOptions {
+  observationCursor?: string;
+}
+export interface ConversationHistoryPageOptions extends ConversationHistoryReadOptions {
   beforeCursor?: string;
   afterCursor?: string;
   aroundEntryId?: string;
   turnLimit?: number;
 }
-export interface ConversationHistoryTurnOptions {
+export interface ConversationHistoryTurnOptions extends ConversationHistoryReadOptions {
   turnId: string;
   cursor?: string;
 }
-export interface ConversationHistoryDirectoryOptions {
+export interface ConversationHistoryDirectoryOptions extends ConversationHistoryReadOptions {
   query?: string;
   cursor?: string;
   direction?: "oldest" | "newest";
   aroundEntryId?: string;
   limit?: number;
 }
-export interface ConversationHistoryContentOptions {
+export interface ConversationHistoryContentOptions extends ConversationHistoryReadOptions {
   ref: string;
   offset?: number;
   limit?: number;
 }
-export interface V4ConversationHistoryPageResult extends ConversationHistoryWatermark {
+export interface V4ConversationHistoryPageResult
+  extends ConversationHistoryWatermark, ConversationHistoryObservation {
   rows: ConversationRow[];
   history: ConversationHistory;
 }
-export interface V4ConversationHistoryTurnResult extends ConversationHistoryWatermark {
+export interface V4ConversationHistoryTurnResult
+  extends ConversationHistoryWatermark, ConversationHistoryObservation {
   rows: ConversationRow[];
   turn: ConversationHistoryTurn;
   hasMore: boolean;
   continuationCursor?: string;
 }
-export interface V4ConversationHistoryDirectoryResult extends ConversationHistoryWatermark {
+export interface V4ConversationHistoryDirectoryResult
+  extends ConversationHistoryWatermark, ConversationHistoryObservation {
   items: { entryId: string; turnId: string; position: number; preview: string }[];
   hasMore: boolean;
   nextCursor?: string;
   totalTurns: number;
 }
-export interface V4ConversationHistoryContentResult extends ConversationHistoryWatermark {
+export interface V4ConversationHistoryContentResult
+  extends ConversationHistoryWatermark, ConversationHistoryObservation {
   ref: string;
   offset: number;
   totalBytes: number;

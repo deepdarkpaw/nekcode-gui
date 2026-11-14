@@ -37,6 +37,7 @@ test("HS1: metadata-only restore still rejects a partial lock holder", () => {
   assert.doesNotThrow(() =>
     historyResult({
       ok: true,
+      observationCursor: "observation:fixture",
       lockedBy: {
         pid: 42,
         hostname: "fixture",

@@ -28,6 +28,15 @@ export function historyResult<T>(result: NekHistoryResult<T>): T {
     !isNekSessionLockHolder(result.lockedBy)
   )
     throw new NekHistoryReadError("INVALID_RESPONSE", "nek returned invalid history lock metadata");
+  if (
+    !("observationCursor" in result) ||
+    typeof result.observationCursor !== "string" ||
+    !result.observationCursor
+  )
+    throw new NekHistoryReadError(
+      "INVALID_RESPONSE",
+      "nek history response omitted observationCursor",
+    );
   return result;
 }
 /** Measure actual encoded public result, allowing envelope headroom below the 16 MB transport cap. */

@@ -66,13 +66,20 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
   return {
     conversationHistoryPageV4: (input) =>
       read(input, async (context) => {
-        const { beforeCursor, afterCursor, aroundEntryId, turnLimit = 20 } = input;
+        const {
+          beforeCursor,
+          afterCursor,
+          aroundEntryId,
+          turnLimit = 20,
+          observationCursor,
+        } = input;
         const page = await context.read({
           type: "read_history_page",
           beforeCursor,
           afterCursor,
           aroundEntryId,
           turnLimit,
+          observationCursor,
         });
         assertObservedEntries(
           [...page.entries, ...page.turns.map((turn) => turn.header)],
@@ -83,6 +90,7 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           !input.subagentId &&
           !beforeCursor &&
           !afterCursor &&
+          !observationCursor &&
           !context.projector.acceptsHistoryPage(page)
         )
           throw new NekHistoryReadError(
@@ -95,7 +103,12 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
         const anchors = context.projector.historyAnchors(scope);
         await verifyHistorySpawnAnchors(
           page.entries,
-          (subagentId) => context.read({ type: "read_history_subagent", subagentId }),
+          (subagentId) =>
+            context.read({
+              type: "read_history_subagent",
+              subagentId,
+              observationCursor: page.observationCursor,
+            }),
           anchors,
         );
         const rows = projectHistory({
@@ -109,6 +122,8 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           rows: input.subagentId ? rows : preserveLive(rows, context),
           history: historyMetadata(page),
           ...context.watermark,
+          branchRevision: page.branchRevision,
+          observationCursor: page.observationCursor,
         });
         context.projector.rememberHistoryAnchors(
           scope,
@@ -123,6 +138,7 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           type: "read_history_turn",
           turnId: input.turnId,
           cursor: input.cursor,
+          observationCursor: input.observationCursor,
         });
         assertObservedEntries(
           [...page.entries, page.turn.header],
@@ -135,7 +151,12 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
         const anchors = context.projector.historyAnchors(scope);
         await verifyHistorySpawnAnchors(
           page.entries,
-          (subagentId) => context.read({ type: "read_history_subagent", subagentId }),
+          (subagentId) =>
+            context.read({
+              type: "read_history_subagent",
+              subagentId,
+              observationCursor: page.observationCursor,
+            }),
           anchors,
         );
         const rows = projectHistory({
@@ -155,6 +176,8 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           hasMore: page.hasMore,
           continuationCursor: page.continuationCursor,
           ...context.watermark,
+          branchRevision: page.branchRevision,
+          observationCursor: page.observationCursor,
         });
         context.projector.rememberHistoryAnchors(
           scope,
@@ -165,7 +188,7 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
       }),
     conversationHistoryDirectoryV4: (input) =>
       read(input, async (context) => {
-        const { query, cursor, direction, aroundEntryId, limit } = input;
+        const { query, cursor, direction, aroundEntryId, limit, observationCursor } = input;
         const page = await context.read({
           type: "read_history_directory",
           query,
@@ -173,6 +196,7 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           direction,
           aroundEntryId,
           limit,
+          observationCursor,
         });
         return boundHistoryResult({
           items: page.items,
@@ -180,6 +204,8 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           nextCursor: page.nextCursor,
           totalTurns: page.totalTurns,
           ...context.watermark,
+          branchRevision: page.branchRevision,
+          observationCursor: page.observationCursor,
         });
       }),
     conversationHistoryContentV4: (input) =>
@@ -189,6 +215,7 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           ref: input.ref,
           offset: input.offset,
           limit: input.limit,
+          observationCursor: input.observationCursor,
         });
         return boundHistoryResult({
           ref: page.ref,
@@ -199,6 +226,8 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           data: page.data,
           nextOffset: page.nextOffset,
           ...context.watermark,
+          branchRevision: page.branchRevision,
+          observationCursor: page.observationCursor,
         });
       }),
   };
