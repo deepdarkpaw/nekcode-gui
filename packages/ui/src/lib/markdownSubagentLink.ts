@@ -35,7 +35,7 @@ export type SubagentTextPart = { text: string } | { id: string; label: string };
 
 /** Cheap inline references for plaintext thinking; code spans/fences and escaped links stay literal. */
 export function splitSubagentText(text: string): SubagentTextPart[] {
-  const pattern = /(`+|~{3,})|\[([^\[\]\n]{1,256})\]\(([0-9a-f-]{36})\)/gi;
+  const pattern = /(`+|~{3,})|\[([^[\]\n]{1,256})\]\(([0-9a-f-]{36})\)/gi;
   const parts: SubagentTextPart[] = [];
   let literalStart = 0;
   let codeDelimiter: string | undefined;
