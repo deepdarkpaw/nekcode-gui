@@ -47,6 +47,10 @@ import {
   type ConversationTurnRenderUnit,
 } from "@/v4/conversationTurnRenderUnits.js";
 import { ConversationTurnRenderUnitCache } from "@/v4/conversationTurnRenderUnitCache.js";
+import {
+  ConversationTimelineScrollPolicyContext,
+  type ConversationTimelineScrollPolicy,
+} from "@/v4/conversationTimelineScrollPolicy.js";
 import type { ConversationHistoryControls } from "./useConversationHistoryControls.js";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { ConversationHistoryHeader } from "./ConversationHistoryHeader.js";
@@ -741,6 +745,31 @@ function ConversationTimelineImpl({
   const markLayoutScrollGuard = useCallback(() => {
     layoutScrollGuardUntilRef.current = Date.now() + LAYOUT_SCROLL_GUARD_MS;
   }, []);
+
+  // 长轮次工作窗口共用本滚动容器；其测高补偿与本 virtualizer 走同一裁决，
+  // 跟随底部/恢复/宽度变化期间一律不改写 scrollTop，补偿写入按布局滚动入账。
+  const nestedScrollPolicy = useMemo<ConversationTimelineScrollPolicy>(
+    () => ({
+      compensateNestedItemResize: (itemEnd, delta) => {
+        const element = scrollRef.current;
+        if (
+          !element ||
+          !shouldAdjustVirtualizerForItemSizeChange({
+            suppressAdjustment: suppressVirtualizerAdjustmentDuringRestoreRef.current,
+            following: followingRef.current,
+            contentWidthChanging: isContentWidthChanging(),
+            itemEnd,
+            scrollTop: element.scrollTop,
+          })
+        )
+          return;
+        markLayoutScrollGuard();
+        element.scrollTop += delta;
+        lastObservedScrollTopRef.current = element.scrollTop;
+      },
+    }),
+    [isContentWidthChanging, markLayoutScrollGuard],
+  );
 
   const markUserScrollIntent = useCallback(
     (intent: TimelineUserScrollIntent) => {
@@ -1818,334 +1847,338 @@ function ConversationTimelineImpl({
   // raw projection row 与按 turn 合并后的 render unit 不是同一计量单位；
   // 分开暴露才能让恢复/分页验证不再把可见 unit 误当成持久 row。
   return (
-    <div ref={timelineRootRef} className="relative flex min-h-0 flex-1 flex-col">
-      {selectionActions ? (
-        <ConversationSelectionTooltip
-          rootRef={scrollRef}
-          rows={rows}
-          sourceSessionId={sessionKey}
-          enabled={selectionActions.enabled}
-          sideActionDisabled={selectionActions.sideActionDisabled}
-          onAddToCurrentTask={selectionActions.onAddToCurrentTask}
-          onAskInSideChat={selectionActions.onAskInSideChat}
+    <ConversationTimelineScrollPolicyContext.Provider value={nestedScrollPolicy}>
+      <div ref={timelineRootRef} className="relative flex min-h-0 flex-1 flex-col">
+        {selectionActions ? (
+          <ConversationSelectionTooltip
+            rootRef={scrollRef}
+            rows={rows}
+            sourceSessionId={sessionKey}
+            enabled={selectionActions.enabled}
+            sideActionDisabled={selectionActions.sideActionDisabled}
+            onAddToCurrentTask={selectionActions.onAddToCurrentTask}
+            onAskInSideChat={selectionActions.onAskInSideChat}
+          />
+        ) : null}
+        <ConversationScrollMemoryScopeCapture
+          scopeKey={scrollMemoryKey}
+          capture={captureScrollMemoryBeforeScopeMutation}
+          commit={commitCapturedScrollMemory}
         />
-      ) : null}
-      <ConversationScrollMemoryScopeCapture
-        scopeKey={scrollMemoryKey}
-        capture={captureScrollMemoryBeforeScopeMutation}
-        commit={commitCapturedScrollMemory}
-      />
-      {/* 分享选择流程无论面板展开还是收起，左 rail 都由分享面板或 reopen 按钮独占，
+        {/* 分享选择流程无论面板展开还是收起，左 rail 都由分享面板或 reopen 按钮独占，
           必须隐藏对话轮导航，避免两个绝对定位控件互相覆盖。退出分享选择后自动恢复。 */}
-      {hideTurnNavigator ? null : (
-        <ConversationTurnNavigator
-          sessionKey={sessionKey}
-          renderUnits={renderUnits}
-          isHydratingDirectory={historyControls?.directory.loading ?? false}
-          directory={
-            historyControls
-              ? {
-                  ...historyControls.directory,
-                  onNavigate: (entryId, turnId) => {
-                    void navigateHistory({ entryId, turnId });
-                  },
-                }
-              : undefined
-          }
-          scrollOffsetPx={virtualizer.scrollOffset ?? turnNavigatorViewport.scrollOffsetPx}
-          viewportHeightPx={
-            virtualizer.scrollRect?.height ?? turnNavigatorViewport.viewportHeightPx
-          }
-          virtualItems={turnNavigatorVirtualItems}
-          activeQueryRowId={turnNavigatorViewport.activeQueryRowId}
-          onJumpToQuery={scrollToQuery}
-        />
-      )}
-      <div
-        ref={scrollRef}
-        data-testid={TID_V4_TIMELINE}
-        data-v4-timeline-scroll="true"
-        data-v4-timeline-scroll-locked={backgroundScrollLocked ? "true" : "false"}
-        data-markdown-table-layout-root="true"
-        data-row-count={rows.length}
-        data-window-row-count={rows.length}
-        data-render-unit-count={renderUnits.length}
-        data-total-row-count={totalCount}
-        data-following={backToBottomVisible ? "false" : "true"}
-        data-loading-older={loadingOlder ? "true" : "false"}
-        onKeyDownCapture={handleKeyDownCapture}
-        onPointerCancelCapture={handlePointerEndCapture}
-        onPointerDownCapture={handlePointerDownCapture}
-        onPointerUpCapture={handlePointerEndCapture}
-        onScroll={handleScroll}
-        onTouchCancelCapture={handleTouchEndCapture}
-        onTouchEndCapture={handleTouchEndCapture}
-        onTouchMoveCapture={handleTouchMoveCapture}
-        onTouchStartCapture={handleTouchStartCapture}
-        onWheelCapture={handleWheelCapture}
-        className={cn(
-          // 原生滚动条按内容高度动态出现时会缩窄会话视口，导致消息与 composer
-          // 横向跳动；稳定预留 gutter，让桌面与手机 Web 共用的滚动区宽度保持不变。
-          // 只声明 overflow-y-auto 会让浏览器把横轴计算为 auto，宽内容会把
-          // 整条 Conversation 撑出横向滚动；表格和代码块应由各自内部容器滚动。
-          "min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] [--markdown-table-layout-left-inset:16px] [--markdown-table-layout-right-inset:16px] max-md:[--markdown-table-layout-left-inset:8px] max-md:[--markdown-table-layout-right-inset:8px]",
-          // 分享选择面板展开时改为 overflow-hidden：scrollTop 与 scrollbar-gutter 都保持不变，
-          // 但原生滚动条、滚轮和键盘翻页都不再能移动背景，勾选目标不会漂走。
-          backgroundScrollLocked && "!overflow-y-hidden",
-          // Conversation turn map 覆盖 timeline 左侧 48px；表格增强滚动如果仍按
-          // 普通 16px 边距借位，会有 32px 落到 turn map 下方，必须把完整占用计入左边界。
-          turnNavigatorQueryRowIds.size >= 2 &&
-            "@min-[864px]/conversation:[--markdown-table-layout-left-inset:48px]",
+        {hideTurnNavigator ? null : (
+          <ConversationTurnNavigator
+            sessionKey={sessionKey}
+            renderUnits={renderUnits}
+            isHydratingDirectory={historyControls?.directory.loading ?? false}
+            directory={
+              historyControls
+                ? {
+                    ...historyControls.directory,
+                    onNavigate: (entryId, turnId) => {
+                      void navigateHistory({ entryId, turnId });
+                    },
+                  }
+                : undefined
+            }
+            scrollOffsetPx={virtualizer.scrollOffset ?? turnNavigatorViewport.scrollOffsetPx}
+            viewportHeightPx={
+              virtualizer.scrollRect?.height ?? turnNavigatorViewport.viewportHeightPx
+            }
+            virtualItems={turnNavigatorVirtualItems}
+            activeQueryRowId={turnNavigatorViewport.activeQueryRowId}
+            onJumpToQuery={scrollToQuery}
+          />
         )}
-      >
         <div
+          ref={scrollRef}
+          data-testid={TID_V4_TIMELINE}
+          data-v4-timeline-scroll="true"
+          data-v4-timeline-scroll-locked={backgroundScrollLocked ? "true" : "false"}
+          data-markdown-table-layout-root="true"
+          data-row-count={rows.length}
+          data-window-row-count={rows.length}
+          data-render-unit-count={renderUnits.length}
+          data-total-row-count={totalCount}
+          data-following={backToBottomVisible ? "false" : "true"}
+          data-loading-older={loadingOlder ? "true" : "false"}
+          onKeyDownCapture={handleKeyDownCapture}
+          onPointerCancelCapture={handlePointerEndCapture}
+          onPointerDownCapture={handlePointerDownCapture}
+          onPointerUpCapture={handlePointerEndCapture}
+          onScroll={handleScroll}
+          onTouchCancelCapture={handleTouchEndCapture}
+          onTouchEndCapture={handleTouchEndCapture}
+          onTouchMoveCapture={handleTouchMoveCapture}
+          onTouchStartCapture={handleTouchStartCapture}
+          onWheelCapture={handleWheelCapture}
           className={cn(
-            // 固定高度断点会在窗口跨过临界值时让问候语与 composer 整组跳动。
-            // 顶部留白按视口高度伸缩，输入框的位置不再受下方推荐列表高度影响；
-            // 空间不足时顶部可收缩到底线，底部继续随内容自然排布。
-            responsiveCenteredEmptyLayout
-              ? // 动态修改原生窗口下限会把内容换行反馈到窗口拖动，产生阻尼；
-                // 容器保留固有最小高度，由外层 timeline 统一承接受限高度下的溢出内容。
-                "flex min-h-full flex-col items-center px-4 before:block before:min-h-[52px] before:w-full before:shrink before:basis-[29dvh] before:content-[''] after:block after:min-h-4 after:w-full after:flex-1 after:content-['']"
-              : centeredEmptyLayout
-                ? "flex min-h-full flex-col items-center justify-center gap-4 px-4"
-                : "flex min-h-full flex-col",
+            // 原生滚动条按内容高度动态出现时会缩窄会话视口，导致消息与 composer
+            // 横向跳动；稳定预留 gutter，让桌面与手机 Web 共用的滚动区宽度保持不变。
+            // 只声明 overflow-y-auto 会让浏览器把横轴计算为 auto，宽内容会把
+            // 整条 Conversation 撑出横向滚动；表格和代码块应由各自内部容器滚动。
+            "min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] [--markdown-table-layout-left-inset:16px] [--markdown-table-layout-right-inset:16px] max-md:[--markdown-table-layout-left-inset:8px] max-md:[--markdown-table-layout-right-inset:8px]",
+            // 分享选择面板展开时改为 overflow-hidden：scrollTop 与 scrollbar-gutter 都保持不变，
+            // 但原生滚动条、滚轮和键盘翻页都不再能移动背景，勾选目标不会漂走。
+            backgroundScrollLocked && "!overflow-y-hidden",
+            // Conversation turn map 覆盖 timeline 左侧 48px；表格增强滚动如果仍按
+            // 普通 16px 边距借位，会有 32px 落到 turn map 下方，必须把完整占用计入左边界。
+            turnNavigatorQueryRowIds.size >= 2 &&
+              "@min-[864px]/conversation:[--markdown-table-layout-left-inset:48px]",
           )}
-          // session 切到 draft 时内容高度骤降，Chrome 会把子树里的
-          // sticky composer 选作原生 scroll anchor，并在切回后覆盖 layout/RAF 恢复值。
-          // V4 已自管 prepend、吸底和记忆锚点；和其它虚拟列表一致，应从内容子树禁用锚点候选。
-          style={{ overflowAnchor: "none" }}
         >
-          {/*
-           * 两个分支必须各带自己的 key。消息层的遮罩由 syncMessageLayerMask 直接写进
-           * DOM 内联样式，而同一位置、同为 div 的两个分支会被 React 复用同一个节点：
-           * 从滚到中间的会话点「新建任务」时，旧遮罩会原样留给空态容器，且空态容器没有
-           * mask-repeat:no-repeat，遮罩会退化成平铺，把水印裁成一条横带（表现为水印
-           * 只剩半截或整块看不见）。key 不同即强制换新节点，旧遮罩无从继承。
-           */}
-          {renderUnits.length === 0 && !hasHeaderSlot ? (
-            <div
-              key="v4-timeline-empty-slot"
-              className={cn(
-                centeredEmptyLayout
-                  ? "flex w-full max-w-2xl shrink-0 items-center justify-center"
-                  : "min-h-0 flex-1",
-                !centeredEmptyLayout && summaryPanelInlineOffsetClassName,
-              )}
-            >
-              {emptyState}
-            </div>
-          ) : (
-            <div
-              key="v4-timeline-message-layer"
-              ref={messageLayerRef}
-              data-v4-timeline-message-layer="true"
-              data-sandbox-page-container="true"
-              className="relative w-full flex-1 [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
-            >
-              {/*
-               * headerSlot 必须落在被 mask 的消息层内、并套用与实时消息列相同的宽度类：
-               * 放在消息层之外会既比正文宽、又从 sticky composer 下方透出来。
-               */}
-              {hasHeaderSlot ? (
-                <div
-                  ref={headerSlotRef}
-                  data-v4-timeline-header-slot="true"
-                  data-v4-timeline-content-column="true"
-                  className={cn(
-                    "relative mx-auto w-full shrink-0",
-                    contentWidthClassName,
-                    summaryPanelInlineOffsetClassName,
-                  )}
-                >
-                  {historyControls ? (
-                    <ConversationHistoryHeader
-                      controls={historyControls}
-                      onLoadOlder={handleLoadOlderTurns}
-                      navigationError={historyNavigationError}
-                      selectionOnly={Boolean(shareSelection)}
-                    />
-                  ) : null}
-                  {headerSlot}
-                </div>
-              ) : null}
+          <div
+            className={cn(
+              // 固定高度断点会在窗口跨过临界值时让问候语与 composer 整组跳动。
+              // 顶部留白按视口高度伸缩，输入框的位置不再受下方推荐列表高度影响；
+              // 空间不足时顶部可收缩到底线，底部继续随内容自然排布。
+              responsiveCenteredEmptyLayout
+                ? // 动态修改原生窗口下限会把内容换行反馈到窗口拖动，产生阻尼；
+                  // 容器保留固有最小高度，由外层 timeline 统一承接受限高度下的溢出内容。
+                  "flex min-h-full flex-col items-center px-4 before:block before:min-h-[52px] before:w-full before:shrink before:basis-[29dvh] before:content-[''] after:block after:min-h-4 after:w-full after:flex-1 after:content-['']"
+                : centeredEmptyLayout
+                  ? "flex min-h-full flex-col items-center justify-center gap-4 px-4"
+                  : "flex min-h-full flex-col",
+            )}
+            // session 切到 draft 时内容高度骤降，Chrome 会把子树里的
+            // sticky composer 选作原生 scroll anchor，并在切回后覆盖 layout/RAF 恢复值。
+            // V4 已自管 prepend、吸底和记忆锚点；和其它虚拟列表一致，应从内容子树禁用锚点候选。
+            style={{ overflowAnchor: "none" }}
+          >
+            {/*
+             * 两个分支必须各带自己的 key。消息层的遮罩由 syncMessageLayerMask 直接写进
+             * DOM 内联样式，而同一位置、同为 div 的两个分支会被 React 复用同一个节点：
+             * 从滚到中间的会话点「新建任务」时，旧遮罩会原样留给空态容器，且空态容器没有
+             * mask-repeat:no-repeat，遮罩会退化成平铺，把水印裁成一条横带（表现为水印
+             * 只剩半截或整块看不见）。key 不同即强制换新节点，旧遮罩无从继承。
+             */}
+            {renderUnits.length === 0 && !hasHeaderSlot ? (
               <div
-                ref={virtualHistoryRef}
-                data-v4-timeline-virtual-history="true"
-                data-v4-timeline-content-column="true"
+                key="v4-timeline-empty-slot"
                 className={cn(
-                  // 默认（< 1280px）过渡 width/max-width/transform，让 w-full ↔ max-w-4xl
-                  // 的中等宽度切换平滑；≥1280px 触发的面板让位（max-w-6xl + 168px 左移）
-                  // 用 @min-[1280px] 降级为只过渡 transform，避免大范围跳变叠加位移抖动。
-                  "relative mx-auto w-full shrink-0 transition-[width,max-width,transform] duration-150 ease-out @min-[1280px]/conversation:transition-[transform]",
-                  contentWidthClassName,
-                  summaryPanelInlineOffsetClassName,
+                  centeredEmptyLayout
+                    ? "flex w-full max-w-2xl shrink-0 items-center justify-center"
+                    : "min-h-0 flex-1",
+                  !centeredEmptyLayout && summaryPanelInlineOffsetClassName,
                 )}
-                style={{ height: totalSize }}
               >
-                {virtualRows.map((virtualRow) => {
-                  const unit = virtualizedUnits[virtualRow.index];
-                  if (!unit) return null;
-                  return (
-                    <div
-                      key={`${virtualRow.key}:${rowContext.logEpoch ?? ""}`}
-                      ref={virtualizer.measureElement}
-                      data-index={virtualRow.index}
-                      data-v4-turn-unit="true"
-                      data-turn-id={unit.turnId}
-                      // virtual history 的子项通过 absolute 定位，父级 padding 不会缩小
-                      // 它们的 containing block；正文响应式内边距必须落在 turn wrapper 自身。
-                      className="absolute left-0 top-0 w-full"
-                      style={{ transform: `translateY(${virtualRow.start - headerSlotHeight}px)` }}
-                    >
-                      <ConversationTurnGroup
-                        unit={unit}
-                        apiRetry={null}
-                        context={rowContext}
-                        onFork={onFork}
-                        onRetry={onRetry}
-                        onFeedbackChange={onFeedbackChange}
-                        onEdit={onEdit}
-                        shareSelection={shareSelection}
-                      />
-                    </div>
-                  );
-                })}
+                {emptyState}
               </div>
-              {liveUnit !== null && liveUnitIndex !== null ? (
+            ) : (
+              <div
+                key="v4-timeline-message-layer"
+                ref={messageLayerRef}
+                data-v4-timeline-message-layer="true"
+                data-sandbox-page-container="true"
+                className="relative w-full flex-1 [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
+              >
+                {/*
+                 * headerSlot 必须落在被 mask 的消息层内、并套用与实时消息列相同的宽度类：
+                 * 放在消息层之外会既比正文宽、又从 sticky composer 下方透出来。
+                 */}
+                {hasHeaderSlot ? (
+                  <div
+                    ref={headerSlotRef}
+                    data-v4-timeline-header-slot="true"
+                    data-v4-timeline-content-column="true"
+                    className={cn(
+                      "relative mx-auto w-full shrink-0",
+                      contentWidthClassName,
+                      summaryPanelInlineOffsetClassName,
+                    )}
+                  >
+                    {historyControls ? (
+                      <ConversationHistoryHeader
+                        controls={historyControls}
+                        onLoadOlder={handleLoadOlderTurns}
+                        navigationError={historyNavigationError}
+                        selectionOnly={Boolean(shareSelection)}
+                      />
+                    ) : null}
+                    {headerSlot}
+                  </div>
+                ) : null}
                 <div
-                  key={`${liveUnit.key}:${rowContext.logEpoch ?? ""}`}
-                  ref={liveTailRef}
-                  data-index={liveUnitIndex}
-                  data-v4-running-live-tail="true"
-                  data-v4-turn-unit="true"
-                  data-turn-id={liveUnit.turnId}
+                  ref={virtualHistoryRef}
+                  data-v4-timeline-virtual-history="true"
                   data-v4-timeline-content-column="true"
                   className={cn(
-                    // ≥1280px 面板让位时降级为只过渡 transform，避免大范围跳变叠加位移抖动。
+                    // 默认（< 1280px）过渡 width/max-width/transform，让 w-full ↔ max-w-4xl
+                    // 的中等宽度切换平滑；≥1280px 触发的面板让位（max-w-6xl + 168px 左移）
+                    // 用 @min-[1280px] 降级为只过渡 transform，避免大范围跳变叠加位移抖动。
                     "relative mx-auto w-full shrink-0 transition-[width,max-width,transform] duration-150 ease-out @min-[1280px]/conversation:transition-[transform]",
                     contentWidthClassName,
                     summaryPanelInlineOffsetClassName,
                   )}
+                  style={{ height: totalSize }}
                 >
-                  <ConversationTurnGroup
-                    unit={liveUnit}
-                    apiRetry={apiRetry}
-                    context={rowContext}
-                    onFork={onFork}
-                    onRetry={onRetry}
-                    onFeedbackChange={onFeedbackChange}
-                    onEdit={onEdit}
-                    shareSelection={shareSelection}
-                  />
+                  {virtualRows.map((virtualRow) => {
+                    const unit = virtualizedUnits[virtualRow.index];
+                    if (!unit) return null;
+                    return (
+                      <div
+                        key={`${virtualRow.key}:${rowContext.logEpoch ?? ""}`}
+                        ref={virtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        data-v4-turn-unit="true"
+                        data-turn-id={unit.turnId}
+                        // virtual history 的子项通过 absolute 定位，父级 padding 不会缩小
+                        // 它们的 containing block；正文响应式内边距必须落在 turn wrapper 自身。
+                        className="absolute left-0 top-0 w-full"
+                        style={{
+                          transform: `translateY(${virtualRow.start - headerSlotHeight}px)`,
+                        }}
+                      >
+                        <ConversationTurnGroup
+                          unit={unit}
+                          apiRetry={null}
+                          context={rowContext}
+                          onFork={onFork}
+                          onRetry={onRetry}
+                          onFeedbackChange={onFeedbackChange}
+                          onEdit={onEdit}
+                          shareSelection={shareSelection}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : null}
-              {historyControls?.history.hasNewer ? (
-                <div
-                  className={cn(
-                    "relative mx-auto flex w-full gap-2 px-4 py-2",
-                    contentWidthClassName,
-                    summaryPanelInlineOffsetClassName,
-                  )}
-                >
-                  <AsyncButton
-                    variant="ghost"
-                    size="xs"
-                    successFeedback="none"
-                    onClick={async () => {
-                      commitFollowing(false);
-                      await historyControls.loadNewer();
-                    }}
+                {liveUnit !== null && liveUnitIndex !== null ? (
+                  <div
+                    key={`${liveUnit.key}:${rowContext.logEpoch ?? ""}`}
+                    ref={liveTailRef}
+                    data-index={liveUnitIndex}
+                    data-v4-running-live-tail="true"
+                    data-v4-turn-unit="true"
+                    data-turn-id={liveUnit.turnId}
+                    data-v4-timeline-content-column="true"
+                    className={cn(
+                      // ≥1280px 面板让位时降级为只过渡 transform，避免大范围跳变叠加位移抖动。
+                      "relative mx-auto w-full shrink-0 transition-[width,max-width,transform] duration-150 ease-out @min-[1280px]/conversation:transition-[transform]",
+                      contentWidthClassName,
+                      summaryPanelInlineOffsetClassName,
+                    )}
                   >
-                    {intl.formatMessage({ id: "chat.history.loadNewer" })}
-                  </AsyncButton>
-                  <AsyncButton
-                    variant="ghost"
-                    size="xs"
-                    successFeedback="none"
-                    onClick={() => navigateHistory("latest")}
+                    <ConversationTurnGroup
+                      unit={liveUnit}
+                      apiRetry={apiRetry}
+                      context={rowContext}
+                      onFork={onFork}
+                      onRetry={onRetry}
+                      onFeedbackChange={onFeedbackChange}
+                      onEdit={onEdit}
+                      shareSelection={shareSelection}
+                    />
+                  </div>
+                ) : null}
+                {historyControls?.history.hasNewer ? (
+                  <div
+                    className={cn(
+                      "relative mx-auto flex w-full gap-2 px-4 py-2",
+                      contentWidthClassName,
+                      summaryPanelInlineOffsetClassName,
+                    )}
                   >
-                    {intl.formatMessage({ id: "chat.scrollToBottom" })}
-                  </AsyncButton>
-                </div>
-              ) : null}
-              {pendingGuides.length > 0 ? (
-                <div
-                  data-v4-timeline-content-column="true"
-                  className={cn(
-                    "relative mx-auto w-full shrink-0",
-                    contentWidthClassName,
-                    summaryPanelInlineOffsetClassName,
-                  )}
-                >
-                  <ConversationPendingGuideList
-                    context={rowContext}
-                    items={pendingGuides}
-                    turnId={
-                      liveUnit?.turnId ??
-                      rows.at(-1)?.productTurnId ??
-                      rows.at(-1)?.turnId ??
-                      "pending-guide"
-                    }
-                  />
-                </div>
-              ) : null}
-            </div>
-          )}
-          {bottomDock ? (
-            <div
-              ref={composerDockRef}
-              data-v4-composer-dock="true"
-              className={cn(
-                // sticky dock 是 z-20 的全宽透明层，过去会盖住 z-10 rail
-                // 在 composer 左侧留白内的按钮。外壳不接事件，只让实际内容列恢复命中。
-                "pointer-events-none z-20 flex w-full justify-center",
-                responsiveCenteredEmptyLayout
-                  ? "mt-3 shrink-0"
-                  : centeredEmptyLayout
-                    ? "shrink-0"
-                    : "sticky bottom-0",
-              )}
-            >
+                    <AsyncButton
+                      variant="ghost"
+                      size="xs"
+                      successFeedback="none"
+                      onClick={async () => {
+                        commitFollowing(false);
+                        await historyControls.loadNewer();
+                      }}
+                    >
+                      {intl.formatMessage({ id: "chat.history.loadNewer" })}
+                    </AsyncButton>
+                    <AsyncButton
+                      variant="ghost"
+                      size="xs"
+                      successFeedback="none"
+                      onClick={() => navigateHistory("latest")}
+                    >
+                      {intl.formatMessage({ id: "chat.scrollToBottom" })}
+                    </AsyncButton>
+                  </div>
+                ) : null}
+                {pendingGuides.length > 0 ? (
+                  <div
+                    data-v4-timeline-content-column="true"
+                    className={cn(
+                      "relative mx-auto w-full shrink-0",
+                      contentWidthClassName,
+                      summaryPanelInlineOffsetClassName,
+                    )}
+                  >
+                    <ConversationPendingGuideList
+                      context={rowContext}
+                      items={pendingGuides}
+                      turnId={
+                        liveUnit?.turnId ??
+                        rows.at(-1)?.productTurnId ??
+                        rows.at(-1)?.turnId ??
+                        "pending-guide"
+                      }
+                    />
+                  </div>
+                ) : null}
+              </div>
+            )}
+            {bottomDock ? (
               <div
-                data-v4-composer-dock-content="true"
+                ref={composerDockRef}
+                data-v4-composer-dock="true"
                 className={cn(
-                  // 同 virtual history/live tail，恢复宽度过渡避免硬跳。
-                  // ≥1280px 面板让位时降级为只过渡 transform，避免大范围跳变叠加位移抖动。
-                  "pointer-events-auto relative z-10 w-full shrink-0 transition-[width,max-width,transform] duration-150 ease-out @min-[1280px]/conversation:transition-[transform]",
-                  contentWidthClassName,
-                  !centeredEmptyLayout && "px-4 pb-4",
-                  !centeredEmptyLayout && summaryPanelInlineOffsetClassName,
+                  // sticky dock 是 z-20 的全宽透明层，过去会盖住 z-10 rail
+                  // 在 composer 左侧留白内的按钮。外壳不接事件，只让实际内容列恢复命中。
+                  "pointer-events-none z-20 flex w-full justify-center",
+                  responsiveCenteredEmptyLayout
+                    ? "mt-3 shrink-0"
+                    : centeredEmptyLayout
+                      ? "shrink-0"
+                      : "sticky bottom-0",
                 )}
               >
-                <div data-v4-back-to-bottom-anchor="composer-dock" className="relative">
-                  {backToBottomVisible ? (
-                    <ConversationBackToBottomButton
-                      // 分屏下 composer 属于滚动视口内的 sticky dock；按钮若挂在
-                      // timeline 外层 absolute bottom，会相对整个 pane 落到 input 下方。
-                      //
-                      // 圆钮采用自己的居中定位；`pointer-events-auto` 保留：
-                      // 它是"按钮点得动"唯一可断言的契约。
-                      className="pointer-events-auto absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 shadow-sm"
-                      label={intl.formatMessage({ id: "chat.scrollToBottom" })}
-                      onClick={handleBackToBottom}
-                    />
-                  ) : null}
-                  {bottomDock}
+                <div
+                  data-v4-composer-dock-content="true"
+                  className={cn(
+                    // 同 virtual history/live tail，恢复宽度过渡避免硬跳。
+                    // ≥1280px 面板让位时降级为只过渡 transform，避免大范围跳变叠加位移抖动。
+                    "pointer-events-auto relative z-10 w-full shrink-0 transition-[width,max-width,transform] duration-150 ease-out @min-[1280px]/conversation:transition-[transform]",
+                    contentWidthClassName,
+                    !centeredEmptyLayout && "px-4 pb-4",
+                    !centeredEmptyLayout && summaryPanelInlineOffsetClassName,
+                  )}
+                >
+                  <div data-v4-back-to-bottom-anchor="composer-dock" className="relative">
+                    {backToBottomVisible ? (
+                      <ConversationBackToBottomButton
+                        // 分屏下 composer 属于滚动视口内的 sticky dock；按钮若挂在
+                        // timeline 外层 absolute bottom，会相对整个 pane 落到 input 下方。
+                        //
+                        // 圆钮采用自己的居中定位；`pointer-events-auto` 保留：
+                        // 它是"按钮点得动"唯一可断言的契约。
+                        className="pointer-events-auto absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 shadow-sm"
+                        label={intl.formatMessage({ id: "chat.scrollToBottom" })}
+                        onClick={handleBackToBottom}
+                      />
+                    ) : null}
+                    {bottomDock}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
+        {backToBottomVisible && !bottomDock ? (
+          <ConversationBackToBottomButton
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-sm"
+            label={intl.formatMessage({ id: "chat.scrollToBottom" })}
+            onClick={handleBackToBottom}
+          />
+        ) : null}
       </div>
-      {backToBottomVisible && !bottomDock ? (
-        <ConversationBackToBottomButton
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-sm"
-          label={intl.formatMessage({ id: "chat.scrollToBottom" })}
-          onClick={handleBackToBottom}
-        />
-      ) : null}
-    </div>
+    </ConversationTimelineScrollPolicyContext.Provider>
   );
 }
 
