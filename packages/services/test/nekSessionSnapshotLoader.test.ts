@@ -99,7 +99,7 @@ function fakeProcess(
   onCommand: (type: string) => void | Promise<void> = () => {},
 ): NekRpcProcess {
   return {
-    guiInfo: { capabilities: { historyPages: 1 } },
+    guiInfo: { capabilities: { historyPages: 2 } },
     client: {
       call: async (command: { type: string }) => {
         calls.push(command.type);

@@ -203,24 +203,12 @@ test("HS4: changed persisted bytes with the same leaf identity invalidate the ol
   }
 });
 
-test("HS2: public-row helper removes private deferred read capabilities", () => {
+test("HS2: public-row helper strips transient tool extras and snapshot history metadata", () => {
   const projector = projectorFor();
   try {
     const source = projector.snapshot().rows.window[0]!;
-    const row = {
-      ...source,
-      historyContent: [
-        {
-          pointer: "",
-          ref: "secret-ref",
-          totalBytes: 12,
-          mediaType: "application/json",
-          encoding: "base64" as const,
-        },
-      ],
-    };
-    assert.equal(JSON.stringify(stripPrivateHistoryRow(row)).includes("secret-ref"), false);
-    assert.equal(row.historyContent[0]?.ref, "secret-ref");
+    const row = source;
+    assert.equal(stripPrivateHistoryRow(row), row);
     const safe = stripPrivateHistorySnapshot({
       ...projector.snapshot(),
       liveHistoryPreview: {
@@ -236,7 +224,6 @@ test("HS2: public-row helper removes private deferred read capabilities", () => 
     assert.equal(safe.history, undefined);
     assert.equal(safe.liveHistoryPreview, undefined);
     assert.equal(JSON.stringify(safe).includes("private-transient"), false);
-    assert.equal(JSON.stringify(safe).includes("secret-ref"), false);
     const tool = {
       ...buildToolCallRow(
         { rowId: 99, entityId: "tool:extra", turnId: "turn:1", createdAt: 1 },

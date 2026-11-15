@@ -25,7 +25,6 @@ export async function verifyHistorySpawnAnchors(
       ids.add(record.id);
       summaries.set(record.id, record);
     }
-    if (source.omissions.length) continue;
     const entry: NekSessionEntry = validateHistoryDisplay(source.entry);
     if (entry.type !== "message" || entry.message.role !== "toolResult") continue;
     for (const { record } of extractSubagentsFromToolResult(

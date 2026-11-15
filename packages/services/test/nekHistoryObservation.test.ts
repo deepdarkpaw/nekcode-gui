@@ -118,14 +118,7 @@ test("HO3/HO5: child preview and all explicit reads guard the child source, not 
         );
       if (!("sessionPath" in command) || command.sessionPath !== child.sessionFile)
         return undefined;
-      if (
-        !(
-          command.type === "read_history_page" ||
-          command.type === "read_history_turn" ||
-          command.type === "read_history_directory" ||
-          command.type === "read_history_content"
-        )
-      )
+      if (!(command.type === "read_history_page" || command.type === "read_history_directory"))
         return undefined;
       childCommands.push(command);
       if (
@@ -152,14 +145,6 @@ test("HO3/HO5: child preview and all explicit reads guard the child source, not 
       };
       if (command.type === "read_history_page")
         return fixtureHistory(childSnapshot.entries, command, childSnapshot.session);
-      if (command.type === "read_history_turn")
-        return {
-          ok: true,
-          ...identity,
-          turn: page.turns[0],
-          entries: page.entries.slice(0, 1),
-          hasMore: false,
-        };
       if (command.type === "read_history_directory")
         return {
           ok: true,
@@ -168,16 +153,7 @@ test("HO3/HO5: child preview and all explicit reads guard the child source, not 
           totalTurns: page.totalTurns,
           hasMore: false,
         };
-      return {
-        ok: true,
-        ...identity,
-        ref: command.ref,
-        offset: command.offset ?? 0,
-        totalBytes: 1,
-        encoding: "base64",
-        mediaType: "application/json",
-        data: "YQ==",
-      };
+      return undefined;
     },
   });
   try {
@@ -200,15 +176,13 @@ test("HO3/HO5: child preview and all explicit reads guard the child source, not 
       subagentId: child.id,
       observationCursor: first.history.observationCursor,
     };
-    const turn = await h.adapter.conversationHistoryTurnV4({ ...target, turnId: "turn:user-0" });
-    const directory = await h.adapter.conversationHistoryDirectoryV4({ ...target, limit: 1 });
-    const content = await h.adapter.conversationHistoryContentV4({
+    const page = await h.adapter.conversationHistoryPageV4({
       ...target,
-      ref: "opaque",
-      offset: 0,
-      limit: 1,
+      aroundEntryId: "user-0",
+      turnLimit: 1,
     });
-    for (const result of [turn, directory, content]) {
+    const directory = await h.adapter.conversationHistoryDirectoryV4({ ...target, limit: 1 });
+    for (const result of [page, directory]) {
       assert.equal(result.observationCursor, second.history.observationCursor);
       assert.equal(result.branchRevision, second.history.branchRevision);
     }
@@ -217,7 +191,7 @@ test("HO3/HO5: child preview and all explicit reads guard the child source, not 
         (command) =>
           "observationCursor" in command &&
           command.observationCursor === first.history.observationCursor,
-      ).length >= 4,
+      ).length >= 3,
     );
     assert.equal(h.sessions.length, 1, "child reads must never open a second runtime");
     stale = true;

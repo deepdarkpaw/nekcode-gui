@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
-  NekHistoryPage,
   NekSessionEntry,
   NekSessionSnapshot,
   NekSubagentRecord,
@@ -156,23 +155,14 @@ test("HS5: locked parent authorizes old child with the same bounded control path
   }
 });
 
-test("HS2/HS4: directory/turn/content methods forward only fixed bounded fields and return owner watermark", async () => {
+test("HS2/HS4: directory method forwards fixed bounded fields and returns owner watermark", async () => {
   const identity = fixtureHistory(
     [],
     { type: "read_session_metadata" },
     { ...historySummary, id: sessionId, path: sessionPath },
   ) as object;
-  const bytes = Buffer.from(JSON.stringify("large 原文"));
   const h = harness({
     historyOverride: (command) => {
-      if (command.type === "read_history_turn") {
-        const source = fixtureHistory(
-          [entry],
-          { type: "read_history_page" },
-          { ...historySummary, id: sessionId, path: sessionPath },
-        ) as NekHistoryPage;
-        return { ...source, turn: source.turns[0], hasMore: false };
-      }
       if (command.type === "read_history_directory")
         return {
           ...identity,
@@ -182,22 +172,6 @@ test("HS2/HS4: directory/turn/content methods forward only fixed bounded fields 
           totalTurns: 1,
           hasMore: false,
         };
-      if (command.type === "read_history_content") {
-        if (command.ref !== "opaque")
-          return { ok: false, error: { code: "FOREIGN_CURSOR", message: "Unauthorized ref" } };
-        const offset = command.offset ?? 0;
-        const end = Math.min(bytes.length, offset + (command.limit ?? 4));
-        return {
-          ...identity,
-          ref: "opaque",
-          offset,
-          totalBytes: bytes.length,
-          data: bytes.subarray(offset, end).toString("base64"),
-          mediaType: "application/json",
-          encoding: "base64",
-          nextOffset: end < bytes.length ? end : undefined,
-        };
-      }
       return undefined;
     },
   });
@@ -210,34 +184,8 @@ test("HS2/HS4: directory/turn/content methods forward only fixed bounded fields 
     });
     assert.equal(directory.atLogEpoch, snapshot.logEpoch);
     assert.equal(directory.items[0]?.entryId, entry.id);
-    const turn = await h.adapter.conversationHistoryTurnV4({
-      ...params,
-      turnId: `turn:${entry.id}`,
-    });
-    assert.equal(turn.turn.userEntryId, entry.id);
-    assert.equal(turn.rows.length, 2);
-    assert.equal(turn.atLogEpoch, snapshot.logEpoch);
-    const chunks: Buffer[] = [];
-    let offset = 0;
-    do {
-      const content = await h.adapter.conversationHistoryContentV4({
-        ...params,
-        ref: "opaque",
-        offset,
-        limit: 4,
-      });
-      assert.equal(content.atSeq, snapshot.seq);
-      chunks.push(Buffer.from(content.data, "base64"));
-      if (content.nextOffset === undefined) break;
-      offset = content.nextOffset;
-    } while (offset < bytes.length);
-    assert.deepEqual(Buffer.concat(chunks), bytes);
-    await assert.rejects(
-      h.adapter.conversationHistoryContentV4({ ...params, ref: "C:/arbitrary-file" }),
-      /Unauthorized ref/,
-    );
     const command = h.sessions[0]!.commands.find(
-      (command) => command.type === "read_history_content",
+      (command) => command.type === "read_history_directory",
     );
     assert.equal(command?.maxBytes, 1024 * 1024);
   } finally {

@@ -8,7 +8,7 @@ import type { NekGuiInfo, NekHistoryStreamState } from "@zcode/shared/nek-protoc
 
 /** 只有真正实现协商与封装的生产者才宣告 historyStream=1。 */
 export const historyStreamCapabilities = {
-  historyPages: 1,
+  historyPages: 2,
   historyStream: 1,
 } as const satisfies NekGuiInfo["capabilities"];
 

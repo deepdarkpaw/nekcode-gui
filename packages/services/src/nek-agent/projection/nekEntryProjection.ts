@@ -388,7 +388,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
       input.state?.isStreaming === true ? "running" : completedTurnState(lastStopReason),
     );
   }
-  if (!input.historyLayout?.partial) settleInactiveNekWorkRows(rows);
+  settleInactiveNekWorkRows(rows);
 
   const usage = summarizeUsage(branch, {
     contextWindow: input.stats?.contextUsage?.contextWindow ?? input.state?.model?.contextWindow,

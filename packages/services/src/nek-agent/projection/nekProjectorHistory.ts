@@ -198,7 +198,7 @@ export class NekProjectorHistory {
     if (!this.metadata) return;
     if (Buffer.byteLength(JSON.stringify(event), "utf8") > 1024 * 1024)
       throw new Error(
-        "nek live history event exceeds 1 MB; CLI bounded live content refs are required (historyPages does not cover live frames)",
+        "nek live history event exceeds 1 MB; CLI historyStream=1 is required for persisted-body locators",
       );
     const message = event.type === "message_start" ? event.message : undefined;
     if (

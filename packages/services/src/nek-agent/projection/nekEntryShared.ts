@@ -45,7 +45,6 @@ export interface NekSnapshotInput {
   historyLayout?: {
     turnId: string;
     selection?: { provider?: string; model?: string; thought?: string };
-    partial?: boolean;
     resolve: (entityId: string) => number;
     subagentAnchors?: ReadonlyMap<string, { turnId: string; parentToolCallId?: string }>;
   };

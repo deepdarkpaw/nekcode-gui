@@ -1614,8 +1614,6 @@ export const diagnosticModules: readonly string[] = [
   "packages/services/src/nek-agent/projection/nekHistoryDisplay.ts",
   "packages/services/src/nek-agent/projection/nekHistoryIdentity.ts",
   "packages/services/src/nek-agent/projection/nekHistoryLive.ts",
-  "packages/services/src/nek-agent/projection/nekHistoryPartial.ts",
-  "packages/services/src/nek-agent/projection/nekHistoryPartialMessages.ts",
   "packages/services/src/nek-agent/projection/nekHistoryProjection.ts",
   "packages/services/src/nek-agent/projection/nekHistoryStreamProjection.ts",
   "packages/services/src/nek-agent/projection/nekLiveMarkers.ts",

@@ -2,7 +2,12 @@ import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { NekHistoryServiceBase } from "./nekHistoryService.js";
 import { measureNekOpenRequest, nekOpenDurationMs } from "./nekSessionOpenTiming.js";
 import { verifyHistorySpawnAnchors } from "./nekHistoryAnchors.js";
-import { historyResult, requireHistoryPages, HISTORY_RPC_MAX_BYTES } from "./nekHistoryRpc.js";
+import {
+  historyResult,
+  requireHistoryPages,
+  HISTORY_RPC_MAX_BYTES,
+  HISTORY_PAGE_MAX_BYTES,
+} from "./nekHistoryRpc.js";
 import { type NekSessionRecord, type NekSessionResult } from "./types.js";
 
 const MAX_RESUME_FLIGHTS = 128;
@@ -80,7 +85,7 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
             sessionPath: input.sessionPath,
             observationCursor: snapshot.observationCursor,
             turnLimit: 20,
-            maxBytes: HISTORY_RPC_MAX_BYTES,
+            maxBytes: HISTORY_PAGE_MAX_BYTES,
           }),
         ),
       );

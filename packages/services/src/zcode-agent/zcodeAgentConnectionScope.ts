@@ -808,25 +808,9 @@ export function createZCodeAgentConnectionScope(
       assertReady();
       return result;
     },
-    async conversationHistoryTurnV4(params) {
-      assertReady();
-      const result = await base.conversationHistoryTurnV4(
-        withTrustedConnection(params, forwardedConnection(params)),
-      );
-      assertReady();
-      return result;
-    },
     async conversationHistoryDirectoryV4(params) {
       assertReady();
       const result = await base.conversationHistoryDirectoryV4(
-        withTrustedConnection(params, forwardedConnection(params)),
-      );
-      assertReady();
-      return result;
-    },
-    async conversationHistoryContentV4(params) {
-      assertReady();
-      const result = await base.conversationHistoryContentV4(
         withTrustedConnection(params, forwardedConnection(params)),
       );
       assertReady();

@@ -2,7 +2,6 @@ import { CONVERSATION_ARCHIVE_LIMITS } from "@zcode/shared";
 import type {
   ConversationHistoryTurn,
   V4ConversationHistoryPageResult,
-  V4ConversationHistoryTurnResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { IZCodeAgentService, ZCodeAgentSessionTarget } from "../zcode-agent/zcodeAgent.js";
 import type { ConversationSharePreflightInput } from "./conversationShare.js";
@@ -22,9 +21,6 @@ interface SourceAgent {
   conversationHistoryPageV4(
     input: ZCodeAgentSessionTarget & { beforeCursor?: string; turnLimit?: number },
   ): Promise<V4ConversationHistoryPageResult>;
-  conversationHistoryTurnV4(
-    input: ZCodeAgentSessionTarget & { turnId: string; cursor?: string },
-  ): Promise<V4ConversationHistoryTurnResult>;
 }
 type LegacyAgent = Pick<IZCodeAgentService, "conversationRowsRangeV4">;
 export type ConversationShareHistoryReadMode = "source" | "legacy-projection";
@@ -55,37 +51,6 @@ async function readSourceRows(
     );
   const target = historyTarget(input);
   const rows = new ShareHistoryRows();
-  const consumeTurn = (
-    result: V4ConversationHistoryTurnResult,
-    turnId: string,
-    repeated: boolean,
-  ) => {
-    rows.fence(result);
-    if (
-      !result.turn ||
-      result.turn.turnId !== turnId ||
-      typeof result.hasMore !== "boolean" ||
-      (!result.hasMore && result.continuationCursor !== undefined)
-    )
-      invalid();
-    rows.turn(result.turn, repeated);
-    return rows.add(result.rows, new Set([turnId]));
-  };
-  const continueTurn = async (turn: ConversationHistoryTurn, firstCursor: string) => {
-    let cursor: string | undefined = firstCursor;
-    const seen = new Set<string>();
-    while (cursor !== undefined) {
-      if (typeof cursor !== "string" || !cursor || seen.has(cursor)) invalid();
-      seen.add(cursor);
-      const result = await budget.read(() =>
-        agent.conversationHistoryTurnV4({ ...target, turnId: turn.turnId, cursor }),
-      );
-      if (consumeTurn(result, turn.turnId, true) === 0) invalid();
-      cursor = result.hasMore ? result.continuationCursor : undefined;
-      if (result.hasMore && (typeof cursor !== "string" || !cursor)) invalid();
-    }
-  };
-
   if (input.selection.kind === "rowAnchors")
     throw new ConversationShareHistoryError("history_turn_selection_required");
   if (input.selection.kind === "productTurns") {
@@ -97,24 +62,16 @@ async function readSourceRows(
         "invalid_selection",
         "A bounded source turn selection is required",
       );
-    for (const turnId of new Set(input.selection.productTurnIds)) {
-      if (typeof turnId !== "string" || !turnId)
-        throw new ConversationShareServiceError(
-          "invalid_selection",
-          "A source turn identity is required",
-        );
-      const result = await budget.read(() =>
-        agent.conversationHistoryTurnV4({ ...target, turnId }),
+    if (input.selection.productTurnIds.some((id) => typeof id !== "string" || !id))
+      throw new ConversationShareServiceError(
+        "invalid_selection",
+        "A source turn identity is required",
       );
-      consumeTurn(result, turnId, false);
-      if (result.hasMore) {
-        if (typeof result.continuationCursor !== "string" || !result.continuationCursor) invalid();
-        await continueTurn(result.turn, result.continuationCursor);
-      }
-    }
-    return rows.finish();
   }
 
+  // Turn IDs are opaque: resolve selections through complete source pages rather than guessing entry IDs.
+  const pending =
+    input.selection.kind === "productTurns" ? new Set(input.selection.productTurnIds) : undefined;
   let beforeCursor: string | undefined;
   let branchRevision: string | undefined;
   let totalTurns: number | undefined;
@@ -160,14 +117,24 @@ async function readSourceRows(
       history.hasNewer !== end < history.totalTurns
     )
       invalid();
+    const selected = new Set<string>();
     for (const [index, turn] of history.turns.entries()) {
       if (turn.position !== start + index) invalid();
+      if (pending && !pending.has(turn.turnId)) continue;
       rows.turn(turn);
+      selected.add(turn.turnId);
+      pending?.delete(turn.turnId);
     }
-    rows.add(page.rows, new Set(history.turns.map((turn: ConversationHistoryTurn) => turn.turnId)));
-    for (const turn of history.turns)
-      if (turn.continuationCursor !== undefined) await continueTurn(turn, turn.continuationCursor);
-    if (!history.hasOlder) break;
+    // Validate every returned owner before retaining only the explicitly selected turns.
+    const owners = new Set(history.turns.map((turn: ConversationHistoryTurn) => turn.turnId));
+    if (!Array.isArray(page.rows) || page.rows.some((row) => !owners.has(row.turnId))) invalid();
+    if (page.rows.length > CONVERSATION_ARCHIVE_LIMITS.rows)
+      throw new ConversationShareHistoryError("history_budget_exceeded");
+    rows.add(
+      page.rows.filter((row) => selected.has(row.turnId)),
+      selected,
+    );
+    if (pending?.size === 0 || !history.hasOlder) break;
     if (
       typeof history.olderCursor !== "string" ||
       !history.olderCursor ||
@@ -178,6 +145,8 @@ async function readSourceRows(
     beforeCursor = history.olderCursor;
     expectedEnd = start;
   }
+  if (pending?.size)
+    throw new ConversationShareServiceError("invalid_selection", "Unknown source turn selection");
   return rows.finish();
 }
 

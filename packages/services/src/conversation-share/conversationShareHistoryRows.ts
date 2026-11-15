@@ -4,10 +4,7 @@ import type {
   ConversationHistoryWatermark,
   ConversationRow,
 } from "@zcode/shared/zcode-protocol-v4";
-import {
-  assertCompleteShareHistory,
-  ConversationShareHistoryError,
-} from "./conversationShareHistoryPolicy.js";
+import { ConversationShareHistoryError } from "./conversationShareHistoryPolicy.js";
 
 export interface ConversationShareRowsRead {
   rows: ConversationRow[];
@@ -80,7 +77,6 @@ export class ShareHistoryRows {
     if (!Array.isArray(rows)) invalid();
     if (rows.length > CONVERSATION_ARCHIVE_LIMITS.rows)
       throw new ConversationShareHistoryError("history_budget_exceeded");
-    assertCompleteShareHistory(rows);
     let changedBodyRows = 0;
     let previousRowId = -1;
     for (const row of rows) {

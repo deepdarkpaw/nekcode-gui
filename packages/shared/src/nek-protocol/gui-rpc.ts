@@ -93,7 +93,7 @@ export const NEK_ENDPOINT_APIS: readonly NekEndpointApi[] = [
 export interface NekGuiInfo {
   protocolVersion: number;
   /** 缺失时不能发送附件路径：旧 RPC 会忽略未知字段，必须明确要求更新。 */
-  capabilities?: { promptAttachments?: 1; historyPages?: 1; historyStream?: 1 };
+  capabilities?: { promptAttachments?: 1; historyPages?: 2; historyStream?: 1 };
   /** nek 自身版本（package.json `nekConfig.version`），例如 "0.4.0"。 */
   nekVersion: string;
   /** 基线 pi 版本，例如 "1.0.2"。 */
@@ -226,9 +226,7 @@ export const NEK_CONTROL_COMMANDS: readonly string[] = [
   "read_session_snapshot",
   "read_session_metadata",
   "read_history_page",
-  "read_history_turn",
   "read_history_directory",
-  "read_history_content",
   "read_history_subagent",
   "import_session",
   "auth_status",

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { NekSessionEntry, NekSessionSnapshot } from "@zcode/shared/nek-protocol";
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
+import { historyRowId } from "../src/nek-agent/projection/nekHistoryIdentity.js";
 import { createProcess, entry, guiInfo, target } from "./nekSessionHarness.js";
 
 function forkHarness(outcome: "success" | "cancel" | "error" = "success") {
@@ -166,6 +167,46 @@ test("fork mapping rejects stale epoch/revision and non-user or mismatched row t
       h.processes[0]?.commands.some((command) => command.type === "fork"),
       false,
     );
+  } finally {
+    await h.adapter.dispose();
+  }
+});
+
+test("HT2: fork validation of an unloaded user reads a target page with the 8 MiB budget", async () => {
+  const h = forkHarness();
+  const saved = h.snapshots.get(h.source)!;
+  for (let index = 0; index < 25; index++)
+    saved.entries.push({
+      ...entry,
+      id: `later-${index}`,
+      parentId: saved.entries.at(-1)!.id,
+      message: { role: "user", content: "later", timestamp: index + 3 },
+    });
+  try {
+    const snapshot = await h.adapter.readNekSession({ ...target, sessionId: "source" });
+    assert.equal(
+      snapshot.rows.window.some((row) => row.entityId === "entry:user-2:user"),
+      false,
+    );
+    const ack = await h.adapter.sendNekConversationCommandV4({
+      target,
+      envelope: {
+        commandId: "fork-old",
+        clientId: "test",
+        type: "forkUserMessage",
+        sessionId: "source",
+        issuedAt: 1,
+        baseRevision: snapshot.revision,
+        baseLogEpoch: snapshot.logEpoch,
+        payload: { target: { rowId: historyRowId(1, 1), entityId: "entry:user-2:user" } },
+      },
+    });
+    assert.equal(ack.status, "accepted");
+    const request = h.processes[0]!.commands.find(
+      (command) => command.type === "read_history_page" && command.aroundEntryId === "user-2",
+    );
+    assert.equal(request?.view, "target");
+    assert.equal(request?.maxBytes, 8 * 1024 * 1024);
   } finally {
     await h.adapter.dispose();
   }

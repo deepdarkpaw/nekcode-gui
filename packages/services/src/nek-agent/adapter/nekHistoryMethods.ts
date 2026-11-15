@@ -3,11 +3,7 @@ import type {
   IZCodeAgentService,
   ZCodeAgentConversationHistoryTarget,
 } from "../../zcode-agent/zcodeAgent.js";
-import {
-  historyMetadata,
-  historyTurn,
-  projectHistory,
-} from "../projection/nekHistoryProjection.js";
+import { historyMetadata, projectHistory } from "../projection/nekHistoryProjection.js";
 import { verifyHistorySpawnAnchors } from "../service/nekHistoryAnchors.js";
 import { boundHistoryResult, NekHistoryReadError } from "../service/nekHistoryRpc.js";
 import type { NekHistoryReadContext } from "../service/nekHistoryService.js";
@@ -32,10 +28,7 @@ function assertObservedEntries(
 
 type HistoryMethods = Pick<
   IZCodeAgentService,
-  | "conversationHistoryPageV4"
-  | "conversationHistoryTurnV4"
-  | "conversationHistoryDirectoryV4"
-  | "conversationHistoryContentV4"
+  "conversationHistoryPageV4" | "conversationHistoryDirectoryV4"
 >;
 
 /** Overlay the CAPTURED emitted owner view, never unflushed bytes that a later delta will append. */
@@ -132,60 +125,6 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
         );
         return result;
       }),
-    conversationHistoryTurnV4: (input) =>
-      read(input, async (context) => {
-        const page = await context.read({
-          type: "read_history_turn",
-          turnId: input.turnId,
-          cursor: input.cursor,
-          observationCursor: input.observationCursor,
-        });
-        assertObservedEntries(
-          [...page.entries, page.turn.header],
-          context,
-          Boolean(input.subagentId),
-        );
-        const scope = input.subagentId
-          ? `${page.sessionId}\0${page.branchRevision}`
-          : page.sessionId;
-        const anchors = context.projector.historyAnchors(scope);
-        await verifyHistorySpawnAnchors(
-          page.entries,
-          (subagentId) =>
-            context.read({
-              type: "read_history_subagent",
-              subagentId,
-              observationCursor: page.observationCursor,
-            }),
-          anchors,
-        );
-        const rows = projectHistory({
-          sessionId: page.sessionId,
-          turns: [
-            {
-              ...page.turn,
-              continuationCursor: page.continuationCursor ?? page.turn.continuationCursor,
-            },
-          ],
-          entries: page.entries,
-          anchors,
-        });
-        const result = boundHistoryResult({
-          rows: input.subagentId ? rows : preserveLive(rows, context),
-          turn: historyTurn(page.turn),
-          hasMore: page.hasMore,
-          continuationCursor: page.continuationCursor,
-          ...context.watermark,
-          branchRevision: page.branchRevision,
-          observationCursor: page.observationCursor,
-        });
-        context.projector.rememberHistoryAnchors(
-          scope,
-          `${page.branchRevision}:${page.turn.id}:${page.entries[0]?.position}:${page.entries.at(-1)?.position}`,
-          result.rows,
-        );
-        return result;
-      }),
     conversationHistoryDirectoryV4: (input) =>
       read(input, async (context) => {
         const { query, cursor, direction, aroundEntryId, limit, observationCursor } = input;
@@ -203,28 +142,6 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
           hasMore: page.hasMore,
           nextCursor: page.nextCursor,
           totalTurns: page.totalTurns,
-          ...context.watermark,
-          branchRevision: page.branchRevision,
-          observationCursor: page.observationCursor,
-        });
-      }),
-    conversationHistoryContentV4: (input) =>
-      read(input, async (context) => {
-        const page = await context.read({
-          type: "read_history_content",
-          ref: input.ref,
-          offset: input.offset,
-          limit: input.limit,
-          observationCursor: input.observationCursor,
-        });
-        return boundHistoryResult({
-          ref: page.ref,
-          offset: page.offset,
-          totalBytes: page.totalBytes,
-          mediaType: page.mediaType,
-          encoding: page.encoding,
-          data: page.data,
-          nextOffset: page.nextOffset,
           ...context.watermark,
           branchRevision: page.branchRevision,
           observationCursor: page.observationCursor,

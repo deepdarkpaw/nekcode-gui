@@ -1,4 +1,4 @@
-/** Validate complete display entries before the legacy v4 adapter; omitted objects are never cast. */
+/** Validate complete display entries before the v4 adapter; only tool-result image bytes may be absent. */
 import { z } from "zod";
 import type { NekSessionEntry } from "@zcode/shared/nek-protocol";
 
@@ -56,7 +56,7 @@ const message = z.discriminatedUnion("role", [
     role: z.literal("toolResult"),
     toolCallId: z.string(),
     toolName: z.string(),
-    content: z.array(z.union([text, image])),
+    content: z.array(z.union([text, image.omit({ data: true })])),
     details: z.unknown().optional(),
     isError: z.boolean(),
     timestamp: z.number(),

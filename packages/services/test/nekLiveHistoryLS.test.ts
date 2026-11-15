@@ -263,10 +263,15 @@ test("LS6/LS7: sequence gaps, reset, retired epoch and timed-out chunks require 
   x.decoder.dispose();
 });
 
-async function integration(initial: NekSessionEntry[] = []) {
+async function integration(initial: NekSessionEntry[] = [], wrongTargetView = false) {
   const entries = [...initial];
   const summary = { ...historySummary, id: sessionId, path: sessionPath };
-  const transport = createProcess((command) => fixtureHistory(entries, command, summary));
+  const transport = createProcess((command) => {
+    const result = fixtureHistory(entries, command, summary);
+    return wrongTargetView && command.type === "read_history_page" && command.view === "target"
+      ? { ...(result as NekHistoryPage), view: "entries" }
+      : result;
+  });
   const projector = new NekConversationProjector({ sessionId, streamFlushIntervalMs: 100000 });
   const record: NekSessionRecord = {
     key: sessionPath,
@@ -358,7 +363,7 @@ test("LS1: writable negotiation precedes bootstrap; replies/UI/auth route withou
     assert.equal(h.stream.failed, false);
     const old = {
       ...h.transport.process,
-      guiInfo: { ...guiInfo, capabilities: { historyPages: 1 as const } },
+      guiInfo: { ...guiInfo, capabilities: { historyPages: 2 as const } },
     };
     const record = { ...h.record, process: old };
     const stream = new NekHistoryStreamSession(record, old, () => {});
@@ -369,13 +374,22 @@ test("LS1: writable negotiation precedes bootstrap; replies/UI/auth route withou
   }
 });
 
-test("LS3/LS4/LS8: two turns with tool/custom interleaving preserve text/arguments, canonical IDs and incremental deltas", async () => {
+test("HT2/LS3/LS4/LS8: target locators reconcile tool output and user images with 8 MiB reads", async () => {
   const h = await integration();
   try {
     h.event({ type: "agent_start" });
     h.event({ type: "message_start", message: { role: "user", timestamp: 1 } }, body);
     assert.equal(h.projector.rows.window.filter((r) => r.kind === "userInput").length, 0);
-    await h.append(stored("u1", null, { role: "user", timestamp: 1, content: "same" }));
+    await h.append(
+      stored("u1", null, {
+        role: "user",
+        timestamp: 1,
+        content: [
+          { type: "text", text: "same" },
+          { type: "image", mimeType: "image/png", data: "aW1hZ2U=" },
+        ],
+      }),
+    );
     h.event(
       {
         type: "message_start",
@@ -492,7 +506,26 @@ test("LS3/LS4/LS8: two turns with tool/custom interleaving preserve text/argumen
     );
     const finalTool = rows.find((r) => r.kind === "toolCall");
     assert.ok(finalTool?.kind === "toolCall");
+    assert.equal(
+      finalTool.rowId,
+      tool.rowId,
+      "persisted tool output updates the existing live tool row",
+    );
     assert.equal(finalTool.output?.text, "full result");
+    const user = rows.find((row) => row.kind === "userInput" && row.entityId === "entry:u1:user");
+    assert.equal(user?.kind === "userInput" && user.attachments?.length, 1);
+    const targets = h.transport.commands.filter(
+      (command) => command.type === "read_history_page" && command.aroundEntryId,
+    );
+    assert.ok(targets.length > 0);
+    assert.ok(
+      targets.every((command) => command.view === "target" && command.maxBytes === 8 * 1024 * 1024),
+    );
+    assert.ok(
+      h.transport.commands
+        .filter((command) => command.type === "read_history_page" && command.view === "summary")
+        .every((command) => command.maxBytes === 1024 * 1024),
+    );
     assert.deepEqual(finalTool.liveResult, { structuredContent: { count: 1 }, terminate: true });
     const reads = h.transport.commands.filter(
       (c) => c.type === "read_history_page" && c.aroundEntryId === "a2",
@@ -521,6 +554,26 @@ test("LS3/LS4/LS8: two turns with tool/custom interleaving preserve text/argumen
         rows,
       );
     }
+  } finally {
+    await h.close();
+  }
+});
+
+test("HT2: a live locator rejects entries-view replies instead of treating them as target slices", async () => {
+  const h = await integration(
+    [stored("u1", null, { role: "user", timestamp: 1, content: "first" })],
+    true,
+  );
+  try {
+    await h.append(
+      stored("a1", "u1", assistant([{ type: "text", text: "must not partially render" }])),
+    );
+    assert.equal(h.stream.failed, true);
+    assert.match(h.projector.snapshot().control.lastError?.message ?? "", /target page/);
+    assert.equal(
+      h.projector.rows.window.some((row) => row.kind === "assistantText"),
+      false,
+    );
   } finally {
     await h.close();
   }

@@ -15,6 +15,7 @@ import {
   historyResult,
   requireHistoryPages,
   HISTORY_RPC_MAX_BYTES,
+  HISTORY_PAGE_MAX_BYTES,
   NekHistoryReadError,
 } from "./nekHistoryRpc.js";
 import { findNekUserFile } from "../projection/nekUserFiles.js";
@@ -180,7 +181,11 @@ function makeHistoryReader(
 ): NekHistoryReadContext["read"] {
   return async <C extends NekHistoryCommand>(command: C) => {
     validate();
-    const wire = await client.call({ ...command, sessionPath, maxBytes: HISTORY_RPC_MAX_BYTES });
+    const maxBytes =
+      command.type === "read_history_page" && command.view !== "summary"
+        ? HISTORY_PAGE_MAX_BYTES
+        : HISTORY_RPC_MAX_BYTES;
+    const wire = await client.call({ ...command, sessionPath, maxBytes });
     // Generic discriminated command/result correlation is enforced by the shared wire map.
     const result = historyResult(wire as NekHistoryResult<NekHistoryIdentity>);
     validate();

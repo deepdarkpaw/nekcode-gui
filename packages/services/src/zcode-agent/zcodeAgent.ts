@@ -66,13 +66,9 @@ import type {
   V4ConversationRowsRangeResult,
   ConversationHistory,
   ConversationHistoryPageOptions,
-  ConversationHistoryTurnOptions,
   ConversationHistoryDirectoryOptions,
-  ConversationHistoryContentOptions,
   V4ConversationHistoryPageResult,
-  V4ConversationHistoryTurnResult,
   V4ConversationHistoryDirectoryResult,
-  V4ConversationHistoryContentResult,
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
   V4SessionsIndexSubscribeResult,
@@ -188,12 +184,8 @@ export interface ZCodeAgentConversationHistoryTarget extends ZCodeAgentSessionTa
 }
 export interface ZCodeAgentConversationHistoryPageParams
   extends ZCodeAgentConversationHistoryTarget, ConversationHistoryPageOptions {}
-export interface ZCodeAgentConversationHistoryTurnParams
-  extends ZCodeAgentConversationHistoryTarget, ConversationHistoryTurnOptions {}
 export interface ZCodeAgentConversationHistoryDirectoryParams
   extends ZCodeAgentConversationHistoryTarget, ConversationHistoryDirectoryOptions {}
-export interface ZCodeAgentConversationHistoryContentParams
-  extends ZCodeAgentConversationHistoryTarget, ConversationHistoryContentOptions {}
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
 
@@ -627,15 +619,9 @@ export interface IZCodeAgentService {
   conversationHistoryPageV4(
     params: ZCodeAgentConversationHistoryPageParams,
   ): Promise<V4ConversationHistoryPageResult>;
-  conversationHistoryTurnV4(
-    params: ZCodeAgentConversationHistoryTurnParams,
-  ): Promise<V4ConversationHistoryTurnResult>;
   conversationHistoryDirectoryV4(
     params: ZCodeAgentConversationHistoryDirectoryParams,
   ): Promise<V4ConversationHistoryDirectoryResult>;
-  conversationHistoryContentV4(
-    params: ZCodeAgentConversationHistoryContentParams,
-  ): Promise<V4ConversationHistoryContentResult>;
   /** Legacy loaded-window query only. Nek source history uses the explicit history APIs above. */
   conversationRowsRangeV4(
     params: ZCodeAgentConversationRowsRangeParams,

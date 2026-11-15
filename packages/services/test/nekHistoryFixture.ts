@@ -50,7 +50,6 @@ export function fixtureHistory(
           ? entry.message.content.slice(0, 256)
           : "",
       entry: { ...entry },
-      omissions: [],
     };
   });
   const turns: NekHistoryTurn[] = [];
@@ -96,7 +95,7 @@ export function fixtureHistory(
   }
   if (command.type === "read_history_page") {
     const query = command as Extract<NekRpcCommand, { type: "read_history_page" }>;
-    const limit = query.turnLimit ?? 20;
+    const limit = query.view === "target" ? 1 : (query.turnLimit ?? 20);
     let start = Math.max(0, turns.length - limit);
     if (query.beforeCursor) start = Math.max(0, Number(query.beforeCursor) - limit);
     if (query.afterCursor) start = Number(query.afterCursor);
@@ -120,12 +119,17 @@ export function fixtureHistory(
               ...turn,
               headerEntryId: header.id,
               headerPosition: header.position,
-              continuationCursor: `full:${turn.id}`,
             })),
           }
         : {
+            view: query.view === "target" ? "target" : "entries",
             turns: selected,
-            entries: sources.filter((source) => selected.some((turn) => turn.id === source.turnId)),
+            entries: sources.filter((source) =>
+              query.view === "target"
+                ? source.id === query.aroundEntryId ||
+                  selected.some((turn) => turn.header.id === source.id)
+                : selected.some((turn) => turn.id === source.turnId),
+            ),
             seed: {},
           }),
       olderCursor: start > 0 ? String(start) : undefined,

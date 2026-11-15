@@ -38,22 +38,9 @@ const publishInput = {
 const historyError = (code: string) => (error: unknown) =>
   error instanceof ConversationShareHistoryError && error.historyCode === code;
 
-/** Canonical source IDs and sparse chronological row IDs survive request-local continuations. */
-test("SH1/SH3: selected reverse-order turn IDs read only those turns/continuations and merge repeated headers by stable identity", async () => {
+/** Canonical source IDs and sparse chronological row IDs survive complete-turn page reads. */
+test("SH1/SH3: selected reverse-order turn IDs retain only the selected complete turns in source order", async () => {
   const h = historyFixture();
-  const original = h.agent.conversationHistoryTurnV4;
-  h.agent.conversationHistoryTurnV4 = async (input) => {
-    const result = await original(input);
-    if (input.turnId !== turnId(60)) return result;
-    return input.cursor
-      ? { ...result, rows: [result.rows[0]!, result.rows[2]!] }
-      : {
-          ...result,
-          rows: result.rows.slice(0, 2),
-          hasMore: true,
-          continuationCursor: "selected-details",
-        };
-  };
   const requested = {
     kind: "productTurns" as const,
     productTurnIds: [turnId(60), turnId(2), turnId(60)],
@@ -79,47 +66,14 @@ test("SH1/SH3: selected reverse-order turn IDs read only those turns/continuatio
     read.rows.filter((row) => row.kind === "turnHeader").map((row) => row.productTurnId),
     [turnId(2), turnId(60)],
   );
-  assert.equal(h.calls.length, 3);
-  assert.ok(h.calls.every((call) => call.method === "turn"));
-  assert.deepEqual(
-    h.calls.map((call) => call.input.cursor),
-    [undefined, "selected-details", undefined],
-  );
+  assert.equal(h.calls.length, 4);
+  assert.ok(h.calls.every((call) => call.method === "page"));
   assert.equal(JSON.stringify(h.rows), before);
   const content = await exportedRows(h.service, requested);
   assert.deepEqual(
     content.rows.filter((row) => row.kind === "userInput").map((row) => row.text),
     ["Question 3", "Question 61"],
   );
-});
-
-test("SH2/SH3: all-source pages follow a turn's advertised continuation without rereading the first turn slice", async () => {
-  const h = historyFixture();
-  const originalPage = h.agent.conversationHistoryPageV4;
-  h.agent.conversationHistoryPageV4 = async (input) => {
-    const page = await originalPage(input);
-    if (input.beforeCursor) return page;
-    return {
-      ...page,
-      rows: page.rows.filter((row) => row.entityId !== "entry:a61"),
-      history: {
-        ...page.history,
-        turns: page.history.turns.map((turn) =>
-          turn.turnId === turnId(60) ? { ...turn, continuationCursor: "all-details" } : turn,
-        ),
-      },
-    };
-  };
-  const originalTurn = h.agent.conversationHistoryTurnV4;
-  h.agent.conversationHistoryTurnV4 = async (input) => {
-    assert.equal(input.cursor, "all-details");
-    const result = await originalTurn(input);
-    return { ...result, rows: [result.rows[0]!, result.rows[2]!] };
-  };
-  const content = await exportedRows(h.service, { kind: "all" });
-  assert.equal(content.rows.filter((row) => row.kind === "turnHeader").length, 70);
-  assert.equal(content.rows.filter((row) => row.kind === "assistantText").length, 70);
-  assert.equal(h.calls.filter((call) => call.method === "turn").length, 1);
 });
 
 for (const field of [
@@ -198,18 +152,6 @@ for (const mode of [
   });
 }
 
-test("SH1/SH2/SH6: a turn continuation that changes its cursor but supplies no new/changed body is rejected", async () => {
-  const h = historyFixture();
-  const original = h.agent.conversationHistoryTurnV4;
-  h.agent.conversationHistoryTurnV4 = async (input) => ({
-    ...(await original(input)),
-    hasMore: true,
-    continuationCursor: input.cursor ? "another-but-empty" : "first-details",
-  });
-  await assert.rejects(exportedRows(h.service, selection), historyError("history_invalid_page"));
-  assert.equal(h.calls.length, 2);
-});
-
 test("SH2/SH6: source row/selection/metadata limits reject before collecting unbounded arrays", async () => {
   const h = historyFixture();
   const original = h.agent.conversationHistoryPageV4;
@@ -237,8 +179,8 @@ test("SH2/SH6: source row/selection/metadata limits reject before collecting unb
 
 test("SH2/SH6: an oversized source row batch rejects before it can enter the request-local collector", async () => {
   const h = historyFixture();
-  const original = h.agent.conversationHistoryTurnV4;
-  h.agent.conversationHistoryTurnV4 = async (input) => {
+  const original = h.agent.conversationHistoryPageV4;
+  h.agent.conversationHistoryPageV4 = async (input) => {
     const result = await original(input);
     return {
       ...result,
@@ -260,8 +202,8 @@ test("SH2/SH6: an oversized source row batch rejects before it can enter the req
 test("SH2/SH3: missing canonical product identity or reordered source rows block instead of fabricating IDs/order", async () => {
   for (const mutation of ["missing-product", "reordered"] as const) {
     const h = historyFixture();
-    const original = h.agent.conversationHistoryTurnV4;
-    h.agent.conversationHistoryTurnV4 = async (input) => {
+    const original = h.agent.conversationHistoryPageV4;
+    h.agent.conversationHistoryPageV4 = async (input) => {
       const result = await original(input);
       return mutation === "missing-product"
         ? { ...result, rows: result.rows.map((row) => ({ ...row, productTurnId: undefined })) }
@@ -323,8 +265,8 @@ test("SH2/SH6: one read deadline covers earlier pages and a hanging later page; 
 test("SH2: bounded admission includes explicit preflights and is shared across connection facades", async () => {
   const h = historyFixture();
   const blocked = gate();
-  const original = h.agent.conversationHistoryTurnV4;
-  h.agent.conversationHistoryTurnV4 = async (input) => {
+  const original = h.agent.conversationHistoryPageV4;
+  h.agent.conversationHistoryPageV4 = async (input) => {
     const result = await original(input);
     await blocked.promise;
     return result;
@@ -370,63 +312,15 @@ test("SH2: preflight slots remain bounded while collected rows wait for artifact
   }
 });
 
-test("SH4/SH5: selected deferred source content is a typed blocking error, never an exported preview/null or public capability", async () => {
-  const h = historyFixture();
-  const body = h.rows.find((row) => row.entityId === "entry:a3")!;
-  Object.assign(body, {
-    historyContent: [
-      {
-        ref: "PRIVATE-HMAC-content",
-        pointer: "/message/content/0/text",
-        totalBytes: 1000,
-        mediaType: "application/json",
-        encoding: "base64",
-        entryId: "PRIVATE-entry",
-      },
-    ],
-  });
-  await assert.rejects(h.service.preflight({ ...target, selection }), (error: unknown) => {
-    assert.ok(error instanceof ConversationShareHistoryError);
-    assert.equal(error.historyCode, "history_content_incomplete");
-    assert.equal(error.details?.diagnostics?.field, "history_content_incomplete");
-    assert.doesNotMatch(JSON.stringify(error), /PRIVATE-HMAC|PRIVATE-entry/);
-    return true;
-  });
-  await assert.rejects(
-    exportedRows(h.service, selection),
-    historyError("history_content_incomplete"),
-  );
-  assert.ok(
-    h.calls.every((call) => call.method === "turn"),
-    "no unsafe source-entry-pointer patching or full-history fallback",
-  );
-  const completeSelection = { kind: "productTurns" as const, productTurnIds: [turnId(60)] };
-  assert.equal(
-    (await exportedRows(h.service, completeSelection)).rows.length,
-    3,
-    "unselected deferred content never forces hydration or blocks another turn",
-  );
-  assert.throws(
-    () =>
-      buildConversationSharePublicProjection({
-        rows: h.rows.filter((row) => row.turnId === turnId(2)),
-        selectedProductTurnIds: [turnId(2)],
-      }),
-    historyError("history_content_incomplete"),
-  );
-});
-
 test("SH3/SH5: public allow-list strips private history metadata/cursors/paths without rewriting selected tool JSON", () => {
   const h = historyFixture(1);
   const rows = structuredClone(h.rows);
   Object.assign(rows[0]!, {
-    historyContent: [],
     history: {
       branchRevision: "PRIVATE-branch",
       olderCursor: "PRIVATE-older",
       sessionPath: "file:///PRIVATE/session",
     },
-    continuationCursor: "PRIVATE-continuation",
   });
   const tool: ConversationRow = {
     ...rows[2]!,
@@ -450,10 +344,7 @@ test("SH3/SH5: public allow-list strips private history metadata/cursors/paths w
     rows,
     selectedProductTurnIds: [turnId(0)],
   });
-  assert.doesNotMatch(
-    JSON.stringify(projected.rows),
-    /PRIVATE|historyContent|Cursor|branchRevision|sessionPath/,
-  );
+  assert.doesNotMatch(JSON.stringify(projected.rows), /PRIVATE|Cursor|branchRevision|sessionPath/);
   assert.equal(JSON.stringify(rows), original);
   const publicTool = projected.rows.find((row) => row.kind === "toolCall");
   assert.ok(publicTool?.kind === "toolCall");
@@ -494,8 +385,8 @@ test("SH1/SH6: default production and attachment scope call the supplied source 
   const facade = host[conversationShareConnectionScopeFactory](scopedAgent);
   const content = await exportedRows(facade, selection);
   assert.equal(content.rows.length, 3);
-  assert.deepEqual(methods, ["conversationHistoryTurnV4"]);
-  assert.deepEqual(h.calls[0]?.input, { ...target, turnId: turnId(2) });
+  assert.deepEqual(methods, Array(4).fill("conversationHistoryPageV4"));
+  assert.deepEqual(h.calls[0]?.input, { ...target, turnLimit: 20 });
 });
 
 test("SH2/SH6: unsupported source RPC fails explicitly and never falls back through a ProxyChannel-shaped legacy member", async () => {

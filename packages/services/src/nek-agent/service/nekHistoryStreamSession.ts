@@ -6,7 +6,12 @@ import {
 } from "../nekHistoryStreamDecoder.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
 import type { NekSessionRecord } from "./types.js";
-import { historyResult, HISTORY_RPC_MAX_BYTES, requireHistoryPages } from "./nekHistoryRpc.js";
+import {
+  historyResult,
+  HISTORY_RPC_MAX_BYTES,
+  HISTORY_PAGE_MAX_BYTES,
+  requireHistoryPages,
+} from "./nekHistoryRpc.js";
 
 /** Input is admitted only with coherent writable history; explicit stop/abort has no such gate. */
 export function assertNekHistoryInputReady(record: NekSessionRecord): void {
@@ -313,16 +318,20 @@ export class NekHistoryStreamSession {
           await this.process.client.call(
             {
               type: "read_history_page",
+              view: "target",
               aroundEntryId: event.entryId,
               turnLimit: 1,
-              maxBytes: HISTORY_RPC_MAX_BYTES,
+              maxBytes: HISTORY_PAGE_MAX_BYTES,
             },
             { signal: this.reads.signal },
           ),
         );
         if (!this.current(generation)) return;
-        if (page.sessionId !== this.record.sessionId)
-          throw new NekHistoryStreamError("LOCATOR", "target page belongs to another session");
+        if (page.view !== "target" || page.sessionId !== this.record.sessionId)
+          throw new NekHistoryStreamError(
+            "LOCATOR",
+            "CLI must return a target page for this session; update nek",
+          );
         this.record.projector!.applyHistoryTarget(page, event.entryId);
         this.seen.add(event.entryId);
         if (this.seen.size > 4096) this.seen.delete(this.seen.values().next().value!);

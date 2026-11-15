@@ -39,11 +39,13 @@ export async function forkUserMessage(
       async (history) => {
         const page = await history.read({
           type: "read_history_page",
+          view: "target",
           aroundEntryId: match[1],
           turnLimit: 1,
         });
         const user = page.turns.find((turn) => turn.userEntryId === match[1])?.header;
         return (
+          page.view === "target" &&
           user?.role === "user" &&
           user.id === match[1] &&
           historyRowId(user.position, 1) === rowTarget?.rowId &&
