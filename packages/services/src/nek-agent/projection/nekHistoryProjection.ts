@@ -123,6 +123,8 @@ export function projectHistory(input: {
   entries: NekHistoryEntry[];
   nekState?: NekState;
   seed?: NekHistorySelection;
+  /** Live target projection: a repeated non-user header is context, not a new selection fact. */
+  targetEntryId?: string;
   anchors?: readonly ConversationRow[];
 }): ConversationRow[] {
   const result = new Map<number, ConversationRow>();
@@ -134,7 +136,11 @@ export function projectHistory(input: {
   };
   for (const turn of input.turns) {
     const byId = new Map([
-      [turn.header.id, turn.header],
+      ...(!input.targetEntryId ||
+      turn.header.id === input.targetEntryId ||
+      turn.header.role === "user"
+        ? [[turn.header.id, turn.header] as const]
+        : []),
       ...input.entries
         .filter((entry) => entry.turnId === turn.id)
         .map((entry) => [entry.id, entry] as const),

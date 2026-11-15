@@ -662,9 +662,10 @@ test("LS7: disconnect during an unfinished chunk is a visible retryable history 
   }
 });
 
-test("LS6: bounded locator slice discards future persisted bodies and summary waits for the live checkpoint", async () => {
+test("LS6/LCB2: locator publishes only its observed turn; future bodies and source proofs wait for the checkpoint", async () => {
   const h = await integration();
   try {
+    const before = h.projector.snapshot().history!;
     h.entries.push(
       stored("u", null, { role: "user", timestamp: 1, content: "hello" }),
       stored("a", "u", assistant([{ type: "text", text: "future" }])),
@@ -682,11 +683,10 @@ test("LS6: bounded locator slice discards future persisted bodies and summary wa
     assert.ok(
       !h.projector.rows.window.some((r) => r.kind === "assistantText" && r.text === "future"),
     );
-    assert.equal(
-      h.projector.snapshot().history!.totalTurns,
-      0,
-      "future source identity cannot advance emitted metadata",
-    );
+    const observed = h.projector.snapshot().history!;
+    assert.equal(observed.totalTurns, 1, "the consumed user locator owns one real turn");
+    assert.equal(observed.branchRevision, before.branchRevision);
+    assert.equal(observed.observationCursor, before.observationCursor);
     h.wire({
       type: "history_entry_appended",
       sessionPath,

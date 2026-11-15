@@ -26,6 +26,7 @@
 /.worktree/
 
 # 构建产物（packages/desktop/build/ 是打包图标与安装脚本源文件，保留）
+/release/
 build/
 !packages/desktop/build/
 dist/

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { ConversationHistory } from "@zcode/shared/zcode-protocol-v4";
 import type { HistoryViewportAnchor } from "./conversationHistoryBoundary.js";
+import { HISTORY_BOUNDARY_REFRESH_REQUIRED } from "./conversationHistoryWindow.js";
 import type { ConversationProjectionStore } from "./conversationProjectionStore.js";
 import type { ConversationTurnDirectory } from "./ConversationTurnNavigator.js";
 import { useConversationHistoryDirectory } from "./useConversationHistoryDirectory.js";
@@ -69,10 +70,12 @@ export function useConversationHistoryControls(
   );
   const resyncHistory = useCallback(() => store?.resyncHistory(), [store]);
   const retry = useCallback(async () => {
+    if (store?.getState().historyError === HISTORY_BOUNDARY_REFRESH_REQUIRED)
+      return await run(() => store.loadLatest());
     const previous = lastAction.current;
     if (previous && previous.store === store) return await previous.run();
     return await store?.loadOlder();
-  }, [store]);
+  }, [run, store]);
   return useMemo(
     () =>
       history

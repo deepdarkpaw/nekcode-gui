@@ -61,7 +61,7 @@ export function fixtureHistory(
     turns.push({
       id: source.turnId,
       userEntryId: source.role === "user" ? source.id : null,
-      position: source.position,
+      position: turns.length,
       preview: source.preview,
       entryCount: 1,
       header: source,

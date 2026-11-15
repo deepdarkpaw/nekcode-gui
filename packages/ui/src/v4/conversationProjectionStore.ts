@@ -1233,7 +1233,11 @@ export class ConversationProjectionStore {
     options: ConversationHistoryPageOptions = {},
   ): Promise<V4ConversationHistoryPageResult | null> {
     const snapshot = this.state.snapshot;
-    if (this.closed || this.historyFlight || !snapshot?.history) return null;
+    if (this.closed || !snapshot?.history) return null;
+    // Explicit back-to-latest retires an older navigation flight; a slow page must not
+    // trap the user in the old window. The owner fence rejects its eventual response.
+    if (this.historyFlight && (direction !== "latest" || this.state.historyRequest === "latest"))
+      return null;
     if (!historyHasEdge(snapshot.history, direction)) return null;
     if (direction === "latest") this.invalidateHistory();
     return this.runHistoryRequest(direction, async (flight) => {

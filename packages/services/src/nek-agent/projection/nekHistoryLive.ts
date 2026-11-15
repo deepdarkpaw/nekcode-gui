@@ -1,12 +1,15 @@
 import type {
   NekHistoryEntry,
   NekHistoryPage,
+  NekHistorySelection,
   NekHistoryTurn,
   NekSessionEntry,
 } from "@zcode/shared/nek-protocol";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { projectHistory } from "./nekHistoryProjection.js";
+import { validateHistoryDisplay } from "./nekHistoryDisplay.js";
+import { advanceHistorySelection } from "./nekSelectionMarkers.js";
 
 /** Only the current owning header is retained; no complete source history or message cache. */
 export interface NekHistoryLiveSource {
@@ -14,14 +17,21 @@ export interface NekHistoryLiveSource {
   baseEntries: number;
   leafId: string | null;
   turn?: NekHistoryTurn;
+  /** Tiny checkpoint at nextPosition, advanced only by contiguous persisted entries. */
+  selection: NekHistorySelection;
   aliases: Map<string, string>;
 }
 export function historyLiveSource(page: NekHistoryPage): NekHistoryLiveSource {
+  const selection = page.entries.reduce(
+    (previous, source) => advanceHistorySelection(previous, validateHistoryDisplay(source.entry)),
+    page.seed,
+  );
   return {
     nextPosition: page.totalEntries,
     baseEntries: page.totalEntries,
     leafId: page.leafId,
     turn: page.turns.at(-1),
+    selection,
     aliases: new Map(),
   };
 }
@@ -100,6 +110,8 @@ export function reconcileHistoryAppend(
     sessionId: ctx.store.sessionId,
     turns: [turn],
     entries: [display],
+    targetEntryId: entry.id,
+    seed: source.selection,
     anchors: ctx.historyAnchors?.() ?? oldRows,
   });
   const aliases = new Map<string, string>();
@@ -157,6 +169,7 @@ export function reconcileHistoryAppend(
   const retained = new Set([...merged.values()].map((row) => row.entityId));
   for (const [alias, entity] of source.aliases)
     if (!retained.has(entity)) source.aliases.delete(alias);
+  source.selection = advanceHistorySelection(source.selection, entry);
   source.nextPosition += 1;
   source.leafId = entry.id;
   source.turn = turn;

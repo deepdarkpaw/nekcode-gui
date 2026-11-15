@@ -22,6 +22,7 @@ import {
 } from "./nekHistoryLive.js";
 import { historyMetadata, projectHistory } from "./nekHistoryProjection.js";
 import { preserveObservedTiming } from "./nekObservedTiming.js";
+import { advanceHistorySelection } from "./nekSelectionMarkers.js";
 import { buildConfigState, buildControlState, planFromNekState } from "./nekProjectionSnapshot.js";
 import {
   boundHistoryResult,
@@ -74,7 +75,33 @@ export class NekProjectorHistory {
 
   applyTarget(page: NekHistoryPage, entryId: string, ctx: NekLiveContext): void {
     if (!this.source) throw new Error("history source is not bootstrapped");
-    this.stream.target(this.source, page, entryId, ctx);
+    const turn = this.stream.target(this.source, page, entryId, ctx);
+    if (!turn || !this.metadata) return;
+    // Publish the verified owning turn with its rows, not after a later summary RPC.
+    // The target read may see an unconsumed persisted tail: its page-wide capabilities
+    // cannot advance our observed branch/observation proof or navigation cursors.
+    const [descriptor] = historyMetadata({ ...page, turns: [turn] }).turns;
+    const turns = [
+      ...this.metadata.turns.filter((item) => item.position !== turn.position),
+      descriptor!,
+    ]
+      .sort((a, b) => a.position - b.position)
+      .slice(-20);
+    this.metadata = {
+      ...this.metadata,
+      totalTurns: Math.max(this.metadata.totalTurns, turn.position + 1),
+      turns,
+      // A cursor belongs to its exact edge, not to a shifting 20-turn summary window.
+      olderCursor:
+        turns[0]!.turnId === this.metadata.turns[0]?.turnId ? this.metadata.olderCursor : undefined,
+      newerCursor:
+        turns.at(-1)!.turnId === this.metadata.turns.at(-1)?.turnId
+          ? this.metadata.newerCursor
+          : undefined,
+      hasOlder: turns[0]!.position > 0,
+      hasNewer: false,
+    };
+    ctx.store.setHistory(this.metadata);
   }
 
   applySummary(page: NekHistorySummaryPage, store: NekProjectionStore): boolean {
@@ -237,6 +264,7 @@ export class NekProjectorHistory {
     if (event.entry.type !== "message") {
       if (event.entry.parentId !== this.source.leafId)
         throw new Error("nek history branch changed; bounded snapshot rebuild required");
+      this.source.selection = advanceHistorySelection(this.source.selection, event.entry);
       this.source.nextPosition += 1;
       this.source.leafId = event.entry.id;
       return;
@@ -270,7 +298,7 @@ export class NekProjectorHistory {
           {
             turnId: `turn:${event.entry.id}`,
             userEntryId: event.entry.id,
-            position: this.source.nextPosition - 1,
+            position: this.metadata.totalTurns,
             preview:
               typeof event.entry.message.content === "string"
                 ? event.entry.message.content.slice(0, 256)

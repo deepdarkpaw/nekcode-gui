@@ -1,5 +1,6 @@
 import type {
   NekHistoryPage,
+  NekHistoryTurn,
   NekHistoryStreamOmission,
   NekRpcEvent,
   NekAssistantMessage,
@@ -12,6 +13,7 @@ import { applyCompactionEnd } from "./nekLiveMarkers.js";
 import { projectHistory } from "./nekHistoryProjection.js";
 import { validateHistoryDisplay } from "./nekHistoryDisplay.js";
 import { withNekModelSelection } from "./nekProjectionSnapshot.js";
+import { advanceHistorySelection } from "./nekSelectionMarkers.js";
 import type { NekHistoryLiveSource } from "./nekHistoryLive.js";
 
 const LIVE_OMISSIONS: Record<string, string[]> = {
@@ -157,7 +159,7 @@ export class NekHistoryStreamProjection {
     page: NekHistoryPage,
     entryId: string,
     ctx: NekLiveContext,
-  ): void {
+  ): NekHistoryTurn | undefined {
     const target = page.entries.find((entry) => entry.id === entryId);
     if (!target)
       throw new Error("history locator target missing from bounded around slice; update nek");
@@ -202,6 +204,8 @@ export class NekHistoryStreamProjection {
       sessionId: ctx.store.sessionId,
       turns: [turn],
       entries: [target],
+      targetEntryId: target.id,
+      seed: source.selection,
       anchors: ctx.historyAnchors?.() ?? oldRows,
     });
     if (assistantKey)
@@ -299,8 +303,10 @@ export class NekHistoryStreamProjection {
       });
     if (entry.type === "session_info" && typeof entry.name === "string")
       ctx.store.setState({ title: entry.name });
+    source.selection = advanceHistorySelection(source.selection, entry);
     source.nextPosition = target.position + 1;
     source.leafId = target.id;
     source.turn = turn;
+    return turn;
   }
 }

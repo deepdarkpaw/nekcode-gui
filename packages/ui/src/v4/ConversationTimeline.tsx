@@ -50,6 +50,7 @@ import { ConversationTurnRenderUnitCache } from "@/v4/conversationTurnRenderUnit
 import type { ConversationHistoryControls } from "./useConversationHistoryControls.js";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { ConversationHistoryHeader } from "./ConversationHistoryHeader.js";
+import { HISTORY_BOUNDARY_REFRESH_REQUIRED } from "./conversationHistoryWindow.js";
 import {
   resolveAdjacentConversationTurnQuery,
   resolveConversationTurnNavigatorActiveQueryRowId,
@@ -483,6 +484,7 @@ function ConversationTimelineImpl({
   const historyScopeRef = useRef(sessionKey);
   historyScopeRef.current = sessionKey;
   const historyJumpGeneration = useRef(0);
+  const historyLatestFlightRef = useRef<{ scope: string } | null>(null);
   const historyJumpRef = useRef<{ scope: string; turnId?: string; bottom?: true } | null>(null);
   const [historyJumpRevision, setHistoryJumpRevision] = useState(0);
   const [historyNavigationError, setHistoryNavigationError] = useState<string | null>(null);
@@ -491,6 +493,11 @@ function ConversationTimelineImpl({
       const controls = historyControlsRef.current;
       if (!controls) return;
       const scope = historyScopeRef.current;
+      // A repeated bottom click must not cancel the first pending jump when the store
+      // rejects duplicate latest reads. A different scope can start its own flight.
+      if (target === "latest" && historyLatestFlightRef.current?.scope === scope) return;
+      const latestFlight = target === "latest" ? { scope } : null;
+      if (latestFlight) historyLatestFlightRef.current = latestFlight;
       const generation = ++historyJumpGeneration.current;
       setHistoryNavigationError(null);
       try {
@@ -509,6 +516,9 @@ function ConversationTimelineImpl({
       } catch (error) {
         if (historyScopeRef.current === scope && historyJumpGeneration.current === generation)
           setHistoryNavigationError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (latestFlight && historyLatestFlightRef.current === latestFlight)
+          historyLatestFlightRef.current = null;
       }
     },
     [],
@@ -1265,7 +1275,8 @@ function ConversationTimelineImpl({
   ]);
 
   const handleBackToBottom = useCallback(() => {
-    if (historyControlsRef.current?.history.hasNewer) {
+    const controls = historyControlsRef.current;
+    if (controls?.history.hasNewer || controls?.error === HISTORY_BOUNDARY_REFRESH_REQUIRED) {
       void navigateHistory("latest");
       return;
     }

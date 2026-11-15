@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useConversationHistoryControls } from "./useConversationHistoryControls.js";
-import { liveStore } from "./liveHistoryRenderer.testFixtures.js";
+import { livePage, liveRow, liveStore } from "./liveHistoryRenderer.testFixtures.js";
+import { HISTORY_BOUNDARY_REFRESH_REQUIRED } from "./conversationHistoryWindow.js";
 import type { ConversationProjectionStore } from "./conversationProjectionStore.js";
 vi.mock("@/logger.js", () => ({
   logger: { warn: vi.fn(), debug: vi.fn(), lifecycle: { info: vi.fn(), warn: vi.fn() } },
@@ -24,6 +25,27 @@ afterEach(async () => {
   cleanup();
   await Promise.all(stores.splice(0).map((store) => store.close()));
   vi.restoreAllMocks();
+});
+
+it("LCB4: the boundary error Retry action refreshes latest instead of repeating a missing cursor read", async () => {
+  const h = await liveStore();
+  stores.push(h.store);
+  h.send(
+    Array.from({ length: 130 }, (_, index) => ({ op: "row.appended", row: liveRow(index + 20) })),
+  );
+  expect(h.store.getState().historyError).toBe(HISTORY_BOUNDARY_REFRESH_REQUIRED);
+  h.transport.historyPage.mockResolvedValueOnce(h.atCurrent(livePage(130, 150)));
+  const { result } = renderHook(() => useConversationHistoryControls(h.store));
+  await act(async () => {
+    await result.current!.retry();
+  });
+  expect(h.transport.historyPage).toHaveBeenCalledExactlyOnceWith({
+    sessionId: "parent",
+    turnLimit: 20,
+  });
+  expect(h.store.getState().historyError).toBeNull();
+  expect(h.store.getState().snapshot!.rows.window.at(-1)!.turnId).toBe("turn:149");
+  expect(h.transport.sendCommand).not.toHaveBeenCalled();
 });
 
 it("LR4/LR5/LR6: viewport and history-only resync callbacks are stable, scope-bound and never run during render", async () => {

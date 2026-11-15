@@ -65,7 +65,19 @@ export function historyEdges(
   const loaded = new Set(rows.map((row) => row.turnId));
   const ordered = history.turns.filter((turn) => loaded.has(turn.turnId));
   const selected = anchor ? ordered.findIndex((turn) => turn.turnId === anchor) : -1;
-  if (anchor && loaded.has(anchor) && selected < 0) return { older: undefined, newer: undefined };
+  if (anchor && loaded.has(anchor) && selected < 0) {
+    // A live start/target can publish its rows before source metadata arrives. Reading that
+    // pending tail does not retire the adjacent, proven latest segment's navigation. Never
+    // cross an unloaded source gap or invent a descriptor/cursor for the unindexed turn.
+    const tail = ordered.at(-1);
+    if (
+      !tail ||
+      tail.position + 1 !== history.totalTurns ||
+      rows.findIndex((row) => row.turnId === anchor) <=
+        rows.findLastIndex((row) => row.turnId === tail.turnId)
+    )
+      return { older: undefined, newer: undefined };
+  }
   let left = selected >= 0 ? selected : ordered.length - 1;
   let right = left;
   while (left > 0 && ordered[left]!.position === ordered[left - 1]!.position + 1) left--;
