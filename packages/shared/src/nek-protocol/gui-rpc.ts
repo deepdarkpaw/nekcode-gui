@@ -19,7 +19,7 @@ import { compareSemverVersions } from "../forceUpdate.js";
 export const NEK_GUI_PROTOCOL_VERSION = 1;
 
 /** Bounded history pages, append observations and the negotiated live stream ship together in this release. */
-export const NEK_GUI_MIN_VERSION = "0.5.1-beta.2";
+export const NEK_GUI_MIN_VERSION = "0.5.1-beta.3";
 
 export function isNekGuiVersionSupported(version: unknown): boolean {
   if (typeof version !== "string") return false;

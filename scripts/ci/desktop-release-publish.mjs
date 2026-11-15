@@ -23,7 +23,7 @@ const PLATFORM_DOWNLOADS = {
  * （`desktop-release-publish.test.mjs` 会读取源码比对）：这里不能 import TS，否则 CI 的
  * `node --test scripts/ci/*.test.mjs` 在没有 tsx 的情况下无法加载。
  */
-export const REQUIRED_NEK_VERSION = "0.5.1-beta.2";
+export const REQUIRED_NEK_VERSION = "0.5.1-beta.3";
 
 /** 首次打开未签名安装包的操作提示。 */
 const UNSIGNED_HINTS = {

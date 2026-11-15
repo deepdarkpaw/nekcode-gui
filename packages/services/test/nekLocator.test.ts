@@ -21,7 +21,7 @@ import type { NekLocatorDeps } from "../src/nek-agent/nekLocator.js";
 function guiInfo(overrides: Partial<NekGuiInfo> = {}): NekGuiInfo {
   return {
     protocolVersion: 1,
-    nekVersion: "0.5.1-beta.2",
+    nekVersion: "0.5.1-beta.3",
     piVersion: "1.0.2",
     node: { path: "/usr/bin/node", version: "v24.0.0" },
     launch: { args: ["/opt/nek/cli.js"] },
@@ -84,7 +84,7 @@ test("finds nek on PATH (Windows tries .cmd first)", async () => {
   const locator = new NekLocator(deps);
   const result = await locator.locate();
   assert.equal(result.launcherPath, "C:\\tools\\nek.cmd");
-  assert.equal(result.info.nekVersion, "0.5.1-beta.2");
+  assert.equal(result.info.nekVersion, "0.5.1-beta.3");
   // .cmd 必须经 cmd.exe /d /s /c，整条命令行再包一层引号（/s 会去掉它），并原样传递参数。
   assert.equal(deps.runs[0]?.file, "C:\\Windows\\cmd.exe");
   assert.deepEqual(deps.runs[0]?.args.slice(0, 3), ["/d", "/s", "/c"]);
@@ -128,7 +128,7 @@ test(
       const deps = { ...createNekLocatorDeps(), env: { ...process.env, PATH: bin } };
       const result = await new NekLocator(deps).locate();
       assert.equal(result.launcherPath, join(bin, "nek.cmd"));
-      assert.equal(result.info.nekVersion, "0.5.1-beta.2");
+      assert.equal(result.info.nekVersion, "0.5.1-beta.3");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -183,7 +183,7 @@ test("a configured path wins and a missing configured path is not_found", async 
   );
 });
 
-for (const version of ["0.4.2", "0.4.3", "0.5.0", "0.5.1-beta.1", "unknown"]) {
+for (const version of ["0.4.2", "0.4.3", "0.5.0", "0.5.1-beta.1", "0.5.1-beta.2", "unknown"]) {
   test(`NV-1: protocol v1 is not sufficient for nek ${version}`, async () => {
     const deps = createDeps({
       files: ["/bin/nek"],
@@ -195,7 +195,7 @@ for (const version of ["0.4.2", "0.4.3", "0.5.0", "0.5.1-beta.1", "unknown"]) {
       assert.ok(error instanceof NekLocatorError);
       assert.equal(error.code, "incompatible");
       assert.equal(error.detail?.actualNekVersion, version);
-      assert.equal(error.detail?.requiredNekVersion, "0.5.1-beta.2");
+      assert.equal(error.detail?.requiredNekVersion, "0.5.1-beta.3");
       return true;
     });
     deps.payload = guiInfo({ nekVersion: "0.5.1" });
