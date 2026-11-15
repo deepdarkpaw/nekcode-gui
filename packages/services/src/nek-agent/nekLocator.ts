@@ -309,7 +309,7 @@ export class NekLocator {
     if (!isNekGuiVersionSupported(info.nekVersion)) {
       throw new NekLocatorError(
         "incompatible",
-        `nek ${info.nekVersion} cannot provide complete GUI tool streams; update nek to ${NEK_GUI_MIN_VERSION} or newer`,
+        `nek ${info.nekVersion} is not compatible with GUI history paging and live streams; update nek to ${NEK_GUI_MIN_VERSION} or newer`,
         {
           launcherPath,
           actualProtocolVersion: info.protocolVersion,

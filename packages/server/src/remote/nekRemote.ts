@@ -121,7 +121,7 @@ export async function detectRemoteNek(
       info,
       protocolVersion: info.protocolVersion,
       stderrSummary,
-      error: `nek ${info.nekVersion} cannot provide complete GUI tool streams; update nek to ${NEK_GUI_MIN_VERSION} or newer`,
+      error: `nek ${info.nekVersion} is not compatible with GUI history paging and live streams; update nek to ${NEK_GUI_MIN_VERSION} or newer`,
     };
   }
   return { status: "ready", info, protocolVersion: info.protocolVersion, stderrSummary };

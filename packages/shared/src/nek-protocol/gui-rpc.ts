@@ -18,8 +18,8 @@ import { compareSemverVersions } from "../forceUpdate.js";
 /** 协议版本：任何不兼容的改动都要递增。GUI 要求 `protocolVersion === NEK_GUI_PROTOCOL_VERSION`。 */
 export const NEK_GUI_PROTOCOL_VERSION = 1;
 
-/** Protocol v1 before 0.4.3 loses structured tool deltas; the renderer cannot reconstruct them. */
-export const NEK_GUI_MIN_VERSION = "0.4.3";
+/** Bounded history pages, append observations and the negotiated live stream ship together in this release. */
+export const NEK_GUI_MIN_VERSION = "0.5.1-beta.2";
 
 export function isNekGuiVersionSupported(version: unknown): boolean {
   if (typeof version !== "string") return false;
@@ -31,8 +31,8 @@ export function isNekGuiVersionSupported(version: unknown): boolean {
  * `webSearch.provider`（显式 Tavily/Exa 选择）从 nek 0.5.0-beta.1 开始生效。
  *
  * 更早的 nek 完全不读这个字段，web_search 永远走 Exa；把 Tavily 的凭据写过去，
- * 旧版本会在下一次搜索时把 Tavily key 发给 Exa，所以版本门禁只针对这一项能力，
- * 不抬高 GUI 的全局最低版本（0.4.3 的其它配置照常可写）。
+ * 旧版本会在下一次搜索时把 Tavily key 发给 Exa，所以该能力仍独立校验，
+ * 不能只凭主协议版本推断搜索凭据的接收方。
  */
 export const NEK_WEB_SEARCH_PROVIDER_MIN_VERSION = "0.5.0-beta.1";
 
