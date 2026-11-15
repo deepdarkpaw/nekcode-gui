@@ -247,7 +247,7 @@ try {
     "13-long-history",
     async () => {
       const sample = writeLongHistorySession(sandbox);
-      const timing = await checkLongHistory(session);
+      const timing = await checkLongHistory(session, capture);
       console.log(
         `[long-history] bytes=${sample.bytes} firstMs=${timing.firstMs} clicks=${timing.clicks}`,
       );
