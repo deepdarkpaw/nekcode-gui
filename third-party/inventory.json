@@ -224,7 +224,7 @@
     ".agents/skills/react-best-practices/rules/server-parallel-nested-fetching.md": "4d9c44e579e1286013acf5cb5f65b04297d2b68909f44f8163804656514a78ff",
     ".agents/skills/react-best-practices/rules/server-serialization.md": "4d025c42043c56e6355196a2e885d168cdb15248d0797146c9db838a57b34946",
     ".agents/skills/react-best-practices/SKILL.md": "b7d246acb440bee224ab33614979a5b8debe5fdb13d0304967aa19358eb69d9f",
-    "package.json": "64f4e80828d3e542a37d92d3b20c701a80077bb05a2be94008010631cda7f759",
+    "package.json": "e7726b532a881bf89e4c42bd7b7d98d59eff12b214147b90d6130af2221464da",
     "packages/client/package.json": "e76f441549130dc3e5e68072a36b6cb9044e19a6625f1e813f19a4def2b1b689",
     "packages/desktop/package.json": "a9cbf9ab4b5832ee595f59559cf479aac3adb7e9dc9cf30433a29e7e0ddc1132",
     "packages/desktop/src/renderer/public/material-icons/3d.svg": "9527b849f0fba57ca7640e2717b3a19cb5f5e046712cbbd8b75d73af338c68fb",
@@ -1423,7 +1423,8 @@
     "packages/ui/src/components/ai-elements/markdown-list.tsx": "ecf50ad4f48cd460ddcf90db7b463671f915d8c22c7cb8e7760ff3b02282c7f1",
     "packages/ui/src/components/ai-elements/markdown-table.tsx": "612d78092eaeb950931070fff2a194a244e84c5c2d63c6df645e6b91391953da",
     "packages/ui/src/components/ai-elements/mermaid-block.tsx": "4cc6783097a6ecbb1896ee1f3dd1d89115ca81f3efb15d9fbabcf448063818ae",
-    "packages/ui/src/components/ai-elements/message.tsx": "d3849fc76932ac14ef69038a202d0dae323f7d5e661639ba1cb54c2cdf4cebb5",
+    "packages/ui/src/components/ai-elements/message.tsx": "0cf508fd5b5e86f7a21cd91cc672ba03906cbba96c3b5745275a485b4d6cf096",
+    "packages/ui/src/components/ai-elements/messageSubagentLink.test.tsx": "c852b8e23b2372e6ebdf6679b68bc511a367ee2fec1118a9f82c2fc619957bb2",
     "packages/ui/src/components/ai-elements/node.tsx": "d7b68c41717a509bd9063f0a9fc0c4525ceb2b23bae4028bcd49ec949fc6268f",
     "packages/ui/src/components/ai-elements/panel.tsx": "9c345ecb217fbb6a3a2b49b93ca81b746f249d18b9223470fbf511c0a9a37bb7",
     "packages/ui/src/components/ai-elements/persona.tsx": "c796e1aa0f85395138eda5e4c7ffc7dac5321690b3f6949f73c7b3ebe8d52808",
@@ -1434,12 +1435,13 @@
     "packages/ui/src/components/ai-elements/prompt-input-textarea.tsx": "4798574a8f2fc8584a1c5585d9dd878dd19d76bd05603e77948ec12180649def",
     "packages/ui/src/components/ai-elements/prompt-input.tsx": "68a92e07c27774e9c1d63bccd12ec3ff38b4f89dd245b20bfffbbd052e6101c4",
     "packages/ui/src/components/ai-elements/queue.tsx": "9d84f6e15708519ec65e258d9843dc5f4d76f106fc85155f7dcf51f89474b695",
-    "packages/ui/src/components/ai-elements/reasoning.tsx": "06688ab4b02409c6277495771b5e1241ed5270b2f59aaccc9f8acc6df0033cd5",
+    "packages/ui/src/components/ai-elements/reasoning.tsx": "f16f5b57160bcecec30053ea865490c7443aea066d73dd6015eada2d36bb63cd",
     "packages/ui/src/components/ai-elements/sandbox.tsx": "f521400dbaebe4c2a2fbcdcb8c18f98980c566169233beb137b22a093b44bbf0",
     "packages/ui/src/components/ai-elements/shimmer.tsx": "5d06ffdff80a13453a0b61b67f588c48d838a20d9be2cd319ca2a97d441b3127",
     "packages/ui/src/components/ai-elements/snippet.tsx": "6f369f0bb3308166ccd55f39dd542f7315873c5bd6de2491ffccc26b0700edfe",
     "packages/ui/src/components/ai-elements/sources.tsx": "cd5a9a20dc50b66f9d114b9a0ced1dd2eb8815040cccd4c577b386ef18bed435",
     "packages/ui/src/components/ai-elements/streamdown-controls.ts": "13dc740d133c75a9d6eec6e23e673b29d0361a87ba4ee0e7d44a4b7ad047984a",
+    "packages/ui/src/components/ai-elements/subagent-link.tsx": "3bca1cab4e3b22134191e1739370bdde990a23bfec3f6f822e3282a619c41134",
     "packages/ui/src/components/ai-elements/suggestion.tsx": "e92b5cdbf1a7868a42f4cb00d172cd8558543dbeb59ebdd192598c6333ea635f",
     "packages/ui/src/components/ai-elements/task.tsx": "89f8110b326bd86afd71d17db79c36d86ada09d9f58401cc01aa47e16667926d",
     "packages/ui/src/components/ai-elements/terminal.tsx": "da19fdbdeaaf682b50db23ccd8ba2a5fc6fa43dc2337bd1a3a0c4b8f52677f44",
@@ -14264,7 +14266,11 @@
         },
         {
           "file": "packages/ui/src/components/ai-elements/message.tsx",
-          "sha256": "d3849fc76932ac14ef69038a202d0dae323f7d5e661639ba1cb54c2cdf4cebb5"
+          "sha256": "0cf508fd5b5e86f7a21cd91cc672ba03906cbba96c3b5745275a485b4d6cf096"
+        },
+        {
+          "file": "packages/ui/src/components/ai-elements/messageSubagentLink.test.tsx",
+          "sha256": "c852b8e23b2372e6ebdf6679b68bc511a367ee2fec1118a9f82c2fc619957bb2"
         },
         {
           "file": "packages/ui/src/components/ai-elements/node.tsx",
@@ -14308,7 +14314,7 @@
         },
         {
           "file": "packages/ui/src/components/ai-elements/reasoning.tsx",
-          "sha256": "06688ab4b02409c6277495771b5e1241ed5270b2f59aaccc9f8acc6df0033cd5"
+          "sha256": "f16f5b57160bcecec30053ea865490c7443aea066d73dd6015eada2d36bb63cd"
         },
         {
           "file": "packages/ui/src/components/ai-elements/sandbox.tsx",
@@ -14329,6 +14335,10 @@
         {
           "file": "packages/ui/src/components/ai-elements/streamdown-controls.ts",
           "sha256": "13dc740d133c75a9d6eec6e23e673b29d0361a87ba4ee0e7d44a4b7ad047984a"
+        },
+        {
+          "file": "packages/ui/src/components/ai-elements/subagent-link.tsx",
+          "sha256": "3bca1cab4e3b22134191e1739370bdde990a23bfec3f6f822e3282a619c41134"
         },
         {
           "file": "packages/ui/src/components/ai-elements/suggestion.tsx",
