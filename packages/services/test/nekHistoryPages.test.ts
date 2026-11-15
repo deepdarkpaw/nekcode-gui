@@ -93,41 +93,6 @@ for (const count of [70, 1000])
     }
   });
 
-test("HS2: root/subtree omissions are explicit deferred content, never cast to model entries or success", () => {
-  const source = page(users(2));
-  source.entries[1] = {
-    ...source.entries[1]!,
-    entry: { message: null },
-    omissions: [
-      {
-        pointer: "/message",
-        ref: "opaque-ref",
-        totalBytes: 90_000_000,
-        mediaType: "application/json",
-        encoding: "base64",
-      },
-    ],
-  };
-  source.turns[1]!.header = source.entries[1]!;
-  const rows = projectHistory({
-    sessionId: source.sessionId,
-    turns: source.turns,
-    entries: source.entries,
-  });
-  const deferred = rows.find((row) => row.historyContent);
-  assert.equal(deferred?.historyContent?.[0]?.totalBytes, 90_000_000);
-  assert.equal(deferred?.historyContent?.[0]?.entryId, "u1");
-  assert.equal(rows.filter((row) => row.kind === "turnHeader").length, 2);
-  assert.ok(JSON.stringify(rows).length < 10_000);
-  assert.throws(() =>
-    projectHistory({
-      sessionId: "s1",
-      turns: source.turns,
-      entries: [{ ...source.entries[0]!, entry: { type: "message", id: "other" } }],
-    }),
-  );
-});
-
 test("HS2: cumulative usage and accepted selection come from full branch metadata, not latest20", () => {
   const source = page(users(70));
   const meta = metadata(users(70));
@@ -170,7 +135,7 @@ test("HS3: older-first, around and duplicate timestamps preserve sparse source r
   assert.throws(() => historyRowId(Number.MAX_SAFE_INTEGER, 1), /overflow/);
 });
 
-test("HS3: partial long turn repeats real owning header and seeds tool input from admitted anchors", () => {
+test("HT1: complete turns render every display entry; target slices reuse admitted tool anchors", () => {
   const root = users(1)[0]!;
   const call: NekSessionEntry = {
     ...entry,
@@ -211,8 +176,15 @@ test("HS3: partial long turn repeats real owning header and seeds tool input fro
   const first = projectHistory({
     sessionId: "s1",
     turns: full.turns,
-    entries: full.entries.slice(0, 2),
+    entries: full.entries,
   });
+  assert.deepEqual(
+    first.map((row) => row.kind),
+    ["turnHeader", "userInput", "toolCall"],
+  );
+  assert.equal(first.find((row) => row.kind === "toolCall")?.output?.text, "body");
+  assert.ok(first.every((row) => !("historyContent" in row)));
+  assert.ok(full.turns.every((turn) => !("continuationCursor" in turn)));
   const next = projectHistory({
     sessionId: "s1",
     turns: full.turns,
@@ -287,16 +259,22 @@ test("HS4: close during delayed bounded read rejects its stale result", async ()
   }
 });
 
-test("HS5: capability gate fails visibly for local and remote targets", () => {
+test("HT4: capability gate requires exactly historyPages 2 for local and remote targets", () => {
   assert.throws(
     () => requireHistoryPages({ capabilities: { promptAttachments: 1 } }),
-    /historyPages=1.*Remote SSH/,
+    /historyPages=2 \(complete-turn history\).*Remote SSH/,
   );
-  assert.doesNotThrow(() => requireHistoryPages({ capabilities: { historyPages: 1 } }));
+  for (const historyPages of [1, 3])
+    assert.throws(
+      () => requireHistoryPages({ capabilities: { historyPages } } as never),
+      /historyPages=2/,
+    );
+  assert.doesNotThrow(() => requireHistoryPages({ capabilities: { historyPages: 2 } }));
 });
 
 test("HS6/HS7: actual response bytes and giant live frames fail explicitly without truncated success", () => {
-  assert.throws(() => boundHistoryResult({ data: "中".repeat(1_500_000) }), /4 MB/);
+  assert.doesNotThrow(() => boundHistoryResult({ data: "x".repeat(8 * 1024 * 1024) }));
+  assert.throws(() => boundHistoryResult({ data: "中".repeat(4_500_000) }), /12 MB/);
   const source = page(users(1));
   const projector = new NekConversationProjector({ sessionId: "s1" });
   try {
@@ -306,7 +284,7 @@ test("HS6/HS7: actual response bytes and giant live frames fail explicitly witho
       message: { role: "user", timestamp: 9, content: "x".repeat(2_000_000) },
     });
     const snapshot = projector.snapshot();
-    assert.match(snapshot.control.lastError?.message ?? "", /bounded live content refs/);
+    assert.match(snapshot.control.lastError?.message ?? "", /historyStream=1/);
     assert.ok(JSON.stringify(snapshot).length < 10_000);
   } finally {
     projector.dispose();

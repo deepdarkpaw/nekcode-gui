@@ -18,7 +18,7 @@ export interface NekHistoryOptions {
   branchRevision?: string;
   /** Signed prefix observation; compatible append is allowed, observed rewrites are rejected. */
   observationCursor?: string;
-  /** Full UTF8 RPC envelope: default 1 MB, range 64 KB..4 MB. */
+  /** Full UTF8 RPC envelope: default 1 MB, range 64 KB..32 MB (65536..33554432 bytes). */
   maxBytes?: number;
 }
 export type NekHistoryCommand =
@@ -26,17 +26,11 @@ export type NekHistoryCommand =
   | ({
       id?: string;
       type: "read_history_page";
-      view?: "entries" | "summary";
+      view?: "entries" | "summary" | "target";
       beforeCursor?: string;
       afterCursor?: string;
       aroundEntryId?: string;
       turnLimit?: number;
-    } & NekHistoryOptions)
-  | ({
-      id?: string;
-      type: "read_history_turn";
-      turnId: string;
-      cursor?: string;
     } & NekHistoryOptions)
   | ({
       id?: string;
@@ -45,13 +39,6 @@ export type NekHistoryCommand =
       cursor?: string;
       direction?: "oldest" | "newest";
       aroundEntryId?: string;
-      limit?: number;
-    } & NekHistoryOptions)
-  | ({
-      id?: string;
-      type: "read_history_content";
-      ref: string;
-      offset?: number;
       limit?: number;
     } & NekHistoryOptions)
   | NekHistorySubagentCommand;
@@ -95,14 +82,6 @@ export interface NekHistorySelection {
   model?: { provider: string; modelId: string };
   thinkingLevel?: string;
 }
-export interface NekHistoryOmission {
-  pointer: string;
-  format?: "durable-record" | "session-entry";
-  ref: string;
-  totalBytes: number;
-  mediaType: "application/json";
-  encoding: "base64";
-}
 export interface NekHistoryEntry {
   id: string;
   parentId: string | null;
@@ -116,7 +95,6 @@ export interface NekHistoryEntry {
   subagents?: NekHistorySubagentRecord[];
   subagentCount?: number;
   entry: Record<string, unknown>;
-  omissions: NekHistoryOmission[];
 }
 export interface NekHistoryTurn {
   id: string;
@@ -125,7 +103,6 @@ export interface NekHistoryTurn {
   preview: string;
   entryCount: number;
   header: NekHistoryEntry;
-  continuationCursor?: string;
 }
 export interface NekHistoryMetadata extends NekHistoryIdentity {
   session: NekSessionSummary;
@@ -145,7 +122,8 @@ export interface NekHistoryMetadata extends NekHistoryIdentity {
   status: "persisted";
 }
 export interface NekHistoryPage extends NekHistoryIdentity {
-  view?: "entries";
+  /** Entries pages contain whole turns; target pages contain only the owner header and target entry. */
+  view?: "entries" | "target";
   turns: NekHistoryTurn[];
   entries: NekHistoryEntry[];
   olderCursor?: string;
@@ -156,7 +134,7 @@ export interface NekHistoryPage extends NekHistoryIdentity {
   totalEntries: number;
   seed: NekHistorySelection;
 }
-/** Metadata-only boundary: no bodies, seed or omission capabilities; cursors cover FULL turns. */
+/** Metadata-only boundary: no bodies or seed; cursors cover FULL turns. */
 export interface NekHistorySummaryPage extends NekHistoryIdentity {
   view: "summary";
   turns: Array<Omit<NekHistoryTurn, "header"> & { headerEntryId: string; headerPosition: number }>;
@@ -167,26 +145,11 @@ export interface NekHistorySummaryPage extends NekHistoryIdentity {
   totalTurns: number;
   totalEntries: number;
 }
-export interface NekHistoryTurnPage extends NekHistoryIdentity {
-  turn: NekHistoryTurn;
-  entries: NekHistoryEntry[];
-  hasMore: boolean;
-  continuationCursor?: string;
-}
 export interface NekHistoryDirectory extends NekHistoryIdentity {
   items: { entryId: string; turnId: string; position: number; preview: string }[];
   hasMore: boolean;
   nextCursor?: string;
   totalTurns: number;
-}
-export interface NekHistoryContent extends NekHistoryIdentity {
-  ref: string;
-  offset: number;
-  totalBytes: number;
-  mediaType: "application/json";
-  encoding: "base64";
-  data: string;
-  nextOffset?: number;
 }
 export interface NekHistorySubagentRecord {
   id: string;
@@ -222,8 +185,6 @@ export type NekHistoryCommandResult<C extends NekHistoryCommand> = C extends {
 export interface NekHistoryResponseData {
   read_session_metadata: NekHistoryResult<NekHistoryMetadata>;
   read_history_page: NekHistoryResult<NekHistoryPage>;
-  read_history_turn: NekHistoryResult<NekHistoryTurnPage>;
   read_history_directory: NekHistoryResult<NekHistoryDirectory>;
-  read_history_content: NekHistoryResult<NekHistoryContent>;
   read_history_subagent: NekHistoryResult<NekHistorySubagent | NekHistorySubagentDirectory>;
 }

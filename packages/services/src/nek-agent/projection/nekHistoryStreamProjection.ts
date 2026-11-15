@@ -219,15 +219,13 @@ export class NekHistoryStreamProjection {
       const entity = old.entityId ? (aliases.get(old.entityId) ?? old.entityId) : undefined;
       const persisted = canonical.get(entity);
       const turnId = aliases.get(old.turnId) ?? old.turnId;
-      // A target read must not rewind a newer live stream. Opaque content capabilities attach
-      // through the canonical projection; only the matching event identity may migrate.
+      // A target read must not rewind a newer live stream; only matching event identities migrate.
       const row = persisted
         ? {
             ...old,
             rowId: persisted.rowId,
             entityId: persisted.entityId,
             turnId: persisted.turnId,
-            ...(persisted.historyContent ? { historyContent: persisted.historyContent } : {}),
           }
         : turnId !== old.turnId
           ? { ...old, turnId }
@@ -289,20 +287,18 @@ export class NekHistoryStreamProjection {
       ctx.nextTurnIdentity = turn.id;
       ensureTurn(ctx, Number(new Date(target.timestamp)) || ctx.now());
     }
-    if (!target.omissions.length) {
-      const entry = validateHistoryDisplay(target.entry);
-      const config = ctx.store.state.config;
-      if (entry.type === "model_change" || entry.type === "thinking_level_change")
-        ctx.store.setState({
-          config: withNekModelSelection(
-            entry.type === "model_change"
-              ? { ...config, provider: entry.provider, model: entry.modelId }
-              : { ...config, thought: entry.thinkingLevel },
-          ),
-        });
-      if (entry.type === "session_info" && typeof entry.name === "string")
-        ctx.store.setState({ title: entry.name });
-    }
+    const entry = validateHistoryDisplay(target.entry);
+    const config = ctx.store.state.config;
+    if (entry.type === "model_change" || entry.type === "thinking_level_change")
+      ctx.store.setState({
+        config: withNekModelSelection(
+          entry.type === "model_change"
+            ? { ...config, provider: entry.provider, model: entry.modelId }
+            : { ...config, thought: entry.thinkingLevel },
+        ),
+      });
+    if (entry.type === "session_info" && typeof entry.name === "string")
+      ctx.store.setState({ title: entry.name });
     source.nextPosition = target.position + 1;
     source.leafId = target.id;
     source.turn = turn;

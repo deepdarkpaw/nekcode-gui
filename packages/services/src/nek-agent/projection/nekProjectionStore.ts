@@ -41,7 +41,7 @@ export interface NekProjectionStoreOptions {
   sessionId: string;
   logEpoch: string;
   initialState: NekProjectionState;
-  /** 行窗口上限（有界内存）；默认 5000。超出后丢最旧的行。 */
+  /** 行窗口上限（有界内存）；默认 5000。超出后淘汰最旧的非活动完整轮。 */
   maxWindowRows?: number;
   /** 沿用已存在的行身份（增量刷新时用）。 */
   existing?: { rows: ConversationRow[]; byEntity: Map<string, number>; nextRowId: number };
@@ -225,13 +225,13 @@ export class NekProjectionStore {
       this.rows.every((item) => this.isPinned(item, activeTurn))
     )
       throw new Error(
-        "nek live rows exceed the rendered window; bounded CLI turn continuation is required",
+        "nek active live turn exceeds the rendered row window; retry after reducing the source page",
       );
     this.reserveRow(row);
     this.rows.push(row);
     this.totalCount += 1;
     this.firstRowId ??= row.rowId;
-    this.trim();
+    this.trim(row.turnId);
   }
 
   /** 整行替换（结构变化）。 */
@@ -385,10 +385,10 @@ export class NekProjectionStore {
     nextRowId: number,
   ): void {
     if (rows.length > this.maxWindowRows)
-      throw new Error("nek projected row limit exceeded; bounded source continuation is required");
+      throw new Error("nek projected row limit exceeded; request fewer complete turns");
     const sizes = rows.map((row) => Buffer.byteLength(JSON.stringify(row), "utf8"));
     if (sizes.reduce((total, size) => total + size, 0) > this.maxWindowBytes)
-      throw new Error("nek rendered history exceeds 16 MB; deferred CLI live content is required");
+      throw new Error("nek rendered history exceeds 16 MB; request fewer complete turns");
     this.rowBytes.clear();
     this.renderedBytes = 0;
     rows.forEach((row, index) => {
@@ -407,26 +407,35 @@ export class NekProjectionStore {
     this.pendingStream.clear();
   }
 
-  /** Evict refetchable inactive bodies; a live turn that alone exceeds budget fails visibly. */
+  /** Evict whole inactive turns; an active live turn that alone exceeds budget fails visibly. */
   private reserveRow(row: ConversationRow, encodedBytes?: number): void {
     const bytes = encodedBytes ?? Buffer.byteLength(JSON.stringify(row), "utf8");
     const previous = this.rowBytes.get(row.rowId) ?? 0;
     if (bytes > this.maxWindowBytes)
-      throw new Error("nek live row exceeds 16 MB; bounded CLI content refs are required");
-    const activeTurn = this.activeTurnId();
-    while (this.renderedBytes - previous + bytes > this.maxWindowBytes) {
-      const index = this.rows.findIndex(
-        (item) => item.rowId !== row.rowId && !this.isPinned(item, activeTurn),
-      );
-      if (index < 0)
-        throw new Error("nek live turn exceeds 16 MB; bounded CLI continuation is required");
-      const [removed] = this.rows.splice(index, 1);
-      this.forgetRow(removed!);
-      this.totalCount -= 1;
-      this.firstRowId = this.rows[0]?.rowId ?? null;
-    }
+      throw new Error("nek live turn exceeds 16 MB; retry after reducing the source page");
+    while (this.renderedBytes - previous + bytes > this.maxWindowBytes)
+      if (!this.evictInactiveTurn(row.turnId))
+        throw new Error("nek live turn exceeds 16 MB; retry after reducing the source page");
     this.rowBytes.set(row.rowId, bytes);
     this.renderedBytes += bytes - previous;
+  }
+
+  /** A single running row pins its entire turn, including detached/background work. */
+  private evictInactiveTurn(protectedTurnId: string): boolean {
+    const activeTurn = this.activeTurnId();
+    const pinned = new Set([protectedTurnId]);
+    for (const row of this.rows) if (this.isPinned(row, activeTurn)) pinned.add(row.turnId);
+    const oldest = this.rows.find((row) => !pinned.has(row.turnId));
+    if (!oldest) return false;
+    for (let index = this.rows.length - 1; index >= 0; index--) {
+      const row = this.rows[index]!;
+      if (row.turnId !== oldest.turnId) continue;
+      this.rows.splice(index, 1);
+      this.forgetRow(row);
+      this.totalCount -= 1;
+    }
+    this.firstRowId = this.rows[0]?.rowId ?? null;
+    return true;
   }
 
   private forgetRow(row: ConversationRow): void {
@@ -453,16 +462,9 @@ export class NekProjectionStore {
     );
   }
 
-  private trim(): void {
-    const activeTurn = this.activeTurnId();
-    while (this.rows.length > this.maxWindowRows) {
-      const index = this.rows.findIndex((row) => !this.isPinned(row, activeTurn));
-      if (index < 0) throw new Error("nek pinned live rows exceed the rendered window");
-      const [row] = this.rows.splice(index, 1);
-      this.forgetRow(row!);
-      this.totalCount -= 1;
-    }
-    // Legacy range sees loaded rows only; history consumers use source cursors, never firstRowId.
-    this.firstRowId = this.rows[0]?.rowId ?? this.firstRowId;
+  private trim(protectedTurnId: string): void {
+    while (this.rows.length > this.maxWindowRows)
+      if (!this.evictInactiveTurn(protectedTurnId))
+        throw new Error("nek pinned live turns exceed the rendered window");
   }
 }

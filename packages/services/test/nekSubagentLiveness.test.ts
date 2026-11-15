@@ -73,7 +73,7 @@ function fixture(running: boolean, live: NekSubagentRecord[], beforeEntries = as
   const target: NekAgentCommandTarget = {
     client: p.process.client,
     phase: "running",
-    capabilities: { historyPages: 1 },
+    capabilities: { historyPages: 2 },
     setPhase: () => {},
   };
   const context = {

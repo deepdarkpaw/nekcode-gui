@@ -84,7 +84,6 @@ export function reconcileHistoryAppend(
     role: entry.type === "message" ? entry.message.role : undefined,
     preview: "",
     entry: { ...entry },
-    omissions: [],
   };
   const turn: NekHistoryTurn =
     user || !source.turn

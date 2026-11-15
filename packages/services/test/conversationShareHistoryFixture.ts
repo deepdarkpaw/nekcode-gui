@@ -78,24 +78,9 @@ export function historyFixture(total = 70) {
         },
       };
     },
-    conversationHistoryTurnV4: async (input: Record<string, unknown>) => {
-      calls.push({ method: "turn", input });
-      const turn = turns.find((turn) => turn.turnId === input.turnId);
-      if (!turn) throw new Error("unknown source turn");
-      return {
-        ...watermark,
-        rows: rows.filter((row) => row.turnId === turn.turnId),
-        turn,
-        hasMore: false,
-      };
-    },
     conversationHistoryDirectoryV4: async (input: Record<string, unknown>) => {
       calls.push({ method: "directory", input });
       throw new Error("Selected source turn IDs never require a whole-history directory scan");
-    },
-    conversationHistoryContentV4: async (input: Record<string, unknown>) => {
-      calls.push({ method: "content", input });
-      throw new Error("Source entry pointers are not v4 row hydration pointers");
     },
     conversationRowsRangeV4: async (input: Record<string, unknown>) => {
       calls.push({ method: "legacy", input });

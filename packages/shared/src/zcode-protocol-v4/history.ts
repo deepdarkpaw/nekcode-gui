@@ -1,31 +1,20 @@
-/** Bounded source-history contracts. Cursors and refs are private, session-bound capabilities. */
+/** Complete-turn source-history contracts. Cursors are private, session-bound capabilities. */
 import { z } from "zod";
 import type { ConversationSnapshot } from "./snapshot.js";
 import type { ConversationRow } from "./rows.js";
 
-export const historyContentReferenceSchema = z.object({
-  ref: z.string(),
-  pointer: z.string(),
-  totalBytes: z.number().int().nonnegative(),
-  mediaType: z.string(),
-  encoding: z.literal("base64"),
-  entryId: z.string().optional(),
-  format: z.enum(["durable-record", "session-entry"]).optional(),
-});
-export type HistoryContentReference = z.infer<typeof historyContentReferenceSchema>;
 export const conversationHistoryTurnSchema = z.object({
   turnId: z.string(),
   userEntryId: z.string().nullable(),
   position: z.number().int().nonnegative(),
   preview: z.string().max(256),
-  continuationCursor: z.string().optional(),
 });
 export type ConversationHistoryTurn = z.infer<typeof conversationHistoryTurnSchema>;
 export const conversationHistorySchema = z.object({
   branchRevision: z.string(),
   observationCursor: z.string().optional(),
   totalTurns: z.number().int().nonnegative(),
-  /** A source page is at most20; a renderer window may retain six such pages. */
+  /** A source page contains at most 20 complete turns; a renderer window may retain six 20-turn pages. */
   turns: z.array(conversationHistoryTurnSchema).max(120),
   olderCursor: z.string().optional(),
   newerCursor: z.string().optional(),
@@ -43,14 +32,13 @@ export const liveHistoryPreviewSchema = z.object({
   incomplete: z.literal(true),
 });
 export type LiveHistoryPreview = z.infer<typeof liveHistoryPreviewSchema>;
-/** Public share/export must remove local read capabilities, even when deferred previews remain. */
+/** Public share/export removes transient live tool extras. */
 export function stripPrivateHistoryRow(row: ConversationRow): ConversationRow {
-  const { historyContent: _privateRefs, ...publicRow } = row;
-  if (publicRow.kind === "toolCall") {
-    const { liveResult: _transientExtras, ...storedRow } = publicRow;
+  if (row.kind === "toolCall") {
+    const { liveResult: _transientExtras, ...storedRow } = row;
     return storedRow;
   }
-  return publicRow;
+  return row;
 }
 
 /** History-specific sanitizer; normal public-export sanitizers must still handle other private fields. */
@@ -85,10 +73,6 @@ export interface ConversationHistoryPageOptions extends ConversationHistoryReadO
   aroundEntryId?: string;
   turnLimit?: number;
 }
-export interface ConversationHistoryTurnOptions extends ConversationHistoryReadOptions {
-  turnId: string;
-  cursor?: string;
-}
 export interface ConversationHistoryDirectoryOptions extends ConversationHistoryReadOptions {
   query?: string;
   cursor?: string;
@@ -96,22 +80,10 @@ export interface ConversationHistoryDirectoryOptions extends ConversationHistory
   aroundEntryId?: string;
   limit?: number;
 }
-export interface ConversationHistoryContentOptions extends ConversationHistoryReadOptions {
-  ref: string;
-  offset?: number;
-  limit?: number;
-}
 export interface V4ConversationHistoryPageResult
   extends ConversationHistoryWatermark, ConversationHistoryObservation {
   rows: ConversationRow[];
   history: ConversationHistory;
-}
-export interface V4ConversationHistoryTurnResult
-  extends ConversationHistoryWatermark, ConversationHistoryObservation {
-  rows: ConversationRow[];
-  turn: ConversationHistoryTurn;
-  hasMore: boolean;
-  continuationCursor?: string;
 }
 export interface V4ConversationHistoryDirectoryResult
   extends ConversationHistoryWatermark, ConversationHistoryObservation {
@@ -119,15 +91,4 @@ export interface V4ConversationHistoryDirectoryResult
   hasMore: boolean;
   nextCursor?: string;
   totalTurns: number;
-}
-export interface V4ConversationHistoryContentResult
-  extends ConversationHistoryWatermark, ConversationHistoryObservation {
-  ref: string;
-  offset: number;
-  totalBytes: number;
-  mediaType: string;
-  encoding: "base64";
-  /** Raw UTF8 JSON bytes. Concatenate decoded bytes before JSON.parse. */
-  data: string;
-  nextOffset?: number;
 }

@@ -96,9 +96,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly initializeConversationV4: IZCodeAgentService["initializeConversationV4"];
   declare readonly setConnectionFlowStateV4: IZCodeAgentService["setConnectionFlowStateV4"];
   declare readonly conversationHistoryPageV4: IZCodeAgentService["conversationHistoryPageV4"];
-  declare readonly conversationHistoryTurnV4: IZCodeAgentService["conversationHistoryTurnV4"];
   declare readonly conversationHistoryDirectoryV4: IZCodeAgentService["conversationHistoryDirectoryV4"];
-  declare readonly conversationHistoryContentV4: IZCodeAgentService["conversationHistoryContentV4"];
   declare readonly conversationRowsRangeV4: IZCodeAgentService["conversationRowsRangeV4"];
   declare readonly conversationPlansV4: IZCodeAgentService["conversationPlansV4"];
   declare readonly backgroundBashOutputV4: IZCodeAgentService["backgroundBashOutputV4"];

@@ -19,7 +19,7 @@ test("SH1/SH3/SH6: explicitly chosen old turn exports from source, not the rende
   );
   assert.deepEqual(
     h.calls.map((call) => call.method),
-    ["turn", "turn"],
+    Array(8).fill("page"),
   );
   assert.equal(
     JSON.stringify(h.rows),

@@ -3,10 +3,7 @@ import type { ConversationShareArtifactDescriptor } from "@zcode/shared";
 import type { ArtifactRow, ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 
 import { ConversationShareServiceError } from "./conversationShare.js";
-import {
-  assertCompleteShareHistory,
-  stripShareHistoryCapabilities,
-} from "./conversationShareHistoryPolicy.js";
+import { stripShareHistoryCapabilities } from "./conversationShareHistoryPolicy.js";
 
 interface ConversationSharePublicProjection {
   rows: ConversationRow[];
@@ -603,7 +600,6 @@ export function buildConversationSharePublicProjection(input: {
   selectedProductTurnIds: string[];
   additionalArtifacts?: ConversationSharePublicArtifact[];
 }): ConversationSharePublicProjection {
-  assertCompleteShareHistory(input.rows);
   const sourceRows = input.rows.map((row) => stripShareHistoryCapabilities(row));
   assertTerminalAndSafe(sourceRows);
   assertUnique(input.selectedProductTurnIds, "source product turn");

@@ -1,5 +1,10 @@
 import { verifyHistorySpawnAnchors } from "./nekHistoryAnchors.js";
-import { historyResult, requireHistoryPages, HISTORY_RPC_MAX_BYTES } from "./nekHistoryRpc.js";
+import {
+  historyResult,
+  requireHistoryPages,
+  HISTORY_RPC_MAX_BYTES,
+  HISTORY_PAGE_MAX_BYTES,
+} from "./nekHistoryRpc.js";
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { measureNekOpenRequest } from "./nekSessionOpenTiming.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
@@ -109,7 +114,7 @@ export async function reloadSessionSnapshot(
         process.client.call({
           type: "read_history_page",
           turnLimit: 20,
-          maxBytes: HISTORY_RPC_MAX_BYTES,
+          maxBytes: HISTORY_PAGE_MAX_BYTES,
         }),
         process.client.call({ type: "get_session_stats" }),
       ]),

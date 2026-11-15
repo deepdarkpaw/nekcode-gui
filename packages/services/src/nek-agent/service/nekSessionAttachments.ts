@@ -1,4 +1,4 @@
-import { historyResult } from "./nekHistoryRpc.js";
+import { historyResult, HISTORY_PAGE_MAX_BYTES } from "./nekHistoryRpc.js";
 import { validateHistoryDisplay } from "../projection/nekHistoryDisplay.js";
 import type { NekSessionEntry } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
@@ -16,13 +16,14 @@ export async function resolveNekSessionAttachment<T>(
     const page = historyResult(
       await (
         await client()
-      ).call({ type: "read_history_page", sessionPath: record.path, turnLimit: 20 }),
+      ).call({
+        type: "read_history_page",
+        sessionPath: record.path,
+        turnLimit: 20,
+        maxBytes: HISTORY_PAGE_MAX_BYTES,
+      }),
     );
-    const attachment = find(
-      page.entries
-        .filter((entry) => entry.omissions.length === 0)
-        .map((entry) => validateHistoryDisplay(entry.entry)),
-    );
+    const attachment = find(page.entries.map((entry) => validateHistoryDisplay(entry.entry)));
     if (attachment) return attachment;
     throw unknown();
   }

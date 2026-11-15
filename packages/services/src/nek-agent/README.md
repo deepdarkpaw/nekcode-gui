@@ -1,37 +1,33 @@
 # nek-agent: session admission and tool projection
 
-## Bounded source history (HS1–HS7)
+## Complete-turn source history (HT1–HT6)
 
-- Storage, branch/cursor validation and opaque content authorization belong to nek.
-  `historyPages=1` is mandatory on the execution target; no full-read fallback.
-- `nekHistoryService.ts` holds the existing process lease, admits at most 16 reads,
-  captures the projector watermark and rejects retired session/process/branch owners.
-  Page bodies are request-local: no completed-output history cache and no prefix traversal.
-  A projector-owned six-page / 1 MB seed cache keeps only tool inputs and child anchors;
-  admitted old-target continuations can reuse these without retaining their output bodies.
-- `nekHistoryProjection.ts` derives sparse numeric identities from authoritative entry
-  position + semantic block slot. Overflows and missing tool/spawn seeds fail explicitly.
-  Display omissions (including null roots) become deferred rows with private refs,
-  never a cast to complete model entries or an invented successful tool result.
-- The projector retains the latest source window and live tail, bounded by row count
-  and 16 MB rendered bodies; inactive bodies/identity indexes are evicted together.
+- nek owns storage, branch/cursor validation and complete display entries.
+  `historyPages=2` is mandatory on local and Remote SSH targets; no fallback reads.
+- `nekHistoryService.ts` holds the process lease, admits at most 16 reads, captures the
+  projector watermark and rejects retired session/process/branch owners. Metadata,
+  summary, directory and child metadata reads use 1 MB; every entries/target page uses
+  8 MB. A source RESPONSE_LIMIT is a visible, retryable `NekHistoryReadError`.
+- `nekHistoryProjection.ts` derives sparse identities from source position + block slot.
+  Each entries page contains up to 20 complete turns. There are no deferred row bodies,
+  raw content capabilities or turn continuation APIs. A projected response is bounded
+  to 12 MB, with no folding/truncation to make it fit.
+- The projector owns the current source window and live tail, bounded by row count and
+  16 MB rendered bodies. Eviction removes whole oldest inactive turns and their indexes;
+  a running row pins its entire turn. An active turn exceeding the budget fails visibly.
   Rebuilds retain the epoch on compatible append and rotate it for incompatible branches.
-  Metadata, not the last20 bodies, supplies cumulative usage and accepted selection.
+  Metadata, not the latest 20 bodies, supplies cumulative usage and accepted selection.
+- historyStream=1 remains unchanged: ordered live events and persisted-body locators
+  share the projector owner. Locators use `read_history_page` view `target` (complete
+  owner header + target entry), never a truncated entries page. A bounded six-page /
+  1 MB anchor cache retains tool inputs and child identities, never completed outputs.
 - Child reads validate the parent persisted relation or current live registry first,
-  then read a bounded child page without resuming it. No raw child transcript API is
-  used by the conversation preview. Status uses a source page, not `get_entries`.
-- Public share/export owners must call shared `stripPrivateHistoryRow` or
-  `stripPrivateHistorySnapshot` before public serialization, in addition to existing
-  sanitizers. Those modules are outside this worker's edit boundary: helper invocation
-  is an explicit main-integration requirement. Private transport retains deferred refs.
-- **CLI gaps:** current history wire cannot enumerate old persisted child IDs (status
-  exposes `historyChildren.{total,loaded,complete}`), or supply original spawn turn/tool
-  anchors outside the page. Cold partial-turn reads without loaded tool anchors reject
-  `HISTORY_ANCHOR_REQUIRED`; old child IDs can still be authorized directly. Live events
-  and `nek.get_state` registry payloads are not covered by the history page byte budget.
-  The host exposes an error for oversized live display events instead of truncating a
-  successful row; a CLI bounded-live/ref extension is required for full large-frame support.
-  Existing explicit legacy attachment APIs remain distinct from source-history content.
+  then read a complete-turn child page without resuming it. Child directories and
+  status remain metadata-only. Tool-result images omit bytes; user images retain them.
+- Share/export uses complete source pages under one request-local budget and retains
+  only selected turns. Turn IDs remain opaque; selections do not guess entry IDs.
+  Public sanitizers remove history metadata and transient `liveResult` tool extras.
+  Explicit legacy attachment APIs remain distinct from source-history pagination.
 
 ## Session binding owner (SR)
 

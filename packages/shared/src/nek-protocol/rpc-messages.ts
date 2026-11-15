@@ -171,7 +171,8 @@ export interface NekToolResultMessage {
   role: "toolResult";
   toolCallId: string;
   toolName: string;
-  content: Array<NekTextContent | NekImageContent>;
+  /** Complete history display omits tool-result image bytes; live/storage messages may include them. */
+  content: Array<NekTextContent | (Omit<NekImageContent, "data"> & { data?: string })>;
   /** 工具私有载荷（GUI 的卡片用它渲染；nek 保证可 JSON 序列化）。 */
   details?: unknown;
   /** 工具内部嵌套模型调用的用量。 */

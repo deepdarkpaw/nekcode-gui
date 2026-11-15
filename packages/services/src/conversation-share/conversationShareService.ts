@@ -59,7 +59,6 @@ import {
   ConversationShareHistoryReader,
   type ConversationShareHistoryReadMode,
 } from "./conversationShareHistory.js";
-import { assertCompleteShareHistory } from "./conversationShareHistoryPolicy.js";
 import type { ConversationShareRowsRead } from "./conversationShareHistoryRows.js";
 import { conversationArchiveCapabilities } from "./conversationArchiveCapabilities.js";
 import { buildConversationSharePublicProjection } from "./conversationSharePublicProjection.js";
@@ -708,7 +707,6 @@ export class ConversationShareService implements IConversationShareService {
       };
     }
 
-    assertCompleteShareHistory(selected.rows);
     const structureSanitized = sanitizeUnsupportedShareStructures(selected.rows);
     const artifactSanitized = sanitizeUnsupportedShareArtifacts(
       removeIndependentArtifactRows(structureSanitized),
@@ -1378,7 +1376,6 @@ export class ConversationShareService implements IConversationShareService {
     const selected = selectRows(conversation.rows, input.selection);
     // 无法公开承载的已定稿结构先降级：删字段或丢整行，换成非阻断提示，
     // 后续所有投影与产物发现都基于这份 sanitized rows。
-    assertCompleteShareHistory(selected.rows);
     const structureSanitized = sanitizeUnsupportedShareStructures(selected.rows);
     const artifactSanitized = sanitizeUnsupportedShareArtifacts(
       removeIndependentArtifactRows(structureSanitized),

@@ -4,7 +4,6 @@ import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import { ConversationShareServiceError } from "./conversationShare.js";
 
 type ShareHistoryFailure =
-  | "history_content_incomplete"
   | "history_invalid_page"
   | "history_stale"
   | "history_budget_exceeded"
@@ -21,11 +20,9 @@ export class ConversationShareHistoryError extends ConversationShareServiceError
         : historyCode === "history_turn_selection_required"
           ? "invalid_selection"
           : "invalid_conversation",
-      historyCode === "history_content_incomplete"
-        ? "Selected history contains deferred content; authoritative row hydration is required before export"
-        : historyCode === "history_timeout"
-          ? "Conversation source history read timed out; retry the export"
-          : `Conversation source history cannot be exported: ${historyCode}`,
+      historyCode === "history_timeout"
+        ? "Conversation source history read timed out; retry the export"
+        : `Conversation source history cannot be exported: ${historyCode}`,
       {
         reasonCode: limit
           ? "payload_limit"
@@ -39,24 +36,13 @@ export class ConversationShareHistoryError extends ConversationShareServiceError
   }
 }
 
-/** Incomplete source projections must be blocked BEFORE any public sanitizer drops private refs. */
-export function assertCompleteShareHistory(rows: readonly ConversationRow[]): void {
-  for (const row of rows) {
-    const refs = (row as ConversationRow & { historyContent?: unknown }).historyContent;
-    if (refs !== undefined && (!Array.isArray(refs) || refs.length > 0))
-      throw new ConversationShareHistoryError("history_content_incomplete");
-  }
-}
-
 const PRIVATE_HISTORY_KEYS = new Set([
   "history",
-  "historyContent",
   "branchRevision",
   "beforeCursor",
   "afterCursor",
   "olderCursor",
   "newerCursor",
-  "continuationCursor",
   "nextCursor",
   "cursor",
   "aroundEntryId",
@@ -74,7 +60,7 @@ export function stripShareHistoryCapabilities(row: ConversationRow): Conversatio
   ) as ConversationRow;
 }
 
-/** One collecting budget spans all source pages/continuations, not a new timeout per page. */
+/** One collecting budget spans all complete-turn source pages, not a new timeout per page. */
 export class ShareHistoryBudget {
   private readonly deadline = Date.now() + DEFAULT_GUI_RUNTIME_CONFIG.timeouts.commandMs;
   private readonly controller = new AbortController();
