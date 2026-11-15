@@ -7,11 +7,12 @@
 - `nekHistoryService.ts` holds the process lease, admits at most 16 reads, captures the
   projector watermark and rejects retired session/process/branch owners. Metadata,
   summary, directory and child metadata reads use 1 MB; every entries/target page uses
-  16 MB. A source RESPONSE_LIMIT is a visible, retryable `NekHistoryReadError`.
+  12 MB. A source RESPONSE_LIMIT is a visible, retryable `NekHistoryReadError`.
 - `nekHistoryProjection.ts` derives sparse identities from source position + block slot.
   Each entries page contains up to 20 complete turns. There are no deferred row bodies,
   raw content capabilities or turn continuation APIs. A projected response is bounded
-  to 14 MB, with no folding/truncation to make it fit.
+  to 15 MB, with no folding/truncation to make it fit; a multi-turn page that projects
+  beyond it is reread with proportionally fewer whole turns.
 - The projector owns the current source window and live tail, bounded by row count and
   16 MB rendered bodies. Eviction removes whole oldest inactive turns and their indexes;
   a running row pins its entire turn. An active turn exceeding the budget fails visibly.
