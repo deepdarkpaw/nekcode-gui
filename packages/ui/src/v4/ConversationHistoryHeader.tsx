@@ -4,7 +4,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ConversationHistoryControls } from "./useConversationHistoryControls.js";
 
 /** Turns that exist before the first loaded turn; positions are zero-based source turn indexes. */
-export function olderTurnCount(history: ConversationHistoryControls["history"]): number {
+function olderTurnCount(history: ConversationHistoryControls["history"]): number {
   const first = history.turns[0];
   return first ? first.position : 0;
 }
@@ -47,7 +47,9 @@ export function ConversationHistoryHeader({
         </AsyncButton>
       ) : null}
       {selectionOnly ? (
-        <p className="text-center">{intl.formatMessage({ id: "chat.history.shareSelectionOnly" })}</p>
+        <p className="text-center">
+          {intl.formatMessage({ id: "chat.history.shareSelectionOnly" })}
+        </p>
       ) : null}
       {controls.directoryQuery && controls.directory.hasMore ? (
         <AsyncButton
@@ -60,7 +62,10 @@ export function ConversationHistoryHeader({
         </AsyncButton>
       ) : null}
       {error ? (
-        <div role="alert" className="flex flex-wrap items-center justify-center gap-2 text-destructive">
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-center gap-2 text-destructive"
+        >
           <span className="min-w-0 break-words">{error}</span>
           <AsyncButton
             variant="outline"

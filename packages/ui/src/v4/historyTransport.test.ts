@@ -67,10 +67,7 @@ it("RH8/RH9: replaceable transport forwards all history methods to the latest re
   transport.replace(second.transport);
   await transport.historyPage({ sessionId: "parent" });
   await transport.historyDirectory({ sessionId: "parent" });
-  for (const method of [
-    "conversationHistoryPageV4",
-    "conversationHistoryDirectoryV4",
-  ] as const) {
+  for (const method of ["conversationHistoryPageV4", "conversationHistoryDirectoryV4"] as const) {
     expect(first.service[method]).not.toHaveBeenCalled();
     expect(second.service[method]).toHaveBeenCalledTimes(1);
   }

@@ -19,7 +19,7 @@ import { buildTurnHeaderRow, toEpochMs } from "./nekRows.js";
 import { HISTORY_ROW_STRIDE as STRIDE, historyRowId } from "./nekHistoryIdentity.js";
 export { historyRowId } from "./nekHistoryIdentity.js";
 
-export const historyTurn = (turn: Omit<NekHistoryTurn, "header">): ConversationHistoryTurn => ({
+const historyTurn = (turn: Omit<NekHistoryTurn, "header">): ConversationHistoryTurn => ({
   turnId: turn.id,
   userEntryId: turn.userEntryId,
   position: turn.position,

@@ -7,11 +7,7 @@ import type {
   ConversationHistoryWatermark,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { SubagentHistoryService } from "./subagentHistoryTypes.js";
-import {
-  childDirectory,
-  childPage,
-  childPreview,
-} from "./subagentHistory.testFixtures.js";
+import { childDirectory, childPage, childPreview } from "./subagentHistory.testFixtures.js";
 
 type SourceService = {
   [K in keyof Omit<SubagentHistoryService, "onAgentRuntimeLifecycle">]: Mock<

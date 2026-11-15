@@ -15,7 +15,7 @@ export const scope: SubagentHistoryScope = {
   parentSessionId: "authorizing-parent",
   childSessionId: "child",
 };
-export const watermark = { atSeq: 1, atRevision: 1, atLogEpoch: "epoch" };
+const watermark = { atSeq: 1, atRevision: 1, atLogEpoch: "epoch" };
 export function childRow(position: number, text = `answer ${position}`): ConversationRow {
   return {
     kind: "assistantText",
