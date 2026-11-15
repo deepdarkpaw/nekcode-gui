@@ -35,6 +35,8 @@ interface Observation {
   readonly path: string;
   readonly scope: NekConfigScope;
   readonly listeners: Set<(change: NekWatchChange) => void>;
+  readonly ready: Promise<void>;
+  finishReady(): void;
   episodes: Map<string, string>;
   epoch: number;
   failure?: string;
@@ -53,7 +55,10 @@ export class NekWatchHub {
   constructor(private readonly options: NekWatchHubOptions = {}) {}
 
   /** Each call is a distinct lease, including repeated subscriptions of the same callback. */
-  subscribe(target: NekWatchTarget, listener: (change: NekWatchChange) => void): () => void {
+  subscribe(
+    target: NekWatchTarget,
+    listener: (change: NekWatchChange) => void,
+  ): (() => void) & { readonly ready: Promise<void> } {
     if (this.disposed) throw new Error("nek config watch hub disposed");
     const dirs = new Map(
       target.dirs.map((dir) => [this.directoryKey(target.key, dir.path, dir.scope), dir]),
@@ -70,8 +75,14 @@ export class NekWatchHub {
     for (const [key, dir] of dirs) {
       let state = this.observations.get(key);
       if (!state) {
+        let finishReady!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          finishReady = resolve;
+        });
         state = {
           key,
+          ready,
+          finishReady,
           target,
           ...dir,
           listeners: new Set(),
@@ -101,7 +112,7 @@ export class NekWatchHub {
     }
     this.subscriptions += 1;
     let released = false;
-    return () => {
+    const release = () => {
       if (released) return;
       released = true;
       if (!this.disposed) this.subscriptions -= 1;
@@ -112,6 +123,9 @@ export class NekWatchHub {
         this.observations.delete(state.key);
       }
     };
+    return Object.assign(release, {
+      ready: Promise.all(leased.map((state) => state.ready)).then(() => {}),
+    });
   }
 
   /** Publication fences scans already in flight; only leases covering this file receive it. */
@@ -202,6 +216,7 @@ export class NekWatchHub {
     poll.unref?.();
     scan();
     return () => {
+      state.finishReady();
       state.epoch += 1;
       if (timer) clearTimeout(timer);
       clearInterval(poll);
@@ -267,6 +282,10 @@ export class NekWatchHub {
         });
     } catch (error) {
       if (epoch === state.epoch) this.fail(state, error);
+    } finally {
+      // The same barrier completes for success and visible failure. Recovery remains owned
+      // by the watch error state, not by a permanently rejected startup Promise.
+      if (priming) state.finishReady();
     }
   }
 

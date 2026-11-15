@@ -237,7 +237,7 @@ export class NekConfigRuntime {
     target: NekConfigTarget,
     listener: (change: NekWatchChange) => void,
     cwd?: string,
-  ): () => void {
+  ): (() => void) & { readonly ready: Promise<void> } {
     const context = this.target(target);
     return this.watchHub.subscribe(
       {

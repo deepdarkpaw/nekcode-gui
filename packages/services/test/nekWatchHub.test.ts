@@ -34,6 +34,34 @@ function setup() {
   return { hub, executor, target };
 }
 
+test("watch readiness waits for every directory and releases pending baseline waiters on disposal", async () => {
+  const { hub, executor, target } = setup();
+  const gates = new Map<string, () => void>();
+  const list = executor.listDir;
+  executor.listDir = async (path) => {
+    await new Promise<void>((resolve) => gates.set(path, resolve));
+    return list(path);
+  };
+  const stop = hub.subscribe(target(PROJECT_A), () => {});
+  let ready = false;
+  void stop.ready.then(() => {
+    ready = true;
+  });
+  await flush();
+  gates.get(GLOBAL)!();
+  await flush();
+  assert.equal(ready, false, "the project baseline is still pending");
+  gates.get(PROJECT_A)!();
+  await stop.ready;
+  assert.equal(ready, true);
+  const pending = hub.subscribe(target(PROJECT_B), () => {});
+  pending();
+  await pending.ready;
+  gates.get(PROJECT_B)!();
+  stop();
+  hub.dispose();
+});
+
 test("MW-H1: directory union, filtered delivery and exact reference-counted release", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const { hub, executor, target } = setup();
@@ -141,8 +169,8 @@ test("MW-H4: scan errors are observable and an unchanged successful rescan repor
   executor.listDir = async () => {
     throw new Error("EACCES scan");
   };
-  hub.subscribe(target(), (change) => changes.push(change));
-  await flush();
+  const initial = hub.subscribe(target(), (change) => changes.push(change));
+  await initial.ready;
   assert.match(changes[0]?.error?.message ?? "", /EACCES scan/);
   const late: NekWatchChange[] = [];
   const stopLate = hub.subscribe(target(), (change) => late.push(change));

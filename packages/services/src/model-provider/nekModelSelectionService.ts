@@ -63,6 +63,8 @@ export function createNekModelSelectionService(
       epoch = 1;
     }, scope);
     try {
+      // Initial directory baselines establish observation, not a configuration mutation during this read.
+      if (release.ready) await waitForModelRead(release.ready, budget.context);
       for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
         epoch = 0;
         assertModelRead(budget.context);
@@ -85,8 +87,10 @@ export function createNekModelSelectionService(
         const superseded = sequence < settledSequence;
         settledSequence = Math.max(settledSequence, sequence);
         assertModelRead(budget.context);
-        if (epoch || superseded) continue;
         const key = catalogKey(facts);
+        // An unrelated workspace can finish later without changing the shared catalog. It must
+        // not make a stable read retry forever; actual invalidations still fence every result.
+        if (epoch || (superseded && key !== lastKey)) continue;
         if (key !== lastKey) {
           lastKey = key;
           revision += 1;

@@ -262,7 +262,7 @@ export interface INekConfigApi {
   ): () => void;
 
   // ---- 外部修改 ----
-  /** Reference-counted global + optional workspace coverage. Errors remain visible until recovery. */
+  /** Reference-counted coverage. `ready` settles after every directory's initial scan; errors remain visible. */
   watch(
     target: NekConfigTarget,
     listener: (change: {
@@ -272,7 +272,7 @@ export interface INekConfigApi {
       error?: { message: string };
     }) => void,
     cwd?: string,
-  ): () => void;
+  ): (() => void) & { readonly ready?: Promise<void> };
 
   // ---- 复制到远程 ----
   previewCopy(

@@ -97,7 +97,10 @@ export interface NekModelFactsSource {
   /** 总是读最新事实；失败直接抛出 nek 的结构化错误。 */
   read(options?: NekModelFactsReadOptions): Promise<NekModelFacts>;
   /** 事实可能过期的信号（配置变化）；不携带快照，调用方重新 `read()`。 */
-  onDidChange(listener: () => void, options?: NekModelFactsReadOptions): () => void;
+  onDidChange(
+    listener: () => void,
+    options?: NekModelFactsReadOptions,
+  ): ReturnType<NekModelFactsApi["watch"]>;
   dispose(): void;
 }
 
@@ -160,7 +163,7 @@ export function createNekModelFactsSource(
     {
       listeners: Set<() => void>;
       errors: Map<string, string>;
-      stop(): void;
+      stop: ReturnType<NekModelFactsApi["watch"]>;
     }
   >();
   const globalErrors = new Map<string, string>();
@@ -291,7 +294,7 @@ export function createNekModelFactsSource(
         state = { listeners: new Set(), errors: new Map(), stop: () => undefined };
         const owned = state;
         scopes.set(cwd, state);
-        let stop: () => void;
+        let stop: ReturnType<NekModelFactsApi["watch"]>;
         try {
           stop = api.watch(
             target,
@@ -342,7 +345,7 @@ export function createNekModelFactsSource(
       if (owned.listeners.size >= 1024) throw new Error("Model observer capacity exceeded");
       const notify = () => listener();
       owned.listeners.add(notify);
-      return () => {
+      const release = () => {
         owned.listeners.delete(notify);
         if (owned.listeners.size > 0 || scopes.get(cwd) !== owned) return;
         owned.stop();
@@ -352,6 +355,7 @@ export function createNekModelFactsSource(
           globalRevisions.clear();
         }
       };
+      return owned.stop.ready ? Object.assign(release, { ready: owned.stop.ready }) : release;
     },
     dispose: () => {
       if (disposed) return;
