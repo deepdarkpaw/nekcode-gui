@@ -2,8 +2,12 @@ import type { NekGuiInfo, NekHistoryResult } from "@zcode/shared/nek-protocol";
 import { isNekSessionLockHolder } from "./types.js";
 
 export const HISTORY_RPC_MAX_BYTES = 1024 * 1024;
-export const HISTORY_PAGE_MAX_BYTES = 8 * 1024 * 1024;
-const HISTORY_RENDER_MAX_BYTES = 12 * 1024 * 1024;
+/**
+ * One page of up to 20 complete turns. Real heavy sessions project to about 0.7x of the
+ * source page, so a 16 MiB source page stays below the 14 MiB projected-result bound.
+ */
+export const HISTORY_PAGE_MAX_BYTES = 16 * 1024 * 1024;
+const HISTORY_RENDER_MAX_BYTES = 14 * 1024 * 1024;
 export function requireHistoryPages(info: Pick<NekGuiInfo, "capabilities">): void {
   if (info.capabilities?.historyPages !== 2)
     throw new Error(
@@ -45,7 +49,7 @@ export function boundHistoryResult<T>(result: T): T {
   if (Buffer.byteLength(JSON.stringify(result), "utf8") > HISTORY_RENDER_MAX_BYTES)
     throw new NekHistoryReadError(
       "RESPONSE_LIMIT",
-      "nek history projection exceeds 12 MB; request a smaller complete-turn source page",
+      "nek history projection exceeds 14 MB; request a smaller complete-turn source page",
     );
   return result;
 }

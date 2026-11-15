@@ -172,7 +172,7 @@ test("fork mapping rejects stale epoch/revision and non-user or mismatched row t
   }
 });
 
-test("HT2: fork validation of an unloaded user reads a target page with the 8 MiB budget", async () => {
+test("HT2: fork validation of an unloaded user reads a target page with the complete-turn page budget", async () => {
   const h = forkHarness();
   const saved = h.snapshots.get(h.source)!;
   for (let index = 0; index < 25; index++)
@@ -206,7 +206,7 @@ test("HT2: fork validation of an unloaded user reads a target page with the 8 Mi
       (command) => command.type === "read_history_page" && command.aroundEntryId === "user-2",
     );
     assert.equal(request?.view, "target");
-    assert.equal(request?.maxBytes, 8 * 1024 * 1024);
+    assert.equal(request?.maxBytes, 16 * 1024 * 1024);
   } finally {
     await h.adapter.dispose();
   }
