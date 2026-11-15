@@ -248,7 +248,9 @@ try {
     async () => {
       const sample = writeLongHistorySession(sandbox);
       const timing = await checkLongHistory(session);
-      console.log(`[long-history] bytes=${sample.bytes} firstMs=${timing.firstMs}`);
+      console.log(
+        `[long-history] bytes=${sample.bytes} firstMs=${timing.firstMs} clicks=${timing.clicks}`,
+      );
     },
     "04-workspace-ready",
   );

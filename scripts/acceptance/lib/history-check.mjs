@@ -1,12 +1,13 @@
 /**
  * 长历史验收：在沙箱 agentDir 写入 70 轮、累计超过 64 MB 的会话，从侧栏打开，
- * 证明首帧不触发 JSONL 单条上限、最新一页可见、向上滚动按页取回更早轮次，且子代理引用不被拦截。
+ * 证明首帧不触发 JSONL 单条上限、最新一页完整可见、顶部按钮按整轮向前取页、
+ * 不出现轮内补载/按需原文入口，且子代理引用不被拦截。
  */
 import { randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, statSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { evaluate, waitForPage } from "./cdp.mjs";
-import { clickTaskItem, waitForText } from "./ui.mjs";
+import { clickButton, clickTaskItem, waitForText } from "./ui.mjs";
 
 const LONG_HISTORY_TURNS = 70;
 const LONG_HISTORY_TITLE = "long history prompt 1";
@@ -74,12 +75,38 @@ export function writeLongHistorySession(sandbox) {
   return { path, bytes };
 }
 
-/** 在时间线上向上滚动，直到出现目标轮次；只由用户滚动驱动取页。 */
-async function scrollUntil(session, text, timeoutMs) {
+/** 旧版逐轮补载/按需原文入口；完整轮分页下任何时候都不能出现。 */
+const FRAGMENT_UI = /按需查看内容|加载本轮更多过程|重新加载本轮内容/u;
+const LOAD_EARLIER = /^加载更早的对话/u;
+
+async function assertNoFragmentUi(session) {
+  const text = await evaluate(session, "document.body.innerText");
+  if (FRAGMENT_UI.test(text)) throw new Error("turn fragment/deferred-content UI is visible");
+}
+
+/**
+ * 向上滚到已加载窗口顶部；出现“加载更早的对话”按钮就点击，按整轮向前取页，
+ * 直到目标轮次出现。滚动本身从不触发取页。
+ */
+async function loadEarlierUntil(session, text, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
+  let clicks = 0;
   while (Date.now() < deadline) {
     if (await evaluate(session, `document.body.innerText.includes(${JSON.stringify(text)})`))
-      return;
+      return clicks;
+    const label = await evaluate(
+      session,
+      `[...document.querySelectorAll('button')].find((button) => !button.disabled &&
+        button.getClientRects().length > 0 && ${LOAD_EARLIER}.test(button.innerText.trim()))
+        ?.innerText.trim() ?? null`,
+    );
+    if (label) {
+      await clickButton(session, label);
+      clicks += 1;
+      await new Promise((done) => setTimeout(done, 500));
+      await assertNoFragmentUi(session);
+      continue;
+    }
     const point = await evaluate(
       session,
       `(() => { const r = document.querySelector(${JSON.stringify(TIMELINE)}).getBoundingClientRect();
@@ -93,7 +120,7 @@ async function scrollUntil(session, text, timeoutMs) {
     });
     await new Promise((done) => setTimeout(done, 250));
   }
-  throw new Error(`scrolling up never revealed "${text}"`);
+  throw new Error(`loading earlier turns never revealed "${text}"`);
 }
 
 /** 打开长会话并验证首屏、分页与子代理引用；返回可记录的阶段耗时。 */
@@ -118,7 +145,9 @@ export async function checkLongHistory(session) {
     `[...document.querySelectorAll('a, button')].some((node) => node.innerText.trim() === "Researcher")`,
   );
   if (!link) throw new Error("subagent reference is not rendered as an internal link");
-  await scrollUntil(session, "long history prompt 50", 60_000);
-  await scrollUntil(session, "long history prompt 30", 60_000);
-  return { firstMs };
+  await assertNoFragmentUi(session);
+  const clicksTo50 = await loadEarlierUntil(session, "long history prompt 50", 90_000);
+  const clicksTo30 = await loadEarlierUntil(session, "long history prompt 30", 90_000);
+  if (clicksTo50 < 1) throw new Error("earlier turns appeared without the load-earlier button");
+  return { firstMs, clicks: clicksTo50 + clicksTo30 };
 }
