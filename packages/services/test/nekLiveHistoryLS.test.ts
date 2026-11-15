@@ -374,7 +374,7 @@ test("LS1: writable negotiation precedes bootstrap; replies/UI/auth route withou
   }
 });
 
-test("HT2/LS3/LS4/LS8: target locators reconcile tool output and user images with 8 MiB reads", async () => {
+test("HT2/LS3/LS4/LS8: target locators reconcile tool output and user images with complete-turn page budget reads", async () => {
   const h = await integration();
   try {
     h.event({ type: "agent_start" });
@@ -519,7 +519,9 @@ test("HT2/LS3/LS4/LS8: target locators reconcile tool output and user images wit
     );
     assert.ok(targets.length > 0);
     assert.ok(
-      targets.every((command) => command.view === "target" && command.maxBytes === 8 * 1024 * 1024),
+      targets.every(
+        (command) => command.view === "target" && command.maxBytes === 16 * 1024 * 1024,
+      ),
     );
     assert.ok(
       h.transport.commands
