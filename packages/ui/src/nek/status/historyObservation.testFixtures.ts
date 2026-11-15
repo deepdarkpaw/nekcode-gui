@@ -11,7 +11,6 @@ import {
   childDirectory,
   childPage,
   childPreview,
-  childRow,
 } from "./subagentHistory.testFixtures.js";
 
 type SourceService = {
@@ -76,25 +75,6 @@ export function observationSource(
     conversationHistoryPageV4: vi.fn<SubagentHistoryService["conversationHistoryPageV4"]>(
       async (params) => page(params),
     ),
-    conversationHistoryTurnV4: vi.fn<SubagentHistoryService["conversationHistoryTurnV4"]>(
-      async (params) => {
-        guard(params);
-        const position = Number(params.turnId.split(":")[1]);
-        return {
-          ...watermark,
-          ...identity(),
-          rows: [childRow(position, "hydrated part")],
-          turn: {
-            turnId: params.turnId,
-            userEntryId: `entry:${position}`,
-            position,
-            preview: "question",
-          },
-          hasMore: true,
-          continuationCursor: params.cursor === "slice:2" ? "slice:3" : "slice:2",
-        };
-      },
-    ),
     conversationHistoryDirectoryV4: vi.fn<SubagentHistoryService["conversationHistoryDirectoryV4"]>(
       async (params) => {
         guard(params);
@@ -109,23 +89,6 @@ export function observationSource(
           totalTurns: size,
           ...watermark,
           ...identity(),
-        };
-      },
-    ),
-    conversationHistoryContentV4: vi.fn<SubagentHistoryService["conversationHistoryContentV4"]>(
-      async (params) => {
-        guard(params);
-        const offset = params.offset ?? 0;
-        return {
-          ...watermark,
-          ...identity(),
-          ref: params.ref,
-          offset,
-          totalBytes: 100,
-          encoding: "base64",
-          data: "YQ==",
-          mediaType: "application/json",
-          nextOffset: offset + 1,
         };
       },
     ),

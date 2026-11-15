@@ -14,10 +14,8 @@ import {
   SUBSCRIPTION_CONTENT_REJECTED,
   type ConversationHistoryPageOptions,
   type ConversationHistoryDirectoryOptions,
-  type ConversationHistoryContentOptions,
   type ConversationHistoryWatermark,
   type V4ConversationHistoryPageResult,
-  type V4ConversationHistoryTurnResult,
   type ConversationRow,
   type ConversationSnapshot,
   type ConversationOpenTiming,
@@ -35,7 +33,6 @@ import {
   historyRowKey,
   historyRowWasChanged,
   type HistoryDirection,
-  type HistoryOmission,
 } from "@/v4/conversationHistoryWindow.js";
 import type { ConversationTurnNavigatorHydrationResult } from "@/v4/conversationTurnNavigatorHelpers.js";
 import type { ConversationTransport } from "@/v4/transport.js";
@@ -133,11 +130,10 @@ export interface ConversationStoreState {
   /** Renderer 首帧 timing；与 snapshot 一起通知，避免 UI 读取到半更新的诊断状态。 */
   rendererTiming?: SessionOpenRendererTiming;
   optimisticCommands: readonly OptimisticCommand[];
-  /** loadOlder 在途标记（自动预取防重入）。 */
+  /** loadOlder 在途标记（防止重复点击/重入）。 */
   loadingOlder: boolean;
   historyError: string | null;
   historyRequest: HistoryDirection | null;
-  historyTruncatedTurns: readonly HistoryOmission[];
   /** CLI 完整有效 projection 返回的终态计划目录。 */
   sessionPlans: readonly ToolCallRow[];
   /** 只用于触发计划目录只读 query，不属于 conversation 协议事实。 */
@@ -170,7 +166,6 @@ const INITIAL_STATE: ConversationStoreState = {
   loadingOlder: false,
   historyError: null,
   historyRequest: null,
-  historyTruncatedTurns: [],
   sessionPlans: [],
   planDirectoryRevision: 0,
   plansLoading: false,
@@ -724,7 +719,6 @@ export class ConversationProjectionStore {
       const boundedSnapshot = this.historyWindow.reset(frame.payload.snapshot);
       this.setState({
         snapshot: boundedSnapshot,
-        historyTruncatedTurns: this.historyWindow.omissions,
         planDirectoryRevision: this.state.planDirectoryRevision + 1,
         // snapshot 整体替换后 real-user query 集合可能已变，终态缓存必须失效。
         turnNavigatorDirectoryRevision: this.state.turnNavigatorDirectoryRevision + 1,
@@ -835,7 +829,6 @@ export class ConversationProjectionStore {
     );
     this.setState({
       snapshot: next,
-      historyTruncatedTurns: this.historyWindow.omissions,
       historyError: this.boundaryHistoryError(),
       // row.removed 已给出权威裁剪边界，可以同步删掉缓存目录中的旧分支计划；
       // 完整 query 继续负责补回 wire tail 之外、但仍属于当前分支的早期计划。
@@ -1210,18 +1203,6 @@ export class ConversationProjectionStore {
     return result;
   }
 
-  async readHistoryContent(options: ConversationHistoryContentOptions) {
-    const target = this.historyTarget();
-    const owner = this.getHistoryOwnerKey();
-    const snapshot = this.state.snapshot!;
-    const history = snapshot.history!;
-    const params = withHistoryObservation({ ...options, ...target }, history.observationCursor);
-    const result = await this.transport.historyContent(params);
-    this.assertHistoryResult(owner, result, snapshot.seq, snapshot.revision);
-    assertHistoryObservation(history, result, params.observationCursor);
-    return result;
-  }
-
   async loadNewer(): Promise<void> {
     await this.loadHistoryPage("newer");
   }
@@ -1292,47 +1273,6 @@ export class ConversationProjectionStore {
       if (direction === "latest") this.invalidateHistory();
       this.setState({
         snapshot: next,
-        historyTruncatedTurns: this.historyWindow.omissions,
-        historyError: this.historyWindow.needsBoundaryRefresh
-          ? HISTORY_BOUNDARY_REFRESH_REQUIRED
-          : null,
-      });
-      return result;
-    });
-  }
-
-  async loadHistoryTurn(
-    turnId: string,
-    cursor?: string,
-  ): Promise<V4ConversationHistoryTurnResult | null> {
-    const snapshot = this.state.snapshot;
-    if (
-      this.closed ||
-      this.historyFlight ||
-      !snapshot?.history?.turns.some((turn) => turn.turnId === turnId)
-    )
-      return null;
-    return this.runHistoryRequest("turn", async (flight) => {
-      const params = withHistoryObservation(
-        { ...this.historyTarget(), turnId, ...(cursor ? { cursor } : {}) },
-        snapshot.history!.observationCursor,
-      );
-      const result = await this.transport.historyTurn(params);
-      this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
-      assertHistoryObservation(snapshot.history!, result, params.observationCursor);
-      if (result.turn.turnId !== turnId) throw new Error("History turn identity mismatch");
-      if (result.hasMore && (!result.continuationCursor || result.continuationCursor === cursor))
-        throw new Error("History turn cursor did not advance");
-      this.assertHistoryRows(result.rows, flight.changed, result);
-      const next = this.historyWindow.mergeTurn(
-        this.state.snapshot!,
-        result,
-        flight.changed,
-        cursor === undefined,
-      );
-      this.setState({
-        snapshot: next,
-        historyTruncatedTurns: this.historyWindow.omissions,
         historyError: this.historyWindow.needsBoundaryRefresh
           ? HISTORY_BOUNDARY_REFRESH_REQUIRED
           : null,

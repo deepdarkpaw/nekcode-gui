@@ -120,9 +120,7 @@ export async function liveStore(initial = livePage(0, 20)) {
     onAssemblyFault: () => () => {},
     onRuntimeRestart: () => () => {},
     historyPage: vi.fn(async (_options: unknown) => livePage(0, 20)),
-    historyTurn: vi.fn(),
     historyDirectory: vi.fn(),
-    historyContent: vi.fn(),
     rowsRange: vi.fn(),
     resync: vi.fn(async (_options: unknown) => ({
       ack: { subscriptionId: "subscription", mode: "snapshot", logEpoch: "epoch" },
@@ -172,13 +170,7 @@ export async function liveStore(initial = livePage(0, 20)) {
       {
         op: "state.updated",
         patch: {
-          history: {
-            ...livePage(Math.max(0, position - 19), position + 1).history,
-            turns: livePage(Math.max(0, position - 19), position + 1).history.turns.map((turn) => ({
-              ...turn,
-              continuationCursor: `FULL:${turn.turnId}`,
-            })),
-          },
+          history: livePage(Math.max(0, position - 19), position + 1).history,
         },
       },
     ]);

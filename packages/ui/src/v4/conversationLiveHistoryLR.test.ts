@@ -3,7 +3,6 @@ import {
   coalesceConversationDeltas,
   type ConversationDelta,
   type V4ConversationHistoryPageResult,
-  type V4ConversationHistoryTurnResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { applyConversationLiveDeltas } from "./conversationLiveDeltas.js";
 import { historyAppendJsonBytes } from "./conversationHistoryBoundary.js";
@@ -79,25 +78,16 @@ describe("LR bounded live history renderer", () => {
     expect(JSON.stringify(initial)).toBe(original);
   });
 
-  it("LR2: ordered boundary-only history changes revision/count but never replaces rows or remaining cursors", async () => {
-    const initial = livePage(0, 20);
-    initial.history.turns[10]!.continuationCursor = "REMAINING:10";
-    const h = await setup(initial);
+  it("LR2: ordered boundary-only history changes revision/count but never replaces rows", async () => {
+    const h = await setup(livePage(0, 20));
     const before = h.store.getState().snapshot!;
     const owner = h.store.getHistoryOwnerKey();
     const summary = livePage(10, 30).history;
-    summary.turns = summary.turns.map((turn) => ({
-      ...turn,
-      continuationCursor: `FULL:${turn.turnId}`,
-    }));
     h.send([{ op: "state.updated", patch: { history: summary } }]);
     const after = h.store.getState().snapshot!;
     expect(after.history!.totalTurns).toBe(30);
     expect(after.history!.branchRevision).toBe("source:30");
     expect(after.history!.turns).toHaveLength(20);
-    expect(after.history!.turns.find((turn) => turn.position === 10)!.continuationCursor).toBe(
-      "REMAINING:10",
-    );
     expect(after.history!.turns.some((turn) => turn.position === 20)).toBe(false);
     expect(after.rows.window).toBe(before.rows.window);
     expect(after.control).toBe(before.control);
@@ -132,44 +122,6 @@ describe("LR bounded live history renderer", () => {
       text: "answer 30 streamed",
     });
     expect(after.rows.window.some((row) => row.rowId === 101)).toBe(true);
-    expect(h.store.getState().historyError).toBeNull();
-    const delayedTurn = deferredValue<V4ConversationHistoryTurnResult>();
-    h.transport.historyTurn.mockImplementationOnce(() => delayedTurn.promise);
-    const turnRequest = h.store.loadHistoryTurn("turn:30", "remaining:1");
-    h.send([
-      { op: "row.delta", rowId: 301, path: "text", append: " newer" },
-      {
-        op: "state.updated",
-        patch: { history: { ...livePage(32, 52).history, observationCursor: "observation:52" } },
-      },
-    ]);
-    delayedTurn.resolve({
-      atSeq: 2,
-      atRevision: 2,
-      atLogEpoch: "epoch",
-      branchRevision: "source:51",
-      observationCursor: "observation:51",
-      rows: [liveRow(30)],
-      turn: after.history!.turns.find((turn) => turn.turnId === "turn:30")!,
-      hasMore: true,
-      continuationCursor: "remaining:2",
-    });
-    await turnRequest;
-    expect(h.transport.historyTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ observationCursor: "observation:51" }),
-    );
-    expect(h.store.getState().snapshot!.history).toMatchObject({
-      branchRevision: "source:52",
-      observationCursor: "observation:52",
-      totalTurns: 52,
-    });
-    expect(
-      h.store.getState().snapshot!.history!.turns.find((turn) => turn.turnId === "turn:30")!
-        .continuationCursor,
-    ).toBe("remaining:2");
-    expect(h.store.getState().snapshot!.rows.window.find((row) => row.rowId === 301)).toMatchObject(
-      { text: "answer 30 streamed newer" },
-    );
     expect(h.store.getState().historyError).toBeNull();
   });
 
@@ -266,7 +218,7 @@ describe("LR bounded live history renderer", () => {
     expect(h.store.countProjectionRows()).toBeLessThanOrEqual(120);
     const window = new ConversationHistoryWindow();
     const initial = window.reset(liveSnapshot(livePage(0, 1)));
-    const append = '\\"\n界'.repeat(1_900_000);
+    const append = '\\"\n界'.repeat(5_700_000); // 9 JSON bytes each: just above the 48 MiB budget
     const delta: ConversationDelta = { op: "row.delta", rowId: 1, path: "text", append };
     const grown = applyConversationLiveDeltas(initial, [delta]);
     window.accountDeltas(initial, grown, [delta]);
@@ -274,7 +226,9 @@ describe("LR bounded live history renderer", () => {
     expect(new TextEncoder().encode(JSON.stringify(bounded.rows.window)).byteLength).toBeLessThan(
       HISTORY_WINDOW_LIMITS.bytes,
     );
-    expect(window.omissions).toContainEqual({ turnId: "turn:0", reason: "budget" });
+    // The over-budget turn is dropped whole (explicit unproven cut), never folded.
+    expect(bounded.rows.window.some((row) => row.turnId === "turn:0")).toBe(false);
+    expect(bounded.history!.hasOlder).toBe(true);
   });
 
   it("LR3: escaped text and split surrogate deltas match exact actual JSON byte growth", () => {

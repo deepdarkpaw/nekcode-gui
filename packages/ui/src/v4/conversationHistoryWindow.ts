@@ -5,7 +5,6 @@ import type {
   ConversationRow,
   ConversationSnapshot,
   V4ConversationHistoryPageResult,
-  V4ConversationHistoryTurnResult,
 } from "@zcode/shared/zcode-protocol-v4";
 
 import {
@@ -16,15 +15,14 @@ import {
   type HistoryViewportAnchor,
 } from "./conversationHistoryBoundary.js";
 
-/** Six host pages, never a full conversation cache. */
-export const HISTORY_WINDOW_LIMITS = { pages: 6, turns: 120, bytes: 16 * 1024 * 1024 } as const;
+/**
+ * Six source pages of complete turns, never a full conversation cache. Over budget the window
+ * evicts whole pages/turns farthest from the reading position; it never folds part of a turn.
+ */
+export const HISTORY_WINDOW_LIMITS = { pages: 6, turns: 120, bytes: 48 * 1024 * 1024 } as const;
 export const HISTORY_BOUNDARY_REFRESH_REQUIRED =
   "Live history exceeded its cursor boundary; loadLatest or loadAround explicitly to refresh navigation";
-export type HistoryDirection = "older" | "newer" | "around" | "latest" | "turn";
-export interface HistoryOmission {
-  turnId: string;
-  reason: "budget";
-}
+export type HistoryDirection = "older" | "newer" | "around" | "latest";
 /** A child transcript has the same body/history window, without parent control/config facts. */
 type HistoryWindowBody = Pick<ConversationSnapshot, "rows" | "history">;
 interface PageBoundary extends Omit<ConversationHistory, "turns"> {
@@ -128,7 +126,6 @@ export class ConversationHistoryWindow {
   }
 
   private readonly sizes = new WeakMap<ConversationRow, number>();
-  omissions: HistoryOmission[] = [];
   /** Missing source proof remains visible; ordered metadata or explicit bounded reads can renew it. */
   needsBoundaryRefresh = false;
 
@@ -136,7 +133,6 @@ export class ConversationHistoryWindow {
     this.pages = snapshot.history ? [this.boundary(snapshot.history)] : [];
     this.latestBoundary = undefined;
     this.unprovenCut = false;
-    this.omissions = [];
     this.needsBoundaryRefresh = false;
     this.retentionDirection = "latest";
     this.readingTurnId = undefined;
@@ -208,7 +204,6 @@ export class ConversationHistoryWindow {
         : this.viewportPinned
           ? this.readingTurnId
           : incoming.turnIds[0];
-    const ids = new Set(incoming.turnIds);
     // Keep overlapping page membership intact: trimming it would invalidate that page's
     // opaque boundary cursor when its neighbor is later evicted.
     const previous = this.pages.filter(
@@ -231,7 +226,6 @@ export class ConversationHistoryWindow {
       (a, b) =>
         (positions.get(a.turnIds[0]!) ?? Infinity) - (positions.get(b.turnIds[0]!) ?? Infinity),
     );
-    this.omissions = this.omissions.filter((item) => !ids.has(item.turnId) && !replace);
     const history = {
       ...result.history,
       turns: [...turns.values()].sort((a, b) => a.position - b.position),
@@ -248,60 +242,6 @@ export class ConversationHistoryWindow {
         history: acceptedHistory,
       },
       direction,
-    );
-  }
-
-  mergeTurn<T extends HistoryWindowBody>(
-    current: T,
-    result: V4ConversationHistoryTurnResult,
-    changed: ReadonlySet<string>,
-    restart = false,
-  ): T {
-    if (!current.history) return current;
-    const base = restart
-      ? current.rows.window.filter(
-          (row) => row.turnId !== result.turn.turnId || historyRowWasChanged(row, changed),
-        )
-      : current.rows.window;
-    let rows = mergeHistoryRows(base, result.rows, changed, false);
-    const turnBytes = rows
-      .filter((row) => row.turnId === result.turn.turnId)
-      .reduce((n, row) => n + this.size(row), 0);
-    const droppedPreviousSlice = turnBytes > HISTORY_WINDOW_LIMITS.bytes;
-    if (droppedPreviousSlice) {
-      const keep = current.rows.window.filter(
-        (row) =>
-          row.turnId !== result.turn.turnId ||
-          row.kind === "turnHeader" ||
-          row.kind === "userInput",
-      );
-      rows = mergeHistoryRows(keep, result.rows, changed, false);
-    }
-    const turn = { ...result.turn, continuationCursor: result.continuationCursor };
-    const boundary = this.latestBoundary;
-    const source =
-      boundary && (result.atSeq < boundary.seq || result.atRevision < boundary.revision)
-        ? boundary.history
-        : result;
-    this.readingTurnId = turn.turnId;
-    this.retentionDirection = "turn";
-    const turns = current.history.turns.map((item) => (item.turnId === turn.turnId ? turn : item));
-    if (restart) this.omissions = this.omissions.filter((item) => item.turnId !== turn.turnId);
-    if (droppedPreviousSlice && !this.omissions.some((item) => item.turnId === turn.turnId))
-      this.omissions.push({ turnId: turn.turnId, reason: "budget" });
-    return this.bound(
-      {
-        ...current,
-        rows: { ...current.rows, window: rows, totalCount: rows.length },
-        history: {
-          ...current.history,
-          branchRevision: source.branchRevision ?? current.history.branchRevision,
-          observationCursor: source.observationCursor ?? current.history.observationCursor,
-          turns,
-        },
-      },
-      "turn",
-      turn.turnId,
     );
   }
 
@@ -348,31 +288,8 @@ export class ConversationHistoryWindow {
       turns = turns.filter((turn) => !drop.has(turn.turnId));
       bytes = rows.reduce((total, row) => total + this.size(row), 0);
     }
-    /** An oversized hydrated/live turn is explicitly omitted, not silently cut in half. */
-    if (exceeds()) {
-      const byTurn = new Map<string, ConversationRow[]>();
-      for (const row of rows) {
-        const list = byTurn.get(row.turnId) ?? [];
-        list.push(row);
-        byTurn.set(row.turnId, list);
-      }
-      const candidates = [...byTurn].sort(
-        (a, b) =>
-          Number(a[0] === requestedTurnId) - Number(b[0] === requestedTurnId) ||
-          b[1].reduce((n, row) => n + this.size(row), 0) -
-            a[1].reduce((n, row) => n + this.size(row), 0),
-      );
-      for (const [turnId, body] of candidates) {
-        if (!exceeds()) break;
-        const header = body.find((row) => row.kind === "turnHeader");
-        rows = rows.filter((row) => row.turnId !== turnId || row === header);
-        if (!this.omissions.some((item) => item.turnId === turnId))
-          this.omissions.push({ turnId, reason: "budget" });
-        bytes = rows.reduce((total, row) => total + this.size(row), 0);
-      }
-    }
-    // A long uninterrupted live stream can outgrow every admitted host page. Bound it
-    // strictly, but never fabricate a cursor for a boundary the host has not issued.
+    // A long uninterrupted live stream can outgrow every admitted host page. Bound it by
+    // dropping whole oldest turns, but never fabricate a cursor the host has not issued.
     if (exceeds()) {
       const ordered = [...new Set(rows.map((row) => row.turnId))];
       for (const turnId of ordered) {
@@ -399,13 +316,6 @@ export class ConversationHistoryWindow {
     this.needsBoundaryRefresh =
       (hasOlder && !olderCursor && !edges.older?.userEntryId) ||
       (hasNewer && !newerCursor && !edges.newer?.userEntryId);
-    const visible = new Set([
-      ...rows.map((row) => row.turnId),
-      ...turns.map((turn) => turn.turnId),
-    ]);
-    this.omissions = this.omissions
-      .filter((item) => visible.has(item.turnId))
-      .slice(-HISTORY_WINDOW_LIMITS.turns);
     return {
       ...snapshot,
       rows: { ...snapshot.rows, window: rows, totalCount: rows.length },

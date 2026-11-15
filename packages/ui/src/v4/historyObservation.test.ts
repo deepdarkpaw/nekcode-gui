@@ -29,14 +29,8 @@ async function setup() {
     historyPage: vi.fn<ConversationTransport["historyPage"]>((params) =>
       source.service.conversationHistoryPageV4({ ...params, workspacePath: "/trusted" }),
     ),
-    historyTurn: vi.fn<ConversationTransport["historyTurn"]>((params) =>
-      source.service.conversationHistoryTurnV4({ ...params, workspacePath: "/trusted" }),
-    ),
     historyDirectory: vi.fn<ConversationTransport["historyDirectory"]>((params) =>
       source.service.conversationHistoryDirectoryV4({ ...params, workspacePath: "/trusted" }),
-    ),
-    historyContent: vi.fn<ConversationTransport["historyContent"]>((params) =>
-      source.service.conversationHistoryContentV4({ ...params, workspacePath: "/trusted" }),
     ),
   };
   const store = new ConversationProjectionStore(
@@ -170,36 +164,13 @@ it("HO5: main older/newer/around reads accept changed append revisions only afte
   expect(after.seq).toBe(4);
 });
 
-it("HO5: main turn continuations, directory and content retain source proof across further appends", async () => {
+it("HO5: main directory reads retain source proof across further appends", async () => {
   const { store, append, transport } = await setup();
   const initial = store.getState().snapshot!.history!;
   append();
-  await store.loadHistoryTurn("turn:60", "slice:1");
-  const first = store.getState().snapshot!.history!;
-  expect(transport.historyTurn).toHaveBeenLastCalledWith(
-    expect.objectContaining({ observationCursor: initial.observationCursor, cursor: "slice:1" }),
-  );
-  expect(first.branchRevision).not.toBe(initial.branchRevision);
-  expect(first.turns.find((turn) => turn.turnId === "turn:60")?.continuationCursor).toBe("slice:2");
-  append();
-  await store.loadHistoryTurn("turn:60", "slice:2");
-  const second = store.getState().snapshot!.history!;
-  expect(transport.historyTurn).toHaveBeenLastCalledWith(
-    expect.objectContaining({ observationCursor: first.observationCursor, cursor: "slice:2" }),
-  );
-  expect(second.branchRevision).not.toBe(first.branchRevision);
-  append();
   await store.readHistoryDirectory({ query: "question", limit: 20 });
-  await store.readHistoryContent({ ref: "opaque", offset: 1, limit: 1 });
   expect(transport.historyDirectory).toHaveBeenLastCalledWith(
-    expect.objectContaining({ sessionId: "parent", observationCursor: second.observationCursor }),
-  );
-  expect(transport.historyContent).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      sessionId: "parent",
-      observationCursor: second.observationCursor,
-      offset: 1,
-    }),
+    expect.objectContaining({ sessionId: "parent", observationCursor: initial.observationCursor }),
   );
   expect(store.getState().historyError).toBeNull();
 });

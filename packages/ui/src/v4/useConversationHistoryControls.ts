@@ -1,30 +1,22 @@
 import { useCallback, useMemo, useRef } from "react";
-import type {
-  ConversationHistory,
-  ConversationHistoryContentOptions,
-  V4ConversationHistoryContentResult,
-} from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationHistory } from "@zcode/shared/zcode-protocol-v4";
 import type { HistoryViewportAnchor } from "./conversationHistoryBoundary.js";
 import type { ConversationProjectionStore } from "./conversationProjectionStore.js";
 import type { ConversationTurnDirectory } from "./ConversationTurnNavigator.js";
 import { useConversationHistoryDirectory } from "./useConversationHistoryDirectory.js";
 
+/** History pages are whole turns only: older/newer pages add complete turns, never turn slices. */
 export interface ConversationHistoryControls {
   history: ConversationHistory;
   directory: Omit<ConversationTurnDirectory, "onNavigate">;
   directoryQuery: string | null;
   error: string | null;
   loading: boolean;
-  truncatedTurns: readonly { turnId: string; reason: "budget" }[];
   loadAround(entryId: string): Promise<boolean>;
   loadOldest(): Promise<string | null>;
   loadLatest(): Promise<boolean>;
   loadOlder(): Promise<void>;
   loadNewer(): Promise<void>;
-  loadTurn(turnId: string, cursor?: string): Promise<void>;
-  readContent(
-    options: ConversationHistoryContentOptions,
-  ): Promise<V4ConversationHistoryContentResult>;
   retry(): Promise<unknown>;
   /** Main Timeline calls from scroll/effect, never render. */
   setViewportAnchor?(anchor: HistoryViewportAnchor): void;
@@ -71,22 +63,6 @@ export function useConversationHistoryControls(
       }),
     [run, store],
   );
-  const loadTurn = useCallback(
-    (turnId: string, cursor?: string) =>
-      run(async () => {
-        const result = await store!.loadHistoryTurn(turnId, cursor);
-        if (!result)
-          throw new Error(store!.getState().historyError ?? "History read became stale; retry");
-      }),
-    [run, store],
-  );
-  const readContent = useCallback(
-    (options: ConversationHistoryContentOptions) => {
-      if (!store) return Promise.reject(new Error("Conversation history is no longer available"));
-      return store.readHistoryContent(options);
-    },
-    [store],
-  );
   const setViewportAnchor = useCallback(
     (anchor: HistoryViewportAnchor) => store?.setViewportAnchor(anchor),
     [store],
@@ -106,14 +82,11 @@ export function useConversationHistoryControls(
             directoryQuery: directory.query,
             error: state?.historyError ?? null,
             loading: Boolean(state?.historyRequest),
-            truncatedTurns: state?.historyTruncatedTurns ?? [],
             loadAround,
             loadLatest,
             loadOlder,
             loadNewer,
             loadOldest,
-            loadTurn,
-            readContent,
             setViewportAnchor,
             resyncHistory,
             retry,
@@ -124,14 +97,11 @@ export function useConversationHistoryControls(
       directory,
       state?.historyError,
       state?.historyRequest,
-      state?.historyTruncatedTurns,
       loadAround,
       loadLatest,
       loadOlder,
       loadNewer,
       loadOldest,
-      loadTurn,
-      readContent,
       setViewportAnchor,
       resyncHistory,
       retry,

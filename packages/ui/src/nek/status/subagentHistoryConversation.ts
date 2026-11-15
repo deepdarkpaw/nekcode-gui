@@ -1,5 +1,4 @@
 import type {
-  ConversationHistoryContentOptions,
   ConversationHistoryDirectoryOptions,
   ConversationHistoryPageOptions,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -32,8 +31,6 @@ import {
   createSubagentHistoryPollTimer,
   observeSubagentHistoryRuntime,
 } from "./subagentHistoryReadLease.js";
-/** One caller-visible raw JSON chunk, never an accumulated full body. */
-const CONTENT_CHUNK_BYTES = 64 * 1024;
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 /** One owner per trusted tab scope. Construct/close at an effect boundary, never during render. */
 export class SubagentHistoryConversation {
@@ -243,20 +240,6 @@ export class SubagentHistoryConversation {
     });
     return turnId ?? null;
   }
-  async loadTurn(turnId: string, cursor?: string): Promise<void> {
-    await this.run(async (generation) => {
-      if (!this.body.data || this.body.stale)
-        throw new Error("Child history is unavailable; load latest explicitly");
-      const params = withHistoryObservation(
-        { ...subagentHistoryReadTarget(this.scope), turnId, ...(cursor ? { cursor } : {}) },
-        this.body.data.history.observationCursor,
-      );
-      const result = await this.service.conversationHistoryTurnV4(params);
-      this.assertCurrent(generation);
-      this.body.applyTurn(result, turnId, cursor, params.observationCursor);
-    });
-    this.throwFailure();
-  }
   private async readDirectory(options: ConversationHistoryDirectoryOptions) {
     const generation = this.generation;
     const ownerKey = this.ownerKey();
@@ -304,40 +287,6 @@ export class SubagentHistoryConversation {
       throw error;
     }
   }
-  readContent = async (options: ConversationHistoryContentOptions) => {
-    this.body.readingLatest = false;
-    const generation = this.generation;
-    const ownerKey = this.ownerKey();
-    const params = withHistoryObservation(
-      {
-        ...options,
-        limit: Math.min(CONTENT_CHUNK_BYTES, Math.max(1, options.limit ?? CONTENT_CHUNK_BYTES)),
-      },
-      this.body.data?.history.observationCursor,
-    );
-    const key = JSON.stringify(params);
-    try {
-      const result = await this.auxiliary.read(
-        () =>
-          this.service.conversationHistoryContentV4({
-            ...params,
-            ...subagentHistoryReadTarget(this.scope),
-          }),
-        params.observationCursor,
-      );
-      this.assertCurrent(generation);
-      if (ownerKey !== this.ownerKey()) throw new Error("Child history owner changed during read");
-      if (this.failure?.key === key) this.failure = undefined;
-      this.publish();
-      return result;
-    } catch (error) {
-      if (this.valid(generation) && ownerKey === this.ownerKey()) {
-        this.failure = { message: messageOf(error), retry: () => this.readContent(params), key };
-        this.publish();
-      }
-      throw error;
-    }
-  };
   async retry(): Promise<unknown> {
     if (!this.active || this.closed) return;
     const retry =

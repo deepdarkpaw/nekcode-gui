@@ -11,9 +11,7 @@ vi.mock("@/logger.js", () => ({
 function adapter() {
   const service = {
     conversationHistoryPageV4: vi.fn(async () => ({ marker: "page" })),
-    conversationHistoryTurnV4: vi.fn(async () => ({ marker: "turn" })),
     conversationHistoryDirectoryV4: vi.fn(async () => ({ marker: "directory" })),
-    conversationHistoryContentV4: vi.fn(async () => ({ marker: "content" })),
   };
   const transport = createAgentConversationTransport(
     service as unknown as Parameters<typeof createAgentConversationTransport>[0],
@@ -28,31 +26,18 @@ it("RH8: real history adapter crosses the existing trusted service contract with
   await expect(
     transport.historyPage({ ...scope, beforeCursor: "before", turnLimit: 20 }),
   ).resolves.toEqual({ marker: "page" });
-  await transport.historyTurn({ ...scope, turnId: "turn:1", cursor: "slice" });
   await transport.historyDirectory({ ...scope, query: "search", direction: "oldest", limit: 100 });
-  await transport.historyContent({ ...scope, ref: "capability", offset: 10, limit: 20 });
   const target = { ...scope, workspacePath: "/trusted", workspaceIdentity: "ssh:trusted" };
   expect(service.conversationHistoryPageV4).toHaveBeenCalledWith({
     ...target,
     beforeCursor: "before",
     turnLimit: 20,
   });
-  expect(service.conversationHistoryTurnV4).toHaveBeenCalledWith({
-    ...target,
-    turnId: "turn:1",
-    cursor: "slice",
-  });
   expect(service.conversationHistoryDirectoryV4).toHaveBeenCalledWith({
     ...target,
     query: "search",
     direction: "oldest",
     limit: 100,
-  });
-  expect(service.conversationHistoryContentV4).toHaveBeenCalledWith({
-    ...target,
-    ref: "capability",
-    offset: 10,
-    limit: 20,
   });
 });
 
@@ -81,14 +66,10 @@ it("RH8/RH9: replaceable transport forwards all history methods to the latest re
   const transport = new ReplaceableConversationTransport(first.transport);
   transport.replace(second.transport);
   await transport.historyPage({ sessionId: "parent" });
-  await transport.historyTurn({ sessionId: "parent", turnId: "turn" });
   await transport.historyDirectory({ sessionId: "parent" });
-  await transport.historyContent({ sessionId: "parent", ref: "ref" });
   for (const method of [
     "conversationHistoryPageV4",
-    "conversationHistoryTurnV4",
     "conversationHistoryDirectoryV4",
-    "conversationHistoryContentV4",
   ] as const) {
     expect(first.service[method]).not.toHaveBeenCalled();
     expect(second.service[method]).toHaveBeenCalledTimes(1);

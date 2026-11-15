@@ -2,7 +2,6 @@ import type {
   ConversationHistoryPageOptions,
   ConversationHistoryWatermark,
   V4ConversationHistoryPageResult,
-  V4ConversationHistoryTurnResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { assertHistoryObservation, withHistoryObservation } from "@zcode/shared/zcode-protocol-v4";
 import { ConversationHistoryWindow } from "@/v4/conversationHistoryWindow.js";
@@ -202,26 +201,5 @@ export class SubagentHistoryBody {
     this.latestDirty = false;
     this.readingLatest =
       direction === "latest" || (direction === "newer" && !result.history.hasNewer);
-  }
-  applyTurn(
-    result: V4ConversationHistoryTurnResult,
-    turnId: string,
-    cursor?: string,
-    observationCursor?: string,
-  ): void {
-    if (!this.data || this.stale)
-      throw new Error("Child history is unavailable; load latest explicitly");
-    assertChildWatermark(result, this.watermark);
-    assertHistoryObservation(this.data.history, result, observationCursor);
-    if (!this.data.history.turns.some((turn) => turn.turnId === turnId) || !result.rows.length)
-      throw new Error("Child history turn is not loaded or omitted rows; load around explicitly");
-    if (
-      result.turn.turnId !== turnId ||
-      (result.hasMore && (!result.continuationCursor || result.continuationCursor === cursor))
-    )
-      throw new Error("Child history turn identity/cursor did not advance");
-    this.commit(this.window.mergeTurn(bodyOf(this.data), result, new Set(), cursor === undefined));
-    this.observeWatermark(watermarkOf(result));
-    this.readingLatest = false;
   }
 }

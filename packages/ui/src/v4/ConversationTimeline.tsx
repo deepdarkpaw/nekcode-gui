@@ -1132,6 +1132,26 @@ function ConversationTimelineImpl({
     [virtualizer],
   );
 
+  // 前插超过 viewport + overscan 后旧可见 turn 会被卸载，DOM 不能作为跨
+  // commit 锚点；这里保存 virtualizer 按稳定 turn key 维护的 measurement 起点。
+  const capturePrependAnchor = useCallback(
+    (element: HTMLDivElement) => {
+      const anchorMeasurement = virtualizer.getVirtualItemForOffset(element.scrollTop);
+      const anchorUnit = anchorMeasurement
+        ? virtualizedUnitsRef.current[anchorMeasurement.index]
+        : undefined;
+      pendingPrependVirtualAnchorRef.current =
+        anchorMeasurement && anchorUnit?.key === anchorMeasurement.key
+          ? {
+              key: anchorUnit.key,
+              offsetTop: anchorMeasurement.start - element.scrollTop,
+              start: anchorMeasurement.start,
+            }
+          : null;
+    },
+    [virtualizer],
+  );
+
   const handleScroll = useCallback(() => {
     const element = scrollRef.current;
     if (!element) return;
@@ -1175,11 +1195,12 @@ function ConversationTimelineImpl({
       userAdjustedScrollSinceRestoreRef.current = true;
       saveCurrentScrollMemory();
     }
-    // 只在 64px 顶边才补页时，用户会先撞到窗口边界再看到内容跳入；提前两个
-    // 视口预取，让桌面和手机 Web 共用的 renderer 在用户抵达边界前完成补页。
+    // 源历史（historyControls）只由顶部“加载更早的对话”按钮按整轮向前加载；
+    // 自动预取只保留给没有源历史分页的 rows/range 窗口。
     const loadOlder = loadOlderRef.current;
     const triggerPx = historyPrefetchTriggerPx(element.clientHeight);
     if (
+      !historyControlsRef.current &&
       scrollSource === "user" &&
       movingUp &&
       shouldTriggerLoadOlder({
@@ -1189,21 +1210,8 @@ function ConversationTimelineImpl({
         triggerPx,
       })
     ) {
-      // 前插超过 viewport + overscan 后旧可见 turn 会被卸载，DOM 不能作为跨
-      // commit 锚点；这里保存 virtualizer 按稳定 turn key 维护的 measurement 起点。
-      const anchorMeasurement = virtualizer.getVirtualItemForOffset(element.scrollTop);
-      const anchorUnit = anchorMeasurement
-        ? virtualizedUnitsRef.current[anchorMeasurement.index]
-        : undefined;
-      pendingPrependVirtualAnchorRef.current =
-        anchorMeasurement && anchorUnit?.key === anchorMeasurement.key
-          ? {
-              key: anchorUnit.key,
-              offsetTop: anchorMeasurement.start - element.scrollTop,
-              start: anchorMeasurement.start,
-            }
-          : null;
-      logger.debug("[v4-timeline] 接近历史窗口顶部，自动预取更早行", {
+      capturePrependAnchor(element);
+      logger.debug("[v4-timeline] 接近窗口顶部，自动预取更早行", {
         scrollTop: element.scrollTop,
         triggerPx,
       });
@@ -1212,13 +1220,26 @@ function ConversationTimelineImpl({
       void loadOlder.onLoadOlder?.();
     }
   }, [
+    capturePrependAnchor,
     commitFollowing,
     getActiveUserScrollIntent,
     reportViewportAnchor,
     saveCurrentScrollMemory,
     syncTurnNavigatorViewport,
-    virtualizer,
   ]);
+
+  /** Explicit “load earlier turns”: prepend whole turns above and keep the current turn in place. */
+  const handleLoadOlderTurns = useCallback(async () => {
+    const controls = historyControlsRef.current;
+    if (!controls) return;
+    const element = scrollRef.current;
+    if (element) {
+      clearUserScrollIntent();
+      commitFollowing(false);
+      capturePrependAnchor(element);
+    }
+    await controls.loadOlder();
+  }, [capturePrependAnchor, clearUserScrollIntent, commitFollowing]);
 
   const handleScrollToTop = useCallback(() => {
     if (historyControlsRef.current?.history.hasOlder) {
@@ -1929,6 +1950,7 @@ function ConversationTimelineImpl({
                   {historyControls ? (
                     <ConversationHistoryHeader
                       controls={historyControls}
+                      onLoadOlder={handleLoadOlderTurns}
                       navigationError={historyNavigationError}
                       selectionOnly={Boolean(shareSelection)}
                     />
@@ -1967,13 +1989,6 @@ function ConversationTimelineImpl({
                     >
                       <ConversationTurnGroup
                         unit={unit}
-                        historyTurn={historyControls?.history.turns.find(
-                          (turn) => turn.turnId === unit.turnId,
-                        )}
-                        historyTruncated={historyControls?.truncatedTurns.some(
-                          (turn) => turn.turnId === unit.turnId,
-                        )}
-                        onLoadHistoryTurn={historyControls?.loadTurn}
                         apiRetry={null}
                         context={rowContext}
                         onFork={onFork}
@@ -2004,13 +2019,6 @@ function ConversationTimelineImpl({
                 >
                   <ConversationTurnGroup
                     unit={liveUnit}
-                    historyTurn={historyControls?.history.turns.find(
-                      (turn) => turn.turnId === liveUnit.turnId,
-                    )}
-                    historyTruncated={historyControls?.truncatedTurns.some(
-                      (turn) => turn.turnId === liveUnit.turnId,
-                    )}
-                    onLoadHistoryTurn={historyControls?.loadTurn}
                     apiRetry={apiRetry}
                     context={rowContext}
                     onFork={onFork}

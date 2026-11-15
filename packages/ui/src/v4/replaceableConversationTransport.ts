@@ -141,22 +141,10 @@ export class ReplaceableConversationTransport implements ConversationTransport {
     return this.readHistory((owner) => owner.historyPage(params));
   }
 
-  historyTurn(
-    params: Parameters<ConversationTransport["historyTurn"]>[0],
-  ): ReturnType<ConversationTransport["historyTurn"]> {
-    return this.readHistory((owner) => owner.historyTurn(params));
-  }
-
   historyDirectory(
     params: Parameters<ConversationTransport["historyDirectory"]>[0],
   ): ReturnType<ConversationTransport["historyDirectory"]> {
     return this.readHistory((owner) => owner.historyDirectory(params));
-  }
-
-  historyContent(
-    params: Parameters<ConversationTransport["historyContent"]>[0],
-  ): ReturnType<ConversationTransport["historyContent"]> {
-    return this.readHistory((owner) => owner.historyContent(params));
   }
 
   plans(

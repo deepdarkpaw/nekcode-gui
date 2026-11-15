@@ -3,13 +3,9 @@
 // 这是「依赖注入解决 desktop/web 兼容」原则在 v4 数据层的落点。
 import type {
   ConversationHistoryPageOptions,
-  ConversationHistoryTurnOptions,
   ConversationHistoryDirectoryOptions,
-  ConversationHistoryContentOptions,
   V4ConversationHistoryPageResult,
-  V4ConversationHistoryTurnResult,
   V4ConversationHistoryDirectoryResult,
-  V4ConversationHistoryContentResult,
   CommandAck,
   CommandEnvelope,
   CommandsQueryParams,
@@ -54,19 +50,13 @@ export interface ConversationTransport {
   queryCommands(params: CommandsQueryParams): Promise<CommandsQueryResult>;
   /** v4/conversation/rowsRange（loadOlder）：按游标向上取一窗历史行。 */
   rowsRange(params: V4ConversationRowsRangeParams): Promise<V4ConversationRowsRangeResult>;
-  /** Source history capabilities stay scoped to their parent session and optional child. */
+  /** Source history pages of complete turns, scoped to their parent session and optional child. */
   historyPage(
     params: ConversationHistoryPageOptions & HistorySessionTarget,
   ): Promise<V4ConversationHistoryPageResult>;
-  historyTurn(
-    params: ConversationHistoryTurnOptions & HistorySessionTarget,
-  ): Promise<V4ConversationHistoryTurnResult>;
   historyDirectory(
     params: ConversationHistoryDirectoryOptions & HistorySessionTarget,
   ): Promise<V4ConversationHistoryDirectoryResult>;
-  historyContent(
-    params: ConversationHistoryContentOptions & HistorySessionTarget,
-  ): Promise<V4ConversationHistoryContentResult>;
   /** v4/conversation/plans：当前有效分支里的全部终态计划。 */
   plans(params: V4ConversationPlansParams): Promise<V4ConversationPlansResult>;
   /** v4/conversation/fileChanges：按 turn row 展开文件摘要详情与只读 diff。 */

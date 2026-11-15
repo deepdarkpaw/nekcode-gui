@@ -3,8 +3,6 @@ import type {
   ConversationRow,
   V4ConversationHistoryDirectoryResult,
   V4ConversationHistoryPageResult,
-  V4ConversationHistoryTurnResult,
-  V4ConversationHistoryContentResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { SubagentConversation } from "./useSubagentConversation.js";
 import type { SubagentHistoryScope } from "./subagentHistoryTypes.js";
@@ -81,28 +79,7 @@ export function childService(preview = childPreview()) {
   const service = {
     getSubagentConversation: vi.fn(async () => preview),
     conversationHistoryPageV4: vi.fn(async () => childPage(30, 50)),
-    conversationHistoryTurnV4: vi.fn(
-      async (): Promise<V4ConversationHistoryTurnResult> => ({
-        ...watermark,
-        rows: [childRow(60)],
-        turn: { turnId: "turn:60", userEntryId: "entry:60", position: 60, preview: "question" },
-        hasMore: true,
-        continuationCursor: "slice:2",
-      }),
-    ),
     conversationHistoryDirectoryV4: vi.fn(async () => childDirectory()),
-    conversationHistoryContentV4: vi.fn(
-      async (): Promise<V4ConversationHistoryContentResult> => ({
-        ...watermark,
-        ref: "ref",
-        offset: 0,
-        totalBytes: 10,
-        encoding: "base64" as const,
-        data: "YWJj",
-        mediaType: "application/json",
-        nextOffset: 3,
-      }),
-    ),
     onAgentRuntimeRestarted: vi.fn((listener: (event: { workspaceKey: string }) => void) => {
       listeners.add(listener);
       return {

@@ -34,7 +34,7 @@ export interface HistoryViewportAnchor {
   followingLatest: boolean;
 }
 
-/** Summary descriptors are source metadata, never accepted body/remaining-cursor facts. */
+/** Summary descriptors are source metadata for loaded turns, never body pages. */
 export function mergeLoadedHistoryBoundary(
   history: ConversationHistory,
   rows: readonly ConversationRow[],
@@ -44,11 +44,7 @@ export function mergeLoadedHistoryBoundary(
   const turns = new Map(
     history.turns.filter((turn) => loaded.has(turn.turnId)).map((turn) => [turn.turnId, turn]),
   );
-  for (const turn of boundary.turns) {
-    if (!loaded.has(turn.turnId)) continue;
-    const previous = turns.get(turn.turnId);
-    turns.set(turn.turnId, { ...turn, continuationCursor: previous?.continuationCursor });
-  }
+  for (const turn of boundary.turns) if (loaded.has(turn.turnId)) turns.set(turn.turnId, turn);
   return {
     ...history,
     ...boundary,

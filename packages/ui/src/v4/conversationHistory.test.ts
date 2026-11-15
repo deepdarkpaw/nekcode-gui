@@ -133,9 +133,7 @@ async function setup(initial = page(50, 70)) {
     onAssemblyFault: () => () => {},
     onRuntimeRestart: () => () => {},
     historyPage: vi.fn(async () => page(30, 50)),
-    historyTurn: vi.fn(),
     historyDirectory: vi.fn(),
-    historyContent: vi.fn(),
     rowsRange: vi.fn(),
   };
   const store = new ConversationProjectionStore(
@@ -291,42 +289,20 @@ describe("renderer bounded history", () => {
     });
   });
 
-  it("RH3/RH4: 16MB body budget explicitly describes an oversized turn omission", () => {
+  it("RH3/RH4: an over-budget window drops whole far turns and never folds a turn body", () => {
     const window = new ConversationHistoryWindow();
     const initial = page(0, 2, 2);
     initial.rows = [
-      { ...row(0), kind: "turnHeader" } as ConversationRow,
+      { ...row(0), kind: "turnHeader", rowId: 0, entityId: "header:0" } as ConversationRow,
       row(0, "x".repeat(HISTORY_WINDOW_LIMITS.bytes)),
+      { ...row(1), kind: "turnHeader", rowId: 10, entityId: "header:1" } as ConversationRow,
       row(1),
     ];
     const current = window.reset(snapshot(initial));
-    expect(current.rows.window.filter((item) => item.turnId === "turn:0")).toHaveLength(1);
-    expect(window.omissions).toEqual([{ turnId: "turn:0", reason: "budget" }]);
-    expect(current.history!.turns).toHaveLength(2);
-  });
-
-  it("RH5: explicit turn continuation merges stable rows and updates metadata, never drains", async () => {
-    const { store, transport } = await setup();
-    transport.historyTurn.mockResolvedValue({
-      ...watermark,
-      rows: [row(60, "hydrated")],
-      turn: { turnId: "turn:60", userEntryId: "entry:60", position: 60, preview: "Question" },
-      hasMore: true,
-      continuationCursor: "slice:2",
-    });
-    await store.loadHistoryTurn("turn:60", "slice:1");
-    expect(transport.historyTurn).toHaveBeenCalledTimes(1);
-    expect(
-      store.getState().snapshot!.history!.turns.find((turn) => turn.turnId === "turn:60")
-        ?.continuationCursor,
-    ).toBe("slice:2");
-    await store.loadHistoryTurn("turn:60", "slice:1");
-    expect(
-      store.getState().snapshot!.rows.window.filter((item) => item.turnId === "turn:60"),
-    ).toHaveLength(1);
-    expect(
-      store.getState().snapshot!.history!.turns.filter((turn) => turn.turnId === "turn:60"),
-    ).toHaveLength(1);
+    expect(current.rows.window.filter((item) => item.turnId === "turn:0")).toHaveLength(0);
+    expect(current.rows.window.filter((item) => item.turnId === "turn:1")).toHaveLength(2);
+    expect(current.history!.turns.map((turn) => turn.turnId)).toEqual(["turn:1"]);
+    expect(current.history!.hasOlder).toBe(true);
   });
 
   it("RH7: failed and nonadvancing pages retain data and expose retry; success clears error", async () => {
@@ -347,7 +323,7 @@ describe("renderer bounded history", () => {
     expect(store.getState().historyError).toBeNull();
   });
 
-  it("RH8: directory and bounded content preserve parent identity without retaining content", async () => {
+  it("RH8: directory reads preserve parent identity without changing the reading window", async () => {
     const { store, transport } = await setup();
     transport.historyDirectory.mockResolvedValue({
       ...watermark,
@@ -355,28 +331,12 @@ describe("renderer bounded history", () => {
       hasMore: false,
       totalTurns: 70,
     });
-    transport.historyContent.mockResolvedValue({
-      ...watermark,
-      ref: "ref",
-      data: "YWJj",
-      offset: 0,
-      totalBytes: 4,
-      encoding: "base64",
-      mediaType: "application/json",
-    });
     const before = store.getState().snapshot;
     await store.readHistoryDirectory({ query: "question", limit: 1000 });
-    await store.readHistoryContent({ ref: "ref", offset: 0, limit: 10 });
     expect(transport.historyDirectory).toHaveBeenCalledWith({
       sessionId: "parent",
       query: "question",
       limit: 100,
-    });
-    expect(transport.historyContent).toHaveBeenCalledWith({
-      sessionId: "parent",
-      ref: "ref",
-      offset: 0,
-      limit: 10,
     });
     expect(store.getState().snapshot).toBe(before);
   });
@@ -424,54 +384,6 @@ describe("renderer bounded history", () => {
     expect(store.getState().snapshot!.history!.turns[0]?.position).toBe(50);
   });
 
-  it("RH5/RH7: turn continuation with no cursor progress errors without changing visible rows", async () => {
-    const { store, transport } = await setup();
-    const before = store.getState().snapshot;
-    transport.historyTurn.mockResolvedValue({
-      ...watermark,
-      rows: [row(60)],
-      turn: { turnId: "turn:60" },
-      hasMore: true,
-      continuationCursor: "slice",
-    });
-    await store.loadHistoryTurn("turn:60", "slice");
-    expect(store.getState().snapshot).toBe(before);
-    expect(store.getState().historyError).toContain("did not advance");
-  });
-
-  it("RH5/RH3: overflowing accumulated turn pieces retain the requested slice with explicit restart metadata", () => {
-    const window = new ConversationHistoryWindow();
-    const first = page(0, 1, 1);
-    const header = {
-      ...row(0),
-      kind: "turnHeader",
-      rowId: 0,
-      entityId: "header:0",
-    } as ConversationRow;
-    first.rows = [header, row(0, "a".repeat(9 * 1024 * 1024))];
-    const initial = window.reset(snapshot(first));
-    const piece = {
-      ...row(0, "b".repeat(9 * 1024 * 1024)),
-      rowId: 2,
-      entityId: "part:2",
-    } as ConversationRow;
-    const next = window.mergeTurn(
-      initial,
-      {
-        ...watermark,
-        rows: [header, piece],
-        turn: first.history.turns[0]!,
-        hasMore: true,
-        continuationCursor: "next",
-      },
-      new Set(),
-    );
-    expect(next.rows.window.some((item) => item.entityId === "part:2")).toBe(true);
-    expect(next.rows.window.some((item) => item.entityId === "answer:0")).toBe(false);
-    expect(window.omissions).toEqual([{ turnId: "turn:0", reason: "budget" }]);
-    expect(next.history!.turns[0]?.continuationCursor).toBe("next");
-  });
-
   it("RH3: live-only turn overflow is bounded and explicitly requires fresh host cursors, never fabricated ones", async () => {
     const { store, transport, deltas } = await setup(page(0, 20, 20));
     deltas(
@@ -503,29 +415,6 @@ describe("renderer bounded history", () => {
     const start = value.history!.turns[0]!.position;
     expect(value.history!.olderCursor).toBe(`before:${start}`);
     expect(value.rows.window[0]!.turnId).toBe(`turn:${start}`);
-  });
-
-  it("RH3/RH5: byte eviction retains the explicitly requested oldest turn", () => {
-    const window = new ConversationHistoryWindow();
-    const first = page(0, 1, 3);
-    first.rows = [row(0, "a".repeat(6 * 1024 * 1024))];
-    let value = window.reset(snapshot(first));
-    const second = page(1, 2, 3);
-    second.rows = [row(1, "b".repeat(6 * 1024 * 1024))];
-    value = window.mergePage(value, second, "newer", new Set());
-    value = window.mergeTurn(
-      value,
-      {
-        ...watermark,
-        rows: [{ ...row(0, "c".repeat(6 * 1024 * 1024)), entityId: "part:0:2", rowId: 2 }],
-        turn: first.history.turns[0]!,
-        hasMore: false,
-      },
-      new Set(),
-    );
-    expect(value.rows.window.some((item) => item.entityId === "part:0:2")).toBe(true);
-    expect(value.history!.turns[0]?.turnId).toBe("turn:0");
-    expect(value.history).toMatchObject({ hasNewer: true, newerCursor: "after:1" });
   });
 
   it("RH3/RH9: token accounting serializes neither snapshot nor growing row after page admission", () => {

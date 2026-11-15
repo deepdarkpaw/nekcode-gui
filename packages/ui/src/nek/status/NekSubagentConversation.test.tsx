@@ -92,7 +92,7 @@ it("S1/S2: the right-side tab uses parent-scoped preview and the standard read-o
   expect(props.rowContext.sessionId).toBe("child");
   expect(props.rowContext.workspaceRemoteSessionId).toBe("ssh-host");
   expect(props.historyControls.history.totalTurns).toBe(0);
-  expect(props.rowContext.readHistoryContent).toBeTypeOf("function");
+  expect(props.rowContext).not.toHaveProperty("readHistoryContent");
   expect(props.onFork).toBeUndefined();
   expect(props.onEdit).toBeUndefined();
 });

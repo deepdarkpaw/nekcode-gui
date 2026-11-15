@@ -244,7 +244,7 @@ it("CH6: poll failure keeps rows, stops automatic retry, and explicit retry repe
   expect(owner.getState().error).toBeNull();
 });
 
-it("CH5: a fresh epoch fences late metadata/content failures, not only body responses", async () => {
+it("CH5: a fresh epoch fences late metadata failures, not only body responses", async () => {
   const { owner, service } = await setup();
   service.conversationHistoryPageV4.mockResolvedValueOnce(childPage(30, 50));
   await owner.loadOlder();
@@ -252,10 +252,6 @@ it("CH5: a fresh epoch fences late metadata/content failures, not only body resp
   const metadata = deferred<V4ConversationHistoryDirectoryResult>();
   service.conversationHistoryDirectoryV4.mockImplementationOnce(() => metadata.promise);
   owner.setQuery("late");
-  const content = deferred<Awaited<ReturnType<typeof service.conversationHistoryContentV4>>>();
-  service.conversationHistoryContentV4.mockImplementationOnce(() => content.promise);
-  const request = owner.readContent({ ref: "ref", limit: 1 });
-  const assertion = expect(request).rejects.toThrow("owner changed");
   service.conversationHistoryPageV4.mockResolvedValueOnce({ ...childPage(), atLogEpoch: "fresh" });
   service.conversationHistoryDirectoryV4.mockResolvedValueOnce({
     ...childDirectory(100),
@@ -264,42 +260,7 @@ it("CH5: a fresh epoch fences late metadata/content failures, not only body resp
   await owner.loadLatest();
   await settleChild();
   metadata.reject(new Error("late metadata failed"));
-  content.resolve({
-    atSeq: 1,
-    atRevision: 1,
-    atLogEpoch: "epoch",
-    ref: "ref",
-    data: "YQ==",
-    offset: 0,
-    totalBytes: 1,
-    encoding: "base64",
-    mediaType: "application/json",
-  });
-  await assertion;
   await settleChild();
   expect(owner.getState().error).toBeNull();
   expect(owner.getState().historyControls?.directory.items[0]?.position).toBe(100);
-});
-
-it("CH5: late closed content read rejects without publishing error or retaining its bytes", async () => {
-  const { owner, service } = await setup();
-  const content = deferred<Awaited<ReturnType<typeof service.conversationHistoryContentV4>>>();
-  service.conversationHistoryContentV4.mockImplementationOnce(() => content.promise);
-  const request = owner.readContent({ ref: "ref", offset: 3, limit: 10 });
-  const assertion = expect(request).rejects.toThrow("no longer active");
-  owner.close();
-  const before = owner.getState();
-  content.resolve({
-    atSeq: 1,
-    atRevision: 1,
-    atLogEpoch: "epoch",
-    ref: "ref",
-    data: "YWJj",
-    offset: 3,
-    totalBytes: 6,
-    encoding: "base64",
-    mediaType: "application/json",
-  });
-  await assertion;
-  expect(owner.getState()).toBe(before);
 });

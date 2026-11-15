@@ -16,9 +16,7 @@ export type SubagentHistoryService = Pick<
   IZCodeAgentService,
   | "getSubagentConversation"
   | "conversationHistoryPageV4"
-  | "conversationHistoryTurnV4"
   | "conversationHistoryDirectoryV4"
-  | "conversationHistoryContentV4"
   | "onAgentRuntimeRestarted"
 > &
   Partial<Pick<IZCodeAgentService, "onAgentRuntimeLifecycle">>;

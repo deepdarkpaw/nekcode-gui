@@ -4,20 +4,13 @@ import type { SubagentHistoryBody } from "./subagentHistoryBody.js";
 
 type HistoryActions = Pick<
   ConversationHistoryControls,
-  | "loadOlder"
-  | "loadNewer"
-  | "loadAround"
-  | "loadLatest"
-  | "loadOldest"
-  | "loadTurn"
-  | "readContent"
-  | "retry"
+  "loadOlder" | "loadNewer" | "loadAround" | "loadLatest" | "loadOldest" | "retry"
 >;
 
-/** Pure view projection; the controller retains all state and the stable bound content callback. */
+/** Pure view projection; the controller retains all state. Pages are whole turns only. */
 export function buildSubagentHistoryControls(
   owner: HistoryActions,
-  body: Pick<SubagentHistoryBody, "history" | "window">,
+  body: Pick<SubagentHistoryBody, "history">,
   directory: ReturnType<typeof createHistoryDirectoryController>,
   query: string,
   error: string | null,
@@ -33,14 +26,11 @@ export function buildSubagentHistoryControls(
     directoryQuery: query,
     error,
     loading,
-    truncatedTurns: body.window.omissions,
     loadOlder: () => owner.loadOlder(),
     loadNewer: () => owner.loadNewer(),
     loadAround: (id) => owner.loadAround(id),
     loadLatest: () => owner.loadLatest(),
     loadOldest: () => owner.loadOldest(),
-    loadTurn: (id, cursor) => owner.loadTurn(id, cursor),
-    readContent: owner.readContent,
     retry: () => owner.retry(),
   };
 }

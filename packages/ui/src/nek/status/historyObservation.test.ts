@@ -1,14 +1,11 @@
 // @vitest-environment happy-dom
-import { useEffect, useState } from "react";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { IZCodeAgentService } from "@zcode/services";
 import {
   createSubagentHistoryConversation,
   type SubagentHistoryConversation,
 } from "./subagentHistoryConversation.js";
-import { useSubagentHistoryConversation } from "./useSubagentHistoryConversation.js";
-import { childPreview, deferred, scope, settleChild } from "./subagentHistory.testFixtures.js";
+import { childPreview, scope, settleChild } from "./subagentHistory.testFixtures.js";
 import { observationSource } from "./historyObservation.testFixtures.js";
 import { NEK_STATUS_TRANSCRIPT_REFRESH_MS } from "./types.js";
 
@@ -28,7 +25,6 @@ async function setup(source = observationSource()) {
 
 it("HO3: guarded compatible append changes the real prefix revision while preserving older rows/cursors", async () => {
   const { owner, source } = await setup();
-  await owner.loadTurn("turn:60", "slice:1");
   await owner.loadOlder();
   const before = owner.getState().data!;
   const proof = before.history.observationCursor;
@@ -52,9 +48,6 @@ it("HO3: guarded compatible append changes the real prefix revision while preser
     olderCursor: before.history.olderCursor,
     newerCursor: before.history.newerCursor,
   });
-  expect(after.history.turns.find((turn) => turn.turnId === "turn:60")?.continuationCursor).toBe(
-    "slice:2",
-  );
   source.append();
   await owner.loadOlder();
   expect(source.service.conversationHistoryPageV4).toHaveBeenLastCalledWith(
@@ -146,23 +139,13 @@ it("HO4: a guarded reply missing the returned proof fails even if the backend re
   expect(owner.getState().error).toContain("omitted its observation proof");
 });
 
-it("HO5: child turn/directory/content continuing reads carry the last proof and remain valid after append", async () => {
+it("HO5: child directory reads carry the last proof and remain valid after append", async () => {
   const { source, owner } = await setup(observationSource(70, "completed"));
   const proof = owner.getState().data!.history.observationCursor;
   source.append();
-  await owner.loadTurn("turn:60", "slice:1");
-  expect(source.service.conversationHistoryTurnV4).toHaveBeenLastCalledWith(
-    expect.objectContaining({ observationCursor: proof, cursor: "slice:1" }),
-  );
-  const nextProof = owner.getState().data!.history.observationCursor;
-  source.append();
   await owner.getState().historyControls!.directory.reload();
-  await owner.readContent({ ref: "opaque", offset: 1, limit: 1 });
   expect(source.service.conversationHistoryDirectoryV4).toHaveBeenLastCalledWith(
-    expect.objectContaining({ observationCursor: nextProof }),
-  );
-  expect(source.service.conversationHistoryContentV4).toHaveBeenLastCalledWith(
-    expect.objectContaining({ observationCursor: nextProof, offset: 1, limit: 1 }),
+    expect.objectContaining({ observationCursor: proof }),
   );
   expect(owner.getState().error).toBeNull();
 });
@@ -181,63 +164,3 @@ it.each(["epoch", "seq", "revision"])(
     expect(owner.getState().error).toContain("watermark changed");
   },
 );
-
-it("HO6: opening content while a guarded poll is in flight detaches before the reply can replace rows", async () => {
-  const { source, owner } = await setup();
-  const before = owner.getState().data!;
-  const reader = owner.getState().historyControls!.readContent;
-  const pending = deferred<Awaited<ReturnType<typeof source.service.getSubagentConversation>>>();
-  source.service.getSubagentConversation.mockImplementationOnce(() => pending.promise);
-  source.append();
-  await vi.advanceTimersByTimeAsync(NEK_STATUS_TRANSCRIPT_REFRESH_MS);
-  await reader({ ref: "opaque", offset: 0, limit: 1 });
-  pending.resolve({
-    ...childPreview(
-      "running",
-      source.page({ observationCursor: before.history.observationCursor }),
-    ),
-    ...source.watermark,
-  });
-  await settleChild();
-  expect(owner.getState().data!.rows).toBe(before.rows);
-  expect(owner.getState().data!.history.branchRevision).not.toBe(before.history.branchRevision);
-  expect(owner.getState().historyControls!.readContent).toBe(reader);
-  expect(owner.getState().error).toBeNull();
-});
-
-it("HO6: content reader identity stays stable and polls preserve an explicitly opened reading viewport/chunk", async () => {
-  const source = observationSource();
-  const { result } = renderHook(() => {
-    const value = useSubagentHistoryConversation({
-      service: source.service as unknown as IZCodeAgentService,
-      scope,
-      active: true,
-    });
-    const read = value.historyControls?.readContent;
-    const [chunk, setChunk] = useState("");
-    useEffect(() => {
-      if (read)
-        void read({ ref: "opaque", offset: 0, limit: 1 }).then((piece) => setChunk(piece.data));
-    }, [read]);
-    return { ...value, chunk };
-  });
-  await act(async () => {
-    await settleChild();
-  });
-  const before = result.current.data!;
-  const reader = result.current.historyControls!.readContent;
-  expect(result.current.chunk).toBe("YQ==");
-  expect(source.service.conversationHistoryContentV4).toHaveBeenCalledTimes(1);
-  for (let n = 0; n < 3; n++) {
-    source.append();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(NEK_STATUS_TRANSCRIPT_REFRESH_MS);
-    });
-    expect(result.current.historyControls!.readContent).toBe(reader);
-    expect(result.current.data!.rows).toBe(before.rows);
-    expect(result.current.chunk).toBe("YQ==");
-    expect(result.current.error).toBeNull();
-  }
-  expect(result.current.data!.history.branchRevision).not.toBe(before.history.branchRevision);
-  expect(source.service.conversationHistoryContentV4).toHaveBeenCalledTimes(1);
-});

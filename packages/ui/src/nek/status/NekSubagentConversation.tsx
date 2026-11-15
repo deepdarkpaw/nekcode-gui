@@ -49,7 +49,6 @@ export function NekSubagentConversation({
       onOpenCodeViewer,
       onOpenFileLink,
       onOpenSubagentSession,
-      readHistoryContent: historyControls?.readContent,
     }),
     [
       tab.workspacePath,
@@ -63,7 +62,6 @@ export function NekSubagentConversation({
       onOpenCodeViewer,
       onOpenFileLink,
       onOpenSubagentSession,
-      historyControls?.readContent,
     ],
   );
   return (

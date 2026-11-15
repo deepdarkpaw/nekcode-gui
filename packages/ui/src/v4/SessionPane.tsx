@@ -1862,7 +1862,6 @@ export function SessionPane({
       applyFileRewind: workspaceFileRewindEnabled ? handleApplyFileRewind : undefined,
       readAttachment: attachmentRead,
       readAttachmentRange: attachmentReadRange,
-      readHistoryContent: historyControls?.readContent,
     }),
     [
       workspacePath,
@@ -1898,7 +1897,6 @@ export function SessionPane({
       handleApplyFileRewind,
       attachmentRead,
       attachmentReadRange,
-      historyControls?.readContent,
     ],
   );
 

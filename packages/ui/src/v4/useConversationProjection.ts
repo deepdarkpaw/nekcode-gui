@@ -11,7 +11,6 @@ const CLOSED_STATE: ConversationStoreState = {
   loadingOlder: false,
   historyError: null,
   historyRequest: null,
-  historyTruncatedTurns: [],
   sessionPlans: [],
   planDirectoryRevision: 0,
   plansLoading: false,
