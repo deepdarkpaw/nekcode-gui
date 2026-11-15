@@ -242,6 +242,73 @@ test("HT3: RESPONSE_LIMIT remains a visible retryable NekHistoryReadError withou
   }
 });
 
+/** Three turns whose projected text alone is ~18 MB: the latest page must shrink by whole turns. */
+function heavyTurns(): NekSessionEntry[] {
+  const entries: NekSessionEntry[] = [];
+  for (let turn = 0; turn < 3; turn++) {
+    entries.push(
+      {
+        ...entry,
+        id: `hu${turn}`,
+        parentId: entries.at(-1)?.id ?? null,
+        message: { role: "user", timestamp: turn * 10 + 1, content: `heavy question ${turn}` },
+      },
+      {
+        ...entry,
+        id: `ha${turn}`,
+        parentId: `hu${turn}`,
+        message: {
+          role: "assistant",
+          timestamp: turn * 10 + 2,
+          api: "test",
+          provider: "mock",
+          model: "mock",
+          usage,
+          stopReason: "stop",
+          content: [{ type: "text", text: `${turn}`.repeat(6 * 1024 * 1024) }],
+        },
+      },
+    );
+  }
+  return entries;
+}
+
+test("HT7: a page projecting beyond the bound is reread with fewer whole turns, never cut", async () => {
+  const h = harness({ entries: heavyTurns() });
+  try {
+    const snapshot = await h.adapter.readNekSession(params);
+    assert.deepEqual(
+      snapshot.history?.turns.map((turn) => turn.turnId),
+      ["turn:hu1", "turn:hu2"],
+    );
+    const initialReads = h.sessions[0]!.commands.filter(
+      (command) => command.type === "read_history_page" && command.view === undefined,
+    );
+    assert.deepEqual(
+      initialReads.map((command) => command.turnLimit),
+      [20, 2],
+    );
+    const before = h.sessions[0]!.commands.length;
+    const page = await h.adapter.conversationHistoryPageV4(params);
+    assert.deepEqual(
+      page.history.turns.map((turn) => turn.turnId),
+      ["turn:hu1", "turn:hu2"],
+    );
+    for (const turn of ["turn:hu1", "turn:hu2"]) {
+      const text = page.rows.find((row) => row.turnId === turn && row.kind === "assistantText");
+      assert.equal(text?.kind === "assistantText" && text.text.length, 6 * 1024 * 1024);
+    }
+    assert.deepEqual(
+      h.sessions[0]!.commands.slice(before)
+        .filter((command) => command.type === "read_history_page")
+        .map((command) => command.turnLimit),
+      [20, 2],
+    );
+  } finally {
+    await h.adapter.dispose();
+  }
+});
+
 function store(maxWindowRows = 5000): NekProjectionStore {
   const projector = new NekConversationProjector({ sessionId: "eviction" });
   const snapshot = projector.snapshot();

@@ -164,13 +164,20 @@ describe("LR bounded live history renderer", () => {
     expect(current.history!.newerCursor).toBeUndefined();
     expect(h.transport.historyPage).not.toHaveBeenCalled();
     h.store.setViewportAnchor({ turnId: "turn:119", followingLatest: false });
-    h.transport.historyPage.mockResolvedValueOnce(h.atCurrent(livePage(109, 129, 150)));
+    h.transport.historyPage
+      .mockResolvedValueOnce(h.atCurrent(livePage(109, 129, 150)))
+      .mockResolvedValueOnce(h.atCurrent(livePage(129, 149, 150)));
     await h.store.loadNewer();
-    expect(h.transport.historyPage).toHaveBeenCalledExactlyOnceWith({
-      sessionId: "parent",
-      turnLimit: 20,
-      aroundEntryId: "entry:119",
-    });
+    // The repair read adds only turns 120-128; the same action continues with the issued cursor.
+    expect(h.transport.historyPage.mock.calls.map(([params]) => params)).toEqual([
+      { sessionId: "parent", turnLimit: 20, aroundEntryId: "entry:119" },
+      {
+        sessionId: "parent",
+        turnLimit: 20,
+        afterCursor: "after:129",
+        observationCursor: undefined,
+      },
+    ]);
     expect(h.store.getState().snapshot!.rows.window.some((row) => row.turnId === "turn:128")).toBe(
       true,
     );
@@ -180,7 +187,7 @@ describe("LR bounded live history renderer", () => {
     expect(h.store.getState().snapshot!.rows.window[0]!.turnId).toBe("turn:160");
     expect(h.store.getState().snapshot!.rows.window.at(-1)!.turnId).toBe("turn:279");
     expect(h.store.getState().historyError).toBeNull();
-    expect(h.transport.historyPage).toHaveBeenCalledTimes(1);
+    expect(h.transport.historyPage).toHaveBeenCalledTimes(2);
   });
 
   it("LR3/LR4: an older reading segment does not skip unloaded source turns to a separate live tail", async () => {

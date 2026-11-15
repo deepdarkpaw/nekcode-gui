@@ -193,6 +193,27 @@ describe("renderer bounded history", () => {
     expect(hasOlderRows(store.getState().snapshot)).toBe(false);
   });
 
+  it("RH11: one load-earlier action reads further pages until it added 20 complete turns", async () => {
+    const { store, transport } = await setup();
+    transport.historyPage
+      .mockResolvedValueOnce(page(43, 50))
+      .mockResolvedValueOnce(page(36, 43))
+      .mockResolvedValueOnce(page(29, 36));
+    await store.loadOlder();
+    const cursors = (
+      transport.historyPage.mock.calls as unknown as [{ beforeCursor?: string }][]
+    ).map(([params]) => params.beforeCursor);
+    expect(cursors).toEqual(["before:50", "before:43", "before:36"]);
+    const turns = store.getState().snapshot!.history!.turns.map((turn) => turn.position);
+    expect(turns[0]).toBe(29);
+    expect(turns).toHaveLength(41);
+    expect(store.getState()).toMatchObject({ loadingOlder: false, historyError: null });
+    transport.historyPage.mockResolvedValueOnce(page(0, 29));
+    await store.loadOlder();
+    expect(transport.historyPage).toHaveBeenCalledTimes(4);
+    expect(store.getState().snapshot!.history!.hasOlder).toBe(false);
+  });
+
   it("RH2/RH4/RH9: overlapping read preserves mutated live rows, control/config/queue and seq", async () => {
     const { store, transport, deltas } = await setup();
     const pending = deferred<V4ConversationHistoryPageResult>();

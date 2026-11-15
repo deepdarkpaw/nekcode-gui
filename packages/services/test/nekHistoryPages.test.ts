@@ -273,8 +273,8 @@ test("HT4: capability gate requires exactly historyPages 2 for local and remote 
 });
 
 test("HS6/HS7: actual response bytes and giant live frames fail explicitly without truncated success", () => {
-  assert.doesNotThrow(() => boundHistoryResult({ data: "x".repeat(12 * 1024 * 1024) }));
-  assert.throws(() => boundHistoryResult({ data: "中".repeat(5_000_000) }), /14 MB/);
+  assert.doesNotThrow(() => boundHistoryResult({ data: "x".repeat(14 * 1024 * 1024) }));
+  assert.throws(() => boundHistoryResult({ data: "中".repeat(5_500_000) }), /15 MB/);
   const source = page(users(1));
   const projector = new NekConversationProjector({ sessionId: "s1" });
   try {

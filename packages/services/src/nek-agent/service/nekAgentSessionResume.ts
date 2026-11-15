@@ -7,6 +7,7 @@ import {
   requireHistoryPages,
   HISTORY_RPC_MAX_BYTES,
   HISTORY_PAGE_MAX_BYTES,
+  NekHistoryPageTooLargeError,
 } from "./nekHistoryRpc.js";
 import { type NekSessionRecord, type NekSessionResult } from "./types.js";
 
@@ -78,32 +79,40 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
     if (existing && existing.sessionId !== snapshot.session.id)
       throw new Error("nek history session identity changed at the bound path; reopen the session");
     if (snapshot.session.locked) {
-      const page = historyResult(
-        await measureNekOpenRequest(openTiming, () =>
+      // Fewer whole turns when the latest 20 project beyond the host window; strictly decreasing.
+      for (let turnLimit = 20; ; ) {
+        const page = historyResult(
+          await measureNekOpenRequest(openTiming, () =>
+            control.client.call({
+              type: "read_history_page",
+              sessionPath: input.sessionPath,
+              observationCursor: snapshot.observationCursor,
+              turnLimit,
+              maxBytes: HISTORY_PAGE_MAX_BYTES,
+            }),
+          ),
+        );
+        this.assertAlive();
+        await verifyHistorySpawnAnchors(page.entries, (subagentId) =>
           control.client.call({
-            type: "read_history_page",
+            type: "read_history_subagent",
             sessionPath: input.sessionPath,
-            observationCursor: snapshot.observationCursor,
-            turnLimit: 20,
-            maxBytes: HISTORY_PAGE_MAX_BYTES,
+            subagentId,
+            observationCursor: page.observationCursor,
           }),
-        ),
-      );
-      this.assertAlive();
-      await verifyHistorySpawnAnchors(page.entries, (subagentId) =>
-        control.client.call({
-          type: "read_history_subagent",
-          sessionPath: input.sessionPath,
-          subagentId,
-          observationCursor: page.observationCursor,
-        }),
-      );
-      this.assertAlive();
-      const result = this.openLockedHistory(snapshot, page, input.cwd);
-      return {
-        ...result,
-        openTiming: { ...openTiming, cliSessionRestoreMs: nekOpenDurationMs(restoreStartedAt) },
-      };
+        );
+        this.assertAlive();
+        try {
+          const result = this.openLockedHistory(snapshot, page, input.cwd);
+          return {
+            ...result,
+            openTiming: { ...openTiming, cliSessionRestoreMs: nekOpenDurationMs(restoreStartedAt) },
+          };
+        } catch (error) {
+          if (!(error instanceof NekHistoryPageTooLargeError)) throw error;
+          turnLimit = error.nextTurnLimit;
+        }
+      }
     }
 
     const record =

@@ -5,7 +5,13 @@ import type {
 } from "../../zcode-agent/zcodeAgent.js";
 import { historyMetadata, projectHistory } from "../projection/nekHistoryProjection.js";
 import { verifyHistorySpawnAnchors } from "../service/nekHistoryAnchors.js";
-import { boundHistoryResult, NekHistoryReadError } from "../service/nekHistoryRpc.js";
+import {
+  boundHistoryResult,
+  historyResultBytes,
+  HISTORY_RENDER_MAX_BYTES,
+  NekHistoryReadError,
+  smallerHistoryTurnLimit,
+} from "../service/nekHistoryRpc.js";
 import type { NekHistoryReadContext } from "../service/nekHistoryService.js";
 import type { NekAgentServiceAdapterLegacyTarget } from "./nekAgentServiceAdapterLegacySupport.js";
 
@@ -48,6 +54,65 @@ function preserveLive(rows: ConversationRow[], context: NekHistoryReadContext): 
     return current ? { ...current, rowId: row.rowId, turnId: row.turnId } : row;
   });
 }
+/** One source read of complete turns, projected and measured; the caller owns the byte budget. */
+async function readProjectedPage(
+  context: NekHistoryReadContext,
+  input: Parameters<IZCodeAgentService["conversationHistoryPageV4"]>[0],
+  turnLimit: number,
+) {
+  const { beforeCursor, afterCursor, aroundEntryId, observationCursor } = input;
+  const page = await context.read({
+    type: "read_history_page",
+    beforeCursor,
+    afterCursor,
+    aroundEntryId,
+    turnLimit,
+    observationCursor,
+  });
+  assertObservedEntries(
+    [...page.entries, ...page.turns.map((turn) => turn.header)],
+    context,
+    Boolean(input.subagentId),
+  );
+  if (
+    !input.subagentId &&
+    !beforeCursor &&
+    !afterCursor &&
+    !observationCursor &&
+    !context.projector.acceptsHistoryPage(page)
+  )
+    throw new NekHistoryReadError(
+      "STALE_CURSOR",
+      "history branch changed; rebuild the bounded snapshot before reading this target",
+    );
+  const scope = input.subagentId ? `${page.sessionId}\0${page.branchRevision}` : page.sessionId;
+  const anchors = context.projector.historyAnchors(scope);
+  await verifyHistorySpawnAnchors(
+    page.entries,
+    (subagentId) =>
+      context.read({
+        type: "read_history_subagent",
+        subagentId,
+        observationCursor: page.observationCursor,
+      }),
+    anchors,
+  );
+  const rows = projectHistory({
+    sessionId: page.sessionId,
+    turns: page.turns,
+    entries: page.entries,
+    seed: page.seed,
+    anchors,
+  });
+  const result = {
+    rows: input.subagentId ? rows : preserveLive(rows, context),
+    history: historyMetadata(page),
+    ...context.watermark,
+    branchRevision: page.branchRevision,
+    observationCursor: page.observationCursor,
+  };
+  return { page, result, bytes: historyResultBytes(result), scope };
+}
 export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarget): HistoryMethods {
   const read = async <T>(
     input: ZCodeAgentConversationHistoryTarget,
@@ -59,71 +124,21 @@ export function createNekHistoryMethods(owner: NekAgentServiceAdapterLegacyTarge
   return {
     conversationHistoryPageV4: (input) =>
       read(input, async (context) => {
-        const {
-          beforeCursor,
-          afterCursor,
-          aroundEntryId,
-          turnLimit = 20,
-          observationCursor,
-        } = input;
-        const page = await context.read({
-          type: "read_history_page",
-          beforeCursor,
-          afterCursor,
-          aroundEntryId,
-          turnLimit,
-          observationCursor,
-        });
-        assertObservedEntries(
-          [...page.entries, ...page.turns.map((turn) => turn.header)],
-          context,
-          Boolean(input.subagentId),
-        );
-        if (
-          !input.subagentId &&
-          !beforeCursor &&
-          !afterCursor &&
-          !observationCursor &&
-          !context.projector.acceptsHistoryPage(page)
-        )
-          throw new NekHistoryReadError(
-            "STALE_CURSOR",
-            "history branch changed; rebuild the bounded snapshot before reading this target",
+        let turnLimit = input.turnLimit ?? 20;
+        for (;;) {
+          const { page, result, bytes, scope } = await readProjectedPage(context, input, turnLimit);
+          if (bytes > HISTORY_RENDER_MAX_BYTES && page.turns.length > 1) {
+            turnLimit = smallerHistoryTurnLimit(page.turns.length, bytes);
+            continue;
+          }
+          boundHistoryResult(result, bytes);
+          context.projector.rememberHistoryAnchors(
+            scope,
+            `${page.branchRevision}:${page.entries[0]?.position}:${page.entries.at(-1)?.position}`,
+            result.rows,
           );
-        const scope = input.subagentId
-          ? `${page.sessionId}\0${page.branchRevision}`
-          : page.sessionId;
-        const anchors = context.projector.historyAnchors(scope);
-        await verifyHistorySpawnAnchors(
-          page.entries,
-          (subagentId) =>
-            context.read({
-              type: "read_history_subagent",
-              subagentId,
-              observationCursor: page.observationCursor,
-            }),
-          anchors,
-        );
-        const rows = projectHistory({
-          sessionId: page.sessionId,
-          turns: page.turns,
-          entries: page.entries,
-          seed: page.seed,
-          anchors,
-        });
-        const result = boundHistoryResult({
-          rows: input.subagentId ? rows : preserveLive(rows, context),
-          history: historyMetadata(page),
-          ...context.watermark,
-          branchRevision: page.branchRevision,
-          observationCursor: page.observationCursor,
-        });
-        context.projector.rememberHistoryAnchors(
-          scope,
-          `${page.branchRevision}:${page.entries[0]?.position}:${page.entries.at(-1)?.position}`,
-          result.rows,
-        );
-        return result;
+          return result;
+        }
       }),
     conversationHistoryDirectoryV4: (input) =>
       read(input, async (context) => {

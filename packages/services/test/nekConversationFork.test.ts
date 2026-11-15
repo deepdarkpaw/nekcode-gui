@@ -5,6 +5,7 @@ import type { NekSessionEntry, NekSessionSnapshot } from "@zcode/shared/nek-prot
 import { createNekAgentServiceAdapter } from "../src/nek-agent/adapter/index.js";
 import { historyRowId } from "../src/nek-agent/projection/nekHistoryIdentity.js";
 import { createProcess, entry, guiInfo, target } from "./nekSessionHarness.js";
+import { HISTORY_PAGE_MAX_BYTES } from "../src/nek-agent/service/nekHistoryRpc.js";
 
 function forkHarness(outcome: "success" | "cancel" | "error" = "success") {
   const entries: NekSessionEntry[] = [
@@ -206,7 +207,7 @@ test("HT2: fork validation of an unloaded user reads a target page with the comp
       (command) => command.type === "read_history_page" && command.aroundEntryId === "user-2",
     );
     assert.equal(request?.view, "target");
-    assert.equal(request?.maxBytes, 16 * 1024 * 1024);
+    assert.equal(request?.maxBytes, HISTORY_PAGE_MAX_BYTES);
   } finally {
     await h.adapter.dispose();
   }

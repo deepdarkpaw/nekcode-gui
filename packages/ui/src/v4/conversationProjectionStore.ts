@@ -12,6 +12,7 @@ import {
   parseConversationTopic,
   PROTOCOL_V4_LIMITS,
   SUBSCRIPTION_CONTENT_REJECTED,
+  type ConversationHistory,
   type ConversationHistoryPageOptions,
   type ConversationHistoryDirectoryOptions,
   type ConversationHistoryWatermark,
@@ -30,6 +31,7 @@ import type { HistoryViewportAnchor } from "./conversationHistoryBoundary.js";
 import {
   ConversationHistoryWindow,
   HISTORY_BOUNDARY_REFRESH_REQUIRED,
+  HISTORY_WINDOW_LIMITS,
   historyRowKey,
   historyRowWasChanged,
   type HistoryDirection,
@@ -154,6 +156,14 @@ export interface SessionOpenRendererTiming {
   initialFrameTransportMs?: number;
   rendererSnapshotApplyMs?: number;
   snapshotAppliedAt?: number;
+}
+
+/** One “load earlier/later” action adds this many complete turns (fewer only at the edge). */
+const HISTORY_TURNS_PER_LOAD = 20;
+function historyHasEdge(history: ConversationHistory, direction: HistoryDirection): boolean {
+  if (direction === "older") return history.hasOlder;
+  if (direction === "newer") return history.hasNewer;
+  return true;
 }
 
 const INITIAL_STATE: ConversationStoreState = {
@@ -1213,72 +1223,102 @@ export class ConversationProjectionStore {
     return this.loadHistoryPage("latest");
   }
 
+  /**
+   * Older/newer is one user action that adds up to {@link HISTORY_TURNS_PER_LOAD} complete turns.
+   * A source page may hold fewer turns when they are large; the same flight then reads the next
+   * page in order. Each page merges as it arrives, so the reading position stays anchored.
+   */
   private async loadHistoryPage(
     direction: HistoryDirection,
     options: ConversationHistoryPageOptions = {},
   ): Promise<V4ConversationHistoryPageResult | null> {
     const snapshot = this.state.snapshot;
     if (this.closed || this.historyFlight || !snapshot?.history) return null;
-    const history = snapshot.history;
-    if (
-      (direction === "older" && !history.hasOlder) ||
-      (direction === "newer" && !history.hasNewer)
-    )
-      return null;
+    if (!historyHasEdge(snapshot.history, direction)) return null;
     if (direction === "latest") this.invalidateHistory();
     return this.runHistoryRequest(direction, async (flight) => {
       const paging = direction === "older" || direction === "newer";
-      const navigation = paging ? this.historyWindow.pageOptions(snapshot, direction) : {};
-      const edge = paging ? this.historyWindow.navigationEdge(snapshot, direction) : undefined;
-      const cursor = navigation.beforeCursor ?? navigation.afterCursor;
-      const params = withHistoryObservation(
-        { ...options, ...navigation, ...this.historyTarget(), turnLimit: 20 },
-        direction === "latest" ? undefined : history.observationCursor,
-      );
-      const result = await this.transport.historyPage(params);
-      this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
-      if (direction !== "latest")
-        assertHistoryObservation(history, result.history, params.observationCursor);
-      if (
-        (direction === "older" &&
-          cursor !== undefined &&
-          result.history.hasOlder &&
-          result.history.olderCursor === cursor) ||
-        (direction === "newer" &&
-          cursor !== undefined &&
-          result.history.hasNewer &&
-          result.history.newerCursor === cursor)
-      )
-        throw new Error("History cursor did not advance");
-      if (
-        (result.history.hasOlder && !result.history.olderCursor) ||
-        (result.history.hasNewer && !result.history.newerCursor)
-      )
-        throw new Error("History response omitted a continuation cursor");
-      const positions = history.turns.map((turn) => turn.position);
-      if (
-        (direction === "older" &&
-          !result.history.turns.some(
-            (turn) => turn.position < (edge?.position ?? Math.min(...positions)),
-          )) ||
-        (direction === "newer" &&
-          !result.history.turns.some(
-            (turn) => turn.position > (edge?.position ?? Math.max(...positions)),
-          ))
-      )
-        throw new Error("History page did not advance the reading window");
-      const current = this.state.snapshot!;
-      this.assertHistoryRows(result.rows, flight.changed, result);
-      const next = this.historyWindow.mergePage(current, result, direction, flight.changed);
-      if (direction === "latest") this.invalidateHistory();
-      this.setState({
-        snapshot: next,
-        historyError: this.historyWindow.needsBoundaryRefresh
-          ? HISTORY_BOUNDARY_REFRESH_REQUIRED
-          : null,
-      });
-      return result;
+      let added = 0;
+      for (;;) {
+        const step = await this.readHistoryPageStep(direction, options, flight);
+        added += step.added;
+        const snapshot = this.state.snapshot;
+        if (
+          !paging ||
+          added >= HISTORY_TURNS_PER_LOAD ||
+          !snapshot?.history ||
+          !historyHasEdge(snapshot.history, direction) ||
+          // A full window would evict what this action just loaded; stop at the bound.
+          new Set(snapshot.rows.window.map((row) => row.turnId)).size >= HISTORY_WINDOW_LIMITS.turns
+        )
+          return step.result;
+      }
     });
+  }
+
+  private async readHistoryPageStep(
+    direction: HistoryDirection,
+    options: ConversationHistoryPageOptions,
+    flight: { owner: string; changed: Set<string> },
+  ): Promise<{ result: V4ConversationHistoryPageResult; added: number }> {
+    const snapshot = this.state.snapshot;
+    if (!snapshot?.history) throw new Error("History owner is unavailable");
+    const history = snapshot.history;
+    const paging = direction === "older" || direction === "newer";
+    const navigation = paging ? this.historyWindow.pageOptions(snapshot, direction) : {};
+    const edge = paging ? this.historyWindow.navigationEdge(snapshot, direction) : undefined;
+    const cursor = navigation.beforeCursor ?? navigation.afterCursor;
+    const params = withHistoryObservation(
+      { ...options, ...navigation, ...this.historyTarget(), turnLimit: HISTORY_TURNS_PER_LOAD },
+      direction === "latest" ? undefined : history.observationCursor,
+    );
+    const result = await this.transport.historyPage(params);
+    this.assertHistoryResult(flight.owner, result, snapshot.seq, snapshot.revision);
+    if (direction !== "latest")
+      assertHistoryObservation(history, result.history, params.observationCursor);
+    if (
+      (direction === "older" &&
+        cursor !== undefined &&
+        result.history.hasOlder &&
+        result.history.olderCursor === cursor) ||
+      (direction === "newer" &&
+        cursor !== undefined &&
+        result.history.hasNewer &&
+        result.history.newerCursor === cursor)
+    )
+      throw new Error("History cursor did not advance");
+    if (
+      (result.history.hasOlder && !result.history.olderCursor) ||
+      (result.history.hasNewer && !result.history.newerCursor)
+    )
+      throw new Error("History response omitted a continuation cursor");
+    const positions = history.turns.map((turn) => turn.position);
+    if (
+      (direction === "older" &&
+        !result.history.turns.some(
+          (turn) => turn.position < (edge?.position ?? Math.min(...positions)),
+        )) ||
+      (direction === "newer" &&
+        !result.history.turns.some(
+          (turn) => turn.position > (edge?.position ?? Math.max(...positions)),
+        ))
+    )
+      throw new Error("History page did not advance the reading window");
+    const current = this.state.snapshot!;
+    this.assertHistoryRows(result.rows, flight.changed, result);
+    const known = new Set(history.turns.map((turn) => turn.turnId));
+    const next = this.historyWindow.mergePage(current, result, direction, flight.changed);
+    if (direction === "latest") this.invalidateHistory();
+    this.setState({
+      snapshot: next,
+      historyError: this.historyWindow.needsBoundaryRefresh
+        ? HISTORY_BOUNDARY_REFRESH_REQUIRED
+        : null,
+    });
+    return {
+      result,
+      added: result.history.turns.filter((turn) => !known.has(turn.turnId)).length,
+    };
   }
 
   private async runHistoryRequest<T>(

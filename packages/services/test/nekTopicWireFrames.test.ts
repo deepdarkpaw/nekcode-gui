@@ -97,11 +97,11 @@ test("S4: an over-limit snapshot rejects subscription instead of acknowledging a
   try {
     await assert.rejects(
       h.adapter.subscribeConversationV4(params),
-      /history projection exceeds 14 MB/u,
+      /history projection exceeds 15 MB/u,
     );
     await assert.rejects(
       h.adapter.subscribeConversationV4(params),
-      /history projection exceeds 14 MB/u,
+      /history projection exceeds 15 MB/u,
     );
   } finally {
     await h.adapter.dispose();

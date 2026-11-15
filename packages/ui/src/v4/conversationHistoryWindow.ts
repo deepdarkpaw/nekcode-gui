@@ -16,10 +16,11 @@ import {
 } from "./conversationHistoryBoundary.js";
 
 /**
- * Six source pages of complete turns, never a full conversation cache. Over budget the window
- * evicts whole pages/turns farthest from the reading position; it never folds part of a turn.
+ * Up to 120 complete turns (source pages may be smaller than 20 turns when turns are large),
+ * never a full conversation cache. Over budget the window evicts whole pages/turns farthest
+ * from the reading position; it never folds part of a turn.
  */
-export const HISTORY_WINDOW_LIMITS = { pages: 6, turns: 120, bytes: 48 * 1024 * 1024 } as const;
+export const HISTORY_WINDOW_LIMITS = { pages: 24, turns: 120, bytes: 48 * 1024 * 1024 } as const;
 export const HISTORY_BOUNDARY_REFRESH_REQUIRED =
   "Live history exceeded its cursor boundary; loadLatest or loadAround explicitly to refresh navigation";
 export type HistoryDirection = "older" | "newer" | "around" | "latest";

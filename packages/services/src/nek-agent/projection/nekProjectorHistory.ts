@@ -23,7 +23,13 @@ import {
 import { historyMetadata, projectHistory } from "./nekHistoryProjection.js";
 import { preserveObservedTiming } from "./nekObservedTiming.js";
 import { buildConfigState, buildControlState, planFromNekState } from "./nekProjectionSnapshot.js";
-import { boundHistoryResult } from "../service/nekHistoryRpc.js";
+import {
+  boundHistoryResult,
+  historyResultBytes,
+  HISTORY_RENDER_MAX_BYTES,
+  NekHistoryPageTooLargeError,
+  smallerHistoryTurnLimit,
+} from "../service/nekHistoryRpc.js";
 
 export interface NekHistorySnapshotInput {
   page: NekHistoryPage;
@@ -99,7 +105,17 @@ export class NekProjectorHistory {
           ]
         : [],
     });
-    boundHistoryResult(rows);
+    const bytes = historyResultBytes(rows);
+    const turns = page.turns.length;
+    if (turns > 1 && (bytes > HISTORY_RENDER_MAX_BYTES || rows.length > store.windowRowLimit))
+      throw new NekHistoryPageTooLargeError(
+        turns,
+        Math.min(
+          smallerHistoryTurnLimit(turns, bytes),
+          Math.max(1, Math.floor((turns * store.windowRowLimit) / rows.length)),
+        ),
+      );
+    boundHistoryResult(rows, bytes);
     if (rows.length > store.windowRowLimit)
       throw new Error("nek history projected row limit exceeded; request a smaller source page");
     if (live) rows = mergeStreamingHistory(rows, live);

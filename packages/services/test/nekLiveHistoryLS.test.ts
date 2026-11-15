@@ -33,6 +33,7 @@ import {
   params,
   target,
 } from "./nekSessionHarness.js";
+import { HISTORY_PAGE_MAX_BYTES } from "../src/nek-agent/service/nekHistoryRpc.js";
 
 const body: NekHistoryStreamOmission[] = [
   { pointer: "/message", resolution: "history", reason: "persisted_body" },
@@ -520,7 +521,7 @@ test("HT2/LS3/LS4/LS8: target locators reconcile tool output and user images wit
     assert.ok(targets.length > 0);
     assert.ok(
       targets.every(
-        (command) => command.view === "target" && command.maxBytes === 16 * 1024 * 1024,
+        (command) => command.view === "target" && command.maxBytes === HISTORY_PAGE_MAX_BYTES,
       ),
     );
     assert.ok(

@@ -4,6 +4,7 @@ import {
   requireHistoryPages,
   HISTORY_RPC_MAX_BYTES,
   HISTORY_PAGE_MAX_BYTES,
+  NekHistoryPageTooLargeError,
 } from "./nekHistoryRpc.js";
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { measureNekOpenRequest } from "./nekSessionOpenTiming.js";
@@ -104,6 +105,8 @@ export async function reloadSessionSnapshot(
 ): Promise<void> {
   const { record } = context;
   requireHistoryPages(process.guiInfo);
+  // Fewer whole turns when the latest 20 project beyond the host window; strictly decreasing.
+  let turnLimit = 20;
   for (let attempt = 0; attempt < MAX_SNAPSHOT_ATTEMPTS; attempt += 1) {
     assertSnapshotTarget(record, process);
     const epoch = record.stateEpoch ?? 0;
@@ -113,7 +116,7 @@ export async function reloadSessionSnapshot(
         process.client.call({ type: "get_state" }),
         process.client.call({
           type: "read_history_page",
-          turnLimit: 20,
+          turnLimit,
           maxBytes: HISTORY_PAGE_MAX_BYTES,
         }),
         process.client.call({ type: "get_session_stats" }),
@@ -161,13 +164,20 @@ export async function reloadSessionSnapshot(
     const projector = (record.projector ??= context.createProjector(record));
     record.historyMetadata = metadata;
     const previousLogEpoch = projector.snapshot().logEpoch;
-    projector.loadHistory({
-      page,
-      metadata,
-      state,
-      stats,
-      nekState: isNekState(extension.result) ? extension.result : undefined,
-    });
+    try {
+      projector.loadHistory({
+        page,
+        metadata,
+        state,
+        stats,
+        nekState: isNekState(extension.result) ? extension.result : undefined,
+      });
+    } catch (error) {
+      if (!(error instanceof NekHistoryPageTooLargeError)) throw error;
+      turnLimit = error.nextTurnLimit;
+      attempt -= 1;
+      continue;
+    }
     if (projector.snapshot().logEpoch !== previousLogEpoch)
       record.historyGeneration = (record.historyGeneration ?? 0) + 1;
     projector.flushNow();
