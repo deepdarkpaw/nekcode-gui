@@ -18,8 +18,8 @@ import { compareSemverVersions } from "../forceUpdate.js";
 /** 协议版本：任何不兼容的改动都要递增。GUI 要求 `protocolVersion === NEK_GUI_PROTOCOL_VERSION`。 */
 export const NEK_GUI_PROTOCOL_VERSION = 1;
 
-/** Bounded history pages, append observations and the negotiated live stream ship together in this release. */
-export const NEK_GUI_MIN_VERSION = "0.5.1-beta.3";
+/** Complete-turn history pages (historyPages=2), append observations and the negotiated live stream. */
+export const NEK_GUI_MIN_VERSION = "0.5.1-beta.4";
 
 export function isNekGuiVersionSupported(version: unknown): boolean {
   if (typeof version !== "string") return false;
