@@ -1,7 +1,9 @@
+import { formatMention } from "@zcode/shared/nek-protocol";
+
 const LINK_MENTION_MARKDOWN_PATTERN =
   /\[((?:\\.|[^\\\]])*)\]\((?:<((?:\\.|[^>])*?)>|((?:\\.|[^)])*))\)/g;
 const INLINE_MENTION_TOKEN_PATTERN =
-  /(^|\s)(\$[a-zA-Z0-9._-]+|\/[a-zA-Z0-9._-]+|@[a-zA-Z0-9._-]+|#sess_[a-zA-Z0-9._-]+)(?=$|\s)/g;
+  /(^|\s)(@skill:[a-zA-Z0-9._-]+|\$[a-zA-Z0-9._-]+|\/[a-zA-Z0-9._-]+|@[a-zA-Z0-9._-]+|#sess_[a-zA-Z0-9._-]+)(?=$|\s)/g;
 
 function escapeMarkdownLabel(label: string): string {
   return label.replaceAll("\\", "\\\\").replaceAll("[", "\\[").replaceAll("]", "\\]");
@@ -65,12 +67,9 @@ export function buildFileMentionMarkdown(
   return `[${escapeMarkdownLabel(label)}](${escapeMarkdownDestination(normalizeMarkdownDestination(normalizedRelativePath))})`;
 }
 
-export function buildSkillMentionMarkdown(label: string, skillPath?: string): string {
-  if (!skillPath) {
-    return `$${label}`;
-  }
-
-  return `[${escapeMarkdownLabel(`$${label}`)}](${escapeMarkdownDestination(normalizeMarkdownDestination(skillPath))})`;
+/** nek expands this token into the loaded skill; its filesystem path is display metadata only. */
+export function buildSkillMentionMarkdown(label: string): string {
+  return formatMention("skill", label);
 }
 
 export function buildSubagentMentionMarkdown(label: string): string {
@@ -153,7 +152,9 @@ function parseInlineMentionTokens(segment: string): MentionTextPart[] {
         text: segment.slice(cursor, tokenStart),
       });
     }
-    if (token.startsWith("$")) {
+    if (token.startsWith("@skill:")) {
+      parts.push({ type: "skill", label: token.slice(7) });
+    } else if (token.startsWith("$")) {
       parts.push({ type: "skill", label: token.slice(1) });
     } else if (token.startsWith("/")) {
       parts.push({ type: "command", label: token.slice(1) });

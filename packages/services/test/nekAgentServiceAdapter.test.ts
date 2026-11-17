@@ -4,7 +4,13 @@ import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import { DEFAULT_GUI_RUNTIME_CONFIG } from "@zcode/shared/guiRuntimeConfig";
-import type { NekGuiInfo, NekInteractionFrame, NekRpcCommand } from "@zcode/shared/nek-protocol";
+import type {
+  NekGuiInfo,
+  NekInteractionFrame,
+  NekMentionTargetInfo,
+  NekRpcCommand,
+} from "@zcode/shared/nek-protocol";
+import { zcodeSkillsReferenceCatalogResultSchema } from "@zcode/shared";
 import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 import {
   NEK_INTERACTION_FEED_METHODS,
@@ -49,6 +55,8 @@ function fakeProcess(
     extensionUi?: NekExtensionUiHandler;
     projectTrust?: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" };
     planCount?: number;
+    mentionTargets?: NekMentionTargetInfo[];
+    mentionError?: string;
   } = {},
 ): FakeProcess {
   const stdin = new PassThrough();
@@ -89,6 +97,18 @@ function fakeProcess(
         command.type === "read_history_subagent"
       ) {
         data = fixtureHistory([], command);
+      } else if (command.type === "get_mention_targets") {
+        if (options.mentionError) {
+          write({
+            id: command.id,
+            type: "response",
+            command: command.type,
+            success: false,
+            error: options.mentionError,
+          });
+          continue;
+        }
+        data = { targets: options.mentionTargets ?? [] };
       } else if (kind === "control") {
         if (command.type === "get_project_trust")
           data = {
@@ -533,6 +553,127 @@ test("routes subagent stop, transcript, and agent type RPCs through the adapter"
         .map((command) => command.method),
       ["nek.get_state", "nek.stop_subagent", "nek.get_subagent_transcript", "nek.list_agent_types"],
     );
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("SC1/SC2: draft skill catalog reads nek targets for the requested cwd without creating a session", async () => {
+  const control = fakeProcess("control", {
+    mentionTargets: [
+      { kind: "agent", name: "explorer" },
+      {
+        kind: "skill",
+        name: "galanalyzer",
+        description: "Visual novel analysis",
+        location: "/home/test/.nek/agent/skills/galanalyzer/SKILL.md",
+      },
+      { kind: "skill", name: "pdf", location: "/workspace/.agents/skills/pdf/SKILL.md" },
+    ],
+  });
+  let sessionStarts = 0;
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => {
+      sessionStarts += 1;
+      throw new Error("draft must not create a session");
+    },
+  });
+  try {
+    const catalog = await adapter.getSkillReferenceCatalog({ workspacePath: "/workspace" });
+    assert.equal(catalog.authority, "workspace");
+    assert.deepEqual(
+      catalog.skills.map((skill) => [skill.name, skill.scope]),
+      [
+        ["galanalyzer", "user"],
+        ["pdf", "workspace"],
+      ],
+    );
+    assert.equal(catalog.skills[0]?.description, "Visual novel analysis");
+    assert.equal(catalog.skills[1]?.enabled, true);
+    assert.deepEqual(zcodeSkillsReferenceCatalogResultSchema.parse(catalog), catalog);
+    assert.equal(sessionStarts, 0);
+    assert.equal(control.commands.at(-1)?.type, "get_mention_targets");
+    assert.equal((control.commands.at(-1) as { cwd?: string }).cwd, "/workspace");
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("SC1/SC5: session skill catalog uses its loaded resources, not the control or another session", async () => {
+  const control = fakeProcess("control", {
+    mentionTargets: [{ kind: "skill", name: "draft-only", location: "/skills/draft/SKILL.md" }],
+  });
+  const session = fakeProcess("session", {
+    mentionTargets: [{ kind: "skill", name: "pdf", location: "/extension/pdf/SKILL.md" }],
+  });
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace", workspaceIdentity: "ssh://host/workspace" };
+    const created = await adapter.createNekSession(target);
+    const catalog = await adapter.getSkillReferenceCatalog({
+      ...target,
+      sessionId: created.sessionId,
+    });
+    assert.equal(catalog.authority, "session");
+    assert.deepEqual(
+      catalog.skills.map((skill) => skill.name),
+      ["pdf"],
+    );
+    assert.equal(session.commands.at(-1)?.type, "get_mention_targets");
+    assert.equal(
+      control.commands.some((command) => command.type === "get_mention_targets"),
+      false,
+    );
+    await assert.rejects(
+      adapter.getSkillReferenceCatalog({ ...target, sessionId: "unknown" }),
+      /nek session unknown is not open/u,
+    );
+    assert.equal(
+      control.commands.some((command) => command.type === "get_mention_targets"),
+      false,
+    );
+    const draft = await adapter.getSkillReferenceCatalog(target);
+    assert.equal(draft.authority, "workspace");
+    assert.deepEqual(
+      draft.skills.map((skill) => skill.name),
+      ["draft-only"],
+    );
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("SC1: skill read failures and missing locations are visible and explicitly retryable", async () => {
+  const options = {
+    mentionError: "skill discovery failed",
+    mentionTargets: [] as NekMentionTargetInfo[],
+  };
+  const control = fakeProcess("control", options);
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    createControlProcess: () => control.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    await assert.rejects(adapter.getSkillReferenceCatalog(target), /skill discovery failed/u);
+    options.mentionError = "";
+    options.mentionTargets = [{ kind: "skill", name: "pdf" }];
+    await assert.rejects(
+      adapter.getSkillReferenceCatalog(target),
+      /skill without a location: pdf/u,
+    );
+    options.mentionTargets[0]!.location = "/skills/pdf/SKILL.md";
+    const result = await adapter.getSkillReferenceCatalog(target);
+    assert.equal(result.skills[0]?.name, "pdf");
+    options.mentionTargets = [];
+    assert.deepEqual((await adapter.getSkillReferenceCatalog(target)).skills, []);
   } finally {
     await adapter.dispose();
   }

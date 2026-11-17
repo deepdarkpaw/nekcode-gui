@@ -1,10 +1,9 @@
 import { useMemo } from "react";
-import type { Locale, SkillScope, ZCodeProvider } from "@zcode/shared";
+import type { Locale, SkillScope } from "@zcode/shared";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";
 import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
 import { buildSkillMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { useSkills } from "@/hooks/useSkills.js";
-import { filterSkillsForProvider } from "@/lib/skillSourceFilter.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSkillSourceLabel } from "@/lib/skillSourceLabel.js";
 
@@ -44,7 +43,7 @@ export function mapSkillsToMentionItemsForTest(
       label: skill.name,
       description: description ? `${sourceLabel} · ${description}` : sourceLabel,
       value: skill.name,
-      markdown: buildSkillMentionMarkdown(skill.name, skill.path),
+      markdown: buildSkillMentionMarkdown(skill.name),
       keywords: [...new Set([skill.name, skill.description, description, skill.scope])],
       data: {
         path: skill.path,
@@ -58,7 +57,6 @@ export function useSkillsMentionProvider(
   workspacePath: string,
   workspaceIdentity: string | undefined,
   sessionId: string | null,
-  provider: ZCodeProvider,
   query: string,
   enabled: boolean,
   requireQuery: boolean,
@@ -76,15 +74,15 @@ export function useSkillsMentionProvider(
   const allItems = useMemo(
     () =>
       mapSkillsToMentionItemsForTest(
-        filterSkillsForProvider(skills, provider).filter((skill) => skill.enabled),
+        skills.filter((skill) => skill.enabled),
         locale,
       ),
-    [locale, provider, skills],
+    [locale, skills],
   );
 
   const items = useMemo(
     () =>
-      filterMentionItemsWithOptions(allItems, query, {
+      filterMentionItemsWithOptions(allItems, query.replace(/^skill:/i, ""), {
         requireQuery,
       }),
     [allItems, query, requireQuery],

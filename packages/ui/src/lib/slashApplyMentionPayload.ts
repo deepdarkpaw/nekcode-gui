@@ -6,7 +6,7 @@ import {
 import { normalizeSlashCommandValue } from "@/slashCommandHelpers.js";
 import type { PromptMentionPayload } from "@/mentions/nodes/PromptMentionNode.js";
 
-/** 将 `/` 面板选中的建议转成 PromptMention 载荷；skill/subagent 仍复用既有 $skill 与 @agent markdown 语义。 */
+/** 将 `/` 面板选中的建议转成 PromptMention 载荷；技能使用 nek 的 @skill:name 调用语义。 */
 export function buildSlashApplyMentionPayload(
   suggestion: PromptInputSuggestionItem,
 ): PromptMentionPayload {
@@ -16,7 +16,7 @@ export function buildSlashApplyMentionPayload(
       category: "skills",
       label: suggestion.value,
       value: suggestion.value,
-      markdown: buildSkillMentionMarkdown(suggestion.value, suggestion.data?.path),
+      markdown: buildSkillMentionMarkdown(suggestion.value),
       description: suggestion.description,
       data: suggestion.data,
     };

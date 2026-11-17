@@ -424,7 +424,7 @@ export function SkillsSection({
     const skillCreator = filterSkillsForProvider(skills, effectiveProvider).find(
       (skill) => skill.name === "skill-creator",
     );
-    const markdown = buildSkillMentionMarkdown("skill-creator", skillCreator?.path);
+    const markdown = buildSkillMentionMarkdown("skill-creator");
 
     // v4 迁移删除旧 pendingComposerPrefill 后，这个入口仍手工操作 session
     // store，只剩返回聊天页的导航，skill-creator 文本没有进入新 Composer。统一委托

@@ -3,7 +3,7 @@ import type { PromptInputTrigger } from "@/lib/promptInputTriggers.js";
 export type MentionPanelGroupId = "files" | "sessions" | "skills";
 export type SessionMentionWorkspaceScope = "current-workspace" | "same-authority-workspaces";
 
-const CONTEXT_GROUP_ORDER: readonly MentionPanelGroupId[] = ["files", "sessions"];
+const CONTEXT_GROUP_ORDER: readonly MentionPanelGroupId[] = ["skills", "files", "sessions"];
 const SESSION_GROUP_ORDER: readonly MentionPanelGroupId[] = ["sessions"];
 const SKILL_GROUP_ORDER: readonly MentionPanelGroupId[] = ["skills"];
 
@@ -13,9 +13,10 @@ const SKILL_GROUP_ORDER: readonly MentionPanelGroupId[] = ["skills"];
  */
 export function getMentionPanelGroupOrder(
   trigger: PromptInputTrigger | null | undefined,
+  query = "",
 ): readonly MentionPanelGroupId[] {
   if (trigger === "@") {
-    return CONTEXT_GROUP_ORDER;
+    return /^skill:/i.test(query) ? SKILL_GROUP_ORDER : CONTEXT_GROUP_ORDER;
   }
   if (trigger === "#") {
     return SESSION_GROUP_ORDER;

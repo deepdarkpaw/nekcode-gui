@@ -126,7 +126,7 @@ export function buildSkillSuggestions(
     id: item.id,
     trigger: "/",
     value: item.value,
-    label: `$${item.value}`,
+    label: `@skill:${item.value}`,
     description: item.description,
     keywords: [...new Set([...(item.keywords ?? []), "skill", "skills", item.value])],
     data: item.data,

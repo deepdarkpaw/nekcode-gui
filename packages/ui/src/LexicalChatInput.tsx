@@ -16,6 +16,7 @@ import { recordInputLag } from "./lib/diagnostics/uiPerformance.js";
  * 3. mention 面板用 enableMentionPanel 控制；slash command 始终读取 CLI workspace catalog。
  */
 import { $getPromptMarkdown } from "@/mentions/promptSerialization.js";
+import { buildSkillMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { PromptClipboardPlugin } from "@/mentions/PromptClipboardPlugin.js";
 import {
   resolveComposerKeyAction,
@@ -327,7 +328,7 @@ function resetEditor(editor: LexicalEditor) {
 function replaceEditorWithSkillMention(
   editor: LexicalEditor,
   skillName: string,
-  markdown = `$${skillName}`,
+  markdown = buildSkillMentionMarkdown(skillName),
   trailingText = " ",
 ) {
   editor.update(
@@ -1316,8 +1317,11 @@ function EditorApiPlugin({
         replaceEditorTextWithPluginMentions(editor, text),
       setEditorStateJson: (editorStateJson: string) =>
         replaceEditorStateJson(editor, editorStateJson),
-      setSkillMention: (skillName: string, markdown = `$${skillName}`, trailingText = " ") =>
-        replaceEditorWithSkillMention(editor, skillName, markdown, trailingText),
+      setSkillMention: (
+        skillName: string,
+        markdown = buildSkillMentionMarkdown(skillName),
+        trailingText = " ",
+      ) => replaceEditorWithSkillMention(editor, skillName, markdown, trailingText),
       setSlashCommandMention: (
         commandName: string,
         markdown = `/${commandName}`,

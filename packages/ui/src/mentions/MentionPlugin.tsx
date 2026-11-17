@@ -153,9 +153,7 @@ export function MentionPlugin({
     (activeTrigger?.trigger === "@" ||
       activeTrigger?.trigger === "$" ||
       activeTrigger?.trigger === "#");
-  const isContextTrigger = activeTrigger?.trigger === "@";
-  const isSessionTrigger = activeTrigger?.trigger === "#";
-  const isSkillTrigger = activeTrigger?.trigger === "$";
+  const groupOrder = getMentionPanelGroupOrder(activeTrigger?.trigger, deferredActiveQuery);
 
   // 修复说明：之前把 @ 面板拆成了两层，导致用户输入 query 后还要再确认一次，
   // 实际感受像“按回车之后才开始搜”。现在改成单层分组面板，query 一变化就直接展示各分组结果。
@@ -163,9 +161,8 @@ export function MentionPlugin({
     workspacePath,
     workspaceIdentity,
     sessionId ?? null,
-    provider,
     deferredActiveQuery,
-    isOpen && isSkillTrigger,
+    isOpen && groupOrder.includes("skills"),
     false,
     intl.formatMessage({ id: "chat.mention.skills.empty" }),
     intl.formatMessage({ id: "chat.mention.skills.title" }),
@@ -177,7 +174,7 @@ export function MentionPlugin({
     workspacePath,
     workspaceIdentity,
     deferredActiveQuery,
-    isOpen && isContextTrigger,
+    isOpen && groupOrder.includes("files"),
     intl.formatMessage({ id: "chat.mention.files.empty" }),
     intl.formatMessage({ id: "chat.mention.files.title" }),
     fileDefaultPreviewLimit,
@@ -187,7 +184,7 @@ export function MentionPlugin({
     workspacePath,
     workspaceIdentity,
     deferredActiveQuery,
-    isOpen && (isContextTrigger || isSessionTrigger),
+    isOpen && groupOrder.includes("sessions"),
     getSessionMentionWorkspaceScope(activeTrigger?.trigger),
     intl.formatMessage({ id: "chat.mention.sessions.empty" }),
     intl.formatMessage({ id: "chat.mention.sessions.title" }),
@@ -220,18 +217,15 @@ export function MentionPlugin({
       },
     } satisfies Record<MentionPanelGroupId, MentionResultGroup<MentionItem>>;
 
-    // 产品约束：@ 固定为 文件 → 对话；旧 # / $ 面板继续走
-    // 原单分组 provider。这里仅重排发现入口，候选自身的 canonical markdown 不变。
-    return buildVisibleMentionGroups(
-      getMentionPanelGroupOrder(activeTrigger?.trigger).map((groupId) => groupsById[groupId]),
-    );
+    // @ 同时发现 nek 技能、文件与对话；@skill: 只查技能，# / $ 保留单分组入口。
+    return buildVisibleMentionGroups(groupOrder.map((groupId) => groupsById[groupId]));
   }, [
     fileResult.emptyText,
     fileResult.error,
     fileResult.items,
     fileResult.loading,
     fileResult.title,
-    activeTrigger?.trigger,
+    groupOrder,
     sessionsResult.emptyText,
     sessionsResult.error,
     sessionsResult.items,

@@ -1,3 +1,4 @@
+import { isAbsolute, relative } from "node:path";
 import type {
   ClientHello,
   ToolCallRow,
@@ -157,8 +158,34 @@ export function createNekLegacyMethods(
     async listMcpServerStatuses() {
       return { statuses: {} };
     },
-    async getSkillReferenceCatalog() {
-      return { authority: "workspace", skills: [] };
+    async getSkillReferenceCatalog(input) {
+      const sessionKey = input.sessionId
+        ? target.resolveSessionKey(input, input.sessionId)
+        : undefined;
+      if (input.sessionId && !sessionKey)
+        throw new Error(`nek session ${input.sessionId} is not open in ${input.workspacePath}`);
+      // nek owns discovery, trust and enabled resources; the adapter only projects its targets.
+      const targets = await target.service.getMentionTargets(
+        sessionKey ? { sessionKey } : { cwd: input.workspacePath },
+      );
+      const skills = targets
+        .filter((item) => item.kind === "skill")
+        .map((skill) => {
+          const path = skill.location;
+          if (!path) throw new Error(`nek returned a skill without a location: ${skill.name}`);
+          const localPath = relative(input.workspacePath, path).replaceAll("\\", "/");
+          const inWorkspace =
+            !isAbsolute(localPath) && localPath !== ".." && !localPath.startsWith("../");
+          return {
+            id: `nek:${skill.name}`,
+            name: skill.name,
+            description: skill.description ?? "",
+            path,
+            scope: inWorkspace ? ("workspace" as const) : ("user" as const),
+            enabled: true as const,
+          };
+        });
+      return { authority: sessionKey ? "session" : "workspace", skills };
     },
     collectLocalRuntimeChildProcesses: () => unsupported("collectLocalRuntimeChildProcesses"),
     generateWorkspaceText: () => unsupported("generateWorkspaceText"),
