@@ -7,7 +7,7 @@
  * - 没写：模型都用同一种端点就显示那一种，混用显示“按模型设置”；
  * - 都没写（内置服务商用内置默认值）：不显示。
  */
-import type { NekEndpointApi, NekProviderView } from "@zcode/shared/nek-protocol";
+import type { NekEndpointApi, NekProviderDraft, NekProviderView } from "@zcode/shared/nek-protocol";
 
 type ProviderApiSummary = { kind: "api"; api: string } | { kind: "perModel" } | { kind: "none" };
 
@@ -41,6 +41,21 @@ export function summarizeProviderApi(
   const [only] = modelApis;
   if (modelApis.size === 1 && only) return { kind: "api", api: only };
   return modelApis.size > 1 ? { kind: "perModel" } : { kind: "none" };
+}
+
+/** 已保存的明确端点随列表请求传入；空模型服务商也能请求，凭据仍由 nek 解析。 */
+export function providerModelListSource(provider: NekProviderView): {
+  providerId: string;
+  draft?: NekProviderDraft;
+} {
+  const summary = summarizeProviderApi(provider);
+  if (summary.kind === "api" && isEndpointApi(summary.api) && provider.baseUrl.trim()) {
+    return {
+      providerId: provider.id,
+      draft: { api: summary.api, baseUrl: provider.baseUrl },
+    };
+  }
+  return { providerId: provider.id };
 }
 
 /** 端点标签；`null` = 不显示（调用方连同分隔符一起省略）。 */

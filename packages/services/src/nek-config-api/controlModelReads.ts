@@ -8,7 +8,7 @@ import type { NekControlClient } from "./control.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { modelRuntimeFingerprint } from "./modelRuntime.js";
 
-/** Preserve the control contract while sharing only model reads behind the freshness lease. */
+/** Freshness gates every model-dependent command; only readonly catalog calls share a flight. */
 export function withModelReadAdmission(
   client: NekControlClient,
   lease: NekModelRuntimeLease,
@@ -35,6 +35,9 @@ export function withModelReadAdmission(
             ),
           context,
         );
+      // Explicit probes must see current models.json, but each click is its own request.
+      if (command.type === "fetch_provider_models" || command.type === "test_provider")
+        return lease.run("selection", call, context);
       if (command.type === "auth_status" && context)
         return lease.run(
           "selection",

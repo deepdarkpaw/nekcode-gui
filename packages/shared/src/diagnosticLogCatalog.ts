@@ -1894,6 +1894,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/shared/src/nek-protocol/rpc-messages.ts",
   "packages/shared/src/nek-protocol/rpc.ts",
   "packages/shared/src/nek-protocol/status.ts",
+  "packages/shared/src/nek-protocol/thinking-levels.ts",
   "packages/shared/src/node.ts",
   "packages/shared/src/node/atomicFileLock.ts",
   "packages/shared/src/node/diagnosticsExport.ts",

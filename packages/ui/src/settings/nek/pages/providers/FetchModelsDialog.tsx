@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { analyzeBaseUrl } from "../../lib/baseUrl.js";
 import { ModelImportEndpoints } from "./ModelImportEndpoints.js";
+import { providerModelListSource } from "./providerApi.js";
 import { ImageIcon, LoaderIcon, PencilLineIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
@@ -60,7 +61,8 @@ function useFetchedModels(open: boolean, provider: NekProviderView, attempt: num
     const existing = new Set(provider.models.map((model) => model.id));
     void (async () => {
       try {
-        const result = await api.fetchProviderModels(target, { providerId: provider.id });
+        const result = await api.fetchProviderModels(target, providerModelListSource(provider));
+        if (cancelled) return;
         if (!result.ok) {
           if (!cancelled) {
             setState({
