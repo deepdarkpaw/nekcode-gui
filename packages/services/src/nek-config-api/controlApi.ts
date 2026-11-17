@@ -20,7 +20,7 @@ import type {
   NekTestProviderResult,
   NekTestWebSearchResult,
 } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { nekThinkingLevelsFromMap } from "@zcode/shared/nek-protocol";
 import type { NekModel } from "@zcode/shared/nek-protocol";
 import type { NekConfigRuntime } from "./runtime.js";
 import { validationError } from "./errors.js";
@@ -67,7 +67,7 @@ export interface NekControlGroup {
 
 function thinkingLevelsOf(model: NekModel): NekCatalogModel["thinkingLevels"] {
   if (model.reasoning !== true) return [];
-  return NEK_THINKING_LEVELS.filter((level) => model.thinkingLevelMap?.[level] !== null);
+  return nekThinkingLevelsFromMap(model.thinkingLevelMap);
 }
 
 /** nek 的 `NekModel` → 设置页用的目录条目（缺省值与 nek 的模型默认值一致）。 */

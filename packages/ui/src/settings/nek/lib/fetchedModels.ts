@@ -9,7 +9,7 @@ import type {
   NekRemoteModel,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { thinkingDraftFromModel, thinkingFieldsFromDraft } from "./thinkingLevels.js";
 
 export const NEK_DEFAULT_CONTEXT_WINDOW = 128_000;
 export const NEK_DEFAULT_MAX_TOKENS = 16_384;
@@ -23,6 +23,7 @@ export interface FetchedModelRow {
   maxTokens: number;
   reasoning: boolean;
   thinkingLevels: NekThinkingLevel[];
+  thinkingLevelMap?: NekCatalogModel["thinkingLevelMap"];
   input: Array<"text" | "image">;
   source: MetadataSource;
   alreadyAdded: boolean;
@@ -45,6 +46,7 @@ function rowFromRemote(
     maxTokens: remote.maxTokens ?? catalog?.maxTokens ?? NEK_DEFAULT_MAX_TOKENS,
     reasoning: remote.reasoning ?? catalog?.reasoning ?? false,
     thinkingLevels: remote.thinkingLevels ?? catalog?.thinkingLevels ?? [],
+    ...(catalog?.thinkingLevelMap ? { thinkingLevelMap: catalog.thinkingLevelMap } : {}),
     input: remote.input ?? catalog?.input ?? ["text"],
     source,
     alreadyAdded,
@@ -91,15 +93,14 @@ export function modelConfigFromRow(
   if (row.reasoning) {
     config.reasoning = true;
     if (row.thinkingLevels.length > 0) {
-      const map: Partial<Record<NekThinkingLevel, string | null>> = {};
-      for (const level of NEK_THINKING_LEVELS) {
-        if (!row.thinkingLevels.includes(level)) {
-          map[level] = null;
-        }
-      }
-      if (Object.keys(map).length > 0) {
-        config.thinkingLevelMap = map;
-      }
+      const draft = thinkingDraftFromModel({
+        reasoning: true,
+        thinkingLevelMap: row.thinkingLevelMap,
+      });
+      config.thinkingLevelMap = thinkingFieldsFromDraft({
+        ...draft,
+        enabled: new Set(row.thinkingLevels),
+      }).thinkingLevelMap;
     }
   }
   return config;

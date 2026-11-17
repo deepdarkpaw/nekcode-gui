@@ -1,10 +1,10 @@
 /**
  * models.json 的 `reasoning` + `thinkingLevelMap`：
- * - 未写进 map 的等级使用 nek 的默认映射（视为支持）；
+ * - 基础档位缺省支持；xhigh/max 必须显式映射才支持；
  * - map 值为 null 表示不支持；字符串为上游原始取值（高级）。
  */
 import type { NekModelConfig, NekThinkingLevel } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { NEK_THINKING_LEVELS, nekThinkingLevelsFromMap } from "@zcode/shared/nek-protocol";
 
 export interface ThinkingDraft {
   reasoning: boolean;
@@ -17,14 +17,10 @@ export function thinkingDraftFromModel(
   model: Pick<NekModelConfig, "reasoning" | "thinkingLevelMap">,
 ): ThinkingDraft {
   const map = model.thinkingLevelMap ?? {};
-  const enabled = new Set<NekThinkingLevel>();
+  const enabled = new Set(nekThinkingLevelsFromMap(map));
   const raw: Partial<Record<NekThinkingLevel, string>> = {};
   for (const level of NEK_THINKING_LEVELS) {
     const value = map[level];
-    if (value === null) {
-      continue;
-    }
-    enabled.add(level);
     if (typeof value === "string") {
       raw[level] = value;
     }
@@ -32,7 +28,7 @@ export function thinkingDraftFromModel(
   return { reasoning: model.reasoning === true, enabled, raw };
 }
 
-/** 编辑态 → `reasoning` / `thinkingLevelMap`（全部默认时省略 map）。 */
+/** 编辑态 → 配置；启用的 xhigh/max 即使原始值留空也必须写入显式映射。 */
 export function thinkingFieldsFromDraft(
   draft: ThinkingDraft,
 ): Pick<NekModelConfig, "reasoning" | "thinkingLevelMap"> {
@@ -48,11 +44,13 @@ export function thinkingFieldsFromDraft(
     const raw = draft.raw[level]?.trim();
     if (raw) {
       map[level] = raw;
+    } else if (level === "xhigh" || level === "max") {
+      map[level] = level;
     }
   }
   return {
     reasoning: true,
-    thinkingLevelMap: Object.keys(map).length > 0 ? map : undefined,
+    thinkingLevelMap: map,
   };
 }
 

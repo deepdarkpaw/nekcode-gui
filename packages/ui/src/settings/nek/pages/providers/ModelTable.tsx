@@ -4,7 +4,7 @@
  */
 import { ImageIcon, PencilIcon, StarIcon, Trash2Icon } from "lucide-react";
 import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { nekThinkingLevelsFromMap } from "@zcode/shared/nek-protocol";
 import { IconButton } from "@/components/ui/icon-button.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -19,7 +19,7 @@ export function modelThinkingLevels(model: NekModelConfig) {
   if (!model.reasoning) {
     return [];
   }
-  return NEK_THINKING_LEVELS.filter((level) => model.thinkingLevelMap?.[level] !== null);
+  return nekThinkingLevelsFromMap(model.thinkingLevelMap);
 }
 
 function ModelRowView({

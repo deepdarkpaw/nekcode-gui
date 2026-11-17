@@ -193,15 +193,15 @@ describe("thinkingLevels", () => {
     expect(draft.raw.high).toBe("32000");
     expect(thinkingFieldsFromDraft(draft)).toEqual({
       reasoning: true,
-      thinkingLevelMap: { high: "32000", max: null },
+      thinkingLevelMap: { high: "32000", xhigh: null, max: null },
     });
   });
 
-  it("omits the map when everything uses defaults", () => {
+  it("keeps implicit advanced levels disabled when standard levels use defaults", () => {
     const draft = thinkingDraftFromModel({ reasoning: true });
     expect(thinkingFieldsFromDraft(draft)).toEqual({
       reasoning: true,
-      thinkingLevelMap: undefined,
+      thinkingLevelMap: { xhigh: null, max: null },
     });
   });
 });

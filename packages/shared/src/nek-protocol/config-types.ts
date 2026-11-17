@@ -74,7 +74,7 @@ export interface NekModelConfig {
   maxTokens?: number;
   input?: Array<"text" | "image">;
   reasoning?: boolean;
-  /** 允许的思考等级 → 上游原始取值（null = 不支持）。 */
+  /** 等级 → 上游原始值；null 禁用。基础档位缺省支持，xhigh/max 须有显式字符串映射。 */
   thinkingLevelMap?: Partial<Record<NekThinkingLevel, string | null>>;
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   headers?: Record<string, string>;

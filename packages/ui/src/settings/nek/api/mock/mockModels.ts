@@ -14,7 +14,7 @@ import type {
   NekTestProviderResult,
   NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { nekThinkingLevelsFromMap } from "@zcode/shared/nek-protocol";
 import { apiKeyViewFromWrite } from "../modelsDoc.js";
 import {
   assertRevision,
@@ -133,7 +133,7 @@ function thinkingLevelsOf(model: NekModelConfig): NekThinkingLevel[] {
   if (!model.reasoning) {
     return [];
   }
-  return NEK_THINKING_LEVELS.filter((level) => model.thinkingLevelMap?.[level] !== null);
+  return nekThinkingLevelsFromMap(model.thinkingLevelMap);
 }
 
 export function availableModels(machine: MockMachine): NekCatalogModel[] {
