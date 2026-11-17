@@ -238,7 +238,10 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
               buildToolCallRow(identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)), {
                 toolCallId: call.toolCall.id,
                 toolName: call.toolCall.name,
-                status: "inputStreaming",
+                status:
+                  assistant.stopReason === "error" || assistant.stopReason === "aborted"
+                    ? "cancelled"
+                    : "inputStreaming",
                 inputText: JSON.stringify(call.toolCall.arguments ?? {}, null, 2),
                 input: call.toolCall.arguments,
                 assistantResponseId: responseId,

@@ -29,6 +29,7 @@ import { applySubagentDetails } from "./nekLiveTools.js";
 import { projectNekUserImages } from "./nekUserImages.js";
 import { projectNekUserFiles, readNekStoredAttachments, withNekUserFiles } from "./nekUserFiles.js";
 import { appendToolArgument } from "./nekToolInput.js";
+import { settleFailedAssistantResponse } from "./nekSettledWork.js";
 
 /**
  * 消息生命周期 → 行。
@@ -204,9 +205,11 @@ export function applyMessageUpdate(
       // will be upserted again by message_end if that event follows. The event reason is
       // authoritative for aborts, even if a provider payload has an inconsistent stopReason.
       if (update.error) {
-        applyAssistantMessage(ctx, update.error, false, update.reason !== "aborted");
-        if (update.reason === "aborted" && ctx.turn) ctx.turn.lastStopReason = "aborted";
+        applyAssistantMessage(ctx, { ...update.error, stopReason: update.reason }, false);
+      } else {
+        settleFailedAssistantResponse(ctx, update.reason);
       }
+      if (ctx.turn) ctx.turn.lastStopReason = update.reason;
       return;
     default:
       // `start` / `done` 不产生行：完成态由 message_end 决定。
@@ -237,7 +240,6 @@ function applyAssistantMessage(
   ctx: NekLiveContext,
   assistant: NekAssistantMessage,
   streaming: boolean,
-  projectModelError = true,
 ): void {
   const responseKey = ctx.assistantResponseKey ?? `resp:${assistant.timestamp}`;
   const createdAt = toEpochMs(assistant.timestamp);
@@ -245,7 +247,7 @@ function applyAssistantMessage(
   if (ctx.turn) ctx.turn.lastStopReason = assistant.stopReason;
   const textState = streaming
     ? "streaming"
-    : assistant.stopReason === "aborted"
+    : assistant.stopReason === "aborted" || assistant.stopReason === "error"
       ? "interrupted"
       : "complete";
 
@@ -292,20 +294,24 @@ function applyAssistantMessage(
     ctx.toolRows.set(call.toolCall.id, rowId);
     ctx.streamRows.set(`${responseKey}:tool:${call.index}`, rowId);
     const existing = ctx.store.getRow(rowId);
-    ctx.store.add(
-      buildToolCallRow(rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt), {
+    const previous = existing?.kind === "toolCall" ? existing : undefined;
+    ctx.store.add({
+      ...previous,
+      ...buildToolCallRow(rowIdentity(entityId, rowId, currentTurnId(ctx), createdAt), {
         toolCallId: call.toolCall.id,
         toolName: call.toolCall.name,
-        status: "inputStreaming",
+        // 消息内容只能补工具入参，不能将已有执行结果/终态退回参数生成中。
+        status: previous?.status ?? "inputStreaming",
         inputText: JSON.stringify(call.toolCall.arguments ?? {}, null, 2),
         input: call.toolCall.arguments,
         assistantResponseId: responseKey,
-        ...(existing?.kind === "toolCall" && existing.output ? { output: existing.output } : {}),
-        ...(existing?.kind === "toolCall" && existing.error ? { error: existing.error } : {}),
       }),
-    );
+    });
   }
-  if (!streaming && projectModelError) applyAssistantErrorMarker(ctx, assistant);
+  if (!streaming) {
+    settleFailedAssistantResponse(ctx, assistant.stopReason, responseKey);
+    applyAssistantErrorMarker(ctx, assistant);
+  }
   // 该 response 的流式累积到此为止：丢弃 key，下一次 message_start 重新建立。
   ctx.assistantResponseKey = streaming ? responseKey : undefined;
 }

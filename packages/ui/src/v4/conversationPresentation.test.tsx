@@ -167,6 +167,40 @@ function mainTurnRows(
   return [header, user, ...workRows];
 }
 
+it("FW5: a cancelled write loses its shimmer while the retry's new write still runs", () => {
+  const writing: ToolCallRow = {
+    ...edit(30_000, "inputStreaming", "G:/project/infrastructure/images.py"),
+    toolName: "write",
+    input: { path: "G:/project/infrastructure/images.py", content: "partial file" },
+    output: undefined,
+  };
+  const ui = render(view(mainTurnRows(29_900, [writing], true)), { wrapper });
+  expect(screen.getByText("正在写入").classList.contains("animated-gradient-text")).toBe(true);
+  const cancelled: ToolCallRow = { ...writing, status: "cancelled" };
+  const failure = marker(30_001, {
+    type: "modelError",
+    provider: "CPA",
+    model: "gpt-6.1-sol",
+    api: "openai-responses",
+    rawError: "stream failed",
+  });
+  ui.rerender(view(mainTurnRows(29_900, [cancelled, failure], true)));
+  expect(screen.queryByText("正在写入")).toBeNull();
+  expect(screen.getByText("写入").classList.contains("animated-gradient-text")).toBe(false);
+  expect(screen.getByText("images.py")).toBeTruthy();
+  expect(ui.container.querySelector('[data-row-id="30000"] .animated-gradient-text')).toBeNull();
+  const retry: ToolCallRow = {
+    ...writing,
+    ...base(30_002),
+    toolCallId: "retry-write",
+    input: { path: "G:/project/storage/database.py", content: "new file" },
+  };
+  ui.rerender(view(mainTurnRows(29_900, [cancelled, failure, retry], true)));
+  expect(screen.getAllByText("正在写入")).toHaveLength(1);
+  expect(screen.getByText("正在写入").classList.contains("animated-gradient-text")).toBe(true);
+  expect(ui.container.querySelector('[data-row-id="30000"] .animated-gradient-text')).toBeNull();
+});
+
 it.each(["", " \n\t"])(
   "CLI-R1: blank assistant blocks (%j) do not split main-turn edits",
   (text) => {

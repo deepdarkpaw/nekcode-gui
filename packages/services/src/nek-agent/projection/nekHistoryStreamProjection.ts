@@ -9,6 +9,7 @@ import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { closeTurn, ensureTurn } from "./nekLiveTurn.js";
 import { applyAssistantErrorMarker } from "./nekLiveMessages.js";
+import { settleFailedAssistantResponse } from "./nekSettledWork.js";
 import { applyCompactionEnd } from "./nekLiveMarkers.js";
 import { projectHistory } from "./nekHistoryProjection.js";
 import { validateHistoryDisplay } from "./nekHistoryDisplay.js";
@@ -90,9 +91,16 @@ export class NekHistoryStreamProjection {
           ctx.store.update(id, (row) =>
             (row.kind === "assistantText" || row.kind === "reasoning") &&
             row.assistantResponseId === ctx.assistantResponseKey
-              ? { ...row, state: message.stopReason === "aborted" ? "interrupted" : "complete" }
+              ? {
+                  ...row,
+                  state:
+                    message.stopReason === "aborted" || message.stopReason === "error"
+                      ? "interrupted"
+                      : "complete",
+                }
               : row,
           );
+        settleFailedAssistantResponse(ctx, message.stopReason);
         applyAssistantErrorMarker(ctx, message as unknown as NekAssistantMessage);
         ctx.assistantResponseKey = undefined;
         ctx.assistantErrorKey = undefined;
@@ -292,6 +300,14 @@ export class NekHistoryStreamProjection {
       ensureTurn(ctx, Number(new Date(target.timestamp)) || ctx.now());
     }
     const entry = validateHistoryDisplay(target.entry);
+    if (entry.type === "message" && entry.message.role === "assistant") {
+      const assistant = entry.message as NekAssistantMessage;
+      settleFailedAssistantResponse(
+        ctx,
+        assistant.stopReason,
+        assistantKey ?? `resp:${assistant.timestamp}`,
+      );
+    }
     const config = ctx.store.state.config;
     if (entry.type === "model_change" || entry.type === "thinking_level_change")
       ctx.store.setState({
