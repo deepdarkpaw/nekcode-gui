@@ -223,7 +223,6 @@ export function SettingsPage({
   const [messageStreamShowTodos, setMessageStreamShowTodos] = useState(false);
   const [toolGroupingExploreEnabled, setToolGroupingExploreEnabled] = useState(true);
   const [toolGroupingTerminalEnabled, setToolGroupingTerminalEnabled] = useState(true);
-  const [toolGroupingChangesEnabled, setToolGroupingChangesEnabled] = useState(true);
   const [zcodeInteractionBehavior, setZCodeInteractionBehavior] =
     useState<ZCodeInteractionBehavior>("queue");
   const [defaultHomeDir, setDefaultHomeDir] = useState("");
@@ -265,7 +264,6 @@ export function SettingsPage({
         setMessageStreamShowTodos(settings.messageStreamShowTodos ?? false);
         setToolGroupingExploreEnabled(settings.toolGroupingExploreEnabled ?? true);
         setToolGroupingTerminalEnabled(settings.toolGroupingTerminalEnabled ?? true);
-        setToolGroupingChangesEnabled(settings.toolGroupingChangesEnabled ?? true);
         setZCodeInteractionBehavior(settings.zcodeInteractionBehavior ?? "queue");
       })
       .catch(() => {});
@@ -298,7 +296,6 @@ export function SettingsPage({
     setMessageStreamShowTodos(sharedSettings.messageStreamShowTodos ?? false);
     setToolGroupingExploreEnabled(sharedSettings.toolGroupingExploreEnabled ?? true);
     setToolGroupingTerminalEnabled(sharedSettings.toolGroupingTerminalEnabled ?? true);
-    setToolGroupingChangesEnabled(sharedSettings.toolGroupingChangesEnabled ?? true);
     setZCodeInteractionBehavior(sharedSettings.zcodeInteractionBehavior ?? "queue");
     setReceivePreviewUpdates(sharedSettings.receivePreviewUpdates ?? false);
     setAutoDownloadAndInstallUpdates(sharedSettings.autoDownloadAndInstallUpdates ?? false);
@@ -479,13 +476,6 @@ export function SettingsPage({
     async (enabled: boolean) => {
       await updateSharedSettings({ toolGroupingTerminalEnabled: enabled });
       setToolGroupingTerminalEnabled(enabled);
-    },
-    [updateSharedSettings],
-  );
-  const handleToolGroupingChangesEnabledChange = useCallback(
-    async (enabled: boolean) => {
-      await updateSharedSettings({ toolGroupingChangesEnabled: enabled });
-      setToolGroupingChangesEnabled(enabled);
     },
     [updateSharedSettings],
   );
@@ -832,7 +822,6 @@ export function SettingsPage({
                             messageStreamShowTodos={messageStreamShowTodos}
                             toolGroupingExploreEnabled={toolGroupingExploreEnabled}
                             toolGroupingTerminalEnabled={toolGroupingTerminalEnabled}
-                            toolGroupingChangesEnabled={toolGroupingChangesEnabled}
                             zcodeInteractionBehavior={zcodeInteractionBehavior}
                             askUserQuestionAutoResolutionEnabled={
                               askUserQuestionAutoResolutionEnabled
@@ -872,9 +861,6 @@ export function SettingsPage({
                             }
                             onToolGroupingTerminalEnabledChange={
                               handleToolGroupingTerminalEnabledChange
-                            }
-                            onToolGroupingChangesEnabledChange={
-                              handleToolGroupingChangesEnabledChange
                             }
                             onZCodeInteractionBehaviorChange={handleZCodeInteractionBehaviorChange}
                             onAskUserQuestionAutoResolutionEnabledChange={

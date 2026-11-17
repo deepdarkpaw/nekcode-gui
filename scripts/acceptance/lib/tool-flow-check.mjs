@@ -82,17 +82,17 @@ export async function checkFileSummary(session) {
     session,
     `(() => {
     const group = document.querySelector('${GROUP}');
-    return group?.innerText.includes('累计 3 次成功操作') && group.querySelector('[aria-label="+2"]') && group.querySelector('[aria-label="-2"]') && group.innerText.includes('部分操作无增删统计');
+    return group?.innerText.includes(${JSON.stringify(MOCK_FILE_NAME)}) && group.querySelector('[aria-label="+2"]') && group.querySelector('[aria-label="-2"]') && !/累计|个文件|部分操作无增删统计/.test(group.innerText);
   })()`,
-    "three successful operations: two known edits +2/-2; write has no preimage",
+    "one file header, known edits +2/-2, no operation-count caption",
   );
   const toggle = `${GROUP} [aria-expanded="false"]`;
-  if (!(await evaluate(session, `Boolean(document.querySelector('[data-change-file]'))`)))
+  if (await evaluate(session, `Boolean(document.querySelector('${toggle}'))`))
     await clickAt(session, toggle);
   await waitForPage(
     session,
-    `document.querySelectorAll('[data-change-file]').length === 1`,
-    "one item for the full file path",
+    `document.querySelectorAll('${GROUP} [data-change-file]').length === 1 && document.querySelectorAll('${GROUP} [data-change-file] [data-tool-call-id]').length === 3`,
+    "one expansion directly exposes all three original operations",
   );
   if (await evaluate(session, "document.body.innerText.includes('工作区 Git 差异')"))
     throw new Error("obsolete Git summary is visible");

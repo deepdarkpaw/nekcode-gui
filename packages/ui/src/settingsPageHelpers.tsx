@@ -76,7 +76,6 @@ export function GeneralSectionContent({
   messageStreamShowTodos,
   toolGroupingExploreEnabled,
   toolGroupingTerminalEnabled,
-  toolGroupingChangesEnabled,
   zcodeInteractionBehavior,
   askUserQuestionAutoResolutionEnabled = true,
   onDataBaseDirChange,
@@ -99,7 +98,6 @@ export function GeneralSectionContent({
   onMessageStreamShowTodosChange,
   onToolGroupingExploreEnabledChange,
   onToolGroupingTerminalEnabledChange,
-  onToolGroupingChangesEnabledChange,
   onZCodeInteractionBehaviorChange,
   onAskUserQuestionAutoResolutionEnabledChange = async () => {},
   onOpenOnboardingDialog,
@@ -137,7 +135,6 @@ export function GeneralSectionContent({
   messageStreamShowTodos: boolean;
   toolGroupingExploreEnabled: boolean;
   toolGroupingTerminalEnabled: boolean;
-  toolGroupingChangesEnabled: boolean;
   zcodeInteractionBehavior: ZCodeInteractionBehavior;
   askUserQuestionAutoResolutionEnabled?: boolean;
   onDataBaseDirChange: (dir: string) => Promise<void>;
@@ -160,7 +157,6 @@ export function GeneralSectionContent({
   onMessageStreamShowTodosChange: (enabled: boolean) => Promise<void>;
   onToolGroupingExploreEnabledChange: (enabled: boolean) => Promise<void>;
   onToolGroupingTerminalEnabledChange: (enabled: boolean) => Promise<void>;
-  onToolGroupingChangesEnabledChange: (enabled: boolean) => Promise<void>;
   onZCodeInteractionBehaviorChange: (behavior: ZCodeInteractionBehavior) => Promise<void>;
   onAskUserQuestionAutoResolutionEnabledChange?: (enabled: boolean) => Promise<void>;
   onOpenOnboardingDialog: () => void;
@@ -765,21 +761,6 @@ export function GeneralSectionContent({
               checked={toolGroupingTerminalEnabled}
               onCheckedChange={(checked) => {
                 void onToolGroupingTerminalEnabledChange(checked);
-              }}
-            />
-          }
-        />
-        <SettingsRow
-          label={intl.formatMessage({ id: "settings.toolGroupingChanges" })}
-          description={intl.formatMessage({
-            id: "settings.toolGroupingChangesDescription",
-          })}
-          control={
-            <Switch
-              aria-label={intl.formatMessage({ id: "settings.toolGroupingChanges" })}
-              checked={toolGroupingChangesEnabled}
-              onCheckedChange={(checked) => {
-                void onToolGroupingChangesEnabledChange(checked);
               }}
             />
           }

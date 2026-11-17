@@ -43,7 +43,6 @@ import { useAssistantPreviewCardsForAssistantTextRow } from "@/v4/useAssistantPr
 import { shouldShowTurnChatLoading } from "@/v4/chatLoadingVisibility.js";
 import {
   buildAssistantWorkRenderItems,
-  ENABLE_CHANGES_TOOL_CALL_GROUPING,
   ENABLE_EXPLORE_TOOL_CALL_GROUPING,
   ENABLE_TERMINAL_TOOL_CALL_GROUPING,
   type ConversationAssistantWorkRenderItem,
@@ -228,13 +227,10 @@ function ConversationAssistantWorkItems({
             context.toolGroupingExploreEnabled ?? ENABLE_EXPLORE_TOOL_CALL_GROUPING,
           enableTerminalGrouping:
             context.toolGroupingTerminalEnabled ?? ENABLE_TERMINAL_TOOL_CALL_GROUPING,
-          enableChangesGrouping:
-            context.toolGroupingChangesEnabled ?? ENABLE_CHANGES_TOOL_CALL_GROUPING,
         },
       ),
     [
       context.workspacePath,
-      context.toolGroupingChangesEnabled,
       context.toolGroupingExploreEnabled,
       context.toolGroupingTerminalEnabled,
       stageTailIsRunning,

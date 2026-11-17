@@ -1,9 +1,9 @@
-import { joinFilePath } from "@/lib/path.js";
+import { filePathComparisonKey } from "@/lib/path.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { readRawToolCallFileSummaries } from "./fileSummaries.js";
 import type { RawToolCallFileSummary } from "./fileSummaryTypes.js";
 
-export interface ChangeGroupStats {
+interface ChangeGroupStats {
   completed: number;
   failed: number;
   cancelled: number;
@@ -13,7 +13,7 @@ export interface ChangeGroupStats {
   removed: number;
 }
 
-export interface ChangeFileGroup {
+interface ChangeFileGroup {
   key: string;
   summary?: RawToolCallFileSummary;
   calls: TaskChatToolCallTreeNode[];
@@ -60,7 +60,7 @@ export function buildFileChangeGroup(
       : [undefined];
     for (const summary of files) {
       const key = summary
-        ? joinFilePath(workspacePath, summary.path).replaceAll("\\", "/")
+        ? filePathComparisonKey(summary.path, workspacePath)
         : `pending:${call.toolId}`;
       let file = byPath.get(key);
       if (!file) {

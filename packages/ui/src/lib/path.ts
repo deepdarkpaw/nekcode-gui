@@ -66,6 +66,13 @@ export function joinFilePath(basePath: string, childPath: string): string {
   return `${normalizedBasePath}${separator}${normalizedChildPath}`;
 }
 
+/** Stable file identity for consecutive-operation grouping and its file summary projection. */
+export function filePathComparisonKey(path: string, workspacePath?: string): string {
+  const fullPath = workspacePath ? joinFilePath(workspacePath, path.trim()) : path.trim();
+  const normalized = fullPath.replaceAll("\\", "/").replace(/^\.\//, "").replaceAll("/./", "/");
+  return /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
 // encodeURI 不转义 # 和 ?，但它们在 URL 里是 fragment/query 分隔符。
 // 文件名包含 # 时（如 index#v2.html）生成的 file URL 会被下游 URL 解析截断 pathname
 // （只剩 /E:/dir/index），shell 打开必然失败。这里在 encodeURI 之后补转义。

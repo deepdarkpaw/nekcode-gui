@@ -698,7 +698,6 @@ function ReadonlyAssistantWorkItems({
           stageTailIsRunning,
           enableExploreGrouping: true,
           enableTerminalGrouping: true,
-          enableChangesGrouping: false,
         },
       ),
     [rows, stageTailIsRunning],

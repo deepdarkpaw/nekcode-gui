@@ -1593,9 +1593,6 @@ const enUS: Record<string, string> = {
   "settings.toolGroupingTerminal": "Group terminal commands",
   "settings.toolGroupingTerminalDescription":
     "Group consecutive non-read-only shell commands into a Terminal section.",
-  "settings.toolGroupingChanges": "Group changes across files",
-  "settings.toolGroupingChangesDescription":
-    "Group consecutive writes across files into a Changes section. Adjacent edits to the same file always combine.",
   "settings.zcodeInteractionBehavior": "Interaction behavior",
   "settings.zcodeInteractionBehaviorDescription":
     "While nek is running, add follow-up actions to the queue or guide them to run after the next tool call.",
@@ -2603,17 +2600,8 @@ const enUS: Record<string, string> = {
   "chat.toolCall.executeGroup.label": "Terminal",
   "chat.toolCall.changesGroup.label": "Changes",
   "chat.toolCall.changesGroup.receivingPath": "Receiving file path",
-  "chat.toolCall.changesGroup.completed": "{count} successful operations in total",
-  "chat.toolCall.changesGroup.failed": "{count} failed",
-  "chat.toolCall.changesGroup.cancelled": "{count} cancelled",
-  "chat.toolCall.changesGroup.running": "{count} in progress",
-  "chat.toolCall.changesGroup.unknownStats": "Some operations have no line statistics",
   "chat.toolCall.readGroup.label": "Read",
   "chat.toolCall.readGroup.count": "{count} reads",
-  "chat.toolCall.changesGroup.file.one": "{count} file",
-  "chat.toolCall.changesGroup.file.other": "{count} files",
-  "chat.toolCall.changesGroup.tool.one": "{count} tool",
-  "chat.toolCall.changesGroup.tool.other": "{count} tools",
   "chat.toolCall.execute.terminal": "Terminal",
   "chat.toolCall.execute.noOutput": "No output.",
   "chat.toolCall.executeGroup.command.one": "{count} command",

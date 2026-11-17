@@ -311,7 +311,9 @@ it("CLI-R3: a live main turn keeps one changes container as blank text and new c
   expect(ui.container.querySelectorAll("[data-changes-group]")).toHaveLength(1);
   // 同一 first-call identity：用户展开的状态随新调用保留，没有被重建成收起壳。
   expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
-  expect(ui.container.textContent).toContain("累计 4 次成功操作");
+  expect(ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")).toHaveLength(4);
+  expect(ui.container.textContent).not.toContain("累计");
+  expect(ui.container.textContent).not.toContain("1 个文件");
 });
 
 it("CLI-R4: blank text that later gains a body re-splits without losing the first-call key", () => {
@@ -350,7 +352,9 @@ it("CLI-R4: blank text that later gains a body re-splits without losing the firs
   expect(ui.container.textContent).toContain("now a real note");
   expect(ui.container.querySelectorAll("[data-changes-group]")).toHaveLength(2);
   // 首组 key 未变，展开状态保留；新出现的第二组仍是默认收起。
-  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+  const groups = ui.container.querySelectorAll("[data-changes-group]");
+  expect(groups[0]?.querySelectorAll("[data-tool-call-id]")).toHaveLength(2);
+  expect(groups[1]?.querySelectorAll("[data-tool-call-id]")).toHaveLength(0);
 });
 
 it("CLI-R5: completed main turn hides blank blocks while keeping the real reply", () => {
@@ -508,7 +512,6 @@ it("CLI-R8: readonly share and child-session turns reuse the same grouping entry
         stageTailIsRunning: true,
         enableExploreGrouping: true,
         enableTerminalGrouping: true,
-        enableChangesGrouping: false,
       },
     ).map((item) => item.kind),
   ).toEqual(["readGroup"]);
@@ -677,16 +680,23 @@ it("CG2e: relative and absolute reads of one file converge to a single read grou
   expect(group.kind === "readGroup" && group.node.toolCall.input).toEqual({ path: "src/main.ts" });
 });
 
-it("CG3: dozens of edits show one collapsed file summary and retain expansion as calls arrive", () => {
+it("FC2/FC3/FC4: a single file header expands directly to edits and stays open when calls arrive", () => {
   const rows = Array.from({ length: 20 }, (_, i) => edit(i + 100));
   const ui = render(view(rows), { wrapper });
   expect(screen.getAllByText("PRD.md")).toHaveLength(1);
   expect(screen.getByLabelText("+20")).toBeTruthy();
-  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(0);
-  fireEvent.click(screen.getByText("PRD.md"));
   expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
-  ui.rerender(view([...rows, edit(120, "success", "/project/ARD.md")]));
-  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(2);
+  expect(ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")).toHaveLength(0);
+  fireEvent.click(screen.getByText("PRD.md"));
+  expect(ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")).toHaveLength(20);
+  expect(ui.container.textContent).not.toContain("1 个文件");
+  expect(ui.container.textContent).not.toContain("累计");
+  ui.rerender(view([...rows, edit(120)]));
+  expect(ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")).toHaveLength(21);
+  ui.rerender(view([...rows, edit(120), edit(121, "success", "/project/ARD.md")]));
+  expect(ui.container.querySelectorAll("[data-changes-group]")).toHaveLength(1);
+  expect(ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")).toHaveLength(21);
+  expect(ui.container.querySelector('[data-tool-call-id="edit-121"]')).toBeTruthy();
   expect(screen.queryByText("工作区 Git 差异")).toBeNull();
 });
 
@@ -778,20 +788,13 @@ it("GE-1/GE-3: the user's disabled cross-file grouping setting still combines ad
     },
   ];
   const items = buildAssistantWorkRenderItems(rows, visibility, {
-    enableChangesGrouping: false,
     workspacePath: "G:/fixture/project",
   });
   expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
   const unit = buildConversationTurnRenderUnits(mainTurnRows(0, rows), {
     sessionPhase: "completedSuccess",
   })[0]!;
-  const ui = render(
-    <ConversationTurnGroup
-      unit={unit}
-      context={{ ...context, toolGroupingChangesEnabled: false }}
-    />,
-    { wrapper },
-  );
+  const ui = render(<ConversationTurnGroup unit={unit} context={context} />, { wrapper });
   expect(screen.getAllByText("更改")).toHaveLength(1);
   expect(ui.container.querySelectorAll('[data-tool-call-id="edit-1"]')).toHaveLength(0);
 });
@@ -807,14 +810,13 @@ it("GE-3: inputText-only relative and absolute CLI edit paths combine without cr
   );
   expect(
     buildAssistantWorkRenderItems(rows, visibility, {
-      enableChangesGrouping: false,
       workspacePath: "G:/fixture/project",
     }).map((item) => item.kind),
   ).toEqual(["changesGroup"]);
 });
 
 it("GE-2: disabling cross-file grouping keeps different files and real boundaries separate", () => {
-  const options = { enableChangesGrouping: false, workspacePath: "/project" };
+  const options = { workspacePath: "/project" };
   const rows = [edit(1), edit(2), edit(3, "success", "/other/project/PRD.md"), edit(4)];
   expect(buildAssistantWorkRenderItems(rows, visibility, options).map((item) => item.kind)).toEqual(
     ["changesGroup", "row", "row"],
@@ -838,18 +840,65 @@ it("RD5: a single write keeps its own row and thinking splits writes", () => {
   expect(acrossReasoning.every((item) => item.kind !== "changesGroup")).toBe(true);
 });
 
-it("RD6: one changes group carries every adjacent write per file", () => {
+it("FC1: A → B → A never merges across a different file", () => {
   const rows = [edit(1), edit(2, "success", "/project/ARD.md"), edit(3)];
   const items = buildAssistantWorkRenderItems(rows, visibility);
-  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
-  const group = items[0]!;
-  const fileGroup = buildFileChangeGroup(
-    group.kind === "changesGroup" ? group.rows.map(toolCallRowToLegacyNode) : [],
-    "/project",
+  expect(items.map((item) => item.kind)).toEqual(["row", "row", "row"]);
+  expect(toolCallItemIds(items)).toEqual(["edit-1", "edit-2", "edit-3"]);
+  const consecutive = buildAssistantWorkRenderItems(
+    [edit(1), edit(2), edit(3, "success", "/project/ARD.md"), edit(4), edit(5)],
+    visibility,
   );
-  expect(fileGroup.files).toHaveLength(2);
-  expect(fileGroup.files.map((file) => file.calls.length)).toEqual([2, 1]);
-  expect(fileGroup.totals.completed).toBe(3);
+  expect(consecutive.map((item) => item.kind)).toEqual(["changesGroup", "row", "changesGroup"]);
+  expect(
+    consecutive
+      .filter((item) => item.kind === "changesGroup")
+      .map((item) => item.rows.map((row) => row.toolCallId)),
+  ).toEqual([
+    ["edit-1", "edit-2"],
+    ["edit-4", "edit-5"],
+  ]);
+});
+
+it("FC1/FC2: Windows casing and relative-dot spellings keep one file header, not a hidden second group", () => {
+  const rows = [
+    edit(39_000, "success", "G:/project/src/Main.ts"),
+    edit(39_001, "success", "g:\\project\\src\\main.ts"),
+    edit(39_002, "success", "./src/Main.ts"),
+  ];
+  const items = buildAssistantWorkRenderItems(rows, visibility, { workspacePath: "G:/project" });
+  expect(items.map((item) => item.kind)).toEqual(["changesGroup"]);
+  const ui = render(view(rows), { wrapper });
+  expect(ui.container.querySelectorAll("[data-change-file]")).toHaveLength(1);
+  fireEvent.click(screen.getByText("更改"));
+  expect(ui.container.querySelectorAll("[data-change-file] [data-tool-call-id]")).toHaveLength(3);
+});
+
+it("FC1: unknown paths are not admitted to a single-file group", () => {
+  const unknown = { ...edit(40_001), input: undefined, output: undefined };
+  expect(
+    buildAssistantWorkRenderItems([edit(40_000), unknown, edit(40_003)], visibility).map(
+      (item) => item.kind,
+    ),
+  ).toEqual(["row", "row", "row"]);
+  expect(
+    buildAssistantWorkRenderItems(
+      [unknown, { ...unknown, rowId: 40_002, toolCallId: "unknown-2" }],
+      visibility,
+    ).map((item) => item.kind),
+  ).toEqual(["row", "row"]);
+});
+
+it("FC3: the collapsed file keeps real failure status without success or operation-count captions", () => {
+  const ui = render(view([edit(41_000), edit(41_001, "error"), edit(41_002, "cancelled")]), {
+    wrapper,
+  });
+  expect(ui.container.textContent).toContain("执行失败");
+  expect(ui.container.textContent).not.toMatch(/累计|次成功操作|项进行中|个文件/);
+  expect(ui.container.querySelector('[data-tool-call-id="edit-41001"]')).toBeNull();
+  fireEvent.click(screen.getByText("更改"));
+  expect(ui.container.querySelector('[data-tool-call-id="edit-41001"]')).toBeTruthy();
+  expect(ui.container.querySelector('[data-tool-call-id="edit-41002"]')).toBeTruthy();
 });
 
 it("RD7: reads and writes of one file never fuse", () => {

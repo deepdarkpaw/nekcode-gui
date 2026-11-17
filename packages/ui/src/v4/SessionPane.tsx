@@ -1186,7 +1186,6 @@ export function SessionPane({
   const messageStreamShowTodos = sharedSettings?.messageStreamShowTodos ?? false;
   const toolGroupingExploreEnabled = sharedSettings?.toolGroupingExploreEnabled ?? true;
   const toolGroupingTerminalEnabled = sharedSettings?.toolGroupingTerminalEnabled ?? true;
-  const toolGroupingChangesEnabled = sharedSettings?.toolGroupingChangesEnabled ?? true;
   const snapshotSessionId = snapshot?.sessionId ?? null;
   const snapshotFollowupMode = snapshot?.config.followupMode ?? null;
   const snapshotRevision = snapshot?.revision ?? null;
@@ -1849,7 +1848,6 @@ export function SessionPane({
       messageStreamShowTodos,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
-      toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
       onOpenBrowserUrl,
             onOpenCodeViewer,
@@ -1880,7 +1878,6 @@ export function SessionPane({
       messageStreamShowTodos,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
-      toolGroupingChangesEnabled,
       handleNavigateToRow,
       onOpenBrowserUrl,
             onOpenCodeViewer,
