@@ -53,7 +53,7 @@ it("LR4/LR5/LR6: viewport and history-only resync callbacks are stable, scope-bo
   const second = await liveStore();
   stores.push(first.store, second.store);
   const anchor = vi.spyOn(first.store, "setViewportAnchor");
-  const resync = vi.spyOn(first.store, "resyncHistory").mockImplementation(() => {});
+  const resync = vi.spyOn(first.store, "resyncHistory").mockResolvedValue();
   const nextAnchor = vi.spyOn(second.store, "setViewportAnchor");
   const { result, rerender } = renderHook(({ store }) => useConversationHistoryControls(store), {
     initialProps: { store: first.store },
@@ -67,7 +67,7 @@ it("LR4/LR5/LR6: viewport and history-only resync callbacks are stable, scope-bo
   expect(result.current!.setViewportAnchor).toBe(setViewport);
   expect(result.current!.resyncHistory).toBe(retryHistory);
   setViewport!({ turnId: "turn:5", followingLatest: false });
-  retryHistory!();
+  await retryHistory!();
   expect(anchor).toHaveBeenCalledExactlyOnceWith({ turnId: "turn:5", followingLatest: false });
   expect(resync).toHaveBeenCalledTimes(1);
   expect(first.transport.historyPage).not.toHaveBeenCalled();

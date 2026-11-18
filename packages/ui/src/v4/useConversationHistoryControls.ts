@@ -22,7 +22,7 @@ export interface ConversationHistoryControls {
   /** Main Timeline calls from scroll/effect, never render. */
   setViewportAnchor?(anchor: HistoryViewportAnchor): void;
   /** Explicit retry for live preview/transport errors; no model input replay. */
-  resyncHistory?(): void;
+  resyncHistory?(): Promise<void>;
 }
 
 /** Thin UI actions over the store owner; retry retains the failed user intent, not an accepted queue. */
@@ -68,7 +68,10 @@ export function useConversationHistoryControls(
     (anchor: HistoryViewportAnchor) => store?.setViewportAnchor(anchor),
     [store],
   );
-  const resyncHistory = useCallback(() => store?.resyncHistory(), [store]);
+  const resyncHistory = useCallback(async () => {
+    if (!store) throw new Error("fault.subscription.historyNotConnected");
+    await store.resyncHistory();
+  }, [store]);
   const retry = useCallback(async () => {
     if (store?.getState().historyError === HISTORY_BOUNDARY_REFRESH_REQUIRED)
       return await run(() => store.loadLatest());

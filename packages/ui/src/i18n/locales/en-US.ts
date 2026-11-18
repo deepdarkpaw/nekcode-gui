@@ -1250,9 +1250,10 @@ const enUS: Record<string, string> = {
   "chat.history.searchMore": "Search earlier content",
   "chat.history.shareSelectionOnly":
     "Only explicitly selected loaded turns are shared. Load an earlier turn before selecting it.",
-  "chat.history.liveIncomplete": "Live display is not fully synchronized",
+  "chat.history.liveIncomplete": "Conversation not fully synchronized",
   "chat.history.liveIncompleteHint":
-    "This is not a complete reply. History has not been deleted. Reload after this turn finishes; your message will not be sent again.",
+    "Loaded messages are still available. Reloading history won't resend your message.",
+  "chat.history.recoveryActive": "Wait for the current turn to finish, then reload history.",
   "chat.history.rawPreview": "Incomplete raw excerpt ({size} received)",
   "chat.history.reloadHistory": "Reload history",
   "chat.history.liveToolResult": "Live tool extras ({count})",
@@ -2870,6 +2871,7 @@ const enUS: Record<string, string> = {
   "chat.slash.emptyResults": "No matching slash commands",
   // Errors
   "chat.error.connectionLost": "Connection to agent lost",
+  "chat.error.recoveryDetails": "Error details",
   "chat.error.sessionLoadFailed": "Couldn't load this conversation",
   "chat.error.processExited": "Agent process exited unexpectedly",
   "chat.error.dismiss": "Dismiss error",

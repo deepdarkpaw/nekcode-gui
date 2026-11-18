@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   coalesceConversationDeltas,
+  PROTOCOL_V4_LIMITS,
   type ConversationDelta,
   type V4ConversationHistoryPageResult,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -287,11 +288,85 @@ describe("LR bounded live history renderer", () => {
       ),
     ).toBe(false);
     h.transport.resync.mockRejectedValueOnce(new Error("RECOVERY_ACTIVE"));
-    h.store.resyncHistory();
-    await vi.waitFor(() => expect(h.store.getState().lastError).toBe("RECOVERY_ACTIVE"));
+    await expect(h.store.resyncHistory()).rejects.toThrow("RECOVERY_ACTIVE");
+    expect(h.store.getState()).toMatchObject({ status: "live", lastError: null });
     expect(h.store.getState().snapshot).toBe(before);
     expect(h.transport.resync).toHaveBeenCalledTimes(1);
     expect(h.transport.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "FU3: history reload waits for both owned frame and ACK (frame first=%s)",
+    async (frameFirst) => {
+      const h = await setup();
+      h.transport.resync.mockRejectedValueOnce(new Error("RECOVERY_ACTIVE"));
+      await expect(h.store.resyncHistory()).rejects.toThrow("RECOVERY_ACTIVE");
+      const ack = deferredValue<Awaited<ReturnType<typeof h.transport.resync>>>();
+      h.transport.resync.mockReturnValueOnce(ack.promise);
+      const retry = h.store.resyncHistory();
+      expect(h.store.resyncHistory()).toBe(retry);
+      const done = vi.fn();
+      void retry.then(done);
+      const sendAck = () =>
+        ack.resolve({
+          ack: { subscriptionId: "subscription", mode: "snapshot", logEpoch: "epoch" },
+        });
+      const sendFrame = () => h.frame(liveSnapshot(livePage(1, 21)), "recovery");
+      if (frameFirst) sendFrame();
+      else sendAck();
+      await Promise.resolve();
+      expect(done).not.toHaveBeenCalled();
+      if (frameFirst) sendAck();
+      else sendFrame();
+      await retry;
+      expect(done).toHaveBeenCalledTimes(1);
+      expect(h.transport.resync).toHaveBeenCalledTimes(2);
+      expect(h.transport.sendCommand).not.toHaveBeenCalled();
+    },
+  );
+
+  it("FU3: missing recovery frame leaves existing conversation live and the history action retryable", async () => {
+    const h = await setup();
+    vi.useFakeTimers();
+    try {
+      const snapshot = h.store.getState().snapshot;
+      const result = expect(h.store.resyncHistory()).rejects.toThrow("recoveryFrameTimedOut");
+      await vi.advanceTimersByTimeAsync(2 * PROTOCOL_V4_LIMITS.logicalFrameAssemblyTimeoutMs);
+      await result;
+      expect(h.store.getState()).toMatchObject({ status: "live", lastError: null });
+      expect(h.store.getState().snapshot).toBe(snapshot);
+      const retry = h.store.resyncHistory();
+      h.frame(liveSnapshot(livePage(1, 21)), "recovery");
+      await retry;
+      expect(h.transport.resync).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("FU3: owner change rejects explicit history reload and late ACK cannot fail the new subscription", async () => {
+    const h = await setup();
+    const ack = deferredValue<Awaited<ReturnType<typeof h.transport.resync>>>();
+    h.transport.resync.mockReturnValueOnce(ack.promise);
+    const failed = expect(h.store.resyncHistory()).rejects.toThrow("historyNotConnected");
+    await h.store.retry();
+    await failed;
+    ack.reject(new Error("old owner failed"));
+    await Promise.resolve();
+    expect(h.store.getState()).toMatchObject({ status: "live", lastError: null });
+    expect(h.transport.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("FU3: joining an automatic transport recovery does not hide its real connection failure", async () => {
+    const h = await setup();
+    const ack = deferredValue<Awaited<ReturnType<typeof h.transport.resync>>>();
+    h.transport.resync.mockReturnValueOnce(ack.promise);
+    h.store.recoverFromStaleAuthority();
+    const failed = expect(h.store.resyncHistory()).rejects.toThrow("connection closed");
+    ack.reject(new Error("connection closed"));
+    await failed;
+    expect(h.store.getState()).toMatchObject({ status: "error", lastError: "connection closed" });
+    expect(h.transport.resync).toHaveBeenCalledTimes(1);
   });
 
   it("LR6: exact removals fence delayed pages; late metadata never clears an explicit paging error", async () => {

@@ -1165,9 +1165,9 @@ const zhCN: Record<string, string> = {
   "chat.history.loadNewer": "加载后续对话",
   "chat.history.searchMore": "继续查找更早内容",
   "chat.history.shareSelectionOnly": "仅分享明确选中的已加载轮次；如需更早内容，请先加载对应轮次。",
-  "chat.history.liveIncomplete": "实时显示未完整同步",
-  "chat.history.liveIncompleteHint":
-    "下方不是完整回复。历史未被删除；本轮结束后可重新读取，不会重发消息。",
+  "chat.history.liveIncomplete": "对话未能完整同步",
+  "chat.history.liveIncompleteHint": "已加载的内容仍可查看。重新读取历史不会重发消息。",
+  "chat.history.recoveryActive": "当前回合仍在运行，请等它结束后重新读取历史。",
   "chat.history.rawPreview": "不完整的原始片段（已接收 {size}）",
   "chat.history.reloadHistory": "重新读取历史",
   "chat.history.liveToolResult": "实时工具附加数据（{count} 项）",
@@ -2712,6 +2712,7 @@ const zhCN: Record<string, string> = {
   "chat.slash.emptyResults": "没有匹配的 slash command",
   // 错误
   "chat.error.connectionLost": "与代理的连接已断开",
+  "chat.error.recoveryDetails": "错误详情",
   "chat.error.sessionLoadFailed": "无法加载此会话",
   "chat.error.processExited": "代理进程意外退出",
   "chat.error.dismiss": "关闭错误提示",

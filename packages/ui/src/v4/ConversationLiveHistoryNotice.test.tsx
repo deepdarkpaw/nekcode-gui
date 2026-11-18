@@ -57,9 +57,12 @@ it("LR5: stream failures without a preview remain retryable and errors stay visi
       </ZCodeIntlProvider>
     </TooltipProvider>,
   );
+  expect(screen.queryByText("SEQUENCE_GAP")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "重新读取历史" }));
-  expect((await screen.findByRole("tooltip")).textContent).toContain("RECOVERY_ACTIVE");
-  expect(screen.getByText("SEQUENCE_GAP")).toBeTruthy();
+  expect((await screen.findByRole("tooltip")).textContent).toContain("当前回合仍在运行");
+  fireEvent.click(screen.getByRole("button", { name: "错误详情" }));
+  expect((await screen.findByText("SEQUENCE_GAP")).tagName).toBe("PRE");
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
 });
 
 it("LR5: tool extras are explicitly expanded without replacing the stored tool output", async () => {

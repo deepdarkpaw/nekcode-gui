@@ -3237,9 +3237,7 @@ export function SessionPane({
   // 恰好是每次输入都可能重渲染的组件。这里固定 button 版的引用，不动 handleStop 的双入口设计。
   const handleStopFromButton = useCallback(() => handleStop("button"), [handleStop]);
 
-  const handleRetrySubscribe = useCallback(() => {
-    void lease?.store.retry();
-  }, [lease]);
+  const handleRetrySubscribe = useCallback(() => lease?.store.retry(), [lease]);
 
   // loadOlder 触发（接近顶部自动预取）。store 内部单飞防重入。
   const handleLoadOlder = useCallback(() => {
@@ -3452,17 +3450,11 @@ export function SessionPane({
   const liveHistoryFault =
     controlLastError?.code === "fault.historyProjection" ? controlLastError.message : undefined;
   const resyncHistory = historyControls?.resyncHistory;
-  const liveHistoryNotice =
-    (liveHistoryPreview || liveHistoryFault) && resyncHistory ? (
-      <ConversationLiveHistoryNotice
-        preview={liveHistoryPreview}
-        error={liveHistoryFault}
-        reload={async () => resyncHistory()}
-      />
-    ) : null;
-  const controlLastErrorKey = controlLastError
-    ? createSessionErrorKey(snapshot?.sessionId ?? sessionId, controlLastError)
-    : null;
+  const showLiveHistoryNotice = Boolean((liveHistoryPreview || liveHistoryFault) && resyncHistory);
+  const controlLastErrorKey =
+    controlLastError && !(liveHistoryFault && showLiveHistoryNotice)
+      ? createSessionErrorKey(snapshot?.sessionId ?? sessionId, controlLastError)
+      : null;
   const projectedComposerError =
     controlLastError && controlLastErrorKey && !dismissedErrorKeys.includes(controlLastErrorKey)
       ? toComposerUiError(snapshot?.sessionId ?? sessionId, controlLastError)
@@ -3824,7 +3816,7 @@ export function SessionPane({
       draftConfig={draftConfig}
       composerDraft={composerDraft}
       replaceComposerDraft={replaceComposerDraft}
-      submissionReady={composerSubmissionReady}
+      submissionReady={composerSubmissionReady && !showLiveHistoryNotice}
       updateComposerContent={updateComposerContent}
       createSubmissionFromComposer={createSubmissionFromComposer}
       contextHeader={isDraft ? draftComposerHeader : undefined}
@@ -3985,10 +3977,22 @@ export function SessionPane({
   );
   // 进入/退出分享时 chat dock 与分享 dock 高度不同；共享同一个 grid 单元做上下位移淡入淡出，
   // 避免父高度突变导致的硬跳。prefers-reduced-motion 由 transition 组件内部降级为立即切换。
-  const conversationBottomDock = conversationBottomDockContent ? (
-    <ConversationBottomDockTransition mode={shareActive && sessionId ? "confirmation" : "chat"}>
-      {conversationBottomDockContent}
-    </ConversationBottomDockTransition>
+  const conversationBottomDock = (showLiveHistoryNotice || conversationBottomDockContent) ? (
+    <>
+      {showLiveHistoryNotice && resyncHistory ? (
+        <ConversationLiveHistoryNotice
+          key={timelineScrollMemoryKey}
+          preview={liveHistoryPreview}
+          error={liveHistoryFault}
+          reload={resyncHistory}
+        />
+      ) : null}
+      {conversationBottomDockContent ? (
+        <ConversationBottomDockTransition mode={shareActive && sessionId ? "confirmation" : "chat"}>
+          {conversationBottomDockContent}
+        </ConversationBottomDockTransition>
+      ) : null}
+    </>
   ) : null;
 
   return (
@@ -4101,7 +4105,7 @@ export function SessionPane({
           />
         ) : null}
 
-        {readOnly && controlLastError ? (
+        {readOnly && controlLastError && !(liveHistoryFault && showLiveHistoryNotice) ? (
           <div
             role="alert"
             data-testid="v4-subagent-readonly-error"
@@ -4111,8 +4115,9 @@ export function SessionPane({
           </div>
         ) : null}
 
-        {errored ? (
+        {errored || (connecting && state.lastError) ? (
           <SessionSubscriptionErrorPanel
+            key={timelineScrollMemoryKey}
             detail={state.lastError ?? null}
             onReconnect={handleRetrySubscribe}
           />
@@ -4148,10 +4153,9 @@ export function SessionPane({
                 view: shareDraft?.view,
               })}
               headerSlot={
-                liveHistoryNotice ??
                 // unsupportedRowCount 也要开这个门：整份副本的行都被本 build 跳过时
                 // rows 为空，但只读块必须留下来显示「需要更新 ZCode」，不能整块消失。
-                (importedShare &&
+                importedShare &&
                 (importedShare.rows.length > 0 || importedShare.unsupportedRowCount > 0) ? (
                   <ConversationShareImportNotice
                     rows={importedShare.rows}
@@ -4167,7 +4171,7 @@ export function SessionPane({
                     onOpenFileLink={onOpenFileLink}
                     onOpenCodeViewer={onOpenCodeViewer}
                   />
-                ) : null)
+                ) : null
               }
               emptyState={
                 isDraft ? (

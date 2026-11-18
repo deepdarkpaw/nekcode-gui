@@ -339,6 +339,9 @@ export class ConversationProjectionStore {
     frameDeadline: ReturnType<typeof setTimeout> | null;
     /** 本次 flight 是为内容确定性失败发起的：终态用 contentRejected，不混进瞬态统计。 */
     contentFault: boolean;
+    /** Joining an automatic flight does not take over its transport-failure semantics. */
+    historyOnly: boolean;
+    historyAction?: PromiseWithResolvers<void>;
   } | null = null;
   private readonly offAssemblyFault: () => void;
   private readonly offRuntimeRestart: (() => void) | null = null;
@@ -656,8 +659,14 @@ export class ConversationProjectionStore {
   }
 
   /** Explicit same-sub history recovery; never sends or replays model input. */
-  resyncHistory(): void {
-    this.requestRecovery();
+  resyncHistory(): Promise<void> {
+    if (this.closed || this.state.status !== "live" || !this.state.subscriptionId)
+      return Promise.reject(new Error("fault.subscription.historyNotConnected"));
+    if (this.recovery?.historyAction) return this.recovery.historyAction.promise;
+    const historyAction = Promise.withResolvers<void>();
+    if (this.recovery) this.recovery.historyAction = historyAction;
+    else this.requestRecovery(false, { historyAction });
+    return historyAction.promise;
   }
 
   /** SessionDataLayer 帧路由入口。 */
@@ -912,7 +921,10 @@ export class ConversationProjectionStore {
     this.requestRecovery(recoveryFault);
   }
 
-  private requestRecovery(recoveryEvent = false, options: { contentFault?: boolean } = {}): void {
+  private requestRecovery(
+    recoveryEvent = false,
+    options: { contentFault?: boolean; historyAction?: PromiseWithResolvers<void> } = {},
+  ): void {
     if (this.closed) return;
     const subscriptionId = this.state.subscriptionId;
     if (!subscriptionId) {
@@ -950,6 +962,8 @@ export class ConversationProjectionStore {
       postRecoveryGapPending: false,
       frameDeadline: null,
       contentFault,
+      historyOnly: options.historyAction !== undefined,
+      historyAction: options.historyAction,
     };
     this.recovery = recovery;
     // 内容失败跳过 resume 档直接强制 snapshot；瞬态失败仍按原阶梯先试 resume。
@@ -991,9 +1005,8 @@ export class ConversationProjectionStore {
       })
       .catch((error) => {
         if (this.closed || this.recovery !== recovery) return;
-        this.clearRecoveryDeadline(recovery);
-        this.recovery = null;
         const message = error instanceof Error ? error.message : String(error);
+        this.discardRecovery(message);
         logger.warn(`[v4-store] resync ${this.topic} 失败: ${message}`);
         if (message.includes("fault.subscription.notOwned")) {
           // 线上事件：notOwned 表示某一层已不认这份 subscription
@@ -1004,7 +1017,7 @@ export class ConversationProjectionStore {
           void this.connect();
           return;
         }
-        this.setState({ status: "error", lastError: message });
+        if (!recovery.historyOnly) this.setState({ status: "error", lastError: message });
       });
   }
 
@@ -1032,6 +1045,7 @@ export class ConversationProjectionStore {
         this.issueRecovery(recovery, false);
       } else {
         this.recovery = null;
+        recovery.historyAction?.resolve();
       }
       return;
     }
@@ -1053,9 +1067,12 @@ export class ConversationProjectionStore {
     recovery.frameDeadline = null;
   }
 
-  private discardRecovery(): void {
-    if (this.recovery) this.clearRecoveryDeadline(this.recovery);
+  private discardRecovery(reason = "fault.subscription.historyNotConnected"): void {
+    const recovery = this.recovery;
+    if (!recovery) return;
+    this.clearRecoveryDeadline(recovery);
     this.recovery = null;
+    recovery.historyAction?.reject(new Error(reason));
   }
 
   /**
@@ -1068,9 +1085,10 @@ export class ConversationProjectionStore {
     // 版本失配读成网络抖动（reasonCode 词表见 wire-fault.ts）。
     const contentFault = this.recovery.contentFault && options.contentEligible !== false;
     const code = contentFault ? SUBSCRIPTION_CONTENT_REJECTED : reasonCode;
-    this.discardRecovery();
+    const explicitHistory = this.recovery.historyOnly;
+    this.discardRecovery(code);
     logger.warn(`[v4-store] ${this.topic} recovery fail-closed: ${code}`);
-    this.setState({ status: "error", lastError: code });
+    if (!explicitHistory) this.setState({ status: "error", lastError: code });
   }
 
   private handleRuntimeRestart(reason?: "runtimeRestart" | "transportReplaced"): void {
