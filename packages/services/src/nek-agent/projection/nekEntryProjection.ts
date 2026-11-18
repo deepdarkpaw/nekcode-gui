@@ -290,7 +290,8 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
           const subagents = planSubagentRows(
             subagentAnchors,
             result,
-            turn.turnId,
+            // A delayed spawn result may arrive after another accepted user input.
+            rows[rowIndexById.get(rowId) ?? -1]?.turnId ?? turn.turnId,
             input.isSessionRunning ?? input.state?.isStreaming === true,
             (entityId) => allocator.resolve(entityId),
             liveSubagents,

@@ -140,7 +140,24 @@ export function applySubagentDetails(
   }
 }
 
-/** `extension_event: nek.subagent` 与工具 details 共用的子代理行更新。 */
+/**
+ * Status broadcasts can precede the spawn result or refer to an unloaded turn. They update
+ * admitted rows only; the existing status channel delivers them without timeline ownership.
+ * Tool results still require a real spawn seed and never guess the active user/tool as parent.
+ */
+export function applySubagentProgress(ctx: NekLiveContext, record: NekSubagentRecord): void {
+  if (
+    ctx.historyPages &&
+    ctx.store.findRowId(`subagent:${record.id}`) === undefined &&
+    !ctx
+      .historyAnchors?.()
+      .some((row) => row.kind === "subagent" && row.childSessionId === record.id)
+  )
+    return;
+  applySubagentRecord(ctx, record);
+}
+
+/** Tool details admit a spawn; progress and later tool results update the same anchored row. */
 export function applySubagentRecord(
   ctx: NekLiveContext,
   record: NekSubagentRecord,

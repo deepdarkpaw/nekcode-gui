@@ -12,7 +12,7 @@ import type { TimelineMarkerPayload, ToolCallRow } from "@zcode/shared/zcode-pro
 import { buildTimelineMarkerRow, buildToolCallRow, toEpochMs } from "./nekRows.js";
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
-import { applySubagentRecord } from "./nekLiveTools.js";
+import { applySubagentProgress } from "./nekLiveTools.js";
 import { applyAssistantErrorMarker, applyCustomMessage } from "./nekLiveMessages.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
 import { buildControlState, withNekModelSelection, withNekMode } from "./nekProjectionSnapshot.js";
@@ -334,7 +334,7 @@ export function applyBashCommandResultRow(
 /** `extension_event`：`nek.state`（完整快照）与 `nek.subagent`（增量）。 */
 export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEvent): void {
   if (event.name === "nek.subagent") {
-    applySubagentRecord(ctx, event.payload as NekSubagentRecord);
+    applySubagentProgress(ctx, event.payload as NekSubagentRecord);
     return;
   }
   if (event.name === "nek.state") {

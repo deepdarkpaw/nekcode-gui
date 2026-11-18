@@ -39,6 +39,7 @@ import {
   applyBashCommandResultRow,
   applyNekLiveEvent,
   applySessionState,
+  applySubagentProgress,
   applySubagentRecord,
 } from "./projection/nekLiveProjection.js";
 
@@ -315,7 +316,8 @@ export class NekConversationProjector {
   /** `extension_event: nek.subagent` 的增量。 */
   applySubagent(record: NekSubagentRecord, parentToolCallId?: string): void {
     try {
-      applySubagentRecord(this.live, record, parentToolCallId);
+      if (parentToolCallId === undefined) applySubagentProgress(this.live, record);
+      else applySubagentRecord(this.live, record, parentToolCallId);
     } catch (error) {
       if (!this.history.metadata) throw error;
       this.historyFault(error);

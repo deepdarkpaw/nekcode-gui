@@ -158,7 +158,7 @@ export function projectHistory(input: {
         row.kind === "subagent" && row.childSessionId
           ? [
               [
-                row.childSessionId,
+                `subagent:${row.childSessionId}`,
                 { turnId: row.turnId, parentToolCallId: row.parentToolCallId },
               ] as const,
             ]
@@ -170,6 +170,8 @@ export function projectHistory(input: {
       entries,
       historyLayout: { turnId: turn.id, resolve, subagentAnchors, selection },
       nekState: input.nekState,
+      // An ordered live target is a current tool fact, not a cold registry restore.
+      isSessionRunning: input.targetEntryId !== undefined,
       existing: { rows: anchors, byEntity: new Map(), nextRowId: 1 },
     });
     for (const entry of entries) {

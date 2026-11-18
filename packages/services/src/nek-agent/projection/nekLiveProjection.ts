@@ -17,7 +17,7 @@ import {
 } from "./nekLiveMarkers.js";
 import { buildQueueItems, withNekModelSelection } from "./nekProjectionSnapshot.js";
 
-export { applySubagentRecord } from "./nekLiveTools.js";
+export { applySubagentProgress, applySubagentRecord } from "./nekLiveTools.js";
 export { applyBashCommandResultRow, applySessionState } from "./nekLiveMarkers.js";
 export { closeTurn } from "./nekLiveTurn.js";
 export type { NekLiveContext, NekLiveTurn } from "./nekLiveTurn.js";

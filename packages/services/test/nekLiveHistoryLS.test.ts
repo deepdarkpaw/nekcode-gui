@@ -775,6 +775,159 @@ test("LS4/LS8: producer commits before queued text tokens; canonical aliases exi
   }
 });
 
+for (const background of [true, false])
+  test(`SA1/SA2: ${background ? "background" : "foreground"} child progress precedes its persisted spawn without poisoning history`, async () => {
+    const h = await integration();
+    try {
+      await h.append(stored("u", null, { role: "user", timestamp: 1, content: "delegate" }));
+      h.event({ type: "agent_start" });
+      h.event({ type: "message_start", message: { role: "user", timestamp: 1 } }, body);
+      await h.append(
+        stored(
+          "a",
+          "u",
+          assistant([
+            {
+              type: "toolCall",
+              id: "spawn",
+              name: "subagent",
+              arguments: { description: "inspect" },
+            },
+          ]),
+        ),
+      );
+      h.event({ type: "tool_execution_start", toolCallId: "spawn", toolName: "subagent" }, [
+        omit("/args"),
+      ]);
+      const child = {
+        id: "child",
+        type: "explorer",
+        description: "inspect",
+        background,
+        status: "running",
+        startedAt: 2,
+      };
+      // Real producer order: registry add/progress is broadcast inside the tool, before it returns.
+      for (const activity of [undefined, "reading source", "checking history"])
+        h.event({ type: "extension_event", name: "nek.subagent", payload: { ...child, activity } });
+      await h.stream.drain();
+      assert.equal(h.stream.failed, false);
+      assert.equal(h.projector.snapshot().control.lastError ?? null, null);
+      assert.equal(
+        h.projector.rows.window.filter((row) => row.kind === "subagent").length,
+        0,
+        "status-only updates cannot invent a source row or guess the latest parent tool",
+      );
+      const returned = background ? child : { ...child, status: "completed", endedAt: 3 };
+      h.event(
+        {
+          type: "tool_execution_end",
+          toolCallId: "spawn",
+          toolName: "subagent",
+          isError: false,
+          result: {},
+        },
+        [omit("/result/content"), omit("/result/details")],
+      );
+      await h.append(
+        stored("r", "a", {
+          role: "toolResult",
+          toolCallId: "spawn",
+          toolName: "subagent",
+          timestamp: 3,
+          content: [],
+          details: { subagent: returned },
+          isError: false,
+        }),
+      );
+      const spawn = h.projector.rows.window.find((row) => row.kind === "subagent")!;
+      assert.ok(spawn?.kind === "subagent");
+      assert.equal(spawn.parentToolCallId, "spawn");
+      assert.equal(spawn.turnId, "turn:u");
+      assert.equal(spawn.status, background ? "running" : "success");
+      await h.append(stored("u2", "r", { role: "user", timestamp: 4, content: "continue" }));
+      h.event({
+        type: "extension_event",
+        name: "nek.subagent",
+        payload: { ...child, status: "completed", endedAt: 5 },
+      });
+      await h.append(stored("a2", "u2", assistant([{ type: "text", text: "still connected" }])));
+      await h.stream.drain();
+      h.projector.flushNow();
+      const after = h.projector.rows.window.find((row) => row.kind === "subagent")!;
+      assert.equal(after.rowId, spawn.rowId);
+      assert.equal(after.turnId, spawn.turnId);
+      assert.equal(after.status, "success");
+      assert.equal(h.projector.snapshot().control.lastError ?? null, null);
+      assert.equal(h.stream.active, true);
+      assert.ok(
+        h.projector.rows.window.some(
+          (row) => row.kind === "assistantText" && row.text === "still connected",
+        ),
+      );
+      assert.deepEqual(h.rendered().rows.window, h.projector.rows.window);
+    } finally {
+      await h.close();
+    }
+  });
+
+test("SA3: concurrent children arriving in reverse order keep their original tool turn across an accepted input", async () => {
+  const h = await integration();
+  try {
+    await h.append(stored("u", null, { role: "user", timestamp: 1, content: "delegate twice" }));
+    await h.append(
+      stored(
+        "a",
+        "u",
+        assistant(
+          ["one", "two"].map((id) => ({
+            type: "toolCall",
+            id,
+            name: "subagent",
+            arguments: { description: id },
+          })),
+        ),
+      ),
+    );
+    const children = ["one", "two"].map((id) => ({
+      id: `child-${id}`,
+      type: "explorer",
+      description: id,
+      background: true,
+      status: "running",
+      startedAt: 2,
+    }));
+    for (const child of [...children].reverse())
+      h.event({ type: "extension_event", name: "nek.subagent", payload: child });
+    await h.append(stored("u2", "a", { role: "user", timestamp: 3, content: "new input" }));
+    for (const child of [...children].reverse()) {
+      await h.append(
+        stored(`r-${child.id}`, h.entries.at(-1)!.id, {
+          role: "toolResult",
+          toolCallId: child.description,
+          toolName: "subagent",
+          timestamp: 4,
+          content: [],
+          details: { subagent: child },
+          isError: false,
+        }),
+      );
+    }
+    await h.stream.drain();
+    assert.equal(h.stream.failed, false, h.projector.snapshot().control.lastError?.message);
+    assert.equal(h.projector.snapshot().control.lastError ?? null, null);
+    const rows = h.projector.rows.window.filter((row) => row.kind === "subagent");
+    assert.equal(rows.length, 2);
+    for (const row of rows) {
+      assert.equal(row.turnId, "turn:u");
+      assert.equal(row.parentToolCallId, row.childSessionId?.replace("child-", ""));
+      assert.equal(row.status, "running");
+    }
+  } finally {
+    await h.close();
+  }
+});
+
 test("LS3/LS8: compaction marker and subagent identity keep original anchors through metadata-only ends", async () => {
   const h = await integration();
   try {
