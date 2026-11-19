@@ -744,6 +744,160 @@ test("LS6: a bounded reload during live locators never rewinds the observed sour
   }
 });
 
+test("TC1: an approved plan can commit the execution input before the plan settles without moving live work", async () => {
+  const h = await integration();
+  const start = Date.now() - 250_000;
+  const headers = () => h.rendered().rows.window.filter((row) => row.kind === "turnHeader");
+  const flush = async () => {
+    await h.stream.drain();
+    h.projector.flushNow();
+  };
+  const userStart = (timestamp: number) =>
+    h.event({ type: "message_start", message: { role: "user", timestamp } }, body);
+  const assistantStart = () =>
+    h.event(
+      {
+        type: "message_start",
+        message: { role: "assistant", timestamp: start + 1_000, provider: "mock", model: "mock" },
+      },
+      body,
+    );
+  try {
+    await h.append(
+      stored("plan", null, { role: "user", timestamp: start - 10_000, content: "make plan" }),
+    );
+    h.event({ type: "agent_start" });
+    userStart(start - 10_000);
+    await flush();
+    // The approval hook calls sendUserMessage inside agent_settled, before RPC delivers that event.
+    await h.append(
+      stored("execute", "plan", { role: "user", timestamp: start, content: "implement" }),
+    );
+    assert.equal(headers().find((row) => row.turnId === "turn:plan")?.state, "running");
+    h.event({ type: "agent_settled", outcome: "completed" });
+    h.event({ type: "agent_start" });
+    userStart(start);
+    assistantStart();
+    h.event({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "inspect" },
+    });
+    h.event({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_start",
+        id: "read",
+        toolName: "read",
+        contentIndex: 1,
+      },
+    });
+    await flush();
+    const checkWork = () => {
+      const rows = h.rendered().rows.window;
+      assert.deepEqual(
+        headers().map((row) => row.turnId),
+        ["turn:plan", "turn:execute"],
+      );
+      assert.equal(headers()[0]!.state, "completedSuccess");
+      const active = headers()[1]!;
+      assert.equal(active.state, "running");
+      assert.equal(active.startedAt, start);
+      assert.equal(active.endedAt, undefined);
+      const work = rows.filter((row) => row.kind === "reasoning" || row.kind === "toolCall");
+      assert.equal(work.length, 2);
+      assert.ok(work.every((row) => row.turnId === active.turnId));
+      return active.rowId;
+    };
+    const headerId = checkWork();
+    await h.append(
+      stored(
+        "response",
+        "execute",
+        assistant(
+          [
+            { type: "thinking", thinking: "inspect" },
+            { type: "toolCall", id: "read", name: "read", arguments: { path: "config.rs" } },
+          ],
+          { timestamp: start + 1_000, stopReason: "toolUse" },
+        ),
+      ),
+    );
+    assert.equal(checkWork(), headerId);
+    await h.append(
+      stored("result", "response", {
+        role: "toolResult",
+        toolCallId: "read",
+        toolName: "read",
+        timestamp: Date.now(),
+        content: [],
+        isError: false,
+      }),
+    );
+    assert.equal(checkWork(), headerId);
+    h.event({ type: "agent_settled", outcome: "completed" });
+    await flush();
+    const end = headers()[1]!;
+    assert.equal(end.rowId, headerId);
+    assert.equal(end.state, "completedSuccess");
+    assert.ok(end.endedAt! - end.startedAt >= 250_000);
+    assert.equal(h.stream.failed, false);
+    assert.deepEqual(h.rendered().rows.window, h.projector.rows.window);
+  } finally {
+    await h.close();
+  }
+});
+
+test("TC2: consumed steer before its locator cuts the old turn once even with identical user timestamps", async () => {
+  const h = await integration();
+  const timestamp = Date.now() - 2000;
+  const user = { role: "user", timestamp, content: "same input" };
+  const start = () =>
+    h.event({ type: "message_start", message: { role: "user", timestamp } }, body);
+  try {
+    await h.append(stored("first", null, user));
+    start();
+    start(); // Actual consumed steer; no settle event in between.
+    h.event(
+      {
+        type: "message_start",
+        message: { role: "assistant", timestamp, model: "mock", provider: "mock" },
+      },
+      body,
+    );
+    h.event({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "new work" },
+    });
+    await h.stream.drain();
+    const before = h.projector.rows.window.filter((row) => row.kind === "turnHeader");
+    assert.deepEqual(
+      before.map((row) => row.state),
+      ["completedSuccess", "running"],
+    );
+    const oldEnd = before[0]!.endedAt;
+    await h.append(stored("second", "first", user));
+    await h.append(stored("second", "first", user), true);
+    const after = h.projector.rows.window.filter((row) => row.kind === "turnHeader");
+    assert.deepEqual(
+      after.map((row) => [row.turnId, row.state]),
+      [
+        ["turn:first", "completedSuccess"],
+        ["turn:second", "running"],
+      ],
+    );
+    assert.equal(after[0]!.endedAt, oldEnd);
+    assert.equal(after[1]!.startedAt, before[1]!.startedAt);
+    assert.equal(
+      h.projector.rows.window.find((row) => row.kind === "reasoning")?.turnId,
+      "turn:second",
+    );
+    assert.equal(h.stream.failed, false);
+    assert.deepEqual(h.rendered().rows.window, h.projector.rows.window);
+  } finally {
+    await h.close();
+  }
+});
+
 test("LS4/LS8: producer commits before queued text tokens; canonical aliases exist even before ephemeral rows", async () => {
   const h = await integration();
   try {

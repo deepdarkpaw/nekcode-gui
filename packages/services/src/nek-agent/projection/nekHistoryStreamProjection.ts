@@ -32,7 +32,7 @@ const LIVE_OMISSIONS: Record<string, string[]> = {
 /** Ordered starts and committed facts are paired by delivery order, NEVER timestamp/text equality. */
 export class NekHistoryStreamProjection {
   private starts: Array<{ role: string; key: string }> = [];
-  private seeds: Array<{ role: string; id: string }> = [];
+  private seeds: Array<{ role: "user"; turnId: string } | { role: "assistant"; id: string }> = [];
   private storedResponse = false;
   clear(activeResponse?: string): void {
     this.starts = activeResponse ? [{ role: "assistant", key: activeResponse }] : [];
@@ -61,23 +61,25 @@ export class NekHistoryStreamProjection {
       if (!message || typeof message.role !== "string")
         throw new Error("invalid metadata-only message_start");
       if (!["user", "assistant"].includes(message.role)) return true;
-      const seed = this.seeds[0]?.role === message.role ? this.seeds.shift() : undefined;
+      const index = this.seeds.findIndex((seed) => seed.role === message.role);
+      const seed = index < 0 ? undefined : this.seeds.splice(index, 1)[0];
       if (!seed) {
         if (this.starts.length >= 256)
           throw new Error("history start pairing exceeds 256; reload history");
         this.starts.push({ role: message.role, key });
       }
       if (message.role === "user") {
-        if (!seed) {
-          closeTurn(ctx, "completedSuccess");
-          ctx.nextTurnIdentity = `turn:${key}`;
-          ensureTurn(ctx, Number(message.timestamp) || ctx.now());
-        }
+        // A plan approval can commit the next input *inside* the previous run's settle hook.
+        // Only its consumed message_start can transfer the live clock, not its locator.
+        closeTurn(ctx, "completedSuccess");
+        ctx.nextTurnIdentity = seed?.role === "user" ? seed.turnId : `turn:${key}`;
+        ensureTurn(ctx, Number(message.timestamp) || ctx.now());
         return true; // No fabricated empty accepted user message.
       }
-      this.storedResponse = Boolean(seed);
-      ctx.assistantResponseKey = seed ? `entry:${seed.id}` : key;
-      ctx.assistantErrorKey = seed ? seed.id : key;
+      const stored = seed?.role === "assistant" ? seed.id : undefined;
+      this.storedResponse = stored !== undefined;
+      ctx.assistantResponseKey = stored === undefined ? key : `entry:${stored}`;
+      ctx.assistantErrorKey = stored ?? key;
       ctx.assistantModel = `${message.provider}/${message.model}`;
       ensureTurn(ctx, Number(message.timestamp) || ctx.now());
       return true;
@@ -196,7 +198,7 @@ export class NekHistoryStreamProjection {
       if (!start) {
         if (this.seeds.length >= 256)
           throw new Error("history persisted pairing exceeds 256; reload history");
-        this.seeds.push({ role, id: target.id });
+        this.seeds.push(role === "user" ? { role, turnId: turn.id } : { role, id: target.id });
       } else if (role === "user") aliases.set(`turn:${start.key}`, turn.id);
       else {
         assistantKey = start.key;
@@ -293,11 +295,6 @@ export class NekHistoryStreamProjection {
     for (const [alias, entity] of source.aliases) {
       if (ctx.store.findRowId(entity) === undefined) source.aliases.delete(alias);
       else ctx.store.bindEntityAlias(alias, entity);
-    }
-    if (role === "user" && (!ctx.turn || ctx.turn.turnId !== turn.id)) {
-      closeTurn(ctx, "completedSuccess");
-      ctx.nextTurnIdentity = turn.id;
-      ensureTurn(ctx, Number(new Date(target.timestamp)) || ctx.now());
     }
     const entry = validateHistoryDisplay(target.entry);
     if (entry.type === "message" && entry.message.role === "assistant") {
