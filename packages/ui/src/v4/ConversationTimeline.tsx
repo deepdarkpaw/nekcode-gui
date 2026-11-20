@@ -175,27 +175,56 @@ interface PendingScrollMemoryRestore extends ConversationScrollMemoryScopeSnapsh
   waitFor: PendingScrollMemoryRestoreWait;
 }
 
+const TIMELINE_TURN_SELECTOR = "[data-v4-turn-unit]";
+
+function getTimelineViewportTop(element: HTMLDivElement): number {
+  return element.getBoundingClientRect().top + element.clientTop;
+}
+
+function getMountedTimelineTurn(element: HTMLDivElement, turnId: string): HTMLElement | undefined {
+  for (const turn of element.querySelectorAll<HTMLElement>(TIMELINE_TURN_SELECTOR)) {
+    if (turn.dataset.turnId === turnId) return turn;
+  }
+  return undefined;
+}
+
+function captureTimelineTurnAnchor(
+  element: HTMLDivElement,
+): ChatSessionScrollMemoryState["turnAnchor"] {
+  const viewportTop = getTimelineViewportTop(element);
+  for (const turn of element.querySelectorAll<HTMLElement>(TIMELINE_TURN_SELECTOR)) {
+    const turnId = turn.dataset.turnId;
+    if (!turnId) continue;
+    const { top, bottom } = turn.getBoundingClientRect();
+    if (top <= viewportTop && viewportTop < bottom) return { turnId, offset: viewportTop - top };
+  }
+  return undefined;
+}
+
 function resolvePendingScrollMemoryRestoreWait(
   state: ChatSessionScrollMemoryState | null,
-  element: Pick<HTMLElement, "clientHeight" | "scrollHeight"> | null,
+  element: HTMLDivElement | null,
   hasRows: boolean,
 ): PendingScrollMemoryRestoreWait | null {
   if (!state || state.wasPinnedToBottom !== false) return null;
   if (!hasRows || !element) return "rows";
-
+  // A mounted anchor can still move when preceding rows are measured after the scope swap.
+  if (state.turnAnchor) return "content";
   const restoredTop = resolveChatSessionScrollRestoreTop(state, element);
   return restoredTop + SCROLL_MEMORY_RESTORE_TOLERANCE_PX < state.scrollTop ? "content" : null;
 }
 
 function canReleasePendingScrollMemoryRestore(
   pendingRestore: PendingScrollMemoryRestore,
-  element: Pick<HTMLElement, "clientHeight" | "scrollHeight"> | null,
+  element: HTMLDivElement | null,
   rowCount: number,
   hasOlderRows: boolean,
   rowWindowKey: string,
 ): boolean {
   if (!element) return false;
   if (pendingRestore.waitFor === "rows" && rowCount === 0) return false;
+  const { turnAnchor } = pendingRestore.state;
+  if (turnAnchor && getMountedTimelineTurn(element, turnAnchor.turnId)) return true;
   const restoredTop = resolveChatSessionScrollRestoreTop(pendingRestore.state, element);
   const targetIsRepresentable =
     restoredTop + SCROLL_MEMORY_RESTORE_TOLERANCE_PX >= pendingRestore.state.scrollTop;
@@ -760,8 +789,8 @@ function ConversationTimelineImpl({
           workWindow.closest("[data-v4-timeline-scroll]") !== element
         )
           return;
-        const viewportTop = element.getBoundingClientRect().top + element.clientTop;
-        const turn = workWindow.closest("[data-v4-turn-unit]");
+        const viewportTop = getTimelineViewportTop(element);
+        const turn = workWindow.closest(TIMELINE_TURN_SELECTOR);
         // A wholly offscreen turn is compensated by the outer virtualizer. Writing here too can
         // eject a newly measured turn from overscan and bounce the user back on every wheel tick.
         if (!turn || turn.getBoundingClientRect().bottom <= viewportTop) return;
@@ -953,16 +982,18 @@ function ConversationTimelineImpl({
         following: followingRef.current,
         metrics,
         lastObservedScrollTop: lastObservedScrollTopRef.current,
+        userScrollIntent: getActiveUserScrollIntent(),
       });
       return {
         scrollTop: element.scrollTop,
         scrollHeight: element.scrollHeight,
         clientHeight: element.clientHeight,
         wasPinnedToBottom,
+        turnAnchor: wasPinnedToBottom ? undefined : captureTimelineTurnAnchor(element),
         updatedAt: Date.now(),
       };
     },
-    [],
+    [getActiveUserScrollIntent],
   );
 
   const cacheCurrentScrollMemoryState = useCallback(
@@ -1135,24 +1166,60 @@ function ConversationTimelineImpl({
     if (state) saveChatSessionScrollMemoryState(key, state);
   }, [cacheCurrentScrollMemoryState, scrollMemoryKey]);
 
+  const getScrollMemoryTarget = useCallback(
+    (state: ChatSessionScrollMemoryState, element: HTMLDivElement): number => {
+      const { turnAnchor } = state;
+      if (!turnAnchor) return state.scrollTop;
+      const viewportTop = getTimelineViewportTop(element);
+      const mounted = getMountedTimelineTurn(element, turnAnchor.turnId);
+      if (mounted) {
+        const { top, height } = mounted.getBoundingClientRect();
+        return (
+          element.scrollTop +
+          top -
+          viewportTop +
+          Math.min(turnAnchor.offset, Math.max(0, height - 1))
+        );
+      }
+      const history = virtualHistoryRef.current;
+      if (!history) return state.scrollTop;
+      // Rebuild the measurements after the scope change. The saved turn might not be mounted
+      // in the new viewport yet; put its estimated start in view before the DOM correction.
+      virtualizer.getTotalSize();
+      const item = virtualizer.measurementsCache.find((row) => row.key === turnAnchor.turnId);
+      return item
+        ? element.scrollTop +
+            history.getBoundingClientRect().top -
+            viewportTop +
+            item.start -
+            virtualizer.options.scrollMargin
+        : state.scrollTop;
+    },
+    [virtualizer],
+  );
+
   const restoreScrollMemory = useCallback(
     (state: ChatSessionScrollMemoryState) => {
       const element = scrollRef.current;
       if (!element) return;
       clearUserScrollIntent();
       markProgrammaticScroll();
-      element.scrollTop = resolveChatSessionScrollRestoreTop(state, element);
+      const scrollTop = getScrollMemoryTarget(state, element);
+      element.scrollTop = resolveChatSessionScrollRestoreTop({ scrollTop }, element);
       lastObservedScrollTopRef.current = element.scrollTop;
       followingRef.current = false;
       setBackToBottomVisible(shouldShowBackToBottom(false, unitsRef.current.length));
       syncTurnNavigatorViewport(element);
       userAdjustedScrollSinceRestoreRef.current = false;
       cacheCurrentScrollMemoryState(element);
+      notifyScrollObserversAfterCommit(element);
     },
     [
       cacheCurrentScrollMemoryState,
       clearUserScrollIntent,
+      getScrollMemoryTarget,
       markProgrammaticScroll,
+      notifyScrollObserversAfterCommit,
       syncTurnNavigatorViewport,
     ],
   );
@@ -1162,9 +1229,19 @@ function ConversationTimelineImpl({
     (element: HTMLDivElement, followingLatest: boolean) => {
       const controls = historyControlsRef.current;
       if (!controls?.setViewportAnchor) return;
-      const item = virtualizer.getVirtualItemForOffset(element.scrollTop);
-      const unit = item ? virtualizedUnitsRef.current[item.index] : undefined;
-      const turnId = unit && item && unit.key === item.key ? unit.turnId : undefined;
+      let turnId: string | undefined;
+      const liveTail = liveTailRef.current;
+      if (liveTail) {
+        const viewportTop = getTimelineViewportTop(element);
+        const tail = liveTail.getBoundingClientRect();
+        // The live turn is in normal flow and has no historical virtualizer measurement.
+        if (viewportTop >= tail.top && viewportTop < tail.bottom) turnId = liveTail.dataset.turnId;
+      }
+      if (!turnId) {
+        const item = virtualizer.getVirtualItemForOffset(element.scrollTop);
+        const unit = item ? virtualizedUnitsRef.current[item.index] : undefined;
+        if (unit && item && unit.key === item.key) turnId = unit.turnId;
+      }
       if (!turnId) return;
       const key = `${turnId}\0${followingLatest}`;
       if (lastViewportAnchorRef.current === key) return;
@@ -1197,15 +1274,14 @@ function ConversationTimelineImpl({
   const handleScroll = useCallback(() => {
     const element = scrollRef.current;
     if (!element) return;
+    const scrollDelta = element.scrollTop - lastObservedScrollTopRef.current;
     const programmaticScroll =
-      programmaticScrollFrameRef.current !== null &&
-      Math.abs(element.scrollTop - lastObservedScrollTopRef.current) < 1;
+      programmaticScrollFrameRef.current !== null && Math.abs(scrollDelta) < 1;
     const userScrollIntent = getActiveUserScrollIntent();
     const movingUp =
-      userScrollIntent === "awayFromBottom" ||
-      (userScrollIntent === "unknown" && element.scrollTop < lastObservedScrollTopRef.current);
-    // 用户输入优先；其余 scroll 若落在内容/测高 guard 内视为布局补偿，guard 外的
-    // 未分类事件继续按真实用户滚动处理，兼容原生滚动条和辅助技术。
+      userScrollIntent === "awayFromBottom" || (userScrollIntent === "unknown" && scrollDelta < 0);
+    // An upward wheel at the top is still a history request for legacy short pages, even when
+    // it cannot move the viewport. The follow decision separately requires actual movement.
     const scrollSource =
       userScrollIntent !== "none"
         ? "user"
@@ -1214,9 +1290,13 @@ function ConversationTimelineImpl({
           : Date.now() <= layoutScrollGuardUntilRef.current
             ? "layout"
             : "user";
-    // virtualizer 的原生 offset observer 会先于 React onScroll 入账；到这里即可确认它
-    // 已看见恢复后的真实 scrollTop。用户滚动也应立即结束保护窗，把滚动权交还用户。
-    if (scrollSource !== "layout") {
+    const userMoved = scrollSource === "user" && scrollDelta !== 0;
+    // A scroll notice for the initial restore does not prove the preceding rows are measured.
+    // While the anchor is pending, only a real user movement can take over the restore guard.
+    if (
+      userMoved ||
+      (scrollSource === "programmatic" && !pendingDetachedScrollRestoreRef.current)
+    ) {
       suppressVirtualizerAdjustmentDuringRestoreRef.current = false;
     }
     lastObservedScrollTopRef.current = element.scrollTop;
@@ -1224,6 +1304,7 @@ function ConversationTimelineImpl({
     const following = resolveFollowingAfterScroll({
       following: followingRef.current,
       source: scrollSource,
+      scrollDelta,
       metrics: {
         scrollTop: element.scrollTop,
         viewportHeight: element.clientHeight,
@@ -1232,7 +1313,7 @@ function ConversationTimelineImpl({
     });
     commitFollowing(following);
     if (scrollSource !== "layout") reportViewportAnchor(element, following);
-    if (scrollSource === "user") {
+    if (userMoved) {
       pendingDetachedScrollRestoreRef.current = null;
       userAdjustedScrollSinceRestoreRef.current = true;
       saveCurrentScrollMemory();
@@ -1600,6 +1681,7 @@ function ConversationTimelineImpl({
   // 恢复；首个 layout 立即写入防闪动，下一帧再校正异步测高，但必须把滚动权让给用户。
   useLayoutEffect(() => {
     clearUserScrollIntent();
+    lastViewportAnchorRef.current = null;
     heightCacheRef.current?.clear();
     // prepend 锚定基线一并重置：rowId 跨会话可重复，禁止拿旧会话首行比较。
     prependAnchorRef.current = { firstRowId: null, totalSize: 0 };

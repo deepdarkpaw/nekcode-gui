@@ -3,6 +3,8 @@ export interface ChatSessionScrollMemoryState {
   scrollHeight: number;
   clientHeight: number;
   wasPinnedToBottom?: boolean;
+  /** Offset of the viewport top within a mounted turn (independent of earlier turns' heights). */
+  turnAnchor?: { turnId: string; offset: number };
   updatedAt: number;
 }
 

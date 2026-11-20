@@ -33,32 +33,18 @@ export function isAtBottom(
   return distanceToBottom(metrics) <= epsilonPx;
 }
 
-/**
- * scroll 事件后的跟随态。规则：落点在底部 ⇔ 跟随。
- * 覆盖三种来源且无需区分：用户上滚（离底 → 解除）、用户滚回（贴底 → 恢复）、
- * 程序化贴底（落点即底部 → 保持）。
- */
-function nextFollowingAfterScroll(
-  metrics: TimelineScrollMetrics,
-  epsilonPx: number = BOTTOM_ANCHOR_EPSILON_PX,
-): boolean {
-  return isAtBottom(metrics, epsilonPx);
-}
-
 type TimelineScrollEventSource = "user" | "programmatic" | "layout";
 
-/**
- * scroll 事件后的滚动权裁决。布局/程序化 scroll 不得改变用户意图；只有用户输入
- * 才按最终落点决定是否跟随。
- */
+/** Only real downward movement into the bottom tolerance can resume following. */
 export function resolveFollowingAfterScroll(input: {
   following: boolean;
   metrics: TimelineScrollMetrics;
   source: TimelineScrollEventSource;
+  scrollDelta: number;
   epsilonPx?: number;
 }): boolean {
-  if (input.source !== "user") return input.following;
-  return nextFollowingAfterScroll(input.metrics, input.epsilonPx);
+  if (input.source !== "user" || input.scrollDelta === 0) return input.following;
+  return input.scrollDelta > 0 && isAtBottom(input.metrics, input.epsilonPx);
 }
 
 /**
@@ -143,7 +129,7 @@ export function timelineKeyboardScrollIntent(input: {
  * 对账规则（在贴底动作之前执行，输入为 commit 时刻的实时指标）：
  * 1. 明确向上滚动 → 立即解除跟随，同帧 terminal/layout commit 也必须让位；
  * 2. 没有用户输入 → 原样保持 following，virtualizer/折叠导致的 scrollTop 回退不算上滚；
- * 3. 方向未知或向下的用户输入 → 落点在底则恢复跟随，明显回退则解除，其余保持。
+ * 3. 方向未知或向下的用户输入 → 真实向下到达底部才恢复跟随，明显回退则解除。
  */
 export function reconcileFollowingForContentAnchor(input: {
   /** 当前跟随态（scroll 事件驱动的既有值）。 */
@@ -160,16 +146,12 @@ export function reconcileFollowingForContentAnchor(input: {
   const userScrollIntent = input.userScrollIntent ?? "unknown";
   if (userScrollIntent === "awayFromBottom") return false;
   if (userScrollIntent === "none") return input.following;
-  if (isAtBottom(input.metrics, input.bottomEpsilonPx ?? BOTTOM_ANCHOR_EPSILON_PX)) {
-    return true;
-  }
-  const unobservedUpscroll =
-    input.metrics.scrollTop <
-    input.lastObservedScrollTop - (input.scrollEpsilonPx ?? UNOBSERVED_SCROLL_EPSILON_PX);
-  if (unobservedUpscroll) {
-    return false;
-  }
-  return input.following;
+  const movement = input.metrics.scrollTop - input.lastObservedScrollTop;
+  const epsilon = input.scrollEpsilonPx ?? UNOBSERVED_SCROLL_EPSILON_PX;
+  if (movement < -epsilon) return false;
+  return (
+    input.following || (movement > epsilon && isAtBottom(input.metrics, input.bottomEpsilonPx))
+  );
 }
 
 /** 「回到底部」按钮可见性：仅在解除跟随且确实存在内容时展示。 */
