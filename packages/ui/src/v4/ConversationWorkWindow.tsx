@@ -1,5 +1,9 @@
 import { useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
+import {
+  defaultRangeExtractor,
+  observeElementOffset,
+  useVirtualizer,
+} from "@tanstack/react-virtual";
 import type { ConversationAssistantWorkRenderItem } from "./conversationAssistantWorkItems.js";
 import { ConversationTimelineScrollPolicyContext } from "./conversationTimelineScrollPolicy.js";
 
@@ -17,6 +21,13 @@ export function ConversationWorkWindow(props: WorkWindowProps) {
 }
 
 function ignoreNestedScrollWrite(): void {}
+
+/** Observe the shared offset even when this window mounts after the last native scroll event. */
+const observeWorkWindowOffset: typeof observeElementOffset<HTMLDivElement> = (instance, cb) => {
+  const unsubscribe = observeElementOffset(instance, cb);
+  if (instance.scrollElement) cb(instance.scrollElement.scrollTop, false);
+  return unsubscribe;
+};
 
 /** Shares the timeline scroll container: no nested scrollbar and no unbounded mounted live turn. */
 function VirtualWorkWindow({ items, renderItem, pinTail = false }: WorkWindowProps) {
@@ -40,6 +51,7 @@ function VirtualWorkWindow({ items, renderItem, pinTail = false }: WorkWindowPro
     count: items.length,
     getItemKey,
     getScrollElement,
+    observeElementOffset: observeWorkWindowOffset,
     estimateSize: () => 72,
     overscan: 4,
     scrollMargin,
@@ -49,8 +61,14 @@ function VirtualWorkWindow({ items, renderItem, pinTail = false }: WorkWindowPro
     // 会把刚回到底部的视口推离底部。内层永不直接写滚动位置，补偿交给 timeline 裁决。
     scrollToFn: ignoreNestedScrollWrite,
   });
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta) => {
-    scrollPolicy?.compensateNestedItemResize(item.end, delta);
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) => {
+    if (root.current) {
+      scrollPolicy?.compensateNestedItemResize(
+        root.current,
+        item.end - instance.options.scrollMargin,
+        delta,
+      );
+    }
     return false;
   };
   useLayoutEffect(() => {

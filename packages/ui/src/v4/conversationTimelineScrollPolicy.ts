@@ -7,8 +7,8 @@ import { createContext } from "react";
  * 恢复、宽度变化）只由 timeline 裁决。嵌套窗口不得自行写 scrollTop，测高补偿必须交给这里。
  */
 export interface ConversationTimelineScrollPolicy {
-  /** 嵌套项测高变化 delta；仅当 timeline 允许补偿（离底阅读且该项整体位于视口上方）时平移。 */
-  compensateNestedItemResize(itemEnd: number, delta: number): void;
+  /** endInWindow is relative to the work window, not the shared viewport or a cached scroll margin. */
+  compensateNestedItemResize(workWindow: HTMLElement, endInWindow: number, delta: number): void;
 }
 
 /** 没有 timeline（独立渲染/测试）时为 null：嵌套窗口不做任何滚动写入。 */

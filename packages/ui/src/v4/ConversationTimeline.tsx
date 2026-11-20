@@ -750,19 +750,22 @@ function ConversationTimelineImpl({
   // 跟随底部/恢复/宽度变化期间一律不改写 scrollTop，补偿写入按布局滚动入账。
   const nestedScrollPolicy = useMemo<ConversationTimelineScrollPolicy>(
     () => ({
-      compensateNestedItemResize: (itemEnd, delta) => {
+      compensateNestedItemResize: (workWindow, endInWindow, delta) => {
         const element = scrollRef.current;
         if (
           !element ||
-          !shouldAdjustVirtualizerForItemSizeChange({
-            suppressAdjustment: suppressVirtualizerAdjustmentDuringRestoreRef.current,
-            following: followingRef.current,
-            contentWidthChanging: isContentWidthChanging(),
-            itemEnd,
-            scrollTop: element.scrollTop,
-          })
+          followingRef.current ||
+          suppressVirtualizerAdjustmentDuringRestoreRef.current ||
+          isContentWidthChanging() ||
+          workWindow.closest("[data-v4-timeline-scroll]") !== element
         )
           return;
+        const viewportTop = element.getBoundingClientRect().top + element.clientTop;
+        const turn = workWindow.closest("[data-v4-turn-unit]");
+        // A wholly offscreen turn is compensated by the outer virtualizer. Writing here too can
+        // eject a newly measured turn from overscan and bounce the user back on every wheel tick.
+        if (!turn || turn.getBoundingClientRect().bottom <= viewportTop) return;
+        if (workWindow.getBoundingClientRect().top + endInWindow > viewportTop) return;
         markLayoutScrollGuard();
         element.scrollTop += delta;
         lastObservedScrollTopRef.current = element.scrollTop;
