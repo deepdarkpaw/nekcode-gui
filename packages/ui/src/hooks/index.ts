@@ -32,7 +32,6 @@ export { useTerminal } from "./useTerminalService.js";
 
 // 设置服务
 export { useSettings, useRecentProjects } from "./useSettingService.js";
-export { useSkills } from "./useSkills.js";
 
 // Onboarding 完成记录服务（本地持久化，后续上传服务器）
 export { useOnboardingRecordService } from "./useOnboardingRecordService.js";

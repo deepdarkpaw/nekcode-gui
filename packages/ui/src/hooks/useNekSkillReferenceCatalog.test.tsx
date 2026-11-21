@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useSkills } from "./useSkills.js";
+import { useNekSkillReferenceCatalog } from "./useNekSkillReferenceCatalog.js";
 import type { ZCodeSkillReferenceCatalogEntry } from "@zcode/shared";
 
 const state = vi.hoisted(() => {
@@ -57,7 +57,7 @@ describe("nek skill catalog scope", () => {
       .mockResolvedValueOnce({ authority: "session", skills: [skill("pdf")] });
     const { result, rerender } = renderHook(
       ({ sessionId }) =>
-        useSkills({
+        useNekSkillReferenceCatalog({
           workspacePath: "/work",
           workspaceIdentity: "ssh://host/work",
           sessionId,
@@ -83,7 +83,7 @@ describe("nek skill catalog scope", () => {
       .mockReturnValueOnce(old.promise)
       .mockResolvedValueOnce({ authority: "session", skills: [skill("galanalyzer")] });
     const { result, rerender } = renderHook(() =>
-      useSkills({
+      useNekSkillReferenceCatalog({
         workspacePath: "/work",
         workspaceIdentity: "ssh://host/work",
         sessionId: "same",

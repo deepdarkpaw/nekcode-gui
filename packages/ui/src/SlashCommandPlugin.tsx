@@ -23,7 +23,7 @@ import {
   KEY_TAB_COMMAND,
 } from "lexical";
 import { useSubagents } from "@/hooks/useSubagents.js";
-import { useSkills } from "@/hooks/useSkills.js";
+import { useNekSkillReferenceCatalog } from "@/hooks/useNekSkillReferenceCatalog.js";
 import { buildSlashApplyMentionPayload } from "@/lib/slashApplyMentionPayload.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
 import { useSlashCommands } from "./hooks/useSlashCommands.js";
@@ -82,7 +82,7 @@ export function SlashCommandPlugin({
     skills,
     loading: skillsLoading,
     error: skillsError,
-  } = useSkills({
+  } = useNekSkillReferenceCatalog({
     workspacePath,
     workspaceIdentity,
     sessionId: sessionId ?? null,

@@ -5,7 +5,7 @@ import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical
 import type { AgentSummary, Locale, SkillSummary, ZCodeSlashCommand } from "@zcode/shared";
 import type { MentionItem } from "@/mentions/mentionTypes.js";
 import { mapSubagentsToMentionItemsForTest } from "@/mentions/providers/subagentsMentionProvider.js";
-import { mapSkillsToMentionItemsForTest } from "@/mentions/providers/skillsMentionProvider.js";
+import { resolveSkillSourceLabel } from "@/lib/skillSourceLabel.js";
 import type { PromptInputSuggestionItem } from "./lib/promptInputTriggers.js";
 
 export interface SlashCommandPluginProps {
@@ -122,15 +122,18 @@ export function buildSkillSuggestions(
   skills: Array<Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope">>,
   locale?: Locale,
 ): PromptInputSuggestionItem[] {
-  return mapSkillsToMentionItemsForTest(skills, locale).map((item) => ({
-    id: item.id,
-    trigger: "/",
-    value: item.value,
-    label: `@skill:${item.value}`,
-    description: item.description,
-    keywords: [...new Set([...(item.keywords ?? []), "skill", "skills", item.value])],
-    data: item.data,
-  }));
+  return skills.map((skill) => {
+    const source = resolveSkillSourceLabel(skill.scope, locale);
+    return {
+      id: `skill:${skill.id}`,
+      trigger: "/",
+      value: skill.name,
+      label: skill.name,
+      description: skill.description ? `${source} · ${skill.description}` : source,
+      keywords: [skill.name, skill.description, "skill", "skills", skill.scope],
+      data: { path: skill.path, scope: skill.scope },
+    };
+  });
 }
 
 function mapSubagentMentionItemToSuggestion(item: MentionItem): PromptInputSuggestionItem {

@@ -37,11 +37,13 @@ interface UseSkillsOptions {
 
 /**
  * Composer 的 Skill catalog。
- * 无 prewarm 的 draft 以 workspace 当前扫描为 authority；prewarm/已有 Session 以对应
- * AgentRuntime 冻结快照为 authority。workspace/session/remote attachment/runtime 代次变化时，
+ * 无会话的草稿查询目标 nek 控制进程；已有会话查询其 `get_mention_targets`。
+ * workspace/session/远程连接/runtime 代次变化时，
  * 旧异步结果一律不得回填。
  */
-export function useSkills(options: UseSkillsOptions): ConversationSkillCatalogState {
+export function useNekSkillReferenceCatalog(
+  options: UseSkillsOptions,
+): ConversationSkillCatalogState {
   const resolution = useWorkspaceServicesResolution(
     options.workspacePath,
     options.preferredRemoteSessionId,
@@ -107,7 +109,7 @@ export function useSkills(options: UseSkillsOptions): ConversationSkillCatalogSt
       .catch((error: unknown) => {
         if (cancelled || seq !== requestSeqRef.current) return;
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn("[useSkills] 拉取对话 Skill catalog 失败", {
+        logger.warn("[useNekSkillReferenceCatalog] 拉取对话 Skill catalog 失败", {
           error: message,
           requestKey,
         });
