@@ -20,6 +20,7 @@ export interface IModelSelectionService {
    * Temporary workspace read lease only; no settled facts/cache is retained.
    * `elapsedMs` carries renderer dirty-follow-up time across RPC without comparing remote clocks.
    * Each caller keeps its remaining budget even when joining another caller's shared work.
+   * The view carries both the full validation catalog and the target nek's ordered CLI scope.
    */
   getView(
     input?: ModelSelectionViewInput,

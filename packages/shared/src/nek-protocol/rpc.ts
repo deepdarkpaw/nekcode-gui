@@ -321,6 +321,7 @@ export interface NekRpcResponseDataMap extends NekHistoryResponseData {
   auth_login: NekGuiRpcResponseData["auth_login"];
   auth_logout: NekGuiRpcResponseData["auth_logout"];
   get_model_catalog: NekGuiRpcResponseData["get_model_catalog"];
+  get_model_scope: NekGuiRpcResponseData["get_model_scope"];
   fetch_provider_models: NekGuiRpcResponseData["fetch_provider_models"];
   test_provider: NekGuiRpcResponseData["test_provider"];
   get_project_trust: NekGuiRpcResponseData["get_project_trust"];

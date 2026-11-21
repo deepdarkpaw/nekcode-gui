@@ -60,6 +60,7 @@ export function runtimeHarness(shared?: MemoryNekConfigHostExecutor) {
     if (command.type === "read_session_snapshot") return snapshots.get(command.sessionPath);
     if (command.type === "get_project_trust") return { cwd: "", trusted: true, resources: [] };
     if (command.type === "get_available_models") return { models: controlModels };
+    if (command.type === "get_model_scope") return { patterns: [], models: [], diagnostics: [] };
     if (command.type === "get_model_catalog")
       return { models: controlModels.map((model) => ({ ...model, thinkingLevels: [] })) };
     if (command.type === "auth_status") return { providers: [] };

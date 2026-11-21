@@ -23,6 +23,8 @@ export interface NekConfigTargetInfo {
   target: NekConfigTarget;
   /** 目标机器的主机名；本机由 host 使用 `os.hostname()` 填充。 */
   hostname: string;
+  /** 匹配远端工作区所属机器；无可证明的匹配时只编辑该目标的全局模型范围。 */
+  remoteEnvironmentKey?: string;
   /** 显示名：本机为 "本机"/"This computer"，远程为主机别名。 */
   label: string;
   /** `user@host:port` 等。 */
@@ -329,6 +331,8 @@ export interface NekLoginSession {
 
 export interface NekCopySelection {
   providers: string[];
+  /** 复制模型时，仅在目标机器的这个工作区检查项目范围。 */
+  targetCwd?: string;
   /** OAuth 登录（auth.json 条目），默认不勾选。 */
   logins: string[];
   mcpServers: string[];

@@ -11,6 +11,7 @@ import { createComposerSubmissionConfig } from "@/v4/composer/composerSubmission
 
 const VIEW: ModelSelectionView = {
   revision: 7,
+  scope: { patterns: [], models: [], diagnostics: [] },
   providers: [
     {
       providerId: "mock",
@@ -53,7 +54,7 @@ describe("buildModelSelectGroups", () => {
   });
 
   it("an empty view yields no groups (配置需求由门禁横幅回答)", () => {
-    expect(buildModelSelectGroups({ revision: 1, providers: [] })).toEqual([]);
+    expect(buildModelSelectGroups({ ...VIEW, providers: [] })).toEqual([]);
   });
 
   it('a menu selection survives submission unchanged, including ids with "/"', () => {

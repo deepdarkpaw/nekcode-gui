@@ -221,6 +221,7 @@ function project(
   });
   return Object.freeze({
     revision,
+    scope: facts.scope,
     providers: Object.freeze(
       providers.map((provider) =>
         Object.freeze({ ...provider, models: Object.freeze(provider.models) }),

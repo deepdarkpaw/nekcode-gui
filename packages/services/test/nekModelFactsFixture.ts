@@ -8,6 +8,7 @@ import type {
   NekCatalogModel,
   NekConfigScope,
   NekConfigTarget,
+  NekModelScopeResult,
   NekSessionReloadOutcome,
   NekSettingsReadResult,
 } from "@zcode/shared/nek-protocol";
@@ -76,6 +77,9 @@ interface FakeFactsApiOptions {
   effective?: Record<string, unknown>;
   /** 按 cwd 生效设置（项目级合并结果）；缺省回落到 `effective`。 */
   effectiveByCwd?: Record<string, Record<string, unknown>>;
+  modelScope?: NekModelScopeResult;
+  modelScopeByCwd?: Record<string, NekModelScopeResult>;
+  scopeError?: Error;
   readError?: Error;
   reloadError?: Error;
   reloadFailures?: NekSessionReloadOutcome["failures"];
@@ -134,6 +138,18 @@ export function createFakeFactsApi(options: FakeFactsApiOptions = {}): FakeFacts
       const snapshot = catalog;
       if (readError) throw readError;
       return snapshot;
+    },
+    getModelScope: async (target, cwd) => {
+      calls.push({ method: "getModelScope", target, cwd });
+      if (options.scopeError) throw options.scopeError;
+      return (
+        (cwd ? options.modelScopeByCwd?.[cwd] : undefined) ??
+        options.modelScope ?? {
+          patterns: [],
+          models: [],
+          diagnostics: [],
+        }
+      );
     },
     getAuthStatus: async (target) => {
       calls.push({ method: "getAuthStatus", target });

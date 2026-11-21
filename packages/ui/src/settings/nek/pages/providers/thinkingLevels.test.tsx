@@ -183,6 +183,7 @@ describe("thinking level configuration", () => {
       currentValue: "max",
       modelSelectionView: {
         revision: 1,
+        scope: { patterns: [], models: [], diagnostics: [] },
         providers: [
           {
             providerId: "deepseek",

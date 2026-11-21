@@ -265,17 +265,20 @@ export function createRemoteNekConfigHostExecutor(
   options: CreateRemoteNekConfigHostExecutorOptions,
 ): NekConfigHostExecutor {
   const { connection, runtime } = options;
-  const run = async (operation: string, values: string[] = []): Promise<unknown> =>
-    await runJson(connection, runtime.node, operation, values);
+  const pathOnTarget = (path: string) =>
+    process.platform === "win32" ? path.replaceAll("\\", "/") : path;
+  // 主进程在 Windows 上拼出的路径分隔符不是远端 POSIX 文件名的一部分。
+  const run = async (operation: string, path: string, ...args: string[]): Promise<unknown> =>
+    await runJson(connection, runtime.node, operation, [pathOnTarget(path), ...args]);
   const writeFileAtomic = async (path: string, content: string): Promise<void> => {
-    await run("write", [path, Buffer.from(content, "utf8").toString("base64")]);
+    await run("write", path, Buffer.from(content, "utf8").toString("base64"));
   };
   const readFile = async (path: string): Promise<string | null> =>
-    asContent(await run("read", [path]));
+    asContent(await run("read", path));
 
   const lock: NekHostLock = {
     runLocked: async (path, critical) => {
-      await run("lock", [path, String(LOCK_TIMEOUT_MS)]);
+      await run("lock", path, String(LOCK_TIMEOUT_MS));
       let failure: unknown;
       try {
         const next = critical((await readFile(path)) ?? undefined);
@@ -284,7 +287,7 @@ export function createRemoteNekConfigHostExecutor(
         failure = error;
       }
       try {
-        await run("unlock", [path]);
+        await run("unlock", path);
       } catch (releaseError) {
         // 释放失败不能掩盖临界区里的真实错误；两者都失败时两个都要报出来。
         throw failure === undefined
@@ -319,13 +322,13 @@ export function createRemoteNekConfigHostExecutor(
     agentDir: () => runtime.agentDir,
     readFile,
     writeFileAtomic,
-    stat: async (path) => asStat(await run("stat", [path])),
-    listDir: async (path) => asDirEntries(await run("listDir", [path])),
+    stat: async (path) => asStat(await run("stat", path)),
+    listDir: async (path) => asDirEntries(await run("listDir", path)),
     remove: async (path) => {
-      await run("remove", [path]);
+      await run("remove", path);
     },
     rename: async (from, to) => {
-      await run("rename", [from, to]);
+      await run("rename", from, pathOnTarget(to));
     },
     spawnNek,
     lock,

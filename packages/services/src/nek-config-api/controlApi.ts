@@ -14,6 +14,7 @@ import type {
   NekFetchModelsResult,
   NekLoginEvent,
   NekLoginSession,
+  NekModelScopeResult,
   NekProjectTrust,
   NekProviderDraft,
   NekProviderOverrides,
@@ -40,6 +41,11 @@ export interface NekControlGroup {
     target: NekConfigTarget,
     context?: NekModelReadContext,
   ) => Promise<NekCatalogModel[]>;
+  getModelScope: (
+    target: NekConfigTarget,
+    cwd?: string,
+    context?: NekModelReadContext,
+  ) => Promise<NekModelScopeResult>;
   listBuiltinTools: (target: NekConfigTarget) => Promise<NekBuiltinTool[]>;
   fetchProviderModels: (
     target: NekConfigTarget,
@@ -146,6 +152,23 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
       const control = await runtime.control(target, context);
       const data = await control.call({ type: "get_available_models" }, context);
       return (data.models ?? []).map(toCatalogModel);
+    },
+
+    getModelScope: async (target, cwd, context) => {
+      const control = await runtime.control(target, context);
+      const directory = cwd?.trim();
+      const scope = await control.call(
+        { type: "get_model_scope", ...(directory ? { cwd: directory } : {}) },
+        context,
+      );
+      if (
+        !Array.isArray(scope?.patterns) ||
+        !Array.isArray(scope.models) ||
+        !Array.isArray(scope.diagnostics)
+      ) {
+        throw new Error("Invalid get_model_scope response from nek");
+      }
+      return scope;
     },
 
     listBuiltinTools: async (target) => {

@@ -18,6 +18,7 @@ export interface NekConfigRemoteHosts {
       connectionId: string;
       label: string;
       hostname?: string;
+      remoteEnvironmentKey?: string;
       detail?: string;
       connected: boolean;
       nek: NekConfigTargetInfo["nek"];
@@ -80,6 +81,7 @@ export function createLocalNekConfigTargetHost(
         targets.push({
           target: { kind: "remote", connectionId: remote.connectionId },
           hostname: remote.hostname ?? remote.label,
+          remoteEnvironmentKey: remote.remoteEnvironmentKey,
           label: remote.label,
           ...(remote.detail ? { detail: remote.detail } : {}),
           connected: remote.connected,

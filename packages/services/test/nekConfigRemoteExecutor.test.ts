@@ -39,7 +39,12 @@ function fakeConnection(options: { fail?: boolean; node?: string } = {}): FakeRe
       } else if (operation === "write") {
         files.set(values[0] ?? "", Buffer.from(values[1] ?? "", "base64").toString("utf8"));
       } else if (operation === "stat") {
-        value = { mtimeMs: 7, size: 2, isDirectory: false };
+        const content = files.get(values[0] ?? "");
+        value = {
+          mtimeMs: 7,
+          size: content === undefined ? 2 : Buffer.byteLength(content),
+          isDirectory: false,
+        };
       } else if (operation === "listDir") {
         value = [{ name: "settings.json", isDirectory: false }];
       }
@@ -151,11 +156,10 @@ test("remote executor backs settings reads and locked writes for a connected tar
     );
     const after = await api.readSettings(target, "global");
     assert.equal(after.values.defaultModel, "acme/sonnet");
-    assert.equal(
-      [...fake.files.values()].some((content) => content.includes("acme/sonnet")),
-      true,
-      "the write must reach the remote settings.json",
-    );
+    await api.saveModelScope(target, ["acme/sonnet"], { expectedPatterns: [] });
+    const remoteSettings = fake.files.get("/home/remote/.nek/agent/settings.json");
+    assert.ok(remoteSettings, "the write must reach the POSIX path used by remote nek");
+    assert.deepEqual(JSON.parse(remoteSettings).enabledModels, ["acme/sonnet"]);
     const operations = fake.commands
       .filter((command) => command.startsWith("'/usr/bin/node'"))
       .map((command) => base64PayloadOf(command)[0]);

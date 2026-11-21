@@ -19,7 +19,8 @@ import type {
   NekCopyResult,
   NekCopySelection,
 } from "@zcode/shared/nek-protocol";
-import { editModelsSnapshot, readModelsSnapshot } from "./modelsDocument.js";
+import { readModelsSnapshot } from "./modelsDocument.js";
+import { writeModelsAndScope } from "./modelScopeWrite.js";
 import { mcpPath, modelsPath, settingsPath } from "./paths.js";
 import { patchSettingsDocument, readSettingsDocument } from "./settingsDocument.js";
 import { readRawMcpServers, serializeMcpServers } from "./mcpDocument.js";
@@ -126,7 +127,14 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
     const preview = await previewCopy(from, to, selection);
     const results: NekCopyItemResult[] = [];
     const written: Array<{ path: string; revision: string }> = [];
-    for (const item of preview.items) {
+    const defaults = preview.items.find((item) => item.kind === "defaults");
+    const copyDefaults =
+      defaults && (!defaults.conflict || resolution["defaults:defaults"] === "overwrite");
+    // 同时覆盖全局默认设置时先应用它，再把新模型追加到复制后的生效范围。
+    const items = copyDefaults
+      ? [defaults, ...preview.items.filter((item) => item !== defaults)]
+      : preview.items;
+    for (const item of items) {
       const key = copyItemKey(item.kind, item.id);
       if (item.conflict && resolution[key] !== "overwrite") {
         results.push({ key, status: "skipped" });
@@ -140,13 +148,14 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
               id: "missing",
             });
           const target = await modelsOf(to);
-          const revision = await editModelsSnapshot(
-            target.context.executor,
+          const saved = await writeModelsAndScope(
+            runtime,
+            to,
             target.snapshot,
-            target.snapshot.revision,
             [{ pointer: ["providers", item.id], value: source }],
+            { revision: target.snapshot.revision, cwd: selection.targetCwd },
           );
-          written.push({ path: target.snapshot.path, revision });
+          written.push(...saved.written);
         } else if (item.kind === "mcpServer") {
           const source = await mcpOf(from);
           const target = await mcpOf(to);

@@ -20,6 +20,7 @@ import {
 import { mockError } from "./mockMachine.js";
 import * as mcp from "./mockMcp.js";
 import * as models from "./mockModels.js";
+import { mockModelScope, saveMockModelScope, updateMockModelScope } from "./mockModelScope.js";
 import { MOCK_BUILTIN_TOOLS } from "./mockBuiltinTools.js";
 import * as settings from "./mockSettings.js";
 
@@ -57,10 +58,11 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
 
   deleteProvider: INekConfigApi["deleteProvider"] = (target, providerId, options) =>
     this.write(target, "deleteProvider", (machine, touch) => {
-      models.findProvider(machine, providerId);
+      const existing = models.findProvider(machine, providerId);
       if (machine.models.revision !== options.revision) {
         throw mockError("conflict", `${machine.models.path} was modified externally`);
       }
+      updateMockModelScope(machine, existing, undefined, options.cwd, touch);
       machine.models.value = machine.models.value.filter((provider) => provider.id !== providerId);
       return touch(machine.models);
     });
@@ -77,19 +79,38 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
 
   renameProvider: INekConfigApi["renameProvider"] = (target, from, to, options) =>
     this.write(target, "renameProvider", (machine, touch) =>
-      models.renameProvider(machine, from, to, options.revision, touch),
+      models.renameProvider(machine, from, to, options.revision, touch, options.cwd),
     );
 
   saveModel: INekConfigApi["saveModel"] = (target, providerId, model, options) =>
-    this.write(target, "saveModel", (machine, touch) =>
-      models.updateModels(
+    this.write(target, "saveModel", (machine, touch) => {
+      const revision = models.updateModels(
         machine,
         providerId,
         options.revision,
         (list) => models.saveModel(list, model, options.previousId),
         touch,
-      ),
-    );
+        options.cwd,
+        options.previousId,
+      );
+      const ref = `${providerId}/${model.id}`;
+      const previous = `${providerId}/${options.previousId ?? model.id}`;
+      const levels = { ...machine.settings.value.modelThinkingLevels };
+      const level =
+        options.defaultThinkingLevel === undefined
+          ? levels[previous]
+          : options.defaultThinkingLevel;
+      if (previous !== ref) delete levels[previous];
+      if (level === null) delete levels[ref];
+      else if (level !== undefined) levels[ref] = level;
+      if (
+        JSON.stringify(levels) !== JSON.stringify(machine.settings.value.modelThinkingLevels ?? {})
+      ) {
+        machine.settings.value.modelThinkingLevels = levels;
+        touch(machine.settings);
+      }
+      return revision;
+    });
 
   addModels: INekConfigApi["addModels"] = (target, providerId, added, options) =>
     this.write(target, "addModels", (machine, touch) =>
@@ -99,6 +120,7 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
         options.revision,
         (list) => models.addModels(list, added),
         touch,
+        options.cwd,
       ),
     );
 
@@ -110,6 +132,7 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
         options.revision,
         (list) => list.filter((model) => model.id !== modelId),
         touch,
+        options.cwd,
       ),
     );
 
@@ -138,6 +161,17 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
 
   listAvailableModels: INekConfigApi["listAvailableModels"] = (target) =>
     this.call("listAvailableModels", () => models.availableModels(this.machineOf(target)));
+
+  getModelScope: INekConfigApi["getModelScope"] = (target, cwd) =>
+    this.call("getModelScope", () => {
+      const machine = this.machineOf(target);
+      return mockModelScope(machine, models.availableModels(machine), cwd);
+    });
+
+  saveModelScope: INekConfigApi["saveModelScope"] = (target, patterns, options) =>
+    this.write(target, "saveModelScope", (machine, touch) =>
+      saveMockModelScope(machine, patterns, options, touch),
+    );
 
   listBuiltinTools: INekConfigApi["listBuiltinTools"] = (target) =>
     this.call("listBuiltinTools", () => {
@@ -329,14 +363,33 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
     this.call("copy", () => {
       const failures = new Map(this.copyFailures);
       this.copyFailures.clear();
-      return settings.copy(
+      const machine = this.machineOf(to);
+      const before = new Map(machine.models.value.map((provider) => [provider.id, provider]));
+      const touch = this.touchFor(to);
+      const result = settings.copy(
         this.machineOf(from),
-        this.machineOf(to),
+        machine,
         selection,
         resolution,
-        this.touchFor(to),
+        touch,
         (key) => failures.get(key),
       );
+      for (const provider of machine.models.value) {
+        if (
+          result.items.some(
+            ({ key, status }) => key === `provider:${provider.id}` && status === "copied",
+          )
+        ) {
+          updateMockModelScope(
+            machine,
+            before.get(provider.id),
+            provider,
+            selection.targetCwd,
+            touch,
+          );
+        }
+      }
+      return result;
     });
 
   /** 让下一次 `copy` 的指定项以 `status:"failed"` 返回（键是 `<kind>:<id>`）。 */

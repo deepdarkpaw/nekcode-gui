@@ -73,6 +73,7 @@ test(
       JSON.stringify({
         defaultProvider: "CPA",
         defaultModel: "old",
+        enabledModels: ["CPA/old"],
         compaction: { enabled: false },
         retry: { enabled: false },
         defaultProjectTrust: "always",
@@ -124,6 +125,7 @@ test(
       const started = performance.now();
       const cold = await menu.getView({ selection: null, workspacePath: project });
       const coldMs = performance.now() - started;
+      assert.deepEqual(cold.scope.models, [{ provider: "CPA", id: "old" }]);
       assert.ok(
         cold.providers.some((provider) => provider.models.some((model) => model.modelId === "old")),
       );
@@ -200,6 +202,11 @@ test(
         initial,
       );
       const refreshed = await menu.getView({ selection: null, workspacePath: project });
+      assert.deepEqual(refreshed.scope.patterns, ["CPA/old", "CPA/gemini-4-carbon"]);
+      assert.deepEqual(
+        refreshed.scope.models.map(({ id }) => id),
+        ["old", "gemini-4-carbon"],
+      );
       assert.ok(
         refreshed.providers.some((provider) =>
           provider.models.some((model) => model.modelId === "gemini-4-carbon"),
