@@ -12,7 +12,6 @@ import {
   applyBashExecutionUpdate,
   applyCompactionEnd,
   applyCompactionStart,
-  applyExtensionEvent,
   applyRetryMarker,
 } from "./nekLiveMarkers.js";
 import { buildQueueItems, withNekModelSelection } from "./nekProjectionSnapshot.js";
@@ -89,9 +88,6 @@ export function applyNekLiveEvent(ctx: NekLiveContext, event: NekRpcEvent): void
       return;
     case "bash_execution_update":
       applyBashExecutionUpdate(ctx, event.id, event.delta);
-      return;
-    case "extension_event":
-      applyExtensionEvent(ctx, event);
       return;
     default:
       return;

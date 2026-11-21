@@ -12,17 +12,16 @@ import {
   assistantToolCalls,
   buildAssistantTextRow,
   buildModelErrorMarker,
-  buildPlanPreviewRow,
   buildReasoningRow,
   buildTimelineMarkerRow,
   buildToolCallRow,
   buildUserInputRow,
   contentText,
-  isPlanPreviewDetails,
   isRedactedThinking,
   toEpochMs,
 } from "./nekRows.js";
 import { mergeToolResultRow } from "./nekToolResultRow.js";
+import { NEK_PLAN_PREVIEW } from "./nekPlanArtifact.js";
 import { closeTurn, currentTurnId, ensureTurn, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
 import { applySubagentDetails } from "./nekLiveTools.js";
@@ -379,19 +378,8 @@ function applyCustomMessage(ctx: NekLiveContext, message: NekCustomMessage): voi
     ctx.store.add(withNekUserFiles(parent, projectNekUserFiles(ctx.store.sessionId, files)));
     return;
   }
-  if (message.display === false) return;
+  if (message.display === false || message.customType === NEK_PLAN_PREVIEW) return;
   const timestamp = toEpochMs(message.timestamp);
-  if (message.customType === "nek.plan_preview" && isPlanPreviewDetails(message.details)) {
-    const entityId = `plan:${message.details.plan.path}#r${message.details.plan.revision}`;
-    const rowId = ctx.store.allocate(entityId);
-    ctx.store.add(
-      buildPlanPreviewRow(
-        rowIdentity(entityId, rowId, currentTurnId(ctx), timestamp),
-        message.details,
-      ),
-    );
-    return;
-  }
   const text = contentText(message.content as string | Array<{ type: string }>);
   if (text.trim() === "") return;
   const entityId = `msg:${timestamp}:custom:${message.customType}`;

@@ -29,9 +29,11 @@ import { preserveObservedTiming } from "./projection/nekObservedTiming.js";
 import {
   buildControlState,
   planFromNekState,
+  readyNekPlan,
   withNekMode,
 } from "./projection/nekProjectionSnapshot.js";
 import { isNekSubagentRecord } from "./projection/nekSubagentRecords.js";
+import { isNekState } from "./service/types.js";
 import { NekProjectionStore } from "./projection/nekProjectionStore.js";
 import { NekExtensionErrors } from "./projection/nekExtensionErrors.js";
 import type { NekLiveContext } from "./projection/nekLiveProjection.js";
@@ -283,6 +285,14 @@ export class NekConversationProjector {
       this.applySubagent(event.payload);
       return;
     }
+    if (
+      event.type === "extension_event" &&
+      event.name === "nek.state" &&
+      isNekState(event.payload)
+    ) {
+      this.applyNekState(event.payload);
+      return;
+    }
     if (event.type === "extension_error") {
       this.extensionErrors.record(event, this.now());
       this.extensionErrors.project(this.store, this.live.turn?.turnId ?? "turn-0");
@@ -307,8 +317,11 @@ export class NekConversationProjector {
   /** `extension_event: nek.state` 的完整快照。 */
   applyNekState(state: NekState): void {
     this.store.setState({
-      config: withNekMode(this.store.state.config, state.mode),
-      plan: planFromNekState(state),
+      config: {
+        ...withNekMode(this.store.state.config, state.mode),
+        nekReadyPlan: readyNekPlan(state),
+      },
+      plan: planFromNekState(state, this.now()),
     });
     this.scheduleFlush();
   }

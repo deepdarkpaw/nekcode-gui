@@ -3,6 +3,7 @@ import type {
   ActionAvailability,
   ConversationSnapshot,
   ConversationRow,
+  NekPlanRevision,
   PlanItem,
   QueueItem,
   RunningSubagentSummary,
@@ -78,6 +79,7 @@ export function summarizeUsage(
 /** `extension_call nek.get_state` 的 todos → v4 plan 状态。cancelled 的 todo 不进 plan。 */
 export function planFromNekState(
   state: NekState | undefined,
+  updatedAt = Date.now(),
 ): { items: PlanItem[]; updatedAt: number } | null {
   if (!state || state.todos.length === 0) return null;
   const items: PlanItem[] = [];
@@ -94,7 +96,7 @@ export function planFromNekState(
             : "pending",
     });
   }
-  return items.length === 0 ? null : { items, updatedAt: Date.now() };
+  return items.length === 0 ? null : { items, updatedAt };
 }
 
 const DEFAULT_THINKING_LEVELS: NekThinkingLevel[] = [
@@ -143,6 +145,15 @@ export function withNekMode(config: SessionConfigState, mode: string): SessionCo
       ? { planTransition: { toolCallId: `nek-mode:${randomUUID()}`, planEnabled } }
       : {}),
   };
+}
+
+/** 不从历史行或输入框模式推断执行资格：只投影 nek 的当前 active + ready 版本。 */
+export function readyNekPlan(state: NekState | undefined): NekPlanRevision | undefined {
+  if (state?.mode !== "plan" || !state.activePlanPath) return undefined;
+  const plan = state.plans.find((plan) => plan.path === state.activePlanPath);
+  if (plan?.status !== "ready" || !Number.isSafeInteger(plan.revision) || plan.revision <= 0)
+    return undefined;
+  return { path: plan.path, revision: plan.revision };
 }
 
 export function buildConfigState(

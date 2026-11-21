@@ -56,7 +56,12 @@ function planRow(
   createdAt: number,
 ): ToolCallRow {
   return buildPlanPreviewRow(
-    { rowId, turnId: `nek-plan:${plan.path}`, entityId: `nek-plan:${plan.path}`, createdAt },
+    {
+      rowId,
+      turnId: `nek-plan:${plan.path}`,
+      entityId: `${plan.path}#r${plan.revision}`,
+      createdAt,
+    },
     { plan, markdown: plan.markdown },
   );
 }

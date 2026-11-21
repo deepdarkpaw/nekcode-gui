@@ -21,6 +21,7 @@ export {
   sessionModelTransitionSchema,
   type SessionConfigState,
   type SessionModelTransition,
+  type NekPlanRevision,
 } from "./session-config.js";
 // ── SessionControl ──
 export const sessionPhaseSchema = z.enum([

@@ -185,14 +185,12 @@ const entries: NekSessionEntry[] = [
     tokensBefore: 1_000,
   },
   {
-    type: "custom_message",
+    type: "custom",
     id: "e6",
     parentId: "e5",
     timestamp: iso(6_000),
-    customType: "nek.plan_preview",
-    content: "plan",
-    display: true,
-    details: {
+    customType: "nek.plan_snapshot",
+    data: {
       plan: { name: "Plan A", path: "/p/plan.md", revision: 2, overview: "overview" },
       markdown: "# Plan A\n",
     },

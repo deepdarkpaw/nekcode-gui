@@ -12,14 +12,8 @@ import type {
   NekSessionStats,
   NekState,
 } from "@zcode/shared/nek-protocol";
-import type { NekRowIdentity } from "./nekRows.js";
-import {
-  buildPlanPreviewRow,
-  buildUserInputRow,
-  contentText,
-  isPlanPreviewDetails,
-  toEpochMs,
-} from "./nekRows.js";
+import { NEK_PLAN_PREVIEW } from "./nekPlanArtifact.js";
+import { buildUserInputRow, contentText, toEpochMs, type NekRowIdentity } from "./nekRows.js";
 
 /**
  * entries 路径的共享类型与行身份分配器。
@@ -145,20 +139,13 @@ export function identity(
   return { entityId, rowId, turnId, createdAt };
 }
 
-/** A visible custom entry owns its plan row or injected user context, without mutable replay state. */
+/** 可见 custom 条目用于外部注入的上下文；计划行由计划制品条目拥有。 */
 export function projectCustomMessage(
   entry: NekCustomMessageEntry,
   turn: TurnContext,
   allocator: RowAllocator,
 ): ConversationRow | null {
-  if (entry.customType === "nek.plan_preview" && isPlanPreviewDetails(entry.details)) {
-    const entityId = `entry:${entry.id}:plan:${entry.details.plan.revision}`;
-    const rowId = allocator.resolve(entityId);
-    return buildPlanPreviewRow(
-      identity(entityId, rowId, turn.turnId, toEpochMs(entry.timestamp)),
-      entry.details,
-    );
-  }
+  if (entry.customType === NEK_PLAN_PREVIEW) return null;
   // 其他 custom 消息等价于"注入的用户侧上下文"：用 synthetic 来源的 userInput 呈现。
   const text = contentText(entry.content as string | Array<{ type: string }>);
   if (text.trim() === "") return null;

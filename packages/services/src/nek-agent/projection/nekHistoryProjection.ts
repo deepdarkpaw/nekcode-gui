@@ -14,6 +14,7 @@ import type {
 import { conversationRowSchema } from "@zcode/shared/zcode-protocol-v4";
 import { projectEntries } from "./nekEntryProjection.js";
 import { validateHistoryDisplay } from "./nekHistoryDisplay.js";
+import { nekPlanArtifactEntity } from "./nekPlanArtifact.js";
 import { extractSubagentsFromToolResult } from "./nekSubagentRecords.js";
 import { buildTurnHeaderRow, toEpochMs } from "./nekRows.js";
 import { HISTORY_ROW_STRIDE as STRIDE, historyRowId } from "./nekHistoryIdentity.js";
@@ -65,14 +66,9 @@ function identityLayout(
     const pos = wrapper.position;
     ids.set(`entry:${entry.id}`, historyRowId(pos, 2));
     ids.set(`entry:${entry.id}:user`, historyRowId(pos, 1));
-    if (entry.type === "custom_message") {
+    ids.set(nekPlanArtifactEntity(entry.id), historyRowId(pos, 3));
+    if (entry.type === "custom_message")
       ids.set(`custom:${entry.id}:${entry.customType}`, historyRowId(pos, 2));
-      if (typeof entry.details === "object" && entry.details !== null && "plan" in entry.details) {
-        const plan = entry.details.plan;
-        if (typeof plan === "object" && plan !== null && "revision" in plan)
-          ids.set(`entry:${entry.id}:plan:${plan.revision}`, historyRowId(pos, 2));
-      }
-    }
     if (entry.type !== "message") continue;
     const message = entry.message;
     if (message.role === "bashExecution") ids.set(`entry:${entry.id}:bash`, historyRowId(pos, 2));

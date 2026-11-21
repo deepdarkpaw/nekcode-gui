@@ -23,7 +23,13 @@ import {
 import { historyMetadata, projectHistory } from "./nekHistoryProjection.js";
 import { preserveObservedTiming } from "./nekObservedTiming.js";
 import { advanceHistorySelection } from "./nekSelectionMarkers.js";
-import { buildConfigState, buildControlState, planFromNekState } from "./nekProjectionSnapshot.js";
+import {
+  buildConfigState,
+  buildControlState,
+  planFromNekState,
+  readyNekPlan,
+  withNekMode,
+} from "./nekProjectionSnapshot.js";
 import {
   boundHistoryResult,
   historyResultBytes,
@@ -184,13 +190,20 @@ export class NekProjectorHistory {
     const selection = metadata.selection;
     store.setState({
       title: state?.sessionName ?? metadata.session.name ?? "",
-      config: buildConfigState(
-        state,
-        state?.model?.provider ?? selection.model?.provider ?? "",
-        state?.model?.id ?? selection.model?.modelId ?? "",
-        state?.thinkingLevel ?? selection.thinkingLevel ?? "",
-        nekState?.mode ?? store.state.config.mode,
-      ),
+      config: {
+        ...buildConfigState(
+          state,
+          state?.model?.provider ?? selection.model?.provider ?? "",
+          state?.model?.id ?? selection.model?.modelId ?? "",
+          state?.thinkingLevel ?? selection.thinkingLevel ?? "",
+          nekState?.mode ?? store.state.config.mode,
+        ),
+        planTransition:
+          live && nekState
+            ? withNekMode(store.state.config, nekState.mode).planTransition
+            : undefined,
+        nekReadyPlan: readyNekPlan(nekState),
+      },
       usage: {
         contextWindow: stats?.contextUsage
           ? {
