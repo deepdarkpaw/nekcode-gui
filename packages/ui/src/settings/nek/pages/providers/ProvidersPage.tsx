@@ -4,7 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import { BoxesIcon } from "lucide-react";
-import type { NekModelConfig, NekProviderView, NekThinkingLevel } from "@zcode/shared/nek-protocol";
+import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useUndoToast } from "@/components/ui/undo-toast.js";
@@ -14,11 +14,10 @@ import { useNekTarget } from "../../api/NekSettingsContext.js";
 import { useNekModelsDoc, type NekModelsDocument } from "../../api/modelsDoc.js";
 import { useNekSettingsDoc, type NekSettingsDocument } from "../../api/settingsDocs.js";
 import { formatModelRef } from "../../lib/modelRef.js";
-import { nestedSettingsPatch } from "../../lib/settingsPatch.js";
 import { DiagnosticsList, DocumentGate, NekEmptyState } from "../../components/DocumentStatus.js";
 import { NekPageFrame } from "../../components/NekPageFrame.js";
 import { FetchModelsDialog } from "./FetchModelsDialog.js";
-import { modelConfigFromDraft, type ModelDraft } from "./modelDraft.js";
+import { modelConfigFromDraft } from "./modelDraft.js";
 import { ModelEditorDialog } from "./ModelEditorDialog.js";
 import { providerWriteFromDraft, type ProviderDraft } from "./providerDraft.js";
 import { ProviderDetail } from "./ProviderDetail.js";
@@ -35,36 +34,6 @@ type DialogState =
   | { kind: "fetch" }
   | { kind: "model"; model: NekModelConfig | undefined };
 
-/** 模型保存：models.json + settings.json 中该模型的默认思考等级（含改 ID 时迁移键）。 */
-async function saveModelDraft(
-  models: NekModelsDocument,
-  settings: NekSettingsDocument,
-  provider: NekProviderView,
-  original: NekModelConfig | undefined,
-  draft: ModelDraft,
-): Promise<void> {
-  const config = modelConfigFromDraft(draft, original);
-  await models.saveModel(provider.id, config, original?.id);
-  const levels = settings.data?.values.modelThinkingLevels ?? {};
-  const oldRef = original ? formatModelRef(provider.id, original.id) : undefined;
-  const newRef = formatModelRef(provider.id, config.id);
-  const changes: Record<string, NekThinkingLevel | null> = {};
-  if (oldRef && oldRef !== newRef && oldRef in levels) {
-    changes[oldRef] = null;
-  }
-  if (draft.defaultLevel !== levels[newRef] || oldRef !== newRef) {
-    changes[newRef] = draft.defaultLevel ?? null;
-  }
-  const relevant = Object.entries(changes).filter(
-    ([ref, level]) => level !== null || ref in levels,
-  );
-  if (relevant.length > 0) {
-    await settings.patch(
-      nestedSettingsPatch({ modelThinkingLevels: Object.fromEntries(relevant) }),
-    );
-  }
-}
-
 function ProvidersBody({
   models,
   settings,
@@ -79,6 +48,7 @@ function ProvidersBody({
   const [selectedId, setSelectedId] = useState<string | undefined>(providers[0]?.id);
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const selected = providers.find((provider) => provider.id === selectedId) ?? providers[0];
+  const editingModel = dialog.kind === "model" ? dialog.model : undefined;
   const existingIds = useMemo(() => new Set(providers.map((provider) => provider.id)), [providers]);
   const close = () => setDialog({ kind: "none" });
   const values = settings.data?.values ?? {};
@@ -205,33 +175,26 @@ function ProvidersBody({
         onManualAdd={() => setDialog({ kind: "model", model: undefined })}
       />
       <ModelEditorDialog
-        documents={[models, settings]}
+        documents={[models]}
         open={dialog.kind === "model"}
         onOpenChange={(open) => !open && close()}
-        model={dialog.kind === "model" ? dialog.model : undefined}
+        model={editingModel}
         providerApi={selected.api}
         providerBaseUrl={selected.baseUrl}
         overridesBuiltin={selected.overridesBuiltin}
         defaultLevel={
-          dialog.kind === "model" && dialog.model
-            ? values.modelThinkingLevels?.[formatModelRef(selected.id, dialog.model.id)]
+          editingModel
+            ? values.modelThinkingLevels?.[formatModelRef(selected.id, editingModel.id)]
             : undefined
         }
         otherIds={
-          new Set(
-            selected.models
-              .map((model) => model.id)
-              .filter((id) => dialog.kind !== "model" || id !== dialog.model?.id),
-          )
+          new Set(selected.models.map((model) => model.id).filter((id) => id !== editingModel?.id))
         }
         onSave={(draft) =>
-          saveModelDraft(
-            models,
-            settings,
-            selected,
-            dialog.kind === "model" ? dialog.model : undefined,
-            draft,
-          )
+          models.saveModel(selected.id, modelConfigFromDraft(draft, editingModel), {
+            previousId: editingModel?.id,
+            defaultThinkingLevel: draft.defaultLevel ?? null,
+          })
         }
       />
     </div>

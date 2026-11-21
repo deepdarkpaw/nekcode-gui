@@ -1,5 +1,5 @@
 import type { ModelSelectionView } from "@zcode/services";
-import type { ModelSelectGroup } from "@/ModelConfigSelect.js";
+import type { ModelSelectGroup, ModelSelectGroupItem } from "@/ModelConfigSelect.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 
 /**
@@ -21,14 +21,39 @@ export function buildModelSelectGroups(view: ModelSelectionView): ModelSelectGro
   }));
 }
 
+/** 单一分组保留 nek 的原始顺序，不能按服务商再次聚合。 */
+export function buildScopedModelSelectGroups(
+  scope: ModelSelectionView["scope"],
+  allGroups: readonly ModelSelectGroup[],
+): ModelSelectGroup[] {
+  const byValue = new Map(
+    allGroups.flatMap((group) => group.items.map((item) => [item.value, item] as const)),
+  );
+  const items = scope.models.flatMap(({ provider, id }) => {
+    const item = byValue.get(encodeCustomModelValue(provider, id));
+    return item ? [{ ...item, badgeLabel: provider }] : [];
+  });
+  return items.length ? [{ key: "scoped", label: "", items }] : [];
+}
+
+export function findModelSelectItem(
+  groups: readonly ModelSelectGroup[],
+  value: string,
+): ModelSelectGroupItem | undefined {
+  for (const group of groups) {
+    const matched = group.items.find((item) => item.value === value);
+    if (matched) return matched;
+  }
+  return undefined;
+}
+
 export function resolveModelDisplayName(
   modelGroups: readonly ModelSelectGroup[],
   value: string,
 ): string | null {
-  for (const group of modelGroups) {
-    const matched = group.items.find((item) => item.value === value);
-    if (matched) return matched.name;
-  }
-
-  return decodeCustomModelValue(value)?.modelName ?? null;
+  return (
+    findModelSelectItem(modelGroups, value)?.name ??
+    decodeCustomModelValue(value)?.modelName ??
+    null
+  );
 }

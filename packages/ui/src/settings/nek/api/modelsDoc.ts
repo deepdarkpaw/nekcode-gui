@@ -7,8 +7,10 @@ import type {
   NekModelsConfigView,
   NekProviderView,
   NekProviderWrite,
+  INekConfigApi,
 } from "@zcode/shared/nek-protocol";
 import { useNekSettingsContext } from "./NekSettingsContext.js";
+import { useModelScopeCwd } from "./useModelScopeCwd.js";
 import { useNekDocument, type NekDocument } from "./useNekDocument.js";
 
 /** 字面量密钥的展示掩码：只保留末 4 位。 */
@@ -74,18 +76,28 @@ function orderModels(models: readonly NekModelConfig[], ids: readonly string[]):
   return [...ordered, ...rest];
 }
 
+type SaveModelOptions = Pick<
+  Parameters<INekConfigApi["saveModel"]>[3],
+  "previousId" | "defaultThinkingLevel"
+>;
+
 export interface NekModelsDocument extends NekDocument<NekModelsConfigView> {
   saveProvider: (provider: NekProviderWrite, isNew: boolean) => Promise<void>;
   deleteProvider: (providerId: string) => Promise<void>;
   renameProvider: (from: string, to: string) => Promise<void>;
-  saveModel: (providerId: string, model: NekModelConfig, previousId?: string) => Promise<void>;
+  saveModel: (
+    providerId: string,
+    model: NekModelConfig,
+    options?: SaveModelOptions,
+  ) => Promise<void>;
   addModels: (providerId: string, models: NekModelConfig[]) => Promise<void>;
   deleteModel: (providerId: string, modelId: string) => Promise<void>;
   reorderModels: (providerId: string, modelIds: string[]) => Promise<void>;
 }
 
 export function useNekModelsDoc(): NekModelsDocument {
-  const { config, target, projectCwd } = useNekSettingsContext();
+  const { config, target } = useNekSettingsContext();
+  const projectCwd = useModelScopeCwd();
   const doc = useNekDocument<NekModelsConfigView>({
     // 带 cwd：服务商被哪些用户 / 项目预设引用要看项目目录下的 `agents/*.md`。
     load: (api, current) => api.readModelsConfig(current, projectCwd),
@@ -103,9 +115,14 @@ export function useNekModelsDoc(): NekModelsDocument {
             ? mapProvider(data, provider.id, () => view)
             : { ...data, providers: [...data.providers, view] };
         },
-        write: (data) => config.saveProvider(target, provider, { revision: data.revision, isNew }),
+        write: (data) =>
+          config.saveProvider(target, provider, {
+            revision: data.revision,
+            isNew,
+            cwd: projectCwd,
+          }),
       }),
-    [config, target, mutate],
+    [config, target, projectCwd, mutate],
   );
 
   const deleteProvider = useCallback(
@@ -115,9 +132,10 @@ export function useNekModelsDoc(): NekModelsDocument {
           ...data,
           providers: data.providers.filter((provider) => provider.id !== providerId),
         }),
-        write: (data) => config.deleteProvider(target, providerId, { revision: data.revision }),
+        write: (data) =>
+          config.deleteProvider(target, providerId, { revision: data.revision, cwd: projectCwd }),
       }),
-    [config, target, mutate],
+    [config, target, projectCwd, mutate],
   );
 
   const renameProvider = useCallback(
@@ -131,11 +149,11 @@ export function useNekModelsDoc(): NekModelsDocument {
   );
 
   const saveModel = useCallback(
-    (providerId: string, model: NekModelConfig, previousId?: string) =>
+    (providerId: string, model: NekModelConfig, options: SaveModelOptions = {}) =>
       mutate({
         optimistic: (data) =>
           mapProvider(data, providerId, (provider) => {
-            const key = previousId ?? model.id;
+            const key = options.previousId ?? model.id;
             const exists = provider.models.some((item) => item.id === key);
             return {
               ...provider,
@@ -145,9 +163,13 @@ export function useNekModelsDoc(): NekModelsDocument {
             };
           }),
         write: (data) =>
-          config.saveModel(target, providerId, model, { revision: data.revision, previousId }),
+          config.saveModel(target, providerId, model, {
+            revision: data.revision,
+            ...options,
+            cwd: projectCwd,
+          }),
       }),
-    [config, target, mutate],
+    [config, target, projectCwd, mutate],
   );
 
   const addModels = useCallback(
@@ -158,9 +180,13 @@ export function useNekModelsDoc(): NekModelsDocument {
             ...provider,
             models: [...provider.models, ...models],
           })),
-        write: (data) => config.addModels(target, providerId, models, { revision: data.revision }),
+        write: (data) =>
+          config.addModels(target, providerId, models, {
+            revision: data.revision,
+            cwd: projectCwd,
+          }),
       }),
-    [config, target, mutate],
+    [config, target, projectCwd, mutate],
   );
 
   const deleteModel = useCallback(
@@ -172,9 +198,12 @@ export function useNekModelsDoc(): NekModelsDocument {
             models: provider.models.filter((model) => model.id !== modelId),
           })),
         write: (data) =>
-          config.deleteModel(target, providerId, modelId, { revision: data.revision }),
+          config.deleteModel(target, providerId, modelId, {
+            revision: data.revision,
+            cwd: projectCwd,
+          }),
       }),
-    [config, target, mutate],
+    [config, target, projectCwd, mutate],
   );
 
   const reorderModels = useCallback(

@@ -80,6 +80,7 @@ export interface ModelSelectFooterAction {
   key: string;
   label: string;
   selected?: boolean;
+  keepOpen?: boolean;
   onSelect?: () => void;
 }
 
@@ -169,6 +170,7 @@ interface ModelConfigSelectProps {
   /** 覆盖 provider 二级模型菜单样式；缺省按内容扩展并保留最小宽度。 */
   providerSubmenuClassName?: string;
   footerActions?: readonly ModelSelectFooterAction[];
+  emptyLabel?: string;
   manageModelsLabel?: string;
   onManageModels?: () => void;
   focusSelectorOnClose?: string | null;
@@ -217,6 +219,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
   showProviderLevel,
   providerSubmenuClassName,
   footerActions = EMPTY_MODEL_SELECT_FOOTER_ACTIONS,
+  emptyLabel,
   manageModelsLabel,
   onManageModels,
   focusSelectorOnClose = '[data-testid="chat-input"]',
@@ -544,7 +547,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           className={cn(
             shouldShowProviderLevel
               ? "w-max min-w-48 max-w-[calc(100vw-2rem)]"
-              : "w-48 max-h-72 overflow-y-auto",
+              : "max-h-72 w-max min-w-48 max-w-[calc(100vw-2rem)] overflow-y-auto",
           )}
           align={contentAlign}
           side={contentSide}
@@ -571,8 +574,11 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           {leadingItems !== undefined && leadingItems.length > 0 ? (
             <>
               {renderModelItems(leadingItems)}
-              {hasSelectableModel ? <DropdownMenuSeparator /> : null}
+              {hasSelectableModel || emptyLabel ? <DropdownMenuSeparator /> : null}
             </>
+          ) : null}
+          {!hasSelectableModel && emptyLabel ? (
+            <DropdownMenuLabel>{emptyLabel}</DropdownMenuLabel>
           ) : null}
           {hasSelectableModel && shouldShowProviderLevel
             ? modelGroups.map((group, index) => {
@@ -638,15 +644,16 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
               : null}
           {renderedFooterActions.length > 0 ? (
             <div className="sticky bottom-0 z-10 bg-menu after:absolute after:left-0 after:top-full after:h-1 after:w-full after:bg-menu after:content-['']">
-              {hasSelectableModel ? <DropdownMenuSeparator /> : null}
+              {hasSelectableModel || emptyLabel ? <DropdownMenuSeparator /> : null}
               {renderedFooterActions.map((action) => (
                 <DropdownMenuItem
                   key={action.key}
                   className="min-h-8 gap-2 px-2"
                   data-model-footer-action={action.key}
                   data-model-footer-action-selected={action.selected ? "true" : undefined}
-                  onSelect={() => {
-                    handlePopoverOpenChange(false);
+                  onSelect={(event) => {
+                    if (action.keepOpen) event.preventDefault();
+                    else handlePopoverOpenChange(false);
                     action.onSelect?.();
                   }}
                 >

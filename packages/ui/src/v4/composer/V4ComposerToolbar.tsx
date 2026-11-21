@@ -28,7 +28,7 @@ import type {
   SessionPhase,
   SessionUsageState,
 } from "@zcode/shared/zcode-protocol-v4";
-import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js";
+import { ModelConfigSelect } from "@/ModelConfigSelect.js";
 import { Button } from "@/components/ui/button.js";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
 import { getNextThoughtLevelValue } from "@/chat-input-toolbar/thoughtLevelOptions.js";
@@ -49,7 +49,11 @@ import { useActionShortcutLabel } from "@/shortcuts/useActionShortcuts.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { logger } from "@/logger.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
-import { buildModelSelectGroups } from "@/lib/modelSelectionGroups.js";
+import {
+  buildModelSelectGroups,
+  buildScopedModelSelectGroups,
+  findModelSelectItem,
+} from "@/lib/modelSelectionGroups.js";
 import {
   resolveDraftDisplayedConfig,
   resolveDraftModelThoughtOption,
@@ -148,12 +152,14 @@ function V4ComposerModelControlsImpl({
   const thoughtTriggerRef = useRef<HTMLSpanElement | null>(null);
   // Ctrl+M 热键：递增 openRequestKey 请求 ModelConfigSelect 打开菜单（旧 handleOpenModelMenuShortcut 语义）。
   const [modelMenuOpenRequestKey, setModelMenuOpenRequestKey] = useState(0);
+  const [showAllModels, setShowAllModels] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
   const handleOpenModelMenuShortcut = useCallback(() => {
     setModelMenuOpenRequestKey((current) => current + 1);
   }, []);
   const handleModelPickerOpenChange = useCallback(
     (open: boolean) => {
+      setShowAllModels(false);
       onConfigPickerOpenChange("model", open);
     },
     [onConfigPickerOpenChange],
@@ -181,10 +187,33 @@ function V4ComposerModelControlsImpl({
     });
   }, [draftMode, effectiveConfig, modelSelectionView?.revision]);
 
-  const modelSelectGroups = useMemo<ModelSelectGroup[]>(() => {
-    if (!modelSelectionView) return [];
-    return buildModelSelectGroups(modelSelectionView);
-  }, [modelSelectionView]);
+  const modelSelectGroups = useMemo(
+    () => (modelSelectionView ? buildModelSelectGroups(modelSelectionView) : []),
+    [modelSelectionView],
+  );
+  const scope = modelSelectionView?.scope;
+  const hasScope = Boolean(scope?.patterns.length);
+  const showScoped = hasScope && !showAllModels;
+  const scopedGroups = useMemo(
+    () => (scope?.patterns.length ? buildScopedModelSelectGroups(scope, modelSelectGroups) : []),
+    [scope, modelSelectGroups],
+  );
+  const scopeActions = useMemo(
+    () =>
+      hasScope
+        ? [
+            {
+              key: "scope-view",
+              label: intl.formatMessage({
+                id: showScoped ? "chat.toolbar.model.showAll" : "chat.toolbar.model.showScoped",
+              }),
+              keepOpen: true,
+              onSelect: () => setShowAllModels((all) => !all),
+            },
+          ]
+        : [],
+    [hasScope, intl, showScoped],
+  );
 
   // 修复：恢复「管理模型」入口（老版 onManageModels = 打开设置页并定位模型供应商区）。
   const handleOpenModelProviderSettings = useCallback(() => {
@@ -222,6 +251,11 @@ function V4ComposerModelControlsImpl({
     [manageModelsLabel, modelSelectGroups, rawModelValue, showManageModelsAction],
   );
   const normalizedModelValue = triggerDisplay.value ?? "";
+  // 当前选择由 Composer 持有，范围不应清掉它或改动实际提交候选。
+  const currentOutsideScope =
+    showScoped && !findModelSelectItem(scopedGroups, normalizedModelValue)
+      ? findModelSelectItem(modelSelectGroups, normalizedModelValue)
+      : undefined;
 
   const modelTriggerDisplay = useMemo(() => {
     // 非可选值（未选 / synthetic / 不可用）：占位文案或默认「选择模型」。
@@ -445,16 +479,17 @@ function V4ComposerModelControlsImpl({
         <span role="status" className="px-2 text-ui-sm text-foreground-subtle">
           {intl.formatMessage({ id: "chat.toolbar.model.loading" })}
         </span>
-      ) : modelSelectionState.status === "error" && modelSelectionReload ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-ui-sm text-destructive"
-          onClick={modelSelectionReload}
-        >
-          {intl.formatMessage({ id: "chat.toolbar.model.loadFailedRetry" })}
-        </Button>
+      ) : modelSelectionState.status === "error" ? (
+        <span role="alert" className="flex min-w-0 items-center gap-1 text-ui-sm text-destructive">
+          <span title={modelSelectionState.error.message} className="truncate px-2">
+            {modelSelectionState.error.message}
+          </span>
+          {modelSelectionReload ? (
+            <Button type="button" variant="ghost" size="sm" onClick={modelSelectionReload}>
+              {intl.formatMessage({ id: "chat.toolbar.model.loadFailedRetry" })}
+            </Button>
+          ) : null}
+        </span>
       ) : modelSelectionState.status === "unavailable" ? (
         <span className="px-2 text-ui-sm text-foreground-subtle">
           {intl.formatMessage({
@@ -466,7 +501,22 @@ function V4ComposerModelControlsImpl({
         </span>
       ) : modelMenuVisible ? (
         <ModelConfigSelect
-          modelGroups={modelSelectGroups}
+          modelGroups={showScoped ? scopedGroups : modelSelectGroups}
+          showProviderLevel={!showScoped}
+          footerActions={scopeActions}
+          emptyLabel={
+            showScoped ? intl.formatMessage({ id: "chat.toolbar.model.scopeEmpty" }) : undefined
+          }
+          leadingItems={
+            currentOutsideScope
+              ? [
+                  {
+                    ...currentOutsideScope,
+                    badgeLabel: intl.formatMessage({ id: "chat.toolbar.model.outsideScope" }),
+                  },
+                ]
+              : undefined
+          }
           normalizedValue={normalizedModelValue}
           triggerLabel={modelTriggerDisplay.fullLabel}
           triggerLabelPrefix={modelTriggerDisplay.providerPrefix}

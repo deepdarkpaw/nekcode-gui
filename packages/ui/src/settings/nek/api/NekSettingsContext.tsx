@@ -46,6 +46,8 @@ interface NekSettingsContextValue {
   host: INekSettingsHostApi;
   isMock: boolean;
   projectCwd?: string;
+  /** undefined：本机；null：尚不能识别机器的远端工作区。 */
+  projectEnvironmentKey?: string | null;
   targets: NekTargetsState;
   target: NekConfigTarget;
   targetKey: string;
@@ -130,10 +132,12 @@ function useWatchHub(
 export function NekSettingsProvider({
   apis,
   projectCwd,
+  projectEnvironmentKey,
   children,
 }: {
   apis: NekSettingsApis;
   projectCwd?: string;
+  projectEnvironmentKey?: string | null;
   children: ReactNode;
 }) {
   const config = useMemo(() => wrapNekConfigApi(apis.config), [apis.config]);
@@ -157,6 +161,7 @@ export function NekSettingsProvider({
       host: apis.host,
       isMock: apis.isMock,
       projectCwd,
+      projectEnvironmentKey,
       targets,
       target,
       targetKey,
@@ -172,6 +177,7 @@ export function NekSettingsProvider({
       apis.host,
       apis.isMock,
       projectCwd,
+      projectEnvironmentKey,
       targets,
       target,
       targetKey,
