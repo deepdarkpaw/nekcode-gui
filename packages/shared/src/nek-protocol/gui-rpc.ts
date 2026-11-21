@@ -208,6 +208,19 @@ export type NekGuiRpcCommand =
   | { id?: string; type: "mcp_test"; name?: string; config?: NekMcpServerConfig; cwd?: string }
   // ---- 输入框 @ 点名补全 [session + control（按 cwd）] ----
   | { id?: string; type: "get_mention_targets"; cwd?: string }
+  // ---- Skills / Prompts 资源 [session + control（按 cwd）] ----
+  | { id?: string; type: "list_resources"; cwd?: string; resourceType: NekResourceType }
+  | {
+      id?: string;
+      type: "set_resource_enabled";
+      cwd?: string;
+      resourceType: NekResourceType;
+      /** `list_resources` 返回的绝对路径。 */
+      path: string;
+      enabled: boolean;
+    }
+  // ---- 模型列表范围（CLI `/model` 默认列表与 Ctrl+P 循环）[session + control（按 cwd）] ----
+  | { id?: string; type: "get_model_scope"; cwd?: string }
   // ---- 扩展通道 [session] ----
   | { id?: string; type: "extension_call"; method: string; params?: unknown };
 
@@ -240,6 +253,9 @@ export const NEK_CONTROL_COMMANDS: readonly string[] = [
   "test_web_search",
   "mcp_test",
   "get_mention_targets",
+  "list_resources",
+  "set_resource_enabled",
+  "get_model_scope",
   "get_available_models",
 ];
 
@@ -275,6 +291,79 @@ export interface NekMentionTarget {
 /** `get_mention_targets` 响应：agent 按 subagents section 顺序，skill 按 resourceLoader 顺序。 */
 export interface NekMentionTargetsResult {
   targets: NekMentionTarget[];
+}
+
+/** `list_resources` / `set_resource_enabled` 管理的资源种类（nek 的 skills 与 prompt 模板）。 */
+export type NekResourceType = "skills" | "prompts";
+
+/**
+ * `list_resources` 的一条：nek 资源解析（package-manager）对 cwd 给出的结果，包含被设置禁用的条目。
+ *
+ * 自动发现只有两处根目录：用户 `<agentDir>/<resourceType>` 与（项目受信任时）`<cwd>/.nek/<resourceType>`。
+ * settings 的显式路径、包与启动参数带来的条目按 nek 的来源如实标注，GUI 不再自行扫描任何目录。
+ */
+export interface NekResourceInfo {
+  resourceType: NekResourceType;
+  /** skill：frontmatter `name`；prompt：斜杠命令名（不带 `/`）。 */
+  name: string;
+  description?: string;
+  /** 绝对路径：skill 为其 `SKILL.md`（或单文件 skill 的 `.md`），prompt 为模板 `.md`。 */
+  path: string;
+  /** user：`<agentDir>` 下；project：`<cwd>/.nek` 下；temporary：settings 显式路径、包或启动参数。 */
+  scope: "user" | "project" | "temporary";
+  /** nek `PathMetadata.source` 原文（例如 `auto`、`local` 或包来源）。 */
+  source: string;
+  /** 套用 settings 覆盖规则（`!pattern` / `+path` / `-path`）后的启用状态；false 的条目不会进入会话。 */
+  enabled: boolean;
+  /** 能否经 `set_resource_enabled` 切换；由 nek 判定（例如包内资源由包配置决定时为 false）。 */
+  toggleable: boolean;
+}
+
+export interface NekResourceDiagnostic {
+  type: "warning" | "error" | "collision";
+  message: string;
+  path?: string;
+}
+
+export interface NekListResourcesResult {
+  resources: NekResourceInfo[];
+  diagnostics: NekResourceDiagnostic[];
+  /** 该 cwd 的项目资源是否参与解析；未受信任时不会出现 project 条目。 */
+  projectTrusted: boolean;
+}
+
+export interface NekSetResourceEnabledResult {
+  /** nek 写入覆盖规则的 settings 作用域：user 资源写全局 settings.json，project 资源写 `<cwd>/.nek/settings.json`。 */
+  settingsScope: "global" | "project";
+  /** 写入后重新解析得到的启用状态。 */
+  enabled: boolean;
+}
+
+/** `get_model_scope` 的一条解析结果。 */
+export interface NekModelScopeEntry {
+  provider: string;
+  id: string;
+  /** 模式里显式写了 `:level` 时才有。 */
+  thinkingLevel?: NekThinkingLevel;
+}
+
+export interface NekModelScopeDiagnostic {
+  code: "no-match" | "invalid-thinking-level" | "ambiguous";
+  message: string;
+  pattern: string;
+}
+
+/**
+ * `get_model_scope`：CLI `/model` 默认列表与 Ctrl+P 循环使用的模型范围。
+ *
+ * `patterns` 是 cwd 生效设置（global ← 受信任 project 深合并）中的 `enabledModels` 原文；
+ * `models` 由 nek 自己的 `resolveModelScopeFromModels` 对可用模型解析得到，顺序与 CLI 一致。
+ * `patterns` 为空表示未设置范围：CLI 显示全部可用模型，此时 `models` 也为空。
+ */
+export interface NekModelScopeResult {
+  patterns: string[];
+  models: NekModelScopeEntry[];
+  diagnostics: NekModelScopeDiagnostic[];
 }
 
 /**
@@ -469,6 +558,9 @@ export interface NekGuiRpcResponseData extends NekHistoryResponseData {
   test_web_search: NekTestWebSearchResult;
   mcp_test: NekMcpTestResult;
   get_mention_targets: NekMentionTargetsResult;
+  list_resources: NekListResourcesResult;
+  set_resource_enabled: NekSetResourceEnabledResult;
+  get_model_scope: NekModelScopeResult;
   extension_call: { result: unknown };
 }
 
