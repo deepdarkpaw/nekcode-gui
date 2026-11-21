@@ -1,24 +1,21 @@
 /**
  * 模型表格：ID（等宽）、显示名称、上下文、最大输出、思考等级徽标、图片输入；
- * 拖拽排序、CLI 循环范围；行内操作：编辑、设为默认、删除（带撤销）。
+ * 拖拽排序；行内操作：编辑、设为默认、删除（带撤销）。
+ * 这里就是 GUI 与 CLI 共用的模型列表（models.json），不另设第二份列表；
+ * 可选的循环范围（enabledModels，CLI /scoped-models）只在默认模型页管理。
  */
-import type { ReactNode } from "react";
 import { ImageIcon, PencilIcon, StarIcon, Trash2Icon } from "lucide-react";
 import type { NekModelConfig, NekProviderView } from "@zcode/shared/nek-protocol";
 import { nekThinkingLevelsFromMap } from "@zcode/shared/nek-protocol";
-import { AsyncButton } from "@/components/ui/async-button.js";
 import { IconButton } from "@/components/ui/icon-button.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatTokens } from "@/lib/displayFormat.js";
 import { ThinkingLevelBadges } from "../../components/modelControls.js";
 import { SortableList } from "../../components/SortableList.js";
-import { useCliModelScope } from "../../api/useCliModelScope.js";
-import { ModelScopeCheckbox, ModelScopeSaveFeedback } from "../../components/ModelScopeControls.js";
-import { formatModelRef } from "../../lib/modelRef.js";
 
 const GRID =
-  "grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_4rem_4rem_minmax(0,1.4fr)_1.5rem_4rem_5.5rem] items-center gap-2";
+  "grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_4rem_4rem_minmax(0,1.4fr)_1.5rem_5.5rem] items-center gap-2";
 
 export function modelThinkingLevels(model: NekModelConfig) {
   if (!model.reasoning) {
@@ -30,14 +27,12 @@ export function modelThinkingLevels(model: NekModelConfig) {
 function ModelRowView({
   model,
   isDefault,
-  scopeCheckbox,
   onEdit,
   onSetDefault,
   onDelete,
 }: {
   model: NekModelConfig;
   isDefault: boolean;
-  scopeCheckbox: ReactNode;
   onEdit: () => void;
   onSetDefault: () => void;
   onDelete: () => void;
@@ -71,7 +66,6 @@ function ModelRowView({
           />
         ) : null}
       </span>
-      <span className="flex justify-center">{scopeCheckbox}</span>
       <span className="flex justify-end gap-0.5">
         <IconButton
           size="icon-sm"
@@ -120,29 +114,8 @@ export function ModelTable({
 }) {
   const { intl } = useZCodeIntl();
   const byId = new Map(provider.models.map((model) => [model.id, model]));
-  const scope = useCliModelScope();
   return (
     <div className="flex flex-col">
-      <div className="flex items-center gap-2 text-ui-sm text-foreground-subtle">
-        {scope.query.status === "error" ? (
-          <>
-            <span role="alert" className="min-w-0 break-words text-destructive">
-              {scope.query.error?.message}
-            </span>
-            <AsyncButton
-              size="xs"
-              variant="ghost"
-              onClick={scope.query.reload}
-              successFeedback="none"
-            >
-              {intl.formatMessage({ id: "settings.nek.load.retry" })}
-            </AsyncButton>
-          </>
-        ) : (
-          <span>{intl.formatMessage({ id: "settings.nek.scoped.exclusionHint" })}</span>
-        )}
-        <ModelScopeSaveFeedback editor={scope} />
-      </div>
       <div
         className={cn(
           GRID,
@@ -156,9 +129,6 @@ export function ModelTable({
         <span>{intl.formatMessage({ id: "settings.nek.model.col.maxTokens" })}</span>
         <span>{intl.formatMessage({ id: "settings.nek.model.col.thinking" })}</span>
         <span />
-        <span className="text-center">
-          {intl.formatMessage({ id: "settings.nek.scoped.column" })}
-        </span>
         <span />
       </div>
       <SortableList
@@ -171,12 +141,6 @@ export function ModelTable({
             <ModelRowView
               model={model}
               isDefault={defaultModelId === model.id}
-              scopeCheckbox={
-                <ModelScopeCheckbox
-                  editor={scope}
-                  modelRef={formatModelRef(provider.id, model.id)}
-                />
-              }
               onEdit={() => onEdit(model)}
               onSetDefault={() => onSetDefault(model)}
               onDelete={() => onDelete(model)}

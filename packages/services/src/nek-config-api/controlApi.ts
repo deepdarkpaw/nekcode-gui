@@ -134,7 +134,7 @@ function overridesOf(draft: NekProviderDraft): NekProviderOverrides {
 }
 
 /** 读目标 nek 的解析结果，模型菜单和写入流程共用同一条准入路径。 */
-export async function readModelScope(
+async function readModelScope(
   runtime: NekConfigRuntime,
   target: NekConfigTarget,
   cwd?: string,

@@ -1,14 +1,8 @@
-import type {
-  NekConfigRevision,
-  NekConfigTarget,
-  NekModelScopeEntry,
-} from "@zcode/shared/nek-protocol";
-import { readModelScope } from "./controlApi.js";
+import type { NekConfigRevision, NekConfigTarget } from "@zcode/shared/nek-protocol";
 import { readCheckedDocument, writeTextDocument } from "./documents.js";
 import { asNekConfigError, conflict, ioError } from "./errors.js";
 import { modelScopeReferenceEdit, type ModelScopeRename } from "./modelScopeReferences.js";
 import {
-  effectiveScopeDocument,
   modelScopePatterns,
   readModelScopeDocuments,
   sameModelScopePatterns,
@@ -30,22 +24,9 @@ interface ModelWriteOptions {
 
 type WrittenFile = NekConfigRevision & { path: string };
 
-/** 与 CLI 一样，看写入前的解析结果；新模型自然命中旧模式不等于要追加该模式。 */
-async function scopeBeforeAddition(
-  runtime: NekConfigRuntime,
-  target: NekConfigTarget,
-  document: NekSettingsDocument,
-  cwd?: string,
-): Promise<NekModelScopeEntry[]> {
-  const patterns = modelScopePatterns(document);
-  if (!patterns.length) return [];
-  const scope = await readModelScope(runtime, target, cwd);
-  if (!sameModelScopePatterns(scope.patterns, patterns)) throw conflict(document.path);
-  return scope.models;
-}
-
 /**
- * 模型新增/移除与范围同步的唯一落盘路径。先验证候选，再加锁合并 settings，最后原子写模型。
+ * 模型改名/移除与范围引用同步的唯一落盘路径。先验证候选，再加锁合并 settings，最后原子写模型。
+ * 新增模型只写 models.json，不改 enabledModels（与 CLI 编辑 models.json 的效果一致）。
  * 两份文件没有共同事务；先写范围使锁失败不会把模型落盘，重试也不会撞上已经新增的 ID。
  */
 export async function writeModelsAndScope(
@@ -72,17 +53,13 @@ export async function writeModelsAndScope(
         transform ? options.cwd : undefined,
         options.globalSettings?.document,
       );
-      const effective = effectiveScopeDocument(documents);
-      const scoped = transform?.hasAdditions
-        ? await scopeBeforeAddition(runtime, target, effective, options.cwd)
-        : [];
       for (const document of [documents.global, documents.project]) {
         if (!document) continue;
         const patch =
           document === documents.global ? (options.globalSettings?.patch(document) ?? {}) : {};
         if (transform) {
           const current = modelScopePatterns(document);
-          const next = transform.apply(current, document === effective ? scoped : []);
+          const next = transform.apply(current);
           if (!sameModelScopePatterns(current, next)) patch.enabledModels = next;
         }
         if (!Object.keys(patch).length) continue;

@@ -128,7 +128,7 @@ test("scope RPC failure rejects the model view rather than widening the menu", a
   await assert.rejects(service.getView(), /get_model_scope.*scope RPC failed/);
 });
 
-test("manual, batch/import, fetched and inline provider models append exact ids without duplicates", async (t) => {
+test("manual, batch/import, fetched and inline provider models never rewrite enabledModels", async (t) => {
   const h = fixture(["CPA/old", "cpa/manual:high"]);
   t.after(() => h.api.dispose());
   const revision = () => h.api.readModelsConfig(LOCAL);
@@ -168,71 +168,34 @@ test("manual, batch/import, fetched and inline provider models append exact ids 
     { ...gateway, id: "new", models: [{ id: "inline" }, { id: "in-provider-edit" }] },
     { ...(await revision()), isNew: false },
   );
-  assert.deepEqual(scopeOf(h), [
-    "CPA/old",
-    "cpa/manual:high",
-    "CPA/manual-with-level",
-    "CPA/imported-a",
-    "CPA/vendor/imported-b",
-    "CPA/draft-model",
-    "new/inline",
-    "new/in-provider-edit",
-  ]);
+  // GUI 与 CLI 是同一个 nek：新增模型只写 models.json，范围仍是用户自己设置的那份。
+  assert.deepEqual(scopeOf(h), ["CPA/old", "cpa/manual:high"]);
   const settings = await h.api.readSettings(LOCAL, "global");
   assert.deepEqual(settings.values.modelThinkingLevels, {
     "CPA/manual": "low",
     "CPA/manual-with-level": "off",
   });
   assert.deepEqual((readJson(h.local, settingsPath) as { keep: unknown }).keep, { unknown: true });
+  assert.ok(!h.control.commands.some(({ type }) => type === "get_model_scope"));
 });
 
 for (const scenario of [
-  {
-    name: "trusted project with a scope",
-    project: ["CPA/old:high"],
-    trusted: true,
-    matched: true,
-    append: "project",
-  },
-  {
-    name: "trusted project with empty scope",
-    project: [],
-    trusted: true,
-    matched: false,
-    append: "neither",
-  },
-  {
-    name: "trusted project with no matching models",
-    project: ["missing/*"],
-    trusted: true,
-    matched: false,
-    append: "neither",
-  },
-  {
-    name: "untrusted project",
-    project: ["project/original"],
-    trusted: false,
-    matched: true,
-    append: "global",
-  },
+  { name: "trusted project with a scope", project: ["CPA/old:high"], trusted: true },
+  { name: "trusted project with empty scope", project: [], trusted: true },
+  { name: "trusted project with no matching models", project: ["missing/*"], trusted: true },
+  { name: "untrusted project", project: ["project/original"], trusted: false },
 ] as const) {
-  test(`new model respects ${scenario.name}`, async (t) => {
+  test(`new model leaves both scopes unchanged for a ${scenario.name}`, async (t) => {
     const project = [...scenario.project];
-    const h = fixture(["CPA/old"], project, scenario.matched);
+    const h = fixture(["CPA/old"], project);
     t.after(() => h.api.dispose());
     h.control.projectTrusted = scenario.trusted;
     await h.api.addModels(LOCAL, "CPA", [{ id: "new" }], {
       ...(await h.api.readModelsConfig(LOCAL)),
       cwd: PROJECT,
     });
-    assert.deepEqual(
-      scopeOf(h),
-      scenario.append === "global" ? ["CPA/old", "CPA/new"] : ["CPA/old"],
-    );
-    assert.deepEqual(
-      scopeOf(h, projectSettingsPath),
-      scenario.append === "project" ? [...project, "CPA/new"] : project,
-    );
+    assert.deepEqual(scopeOf(h), ["CPA/old"]);
+    assert.deepEqual(scopeOf(h, projectSettingsPath), project);
   });
 }
 
@@ -256,25 +219,20 @@ test("new models do not expand a scope which matches nothing before saving", asy
     (await h.api.readModelsConfig(LOCAL)).providers[0]?.models.map(({ id }) => id),
     ["old", "new", "not-in-range"],
   );
-  assert.deepEqual(h.control.commands, [{ type: "get_model_scope" }]);
+  assert.deepEqual(h.control.commands, []);
 });
 
-test("an RPC failure or a stale scope cannot silently save a configured model addition", async (t) => {
+test("adding models does not depend on the scope RPC", async (t) => {
   const h = fixture(["CPA/old"]);
   t.after(() => h.api.dispose());
-  const options = await h.api.readModelsConfig(LOCAL);
-  const add = () => h.api.addModels(LOCAL, "CPA", [{ id: "new" }], options);
   h.control.readModelScope = () => {
     throw new Error("scope read failed");
   };
-  await assert.rejects(add(), /scope read failed/);
-  h.control.readModelScope = () => ({
-    patterns: ["other/old"],
-    models: [{ provider: "other", id: "old" }],
-    diagnostics: [],
-  });
-  await expectNekError(add, "conflict");
-  assert.equal(h.local.writes.length, 0);
+  await h.api.addModels(LOCAL, "CPA", [{ id: "new" }], await h.api.readModelsConfig(LOCAL));
+  assert.deepEqual(
+    (await h.api.readModelsConfig(LOCAL)).providers[0]?.models.map(({ id }) => id),
+    ["old", "new"],
+  );
   assert.equal(h.local.files.get(settingsPath), settingsFile(["CPA/old"]));
 });
 
@@ -301,7 +259,7 @@ test("model/provider rename and delete rewrite definite scope references in both
 });
 
 for (const matched of [true, false]) {
-  test(`provider copy only appends to a destination scope with matches (${matched})`, async (t) => {
+  test(`provider copy leaves the destination scope unchanged (${matched})`, async (t) => {
     const h = createHarness({
       localFiles: {
         [modelsPath]: modelFile("old", "new"),
@@ -333,9 +291,7 @@ for (const matched of [true, false]) {
     assert.deepEqual(result.items, [{ key: "provider:CPA", status: "copied" }]);
     assert.deepEqual(
       readJson(h.remote, projectSettingsPath),
-      JSON.parse(
-        settingsFile(matched ? ["remote/project", "CPA/old", "CPA/new"] : ["remote/project"]),
-      ),
+      JSON.parse(settingsFile(["remote/project"])),
     );
     assert.equal(h.remote.files.get(remoteSettingsPath), settingsFile(["remote/global"]));
     assert.deepEqual(scopeOf(h), ["CPA/old"]);
@@ -354,7 +310,7 @@ for (const matched of [true, false]) {
   });
 }
 
-test("a conflicting settings lock prevents writing models and the same model write can retry", async (t) => {
+test("a conflicting settings lock prevents a scope-rewriting delete and the same delete can retry", async (t) => {
   const h = fixture(["CPA/old"]);
   t.after(() => h.api.dispose());
   const options = await h.api.readModelsConfig(LOCAL);
@@ -368,17 +324,17 @@ test("a conflicting settings lock prevents writing models and the same model wri
     );
     return runLocked(path, critical);
   };
-  const add = () => h.api.addModels(LOCAL, "CPA", [{ id: "new" }], options);
-  await expectNekError(add, "conflict");
+  const remove = () => h.api.deleteModel(LOCAL, "CPA", "old", options);
+  await expectNekError(remove, "conflict");
   assert.equal(h.local.writes.length, 0);
-  await add();
+  await remove();
   assert.deepEqual(readJson(h.local, settingsPath), {
-    enabledModels: ["CPA/old", "other/updated", "CPA/new"],
+    enabledModels: ["other/updated"],
     fresh: true,
   });
 });
 
-test("a failed model write reports the saved scope and repeating the operation does not duplicate entries", async (t) => {
+test("a failed model write after a scope rewrite is reported and the delete can be repeated", async (t) => {
   const h = fixture(["CPA/old"]);
   t.after(() => h.api.dispose());
   const options = await h.api.readModelsConfig(LOCAL);
@@ -388,10 +344,11 @@ test("a failed model write reports the saved scope and repeating the operation d
     if (path === modelsPath) throw new Error("model write failed");
     await write(path, content);
   };
-  const add = () => h.api.addModels(LOCAL, "CPA", [{ id: "new" }], options);
-  await assert.rejects(add(), /Model settings were saved.*model write failed/);
-  await add();
-  assert.deepEqual(scopeOf(h), ["CPA/old", "CPA/new"]);
+  const remove = () => h.api.deleteModel(LOCAL, "CPA", "old", options);
+  await assert.rejects(remove(), /Model settings were saved.*model write failed/);
+  await remove();
+  assert.deepEqual(scopeOf(h), []);
+  assert.deepEqual((await h.api.readModelsConfig(LOCAL)).providers[0]?.models, []);
 });
 
 test("scope editor compares displayed patterns and preserves an explicit empty project override", async (t) => {

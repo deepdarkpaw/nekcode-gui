@@ -90,7 +90,7 @@ function renderToolbar(view = scoped, state: ModelSelectionState = { status: "re
 const openMenu = () =>
   fireEvent.keyDown(screen.getByTestId(TID_CHAT_MODEL_SELECT_TRIGGER), { key: "Enter" });
 
-describe("composer CLI model list", () => {
+describe("composer model scope", () => {
   it("keeps RPC order, marks the current model outside scope, and toggles both ways without closing", async () => {
     const { select } = renderToolbar();
     expect(screen.getByTestId(TID_CHAT_MODEL_SELECT_TRIGGER).textContent).toContain("current");
@@ -108,7 +108,7 @@ describe("composer CLI model list", () => {
     expect(menu.getByText("Provider A")).toBeDefined();
     expect(menu.getByText("Provider B")).toBeDefined();
     expect(menu.queryByText("当前 · 范围外")).toBeNull();
-    fireEvent.click(menu.getByText("显示 CLI 模型列表"));
+    fireEvent.click(menu.getByText("只显示循环范围"));
     fireEvent.click(menu.getByText("second"));
     expect(select).toHaveBeenCalledWith("b", "second", { provider: "a", model: "current" });
   });
@@ -132,7 +132,7 @@ describe("composer CLI model list", () => {
       expect(await screen.findByText("Provider A")).toBeDefined();
       expect(screen.getByText("Provider B")).toBeDefined();
       expect(screen.queryByText("显示全部模型")).toBeNull();
-      expect(screen.queryByText("显示 CLI 模型列表")).toBeNull();
+      expect(screen.queryByText("只显示循环范围")).toBeNull();
       expect(screen.queryByText("当前 · 范围外")).toBeNull();
     },
   );

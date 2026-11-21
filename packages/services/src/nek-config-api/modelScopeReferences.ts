@@ -1,4 +1,3 @@
-import type { NekModelScopeEntry } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 import type { NekModelsSnapshot } from "./modelsDocument.js";
 
@@ -29,21 +28,23 @@ function splitKnownRef(pattern: string, refs: ReadonlySet<string>): [string, str
   return [key, ""];
 }
 
+/**
+ * 改名/删除模型或服务商时，同步 enabledModels 里可确定归属的引用，避免留下失效模式。
+ * 新增模型不会写进范围：GUI 与 CLI 是同一个 nek 的两种用法，CLI 改 models.json 时也不会
+ * 自动改 enabledModels，GUI 不另造一份需要同步的列表。
+ */
 export function modelScopeReferenceEdit(
   before: Providers,
   after: Providers,
   rename?: ModelScopeRename,
 ) {
   const beforeRefs = new Set<string>();
-  const afterRefs = new Set<string>();
   const providers = new Map<string, string | null>();
   const refs = new Map<string, string | null>();
-  const added: string[] = [];
   for (const provider of new Set([...Object.keys(before), ...Object.keys(after)])) {
     const previous = idsOf(before[provider]);
     const next = idsOf(after[provider]);
     for (const id of previous) beforeRefs.add(`${provider}/${id}`.toLowerCase());
-    for (const id of next) afterRefs.add(`${provider}/${id}`.toLowerCase());
     if (before[provider] && !after[provider]) {
       providers.set(provider.toLowerCase(), rename?.kind === "provider" ? rename.to : null);
       continue;
@@ -58,13 +59,10 @@ export function modelScopeReferenceEdit(
         );
       }
     }
-    for (const id of next) {
-      if (!previous.has(id) && modelRename?.to !== id) added.push(`${provider}/${id}`);
-    }
   }
-  if (!providers.size && !refs.size && !added.length) return undefined;
-  const apply = (patterns: readonly string[], scoped: readonly NekModelScopeEntry[]): string[] => {
-    const next = patterns.flatMap((original) => {
+  if (!providers.size && !refs.size) return undefined;
+  const apply = (patterns: readonly string[]): string[] =>
+    patterns.flatMap((original) => {
       const pattern = original.trim();
       const slash = pattern.indexOf("/");
       const provider = slash > 0 ? providers.get(pattern.slice(0, slash).toLowerCase()) : undefined;
@@ -75,13 +73,5 @@ export function modelScopeReferenceEdit(
       if (replacement === null) return [];
       return [replacement === undefined ? original : `${replacement}${suffix}`];
     });
-    if (!scoped.length || !patterns.length || !added.length) return next;
-    const present = new Set(next.map((pattern) => splitKnownRef(pattern.trim(), afterRefs)[0]));
-    const alreadyScoped = new Set(scoped.map(({ provider, id }) => `${provider}/${id}`));
-    return [
-      ...next,
-      ...added.filter((ref) => !present.has(ref.toLowerCase()) && !alreadyScoped.has(ref)),
-    ];
-  };
-  return { hasAdditions: added.length > 0, apply };
+  return { apply };
 }

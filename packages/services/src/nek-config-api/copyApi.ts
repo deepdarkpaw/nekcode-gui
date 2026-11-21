@@ -130,7 +130,7 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
     const defaults = preview.items.find((item) => item.kind === "defaults");
     const copyDefaults =
       defaults && (!defaults.conflict || resolution["defaults:defaults"] === "overwrite");
-    // 同时覆盖全局默认设置时先应用它，再把新模型追加到复制后的生效范围。
+    // 同时覆盖全局默认设置时先应用它；随后复制服务商只改写目标范围里已失效的引用，不追加新模型。
     const items = copyDefaults
       ? [defaults, ...preview.items.filter((item) => item !== defaults)]
       : preview.items;

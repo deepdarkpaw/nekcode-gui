@@ -34,7 +34,7 @@ export async function readModelScopeDocuments(
   return { global, project: await readSettingsDocument(executor, path) };
 }
 
-export function effectiveScopeDocument({
+function effectiveScopeDocument({
   global,
   project,
 }: ModelScopeDocuments): NekSettingsDocument {

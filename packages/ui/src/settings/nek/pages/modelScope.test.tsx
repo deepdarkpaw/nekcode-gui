@@ -12,10 +12,10 @@ beforeAll(installDomPolyfills);
 afterEach(cleanup);
 
 const scopeCheckbox = (model: string) =>
-  screen.findByRole("checkbox", { name: `在 CLI 列表中显示 ${model}` });
+  screen.findByRole("checkbox", { name: `把 ${model} 加入循环范围` });
 
 async function checkedScope(model: string, checked: boolean) {
-  const name = `在 CLI 列表中显示 ${model}`;
+  const name = `把 ${model} 加入循环范围`;
   return waitFor(() => {
     const checkbox = screen.getByRole("checkbox", { name });
     expect(checkbox.getAttribute("aria-checked")).toBe(String(checked));
@@ -23,7 +23,7 @@ async function checkedScope(model: string, checked: boolean) {
   });
 }
 
-describe("CLI model scope in settings", () => {
+describe("scoped models (enabledModels) in settings", () => {
   it.each([[], ["missing-model"]].map((patterns) => ({ patterns })))(
     "checks all models and explicitly saves the remaining ones on exclusion when none resolve ($patterns)",
     async ({ patterns }) => {
@@ -31,7 +31,7 @@ describe("CLI model scope in settings", () => {
       const settings = await env.config.readSettings(LOCAL_TARGET, "global");
       await env.config.patchSettings(LOCAL_TARGET, "global", { enabledModels: patterns }, settings);
       const available = await env.config.listAvailableModels(LOCAL_TARGET);
-      render(<ProvidersPage />, { wrapper: env.wrapper });
+      render(<DefaultModelPage />, { wrapper: env.wrapper });
       await checkedScope("deepseek/deepseek-reasoner", true);
       fireEvent.click(await checkedScope("deepseek/deepseek-chat", true));
       await checkedScope("deepseek/deepseek-chat", false);
@@ -40,8 +40,6 @@ describe("CLI model scope in settings", () => {
           .map(({ provider, id }) => `${provider}/${id}`)
           .filter((ref) => ref !== "deepseek/deepseek-chat"),
       );
-      cleanup();
-      render(<DefaultModelPage />, { wrapper: env.wrapper });
       await checkedScope("deepseek/deepseek-chat", false);
       fireEvent.click(screen.getByRole("button", { name: "使用全部模型" }));
       await checkedScope("deepseek/deepseek-chat", true);
@@ -59,9 +57,7 @@ describe("CLI model scope in settings", () => {
       settings,
     );
     render(<DefaultModelPage />, { wrapper: env.wrapper });
-    const notice = await screen.findByText(
-      "CLI 模型列表的模式没有匹配任何模型，当前按全部模型显示。",
-    );
+    const notice = await screen.findByText("循环范围的模式没有匹配任何模型，当前按全部模型显示。");
     expect(notice.getAttribute("role")).toBe("status");
     expect(screen.getByText(/No models match pattern "missing-model"/)).toBeDefined();
     await checkedScope("deepseek/deepseek-chat", true);
@@ -97,20 +93,28 @@ describe("CLI model scope in settings", () => {
       { enabledModels: ["deepseek/deepseek-chat"] },
       settings,
     );
-    render(<ProvidersPage />, { wrapper: env.wrapper });
+    render(<DefaultModelPage />, { wrapper: env.wrapper });
     const checkbox = await checkedScope("deepseek/deepseek-chat", true);
     expect(checkbox.hasAttribute("disabled")).toBe(true);
     expect(checkbox.title).toContain("至少保留一个模型");
   });
 
-  it("keeps model management usable on a scope error, then retries read and write visibly", async () => {
+  it("keeps the shared model list free of scope controls", async () => {
+    const env = createNekTestEnv();
+    const readScope = vi.spyOn(env.config, "getModelScope");
+    render(<ProvidersPage />, { wrapper: env.wrapper });
+    expect(await screen.findByRole("button", { name: "手动添加" })).toBeDefined();
+    await flushNek();
+    expect(screen.queryByRole("checkbox", { name: /加入循环范围/u })).toBeNull();
+    expect(readScope).not.toHaveBeenCalled();
+  });
+
+  it("retries scope reads and writes visibly on the default model page", async () => {
     const env = createNekTestEnv();
     env.config.failNext("getModelScope", { code: "io", message: "scope RPC offline" });
-    render(<ProvidersPage />, { wrapper: env.wrapper });
+    render(<DefaultModelPage />, { wrapper: env.wrapper });
     expect(await screen.findByText("scope RPC offline")).toBeDefined();
-    expect(screen.getByRole("button", { name: "手动添加" })).toBeDefined();
-    const checkbox = await scopeCheckbox("deepseek/deepseek-reasoner");
-    expect(checkbox.getAttribute("aria-checked")).toBe("mixed");
+    expect(screen.queryByRole("checkbox", { name: /加入循环范围/u })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     const excluded = await checkedScope("deepseek/deepseek-reasoner", false);
     env.config.failNext("saveModelScope", { code: "io", message: "settings lock denied" });
