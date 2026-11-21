@@ -1,36 +1,18 @@
-/**
- * Agent 相关：子代理预设、指令文件（AGENTS.md）、资源清单（skills / prompts / extensions）。
- *
- * 预设与指令都要 revision 校验：它们是纯文本，用户在编辑器里也可能同时改。
- * 资源清单只读，扫描失败只影响该目录（不打断列表）。
- */
+/** Agent 预设、指令文件与约定的扩展目录。技能、模板只由 nek RPC 发现。 */
 import type {
+  INekConfigApi,
   NekAgentPreset,
   NekAgentPresetsView,
   NekConfigRevision,
   NekConfigScope,
   NekConfigTarget,
 } from "@zcode/shared/nek-protocol";
-import { join } from "node:path";
-import { parseFrontmatterDocument } from "../nek-agent/config/nekConfigDocuments.js";
 import { readTextDocument, writeTextDocument } from "./documents.js";
 import { conflict } from "./errors.js";
-import { instructionsPath, projectConfigDir, resourceDirs } from "./paths.js";
+import { instructionsPath } from "./paths.js";
+import { resourcePaths } from "./resourceFiles.js";
 import { deleteAgentPreset, listAgentPresets, writeAgentPreset } from "./presetsDocument.js";
 import type { NekConfigRuntime } from "./runtime.js";
-
-export interface NekAgentResource {
-  name: string;
-  path: string;
-  description?: string;
-}
-
-export interface NekResourcesResult {
-  skills: NekAgentResource[];
-  prompts: NekAgentResource[];
-  extensions: Array<{ name: string; path: string }>;
-  directories: { agentDir: string; projectDir?: string };
-}
 
 export interface NekAgentGroup {
   listAgentPresets: (target: NekConfigTarget, cwd?: string) => Promise<NekAgentPresetsView>;
@@ -57,23 +39,7 @@ export interface NekAgentGroup {
     content: string,
     options: { revision: string; cwd?: string },
   ) => Promise<NekConfigRevision>;
-  listResources: (target: NekConfigTarget, cwd?: string) => Promise<NekResourcesResult>;
-}
-
-/** 从文件头部提取 `description`（缺 frontmatter 或没有该字段时返回 undefined）。 */
-async function descriptionOf(
-  readFile: (path: string) => Promise<string | null>,
-  path: string,
-): Promise<string | undefined> {
-  const content = await readFile(path);
-  if (content === null || !content.startsWith("---")) return undefined;
-  try {
-    const parsed = parseFrontmatterDocument(path, content);
-    const description = parsed.frontmatter.description;
-    return typeof description === "string" ? description : undefined;
-  } catch {
-    return undefined;
-  }
+  listExtensions: INekConfigApi["listExtensions"];
 }
 
 function stripExtension(name: string): string {
@@ -144,53 +110,19 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
       return { revision };
     },
 
-    listResources: async (target, cwd) => {
-      const context = runtime.target(target);
-      const agentDir = context.layout.agentDir;
-      const skills = new Map<string, NekAgentResource>();
-      const prompts = new Map<string, NekAgentResource>();
-      const extensions = new Map<string, { name: string; path: string }>();
-      for (const dir of resourceDirs(context.layout, "skills", cwd)) {
-        for (const entry of await context.executor.listDir(dir)) {
-          if (!entry.isDirectory) continue;
-          const path = join(dir, entry.name, "SKILL.md");
-          const description = await descriptionOf((file) => context.executor.readFile(file), path);
-          skills.set(entry.name, {
-            name: entry.name,
-            path,
-            ...(description ? { description } : {}),
-          });
-        }
-      }
-      for (const dir of resourceDirs(context.layout, "prompts", cwd)) {
-        for (const entry of await context.executor.listDir(dir)) {
-          if (entry.isDirectory || !entry.name.endsWith(".md")) continue;
-          const path = join(dir, entry.name);
-          const description = await descriptionOf((file) => context.executor.readFile(file), path);
-          prompts.set(stripExtension(entry.name), {
-            name: stripExtension(entry.name),
-            path,
-            ...(description ? { description } : {}),
-          });
-        }
-      }
-      for (const dir of resourceDirs(context.layout, "extensions", cwd)) {
-        for (const entry of await context.executor.listDir(dir)) {
-          if (entry.isDirectory || !/\.(ts|js|mjs|cjs)$/u.test(entry.name)) continue;
-          extensions.set(stripExtension(entry.name), {
-            name: stripExtension(entry.name),
-            path: join(dir, entry.name),
-          });
-        }
-      }
+    listExtensions: async (target) => {
+      const { executor, layout } = runtime.target(target);
+      const paths = resourcePaths(layout.agentDir);
+      const directory = paths.join(layout.agentDir, "extensions");
+      const entries = await executor.listDir(directory);
       return {
-        skills: [...skills.values()],
-        prompts: [...prompts.values()],
-        extensions: [...extensions.values()],
-        directories: {
-          agentDir,
-          ...(cwd ? { projectDir: projectConfigDir(cwd) } : {}),
-        },
+        directory,
+        extensions: entries
+          .filter((entry) => !entry.isDirectory && /\.(ts|js|mjs|cjs)$/u.test(entry.name))
+          .map((entry) => ({
+            name: stripExtension(entry.name),
+            path: paths.join(directory, entry.name),
+          })),
       };
     },
   };

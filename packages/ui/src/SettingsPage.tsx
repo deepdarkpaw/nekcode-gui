@@ -34,12 +34,12 @@ import {
   resolveSettingsSection,
   writeLastSettingsSectionPreference,
 } from "@/lib/settingsNavigation.js";
-import { CapabilitySection } from "@/settings/CapabilitySection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
 import { NekSettingsSection } from "@/settings/nek/NekSettingsSection.js";
+import { useSettingsWorkspaceBinding } from "@/settings/nek/api/useSettingsWorkspaceBinding.js";
 import { isNekSettingsSectionId } from "@/settings/nek/sectionIds.js";
 import { SETTINGS_FRAME_CONTENT_CLASSNAME } from "@/settings/SettingsPageParts.js";
 import {
@@ -176,6 +176,11 @@ export function SettingsPage({
   const activeWorkspaceIdentity = useTabStore(
     (state) => state.activeWorkspaceIdentity ?? undefined,
   );
+  const projectCwd = activeWorkspacePath ?? captionWorkspacePath;
+  const activeWorkspaceTab = workspaceTabs.find(
+    (tab) => tab.workspacePath === projectCwd && tab.workspaceIdentity === activeWorkspaceIdentity,
+  );
+  const workspaceConfig = useSettingsWorkspaceBinding(projectCwd, activeWorkspaceTab);
   const selectDirectory = useSelectDirectory();
   const services = useServices();
   const onboardingRecordService = services.onboardingRecordService;
@@ -780,7 +785,8 @@ export function SettingsPage({
                         {isNekSettingsSectionId(activeSection) ? (
                           <NekSettingsSection
                             sectionId={activeSection}
-                            projectCwd={activeWorkspacePath ?? captionWorkspacePath}
+                            projectCwd={projectCwd}
+                            workspace={workspaceConfig}
                             isWindowsDesktop={Boolean(isWindowsDesktop)}
                           />
                         ) : activeSection === "general" ? (
@@ -879,26 +885,11 @@ export function SettingsPage({
                               workspaceDisplayNames={memoryWorkspaceDisplayNames}
                             />
                           </ServiceProvider>
-                        ) : activeSection === "skill" ? (
-                          <CapabilitySection
-                            key={`skill:${settingsSectionNavigationVersion}`}
-                            mode="skill"
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            onCreateTask={onCreateTask}
-                          />
                         ) : activeSection === "migration" ? (
                           <MigrationSection
                             workspacePath={activeWorkspacePath}
                             workspaceIdentity={activeWorkspaceIdentity}
                             isDesktop={isDesktop}
-                          />
-                        ) : activeSection === "commands" ? (
-                          <CapabilitySection
-                            mode="command"
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            onCreateTask={onCreateTask}
                           />
                         ) : activeSection === "hooks" ? (
                           <HooksSection

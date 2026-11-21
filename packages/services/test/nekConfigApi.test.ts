@@ -1148,22 +1148,11 @@ test("instructions and resources reflect the agent dir", async () => {
     "conflict",
   );
 
-  const resources = await harness.api.listResources(LOCAL, PROJECT);
-  assert.deepEqual(resources.skills, [
-    { name: "pdf", path: join(AGENT_DIR, "skills", "pdf", "SKILL.md"), description: "read PDFs" },
-  ]);
-  assert.deepEqual(resources.prompts, [
-    {
-      name: "review",
-      path: join(AGENT_DIR, "prompts", "review.md"),
-      description: "review staged changes",
-    },
-  ]);
+  const resources = await harness.api.listExtensions(LOCAL);
   assert.deepEqual(resources.extensions, [
     { name: "llama", path: join(AGENT_DIR, "extensions", "llama.ts") },
   ]);
-  assert.equal(resources.directories.agentDir, AGENT_DIR);
-  assert.equal(resources.directories.projectDir, PROJECT_DIR);
+  assert.equal(resources.directory, join(AGENT_DIR, "extensions"));
 });
 
 test("a disconnected target fails with not_connected and model catalog comes from the control process", async () => {

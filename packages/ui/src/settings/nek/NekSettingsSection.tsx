@@ -3,7 +3,10 @@
  * 由 SettingsPage 在 nek 分区下渲染；配置目标状态是模块级的，切换分区时保持。
  */
 import { useMemo, type ReactNode } from "react";
-import { NekSettingsProvider } from "./api/NekSettingsContext.js";
+import type { INekWorkspaceConfigService } from "@zcode/services";
+import type { NekConfigTargetInfo } from "@zcode/shared/nek-protocol";
+import { LOCAL_TARGET, NekSettingsProvider } from "./api/NekSettingsContext.js";
+import { withWorkspaceConfigTarget } from "./api/workspaceConfigTarget.js";
 import { resolveNekSettingsApis } from "./api/registry.js";
 import type { NekSettingsSectionId } from "./sections.js";
 import { AccountsPage } from "./pages/accounts/AccountsPage.js";
@@ -19,9 +22,17 @@ import { AppearancePage } from "./pages/AppearancePage.js";
 import { ShortcutsPage } from "./pages/ShortcutsPage.js";
 import { AdvancedPage } from "./pages/AdvancedPage.js";
 import { AboutPage } from "./pages/AboutPage.js";
+import { ResourcesPage } from "./pages/resources/ResourcesPage.js";
+
+export interface SettingsWorkspaceBinding {
+  service: INekWorkspaceConfigService;
+  info: NekConfigTargetInfo;
+  openRemotePath?: (path: string, pathKind: "file" | "directory") => Promise<void>;
+}
 
 export interface NekSettingsSectionEnv {
   isWindowsDesktop: boolean;
+  openRemotePath?: (path: string, pathKind: "file" | "directory") => Promise<void>;
 }
 
 const PAGES: Readonly<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) => ReactNode>> = {
@@ -33,6 +44,12 @@ const PAGES: Readonly<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) 
   nekMcp: () => <McpPage />,
   nekAgent: () => <AgentPage />,
   nekProject: () => <ProjectPage />,
+  nekSkills: ({ openRemotePath }) => (
+    <ResourcesPage resourceType="skills" openRemotePath={openRemotePath} />
+  ),
+  nekPrompts: ({ openRemotePath }) => (
+    <ResourcesPage resourceType="prompts" openRemotePath={openRemotePath} />
+  ),
   nekAppearance: () => <AppearancePage />,
   nekShortcuts: () => <ShortcutsPage />,
   nekAdvanced: () => <AdvancedPage />,
@@ -43,17 +60,35 @@ const PAGES: Readonly<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) 
 export function NekSettingsSection({
   sectionId,
   projectCwd,
+  workspace,
   isWindowsDesktop = false,
 }: {
   sectionId: NekSettingsSectionId;
   projectCwd?: string | null;
+  workspace?: SettingsWorkspaceBinding;
   isWindowsDesktop?: boolean;
 }) {
-  const apis = useMemo(() => resolveNekSettingsApis(), []);
+  const base = useMemo(() => resolveNekSettingsApis(), []);
+  const scoped =
+    sectionId === "nekSkills" || sectionId === "nekPrompts" || sectionId === "nekProject";
+  const workspaceService = scoped && !base.isMock ? workspace?.service : undefined;
+  const workspaceTarget = workspaceService && projectCwd ? workspace?.info : undefined;
+  const target = workspaceTarget?.target ?? LOCAL_TARGET;
+  const apis = useMemo(
+    () =>
+      workspaceService
+        ? { ...base, config: withWorkspaceConfigTarget(base.config, workspaceService, target) }
+        : base,
+    [base, workspaceService, target],
+  );
   const render = PAGES[sectionId];
   return (
-    <NekSettingsProvider apis={apis} projectCwd={projectCwd ?? undefined}>
-      {render({ isWindowsDesktop })}
+    <NekSettingsProvider
+      apis={apis}
+      projectCwd={projectCwd ?? undefined}
+      workspaceTarget={workspaceTarget}
+    >
+      {render({ isWindowsDesktop, openRemotePath: workspaceTarget && workspace?.openRemotePath })}
     </NekSettingsProvider>
   );
 }

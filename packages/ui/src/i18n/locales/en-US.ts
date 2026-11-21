@@ -3809,12 +3809,52 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.error.nameDuplicate": "A preset with this name already exists",
   "settings.nek.agent.preset.error.descriptionRequired": "Enter a description",
   "settings.nek.agent.instructions": "Global AGENTS.md",
-  "settings.nek.agent.resources": "Skills / prompts / extensions",
-  "settings.nek.agent.resourcesHint":
-    "Resources loaded by nek (read-only); open the folder to edit.",
-  "settings.nek.agent.resources.skills": "Skills ({count})",
-  "settings.nek.agent.resources.prompts": "Prompts ({count})",
-  "settings.nek.agent.resources.extensions": "Extensions ({count})",
+  "settings.nek.agent.extensions": "Global extensions folder",
+  "settings.nek.agent.extensionsHint": "View extension files in the nek configuration directory.",
+  "settings.nek.section.skills": "Skills",
+  "settings.nek.section.prompts": "Command templates",
+  "settings.nek.resources.page.skills":
+    "Manage the skills discovered by nek. The CLI and desktop share this configuration.",
+  "settings.nek.resources.page.prompts":
+    "Manage nek Markdown prompt templates. Type / followed by the template filename to use one.",
+  "settings.nek.resources.group.global": "Global",
+  "settings.nek.resources.group.project": "Project",
+  "settings.nek.resources.group.explicit": "Other explicit sources",
+  "settings.nek.resources.untrusted.skills":
+    "This project is not trusted. nek will not load its skills.",
+  "settings.nek.resources.untrusted.prompts":
+    "This project is not trusted. nek will not load its command templates.",
+  "settings.nek.resources.manageTrust": "Manage project trust",
+  "settings.nek.resources.reconnectWorkspace":
+    "Reconnect the workspace before managing settings on this machine.",
+  "settings.nek.resources.refresh": "Refresh list",
+  "settings.nek.resources.local": "This computer",
+  "settings.nek.resources.empty": "No entries in this directory.",
+  "settings.nek.resources.enabled": "Enable {name}",
+  "settings.nek.resources.notToggleable":
+    "This resource is controlled by its nek source and cannot be toggled here.",
+  "settings.nek.resources.override":
+    "nek returned a different state. Check this resource's override rules.",
+  "settings.nek.resources.open.file": "Open file",
+  "settings.nek.resources.open.directory": "Open folder",
+  "settings.nek.resources.openFailed": "Could not open the path on the target machine.",
+  "settings.nek.resources.create.skills": "Create skill",
+  "settings.nek.resources.create.prompts": "Create command template",
+  "settings.nek.resources.edit": "Edit command template",
+  "settings.nek.resources.saveTemplate": "Save command template",
+  "settings.nek.resources.name": "Name",
+  "settings.nek.resources.nameHint": "Use up to 64 lowercase letters, digits, and single hyphens.",
+  "settings.nek.resources.description": "Description",
+  "settings.nek.resources.body": "Markdown body",
+  "settings.nek.resources.bodyRequired": "Enter a body no larger than {size} KB.",
+  "settings.nek.resources.skillBodyHint": "Creates a SKILL.md with a name and description.",
+  "settings.nek.resources.promptBodyHint":
+    "The filename defines the command. Use $1 or $ARGUMENTS for arguments and optional YAML frontmatter for description and argument-hint.",
+  "settings.nek.resources.delete": "Delete resource file",
+  "settings.nek.resources.deleteTitle": "Delete {name}?",
+  "settings.nek.resources.deleteHint": "Permanently deletes {path}. Other files are not removed.",
+  "settings.nek.resources.reloadDeferred":
+    "Configuration saved. Running sessions will reload after the current turn.",
   "settings.nek.instructions.save": "Save",
   "settings.nek.instructions.revert": "Revert",
   "settings.nek.instructions.unsaved": "Unsaved changes",

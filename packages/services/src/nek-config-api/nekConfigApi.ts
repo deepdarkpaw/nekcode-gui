@@ -22,6 +22,7 @@ import { createMcpGroup } from "./mcpApi.js";
 import type { NekMcpGroup } from "./mcpApi.js";
 import { createModelsGroup } from "./modelsApi.js";
 import type { NekModelsGroup } from "./modelsApi.js";
+import { createResourcesGroup } from "./resourcesApi.js";
 import { NekConfigRuntime } from "./runtime.js";
 import type { NekConfigApiOptions } from "./runtime.js";
 import { createSettingsGroup } from "./settingsApi.js";
@@ -39,6 +40,7 @@ export class NekConfigApi implements INekConfigApi {
   private readonly agent: NekAgentGroup;
   private readonly control: NekControlGroup;
   private readonly copyGroup: NekCopyGroup;
+  private readonly resources: ReturnType<typeof createResourcesGroup>;
 
   constructor(options: NekConfigApiOptions) {
     this.options = options;
@@ -50,6 +52,7 @@ export class NekConfigApi implements INekConfigApi {
     this.agent = createAgentGroup(this.runtime);
     this.control = createControlGroup(this.runtime);
     this.copyGroup = createCopyGroup(this.runtime);
+    this.resources = createResourcesGroup(this.runtime);
   }
 
   /** Host-only production wiring: binds live CLI writers to this config owner. */
@@ -142,7 +145,7 @@ export class NekConfigApi implements INekConfigApi {
     this.agent.readInstructions(...args);
   writeInstructions: INekConfigApi["writeInstructions"] = (...args) =>
     this.agent.writeInstructions(...args);
-  listResources: INekConfigApi["listResources"] = (...args) => this.agent.listResources(...args);
+  listExtensions: INekConfigApi["listExtensions"] = (...args) => this.agent.listExtensions(...args);
 
   // ---- 项目信任 ----
 
@@ -168,6 +171,20 @@ export class NekConfigApi implements INekConfigApi {
 
   previewCopy: INekConfigApi["previewCopy"] = (...args) => this.copyGroup.previewCopy(...args);
   copy: INekConfigApi["copy"] = (...args) => this.copyGroup.copy(...args);
+
+  // ---- nek 技能与提示词模板 ----
+  listConfigResources: INekConfigApi["listConfigResources"] = (...args) =>
+    this.resources.listConfigResources(...args);
+  setResourceEnabled: INekConfigApi["setResourceEnabled"] = (...args) =>
+    this.resources.setResourceEnabled(...args);
+  createResource: INekConfigApi["createResource"] = (...args) =>
+    this.resources.createResource(...args);
+  readPromptTemplate: INekConfigApi["readPromptTemplate"] = (...args) =>
+    this.resources.readPromptTemplate(...args);
+  writePromptTemplate: INekConfigApi["writePromptTemplate"] = (...args) =>
+    this.resources.writePromptTemplate(...args);
+  deleteResource: INekConfigApi["deleteResource"] = (...args) =>
+    this.resources.deleteResource(...args);
 
   /** 释放监视器与所有控制进程（宿主退出时调用）。 */
   dispose(): void {

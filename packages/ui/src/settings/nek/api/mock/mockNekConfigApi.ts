@@ -22,6 +22,14 @@ import * as mcp from "./mockMcp.js";
 import * as models from "./mockModels.js";
 import { MOCK_BUILTIN_TOOLS } from "./mockBuiltinTools.js";
 import * as settings from "./mockSettings.js";
+import {
+  createMockResource,
+  deleteMockResource,
+  getMockResource,
+  listMockResources,
+  writeMockResource,
+  type MockResourceStore,
+} from "./mockResources.js";
 
 export type { MockNekConfigApiOptions } from "./mockNekConfigApiBase.js";
 
@@ -284,8 +292,47 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
       return touch(file);
     });
 
-  listResources: INekConfigApi["listResources"] = (target, cwd) =>
-    this.call("listResources", () => settings.resources(this.machineOf(target), cwd));
+  listExtensions: INekConfigApi["listExtensions"] = (target) =>
+    this.call("listExtensions", () => settings.extensions(this.machineOf(target)));
+
+  private readonly resources: MockResourceStore = new WeakMap();
+
+  listConfigResources: INekConfigApi["listConfigResources"] = (target, query) =>
+    this.call("listConfigResources", () =>
+      listMockResources(this.resources, this.machineOf(target), query),
+    );
+
+  setResourceEnabled: INekConfigApi["setResourceEnabled"] = (target, input) =>
+    this.call("setResourceEnabled", () => {
+      const { info, file } = getMockResource(this.resources, this.machineOf(target), input);
+      info.enabled = input.enabled;
+      this.touchFor(target)(file);
+      return {
+        settingsScope: info.scope === "project" ? "project" : "global",
+        enabled: info.enabled,
+      };
+    });
+
+  createResource: INekConfigApi["createResource"] = (target, input) =>
+    this.call("createResource", () => {
+      this.touchFor(target)(createMockResource(this.resources, this.machineOf(target), input));
+    });
+
+  readPromptTemplate: INekConfigApi["readPromptTemplate"] = (target, input) =>
+    this.call("readPromptTemplate", () => {
+      const { file } = getMockResource(this.resources, this.machineOf(target), input);
+      return { content: file.value, revision: file.revision };
+    });
+
+  writePromptTemplate: INekConfigApi["writePromptTemplate"] = (target, input) =>
+    this.call("writePromptTemplate", () => {
+      this.touchFor(target)(writeMockResource(this.resources, this.machineOf(target), input));
+    });
+
+  deleteResource: INekConfigApi["deleteResource"] = (target, input) =>
+    this.call("deleteResource", () => {
+      this.touchFor(target)(deleteMockResource(this.resources, this.machineOf(target), input));
+    });
 
   // ---- 项目信任 ----
 

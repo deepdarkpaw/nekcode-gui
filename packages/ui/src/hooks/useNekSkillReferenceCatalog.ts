@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ZCodeSkillReferenceCatalogEntry } from "@zcode/shared";
+import type { ZCodeSkillReferenceCatalogEntry, ZCodeSlashCommand } from "@zcode/shared";
+import type { NekMentionTarget } from "@zcode/shared/nek-protocol";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { logger } from "@/logger.js";
 
 interface ConversationSkillCatalogState {
   skills: ZCodeSkillReferenceCatalogEntry[];
+  agents?: NekMentionTarget[];
+  commands?: ZCodeSlashCommand[];
   authority: "session" | "workspace" | null;
   loading: boolean;
   error: string | null;
@@ -33,6 +36,7 @@ interface UseSkillsOptions {
   sessionId: string | null;
   enabled: boolean;
   preferredRemoteSessionId?: string;
+  includeSlashCatalog?: boolean;
 }
 
 /**
@@ -91,6 +95,7 @@ export function useNekSkillReferenceCatalog(
       ...(options.workspaceIdentity ? { workspaceIdentity: options.workspaceIdentity } : {}),
       ...(remoteSessionId ? { remoteSessionId } : {}),
       ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options.includeSlashCatalog ? { includeSlashCatalog: true } : {}),
     };
     services.zcodeAgentService
       .getSkillReferenceCatalog(params)
@@ -99,8 +104,7 @@ export function useNekSkillReferenceCatalog(
         setScopedState({
           scope: requestScope,
           value: {
-            skills: result.skills,
-            authority: result.authority,
+            ...result,
             loading: false,
             error: null,
           },
@@ -123,6 +127,7 @@ export function useNekSkillReferenceCatalog(
     };
   }, [
     options.enabled,
+    options.includeSlashCatalog,
     options.sessionId,
     options.workspaceIdentity,
     options.workspacePath,

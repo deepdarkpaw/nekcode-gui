@@ -1,12 +1,4 @@
-import {
-  Settings,
-  Settings2,
-  Terminal,
-  Anchor,
-  Brain,
-  WandSparkles,
-  FileSearch,
-} from "lucide-react";
+import { Settings, Settings2, Anchor, Brain, FileSearch } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import {
   NEK_SETTINGS_GROUPS,
@@ -49,18 +41,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "memory",
     icon: Brain,
     titleId: "settings.memory",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "skill",
-    icon: WandSparkles,
-    titleId: "settings.skills.title",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "commands",
-    icon: Terminal,
-    titleId: "settings.commands.title",
     groupId: "agentCapabilities",
   },
   {

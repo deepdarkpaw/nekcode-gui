@@ -40,8 +40,6 @@ const runtime = vi.hoisted(() => {
         },
       },
     },
-    commands: [],
-    subagents: { agents: [], loading: false, error: null },
     files: { items: [], loading: false, error: null, title: "Files", emptyText: "No files" },
     sessions: {
       items: [],
@@ -55,8 +53,6 @@ const runtime = vi.hoisted(() => {
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
   useWorkspaceServicesResolution: () => runtime.resolution,
 }));
-vi.mock("@/hooks/useSlashCommands.js", () => ({ useSlashCommands: () => runtime.commands }));
-vi.mock("@/hooks/useSubagents.js", () => ({ useSubagents: () => runtime.subagents }));
 vi.mock("./providers/fileMentionProvider.js", () => ({
   useFileMentionProvider: () => runtime.files,
 }));
@@ -146,7 +142,6 @@ function mount(sessionId: string | null = "session-1") {
         <SlashCommandPlugin
           workspacePath="/workspace"
           sessionId={sessionId}
-          provider={ZCODE_AGENT_PROVIDER}
           container={document.body}
         />
         <MentionPlugin
@@ -197,6 +192,7 @@ describe("nek skill completion wiring", () => {
       expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledWith({
         workspacePath: "/workspace",
         sessionId: "session-1",
+        includeSlashCatalog: true,
       });
       await act(async () => {
         editor.dispatchCommand(
@@ -250,6 +246,9 @@ describe("nek skill completion wiring", () => {
     await typeText("/pdf");
     await screen.findByRole("option", { name: "pdf" });
     expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledTimes(2);
-    expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledWith({ workspacePath: "/workspace" });
+    expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledWith({
+      workspacePath: "/workspace",
+      includeSlashCatalog: true,
+    });
   });
 });

@@ -66,17 +66,6 @@ export function agentPresetPath(
   return join(agentsDir(layout, scope, cwd), `${name}.md`);
 }
 
-/** 资源目录（skills / prompts / extensions）的全局与项目位置。 */
-export function resourceDirs(
-  layout: NekConfigLayout,
-  kind: "skills" | "prompts" | "extensions",
-  cwd?: string,
-): string[] {
-  const dirs = [join(layout.agentDir, kind)];
-  if (cwd) dirs.push(join(projectConfigDir(cwd), kind));
-  return dirs;
-}
-
 function requireCwd(scope: NekConfigScope, cwd?: string): string {
   if (scope === "project" && (!cwd || cwd.trim() === "")) {
     throw new Error("project scope requires cwd");

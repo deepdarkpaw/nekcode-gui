@@ -53,13 +53,15 @@ import type {
   NekMcpServerConfig,
   NekMcpServerStatus,
 } from "./gui-extension-api.js";
+import type { INekResourceConfigApi } from "./resource-config.js";
 export * from "./config-types.js";
+export * from "./resource-config.js";
 
 // ============================================================================
 // API
 // ============================================================================
 
-export interface INekConfigApi {
+export interface INekConfigApi extends INekResourceConfigApi {
   // ---- 目标 ----
   listTargets(): Promise<NekConfigTargetInfo[]>;
 
@@ -237,14 +239,12 @@ export interface INekConfigApi {
     content: string,
     options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
-  listResources(
+  listExtensions(
     target: NekConfigTarget,
     cwd?: string,
   ): Promise<{
-    skills: Array<{ name: string; path: string; description?: string }>;
-    prompts: Array<{ name: string; path: string; description?: string }>;
     extensions: Array<{ name: string; path: string }>;
-    directories: { agentDir: string; projectDir?: string };
+    directory: string;
   }>;
 
   // ---- 项目信任 ----

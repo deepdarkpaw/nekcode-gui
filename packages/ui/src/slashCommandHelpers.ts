@@ -2,9 +2,8 @@
  * slashCommandHelpers — 纯函数辅助工具，供 SlashCommandPlugin.tsx 使用
  */
 import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical";
-import type { AgentSummary, Locale, SkillSummary, ZCodeSlashCommand } from "@zcode/shared";
-import type { MentionItem } from "@/mentions/mentionTypes.js";
-import { mapSubagentsToMentionItemsForTest } from "@/mentions/providers/subagentsMentionProvider.js";
+import type { Locale, ZCodeSkillReferenceCatalogEntry, ZCodeSlashCommand } from "@zcode/shared";
+import type { NekMentionTarget } from "@zcode/shared/nek-protocol";
 import { resolveSkillSourceLabel } from "@/lib/skillSourceLabel.js";
 import type { PromptInputSuggestionItem } from "./lib/promptInputTriggers.js";
 
@@ -106,20 +105,21 @@ export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInpu
 }
 
 export function buildSubagentSuggestions(
-  agents: Array<
-    Pick<
-      AgentSummary,
-      "id" | "name" | "description" | "path" | "scope" | "source" | "enabled" | "modelSelection"
-    >
-  >,
+  agents: readonly NekMentionTarget[],
 ): PromptInputSuggestionItem[] {
-  return mapSubagentsToMentionItemsForTest(agents).map((item) =>
-    mapSubagentMentionItemToSuggestion(item),
-  );
+  return agents.map((agent) => ({
+    id: `subagent:${agent.name}`,
+    trigger: "/",
+    value: agent.name,
+    label: agent.name,
+    description: agent.description,
+    keywords: [agent.name, agent.description ?? "", "subagent", "agent"],
+    data: { path: agent.location },
+  }));
 }
 
 export function buildSkillSuggestions(
-  skills: Array<Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope">>,
+  skills: ReadonlyArray<ZCodeSkillReferenceCatalogEntry>,
   locale?: Locale,
 ): PromptInputSuggestionItem[] {
   return skills.map((skill) => {
@@ -134,18 +134,6 @@ export function buildSkillSuggestions(
       data: { path: skill.path, scope: skill.scope },
     };
   });
-}
-
-function mapSubagentMentionItemToSuggestion(item: MentionItem): PromptInputSuggestionItem {
-  return {
-    id: item.id,
-    trigger: "/",
-    value: item.value,
-    label: item.label,
-    description: item.description,
-    keywords: [...new Set([...(item.keywords ?? []), "subagent", "agent"])],
-    data: item.data,
-  };
 }
 
 export function getTextAroundCursor() {

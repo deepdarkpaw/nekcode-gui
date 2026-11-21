@@ -15,6 +15,8 @@
  * - `nekConfigApi.ts`：把上面拼成 `INekConfigApi`。
  */
 export { NekConfigApi } from "./nekConfigApi.js";
+export { createWorkspaceConfigService } from "./workspaceConfigAdapter.js";
+export { INekWorkspaceConfigService } from "./workspaceConfigService.js";
 export {
   DEFAULT_MODEL_READ_MS,
   NekModelReadBudget,

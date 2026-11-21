@@ -13,6 +13,7 @@ import type { IZCodeSessionService } from "./zcode-session/zcodeSession.js";
 import type { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 import type { IModelSelectionService } from "./model-provider/modelSelectionService.js";
 import type { IClientScenesService } from "./client-scenes/clientScenes.js";
+import type { INekWorkspaceConfigService } from "./nek-config-api/workspaceConfigService.js";
 import type { ISkillsService } from "./skills/skills.js";
 import type { ISkillSyncService } from "./skill-sync/skillSync.js";
 import type { IMcpSyncService } from "./mcp-sync/mcpSync.js";
@@ -49,6 +50,7 @@ export interface IServiceAccessor {
   /** 当前目标机器上 nek 发布的唯一模型选择 View。 */
   readonly modelSelectionService: IModelSelectionService;
   readonly clientScenesService: IClientScenesService;
+  readonly nekWorkspaceConfigService: INekWorkspaceConfigService;
   /** 闲时任务管理（独立服务面）。 */
   readonly skillsService: ISkillsService;
   readonly skillSyncService: ISkillSyncService;

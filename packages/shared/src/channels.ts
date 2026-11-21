@@ -70,6 +70,8 @@ export const ServiceChannels = {
   FileWatcher: "file-watcher",
   /** nek-backed model selection on the target machine. */
   ModelSelection: "model-selection",
+  /** 工作区执行端上的 nek 配置维护。 */
+  NekWorkspaceConfig: "nek-workspace-config",
   /** ZCode 客户端场景配置服务 */
   ClientScenes: "client-scenes",
   /** Skills 管理服务 */

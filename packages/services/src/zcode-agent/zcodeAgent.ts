@@ -519,9 +519,12 @@ export interface IZCodeAgentService {
   ): Promise<ZCodeWorkspaceHookTrustGrantResult>;
   listMcpServerStatuses(params: ZCodeAgentListMcpServerStatusesParams): Promise<ZCodeMcpListResult>;
   /** Composer Skill 引用 catalog；带 sessionId 时读取该 runtime 的冻结快照。 */
-  getSkillReferenceCatalog(
-    params: ZCodeAgentSkillReferenceCatalogParams,
-  ): Promise<ZCodeSkillsReferenceCatalogResult>;
+  getSkillReferenceCatalog(params: ZCodeAgentSkillReferenceCatalogParams): Promise<
+    ZCodeSkillsReferenceCatalogResult & {
+      commands?: import("@zcode/shared").ZCodeSlashCommand[];
+      agents?: import("@zcode/shared/nek-protocol").NekMentionTarget[];
+    }
+  >;
   /**
    * 资源管理器：枚举本 Host 内全部本地 Agent 进程（含 plugin / mcp-status 泳道），
    * 并向每个存活 runtime 请求 `process/childProcesses`；单个 runtime 失败只让它的 children 为空。

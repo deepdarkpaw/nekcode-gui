@@ -210,6 +210,11 @@ export {
 
 // Skills service — ISkillsService is both a type (interface) and value (descriptor)
 export { ISkillsService } from "./skills/skills.js";
+export {
+  INekWorkspaceConfigService,
+  NEK_WORKSPACE_CONFIG_METHODS,
+  type NekWorkspaceConfigMethod,
+} from "./nek-config-api/workspaceConfigService.js";
 export { ISkillSyncService } from "./skill-sync/skillSync.js";
 export { IMcpSyncService } from "./mcp-sync/mcpSync.js";
 

@@ -6,8 +6,6 @@ export type SettingsSectionId =
   | "general"
   | "migration"
   | "memory"
-  | "skill"
-  | "commands"
   | "hooks"
   | "workspaceFileSearch"
   | NekSettingsSectionId;
@@ -28,6 +26,9 @@ const LEGACY_SECTION_REDIRECTS = {
   appearance: "nekAppearance",
   shortcuts: "nekShortcuts",
   subagents: "nekAgent",
+  skill: "nekSkills",
+  skills: "nekSkills",
+  commands: "nekPrompts",
 } as const satisfies Record<string, NekSettingsSectionId>;
 
 type SettingsSectionInput = SettingsSectionId | keyof typeof LEGACY_SECTION_REDIRECTS;
@@ -41,8 +42,6 @@ function isSettingsSectionId(value: string): value is SettingsSectionId {
     value === "general" ||
     value === "migration" ||
     value === "memory" ||
-    value === "skill" ||
-    value === "commands" ||
     value === "hooks" ||
     value === "workspaceFileSearch" ||
     isNekSettingsSectionId(value)
@@ -95,10 +94,6 @@ function readLastSettingsSectionPreference(
 
   try {
     const raw = storage.getItem(SETTINGS_LAST_SECTION_STORAGE_KEY);
-    if (raw === "skills") {
-      storage.setItem(SETTINGS_LAST_SECTION_STORAGE_KEY, "skill");
-      return "skill";
-    }
     // 旧版“代码预览”已并入“外观”，保留用户上次停留位置的迁移语义。
     if (raw === "codePreview") {
       storage.setItem(SETTINGS_LAST_SECTION_STORAGE_KEY, "nekAppearance");
@@ -196,10 +191,6 @@ function consumePendingSettingsSection(
       window.sessionStorage.removeItem(SETTINGS_SECTION_INTENT_KEY);
     }
 
-    if (raw === "skills") {
-      // 旧 Skills 使用复数 id；迁移到当前独立 skill 分区。
-      return "skill";
-    }
     if (raw && isSettingsSectionInput(raw)) {
       return resolveSettingsSection(raw, fallbackSection);
     }

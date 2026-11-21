@@ -50,6 +50,10 @@ import { createObservableSettingService } from "./setting/observableSettingServi
 import { createCredentialService } from "./credential/credentialService.js";
 import { createBroadcastService } from "./broadcast/broadcastService.js";
 import { createNekRuntimeServices } from "./createNekRuntimeServices.js";
+import {
+  createWorkspaceConfigService,
+  INekWorkspaceConfigService,
+} from "./nek-config-api/index.js";
 import type { ZCodeAgentCommandResolver } from "./zcode-agent/zcodeAgentCommand.js";
 import { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
 import { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
@@ -221,6 +225,7 @@ export function createLocalServices(options: CreateLocalServicesOptions): Servic
     .register(IFileWatcherService, createFileWatcherService())
     .register(IModelSelectionService, modelSelectionService)
     .register(IClientScenesService, createClientScenesService())
+    .register(INekWorkspaceConfigService, createWorkspaceConfigService(nekConfigApi))
     .register(ISkillsService, createSkillsService({ isDesktopRuntime: true }))
     .register(ISkillSyncService, createSkillSyncService())
     .register(

@@ -3,9 +3,11 @@
  */
 import {
   BotIcon,
+  BookOpenIcon,
   BoxesIcon,
   CableIcon,
   CircleUserRoundIcon,
+  FileTextIcon,
   FolderGit2Icon,
   InfoIcon,
   KeyboardIcon,
@@ -95,6 +97,20 @@ export const NEK_SETTINGS_SECTIONS: readonly NekSettingsSectionDefinition[] = [
     id: "nekProject",
     icon: FolderGit2Icon,
     titleId: "settings.nek.section.project",
+    groupId: "nekConfig",
+    usesTarget: true,
+  },
+  {
+    id: "nekSkills",
+    icon: BookOpenIcon,
+    titleId: "settings.nek.section.skills",
+    groupId: "nekConfig",
+    usesTarget: true,
+  },
+  {
+    id: "nekPrompts",
+    icon: FileTextIcon,
+    titleId: "settings.nek.section.prompts",
     groupId: "nekConfig",
     usesTarget: true,
   },

@@ -20,6 +20,7 @@ const LEGACY_REMOTE_WORKSPACE_RPC_CHANNELS = [
   "commandsService",
   "hooksService",
   "modelSelectionService",
+  "nekWorkspaceConfigService",
 ] as const satisfies readonly (keyof IServiceAccessor)[];
 
 type LegacyRemoteWorkspaceRpcContract = Pick<

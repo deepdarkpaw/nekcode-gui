@@ -8,7 +8,6 @@
  * 3. 支持 Esc 关闭、上下键切换、Enter / Tab 选中，以及跟随输入做模糊搜索
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ZCodeProvider } from "@zcode/shared";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { createPortal } from "react-dom";
 import {
@@ -22,11 +21,9 @@ import {
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
 } from "lexical";
-import { useSubagents } from "@/hooks/useSubagents.js";
 import { useNekSkillReferenceCatalog } from "@/hooks/useNekSkillReferenceCatalog.js";
 import { buildSlashApplyMentionPayload } from "@/lib/slashApplyMentionPayload.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
-import { useSlashCommands } from "./hooks/useSlashCommands.js";
 import { $createPromptMentionNode } from "./mentions/nodes/PromptMentionNode.js";
 import {
   extractActivePromptInputTrigger,
@@ -61,24 +58,17 @@ export function SlashCommandPlugin({
   workspacePath,
   workspaceIdentity,
   sessionId,
-  provider,
   container,
   disabled = false,
   excludedCommandNames,
   appCommands,
-}: SlashCommandPluginProps & { provider: ZCodeProvider }) {
+}: SlashCommandPluginProps) {
   const [editor] = useLexicalComposerContext();
   const { intl, locale } = useZCodeIntl();
   const [activeTrigger, setActiveTrigger] = useState<ActivePromptInputTrigger | null>(null);
-  // 远程 workspace 的 slashCommands 写在 workspaceIdentity 桶。
-  // 这里只按 workspacePath 读取会落到 path 桶，表现为 ZCode Agent 已收到 available_commands_update 但 / 面板为空。
-  const commands = useSlashCommands(workspacePath, workspaceIdentity);
   const {
+    commands,
     agents,
-    loading: subagentsLoading,
-    error: subagentsError,
-  } = useSubagents(workspacePath, provider, workspaceIdentity);
-  const {
     skills,
     loading: skillsLoading,
     error: skillsError,
@@ -87,6 +77,7 @@ export function SlashCommandPlugin({
     workspaceIdentity,
     sessionId: sessionId ?? null,
     enabled: !disabled && activeTrigger?.trigger === "/",
+    includeSlashCatalog: true,
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dismissedSignatureRef = useRef<string | null>(null);
@@ -94,7 +85,7 @@ export function SlashCommandPlugin({
   const activeTokenRef = useRef<ActivePromptInputTokenSnapshot | null>(null);
   const commandSuggestions = useMemo(() => {
     const excluded = new Set((excludedCommandNames ?? []).map(normalizeSlashCommandValue));
-    const cliSuggestions = buildSlashSuggestions(commands).filter(
+    const cliSuggestions = buildSlashSuggestions(commands ?? []).filter(
       (item) => !excluded.has(item.value),
     );
     // App 层命令追加在 CLI catalog 之后展示；CLI 已提供同名命令时以 CLI 为准，避免遮蔽。
@@ -104,7 +95,7 @@ export function SlashCommandPlugin({
     );
     return [...cliSuggestions, ...appSuggestions];
   }, [appCommands, commands, excludedCommandNames]);
-  const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents), [agents]);
+  const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents ?? []), [agents]);
   const skillSuggestions = useMemo(
     () =>
       buildSkillSuggestions(
@@ -430,14 +421,14 @@ export function SlashCommandPlugin({
 
   const panelSections = useSlashCommandMentionPanelSections(
     intl,
-    commands.length,
+    commands?.length ?? 0,
     filteredCommandSuggestions,
     filteredSkillSuggestions,
     skillsLoading,
     skillsError,
     filteredSubagentSuggestions,
-    subagentsLoading,
-    subagentsError,
+    skillsLoading,
+    null,
   );
 
   if (!isOpen || !container) {

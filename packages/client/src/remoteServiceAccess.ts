@@ -16,6 +16,7 @@ import {
   IConversationShareService,
   IFileWatcherService,
   IModelSelectionService,
+  INekWorkspaceConfigService,
   IClientScenesService,
   ISkillsService,
   ISkillSyncService,
@@ -53,6 +54,7 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly conversationShareService: IConversationShareService;
   readonly fileWatcherService: IFileWatcherService;
   readonly modelSelectionService: IModelSelectionService;
+  readonly nekWorkspaceConfigService: INekWorkspaceConfigService;
   readonly clientScenesService: IClientScenesService;
   readonly skillsService: ISkillsService;
   readonly skillSyncService: ISkillSyncService;
@@ -117,6 +119,9 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.modelSelectionService = ProxyChannel.toService<IModelSelectionService>(
       channelClient.getChannel(IModelSelectionService.channelName),
+    );
+    this.nekWorkspaceConfigService = ProxyChannel.toService<INekWorkspaceConfigService>(
+      channelClient.getChannel(INekWorkspaceConfigService.channelName),
     );
     this.clientScenesService = ProxyChannel.toService<IClientScenesService>(
       channelClient.getChannel(IClientScenesService.channelName),

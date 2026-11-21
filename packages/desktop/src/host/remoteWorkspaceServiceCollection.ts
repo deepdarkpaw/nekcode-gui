@@ -15,6 +15,7 @@ import {
   IConversationShareService,
   IFileWatcherService,
   IModelSelectionService,
+  INekWorkspaceConfigService,
   IClientScenesService,
   ISkillsService,
   ISkillSyncService,
@@ -211,6 +212,7 @@ export function createRemoteWorkspaceServiceCollection(params: {
     .register(IFileWatcherService, params.connectionServices.fileWatcherService)
     // Model facts belong to nek on the target machine, never the local desktop.
     .register(IModelSelectionService, params.connectionServices.modelSelectionService)
+    .register(INekWorkspaceConfigService, params.connectionServices.nekWorkspaceConfigService)
     .register(IClientScenesService, createClientScenesService())
     // 远端 workspace 的项目级 skills/plugins/commands 位于 SSH/Docker 文件系统。
     // 这里必须透出远端服务，避免本机服务拿远端 workspacePath 去本机目录扫描。

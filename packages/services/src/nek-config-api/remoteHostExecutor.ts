@@ -76,6 +76,7 @@ const REMOTE_PROBE_SCRIPT = [
 const REMOTE_SCRIPT = String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
 const [operation, ...values] = JSON.parse(Buffer.from(process.argv[1], "base64").toString("utf8"));
 const write = (value) => process.stdout.write(JSON.stringify({ ok: true, value }));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -123,6 +124,38 @@ function release(target) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       try { fs.writeFileSync(temporary, Buffer.from(values[1], "base64")); fs.renameSync(temporary, target); }
       catch (error) { try { fs.unlinkSync(temporary); } catch {} throw error; }
+      write(null);
+    } else if (operation === "resourceKind") {
+      try {
+        const info = fs.lstatSync(values[0]);
+        write(info.isDirectory() ? "directory" : info.isFile() ? "file" : "other");
+      } catch (error) { if (ignoredMissing(error)) write(null); else throw error; }
+    } else if (operation === "resourceRead") {
+      const [target, limit] = values;
+      const maxBytes = Number(limit);
+      const file = fs.openSync(target, "r");
+      try {
+        const buffer = Buffer.alloc(maxBytes + 1);
+        let size = 0;
+        while (size < buffer.length) {
+          const count = fs.readSync(file, buffer, size, buffer.length - size, size);
+          if (count === 0) break;
+          size += count;
+        }
+        if (size > maxBytes) throw new Error("Resource exceeds " + (maxBytes / 1024) + " KB: " + target);
+        write({ content: buffer.toString("utf8", 0, size) });
+      } finally { fs.closeSync(file); }
+    } else if (operation === "resourceWrite") {
+      const [target, content, createOnly] = values;
+      const temporary = target + "." + randomUUID() + ".tmp";
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(temporary, Buffer.from(content, "base64"), { flag: "wx" });
+      try {
+        if (createOnly === "true") fs.linkSync(temporary, target);
+        else fs.renameSync(temporary, target);
+      } finally {
+        try { fs.unlinkSync(temporary); } catch (error) { if (!ignoredMissing(error)) throw error; }
+      }
       write(null);
     } else if (operation === "stat") {
       try { const info = fs.statSync(values[0]); write({ mtimeMs: info.mtimeMs, size: info.size, isDirectory: info.isDirectory() }); }
@@ -320,6 +353,24 @@ export function createRemoteNekConfigHostExecutor(
     readFile,
     writeFileAtomic,
     stat: async (path) => asStat(await run("stat", [path])),
+    resourceEntryKind: async (path) => {
+      const result = await run("resourceKind", [path]);
+      if (result === "directory" || result === "file" || result === "other" || result === null)
+        return result;
+      throw new Error("远端资源文件类型无效");
+    },
+    readResourceFile: async (path, maxBytes) => {
+      const content = asContent(await run("resourceRead", [path, String(maxBytes)]));
+      if (content === null) throw new Error(`Missing resource: ${path}`);
+      return content;
+    },
+    writeResourceFile: async (path, content, createOnly) => {
+      await run("resourceWrite", [
+        path,
+        Buffer.from(content, "utf8").toString("base64"),
+        String(createOnly),
+      ]);
+    },
     listDir: async (path) => asDirEntries(await run("listDir", [path])),
     remove: async (path) => {
       await run("remove", [path]);
