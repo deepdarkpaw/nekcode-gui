@@ -40,10 +40,10 @@ export const ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME = ".nek/gui-server";
 export const ZCODE_APP_CONFIG_SUBDIR_NAME = "v2";
 
 /** 工作区文件搜索忽略规则文件名。 */
-export const ZCODE_WORKSPACE_IGNORE_FILE_NAME = ".zcodiumignore";
+export const ZCODE_WORKSPACE_IGNORE_FILE_NAME = ".nekignore";
 
-/** 插件清单目录名，即 `<plugin>/.zcodium-plugin/plugin.json`。 */
-export const ZCODE_PLUGIN_MANIFEST_DIR_NAME = ".zcodium-plugin";
+/** 插件清单目录名，即 `<plugin>/.nekcode-plugin/plugin.json`。 */
+export const ZCODE_PLUGIN_MANIFEST_DIR_NAME = ".nekcode-plugin";
 
 /** 插件清单文件名。 */
 export const ZCODE_PLUGIN_MANIFEST_FILE_NAME = "plugin.json";

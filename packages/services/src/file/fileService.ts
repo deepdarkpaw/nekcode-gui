@@ -204,7 +204,7 @@ interface WorkspaceFileIndex {
 }
 
 /**
- * 索引缓存的规则指纹。`.zcodiumignore` 存在时只认它（唯一权威规则源）；
+ * 索引缓存的规则指纹。`.nekignore` 存在时只认它（唯一权威规则源）；
  * 不存在时规则由 `.gitignore` + 内置默认段在内存合成，指纹必须跟随 `.gitignore`，
  * 否则编辑 `.gitignore` 后 60s 内的旧索引会继续用过期规则。
  * 前缀区分两种来源：文件被创建/删除时指纹一定变化。

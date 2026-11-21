@@ -29,7 +29,7 @@ window.exportCalls = { saves: 0, releases: 0 };
 const bytes = Uint8Array.from([80, 75, 0, 255, 1, 2, 3]);
 const descriptor = {
   archiveId: "fixture",
-  suggestedName: "conversation-report.zcodium",
+  suggestedName: "conversation-report.nekcode",
   byteLength: bytes.length,
 };
 const service = {
@@ -47,7 +47,7 @@ const platform = {
     if (window.exportCalls.saves === 1 && outcome === "failure")
       throw new Error("test save failure");
     if (outcome === "download") return saveBrowserFile(request);
-    return { success: true, name: "renamed-by-user.zcodium" };
+    return { success: true, name: "renamed-by-user.nekcode" };
   },
 };
 function Fixture() {

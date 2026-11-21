@@ -94,7 +94,7 @@ try {
           const waitDownload = page.waitForEvent("download");
           await page.keyboard.press("Enter");
           download = await waitDownload;
-          assert.equal(download.suggestedFilename(), "conversation-report.zcodium");
+          assert.equal(download.suggestedFilename(), "conversation-report.nekcode");
           const data = await readFile(await download.path());
           assert.deepEqual([...data], [80, 75, 0, 255, 1, 2, 3]);
         } else {
@@ -111,7 +111,7 @@ try {
         assert.equal(await page.getByTestId("conversation-share-open-browser").count(), 0);
         assert.equal(
           await page.getByTestId("conversation-share-result-title").innerText(),
-          outcome === "download" ? "conversation-report.zcodium" : "renamed-by-user.zcodium",
+          outcome === "download" ? "conversation-report.nekcode" : "renamed-by-user.nekcode",
         );
         const calls = await page.evaluate(() => window.exportCalls);
         assert.equal(calls.saves, outcome === "download" ? 1 : 2);

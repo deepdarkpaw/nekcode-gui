@@ -23,7 +23,6 @@ test("command palette keeps local settings and workspace actions without officia
   );
   const commands = createQuickPickCommands({
     allowOpenWorkspace: true,
-    canOpenCommunity: true,
     isSidebarVisible: true,
     themeTarget: "light",
     shortcuts: { newTask: "", openWorkspace: "", toggleSidebar: "", toggleTerminal: "" },

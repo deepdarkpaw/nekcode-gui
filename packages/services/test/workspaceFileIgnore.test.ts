@@ -13,7 +13,7 @@ import {
 } from "../src/file/workspaceFileIgnore.js";
 
 /**
- * 回归：打开 / 搜索 / 列举 workspace 不能隐式创建 `.zcodiumignore`。
+ * 回归：打开 / 搜索 / 列举 workspace 不能隐式创建 `.nekignore`。
  *
  * Bug 原因：`loadWorkspaceFileSearchIgnoreRules` 在文件缺失时直接落盘（.gitignore 拷贝 /
  * 默认模板），而 list/search 的公共入口每次都调用它，于是用户仓库被写入一个从未保存过的
@@ -89,7 +89,7 @@ async function searchRelativePaths(
   return entries.map((entry) => entry.relativePath);
 }
 
-test("缺失 .zcodiumignore 时 list/search 不创建文件，.gitignore 与内置默认规则仍生效", async () => {
+test("缺失 .nekignore 时 list/search 不创建文件，.gitignore 与内置默认规则仍生效", async () => {
   const fixture = await createFixture({
     ".gitignore": "dist/\n",
     "keep.ts": "export const keep = 1;\n",
@@ -105,7 +105,7 @@ test("缺失 .zcodiumignore 时 list/search 不创建文件，.gitignore 与内�
     const searchHits = await searchRelativePaths(service, fixture.rootPath, "app");
     assert.ok(searchHits.includes("src/app.ts"));
     assert.ok(!searchHits.includes("dist/bundle.js"), ".gitignore 规则必须在搜索路径生效");
-    assert.equal(await fileExists(fixture.ignorePath), false, "搜索不能创建 .zcodiumignore");
+    assert.equal(await fileExists(fixture.ignorePath), false, "搜索不能创建 .nekignore");
 
     const listed = await listRelativePaths(service, fixture.rootPath);
     assert.ok(listed.includes("keep.ts"));
@@ -117,7 +117,7 @@ test("缺失 .zcodiumignore 时 list/search 不创建文件，.gitignore 与内�
     assert.equal(
       await fileExists(fixture.ignorePath),
       false,
-      "列举（含缓存命中路径）不能创建 .zcodiumignore",
+      "列举（含缓存命中路径）不能创建 .nekignore",
     );
 
     // 设置页读取同样只读，并按契约返回 template 预览。
@@ -156,7 +156,7 @@ test("缺失文件时编辑 .gitignore 立即失效索引缓存", async () => {
   }
 });
 
-test("显式 .zcodiumignore 覆盖 .gitignore，且编辑后缓存失效", async () => {
+test("显式 .nekignore 覆盖 .gitignore，且编辑后缓存失效", async () => {
   const fixture = await createFixture({
     ".gitignore": "dist/\n",
     [ignoreFileName]: "# 自定义规则\n",
@@ -168,14 +168,14 @@ test("显式 .zcodiumignore 覆盖 .gitignore，且编辑后缓存失效", async
     const before = await listRelativePaths(service, fixture.rootPath);
     assert.ok(
       before.includes("dist/bundle.js"),
-      "已存在的 .zcodiumignore 是唯一权威规则源，.gitignore 不再参与",
+      "已存在的 .nekignore 是唯一权威规则源，.gitignore 不再参与",
     );
     assert.ok(before.includes("secret.ts"));
 
     await rewriteRuleFile(fixture.ignorePath, "# 自定义规则\ndist/\n");
 
     const after = await listRelativePaths(service, fixture.rootPath);
-    assert.ok(!after.includes("dist/bundle.js"), "编辑 .zcodiumignore 后新规则必须立即生效");
+    assert.ok(!after.includes("dist/bundle.js"), "编辑 .nekignore 后新规则必须立即生效");
     assert.ok(after.includes("secret.ts"), "未命中规则的文件不能被顺带排除");
     assert.ok(await fileExists(fixture.ignorePath), "编辑不能删除用户规则文件");
   } finally {
@@ -183,7 +183,7 @@ test("显式 .zcodiumignore 覆盖 .gitignore，且编辑后缓存失效", async
   }
 });
 
-test("只有设置页保存才创建 .zcodiumignore", async () => {
+test("只有设置页保存才创建 .nekignore", async () => {
   const fixture = await createFixture({
     ".gitignore": "dist/\n",
     "dist/bundle.js": "console.log('dist');\n",

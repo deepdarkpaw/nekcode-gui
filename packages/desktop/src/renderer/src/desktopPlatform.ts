@@ -1,5 +1,5 @@
 import { selectBrowserFileData } from "@zcode/ui";
-import { DesktopCommandIds, buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
+import { buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
 
 export function createDesktopPlatform(options: {
   isLocalDevelopmentRuntime: boolean;
@@ -29,8 +29,6 @@ export function createDesktopPlatform(options: {
     listDockerContainers: () => window.zcode.listDockerContainers(),
     listSSHConfigAliases: () => window.zcode.listSSHConfigAliases(),
     openExternal: (url) => window.zcode.openExternal(url),
-    openCommunity: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenCommunity),
-    canOpenCommunity: (locale) => window.zcode.canOpenCommunity(locale),
     openInFileManager: (path) => window.zcode.openInFileManager(path),
     openExternalFile: (path) => window.zcode.openExternalFile(path),
     notifyRendererReady: () => window.zcode.notifyRendererReady(),

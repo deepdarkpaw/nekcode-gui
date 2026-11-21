@@ -550,12 +550,6 @@ export default {
     { from: "bundled-remote-assets", to: "remote-assets" },
     { from: resolve(workspaceRoot, noticesFileName), to: noticesFileName },
     {
-      // 正式包不能依赖仓库目录读取社区、反馈等内置兜底配置。
-      // 显式放入 resources/config，与主进程的 process.resourcesPath 解析保持一致。
-      from: resolve(workspaceRoot, "config/default.json"),
-      to: "config/default.json",
-    },
-    {
       // 应用图标：打包后放入 resources 目录，主进程通过 process.resourcesPath 加载
       from: "build/icon.png",
       to: "icon.png",

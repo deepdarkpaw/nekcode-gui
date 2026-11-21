@@ -112,8 +112,6 @@ declare global {
       onTaskNotificationClick(handler: (taskId: string) => void): () => void;
       /** 打开外部 URL */
       openExternal(url: string): void;
-      /** 查询当前语言下是否存在可用的用户社群入口 */
-      canOpenCommunity(locale: Locale): Promise<boolean>;
       /** 在系统文件管理器中打开指定路径 */
       openInFileManager(path: string): Promise<{ success: boolean; error?: string }>;
       /** 使用系统默认应用打开本地文件 */
@@ -122,7 +120,7 @@ declare global {
       notifyRendererReady(): void;
       /** 触发任务状态对应的系统通知 */
       showTaskNotification(payload: TaskNotificationPayload): void;
-      /** 导出日志：打包 ~/.zcodium/v2 及外部 agent 日志为 zip 并在 Finder 中显示 */
+      /** 导出日志：打包 ~/.nek/gui/v2 及外部 agent 日志为 zip 并在 Finder 中显示 */
       exportLogs(): Promise<{
         success: boolean;
         path?: string;

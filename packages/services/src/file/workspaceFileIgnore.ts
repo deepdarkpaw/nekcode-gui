@@ -8,7 +8,7 @@ import type { ServiceLogger } from "../logger/serviceLogger.js";
 /**
  * workspace 文件搜索忽略的单一真相源。
  *
- * `.zcodiumignore`（workspace root，gitignore 语法）是搜索索引的唯一规则文件。
+ * `.nekignore`（workspace root，gitignore 语法）是搜索索引的唯一规则文件。
  * 读写契约：
  * - 打开 / 搜索 / 列举 / 设置页读取都只读，绝不隐式创建或改写文件；
  * - 文件不存在是正常状态（不是警告、不是 fail-open 降级）：规则在内存里按
@@ -22,14 +22,14 @@ import type { ServiceLogger } from "../logger/serviceLogger.js";
  */
 
 export const WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME = ZCODE_WORKSPACE_IGNORE_FILE_NAME;
-/** root `.gitignore`：`.zcodiumignore` 缺失时内存规则的来源（文件保持不变）。 */
+/** root `.gitignore`：`.nekignore` 缺失时内存规则的来源（文件保持不变）。 */
 export const WORKSPACE_FILE_GITIGNORE_FILE_NAME = ".gitignore";
 
 type WorkspaceFileIgnoreLogger = Pick<ServiceLogger, "warn">;
 
 /**
  * 规则来源（仅诊断用，不参与匹配）：
- * - file：`.zcodiumignore` 已存在，内容即唯一真相源；
+ * - file：`.nekignore` 已存在，内容即唯一真相源；
  * - memory-gitignore / memory-template：文件缺失时的内存合成规则（缺失是正常状态，不写盘；
  *   来自 `.gitignore` 拷贝或内置默认模板）；
  * - fallback-gitignore / fallback-builtin：读取失败后的可见降级（伴随 warn 日志）。
@@ -49,7 +49,7 @@ interface WorkspaceFileSearchIgnoreRules {
 interface WorkspaceFileSearchIgnoreContent {
   content: string;
   /**
-   * file：.zcodiumignore 已存在；template：尚未创建，content 是保存后将落盘的初始内容预览。
+   * file：.nekignore 已存在；template：尚未创建，content 是保存后将落盘的初始内容预览。
    * 搜索/列举同样按 template 内容在内存里剪枝，但不会因此创建文件。
    */
   source: "file" | "template";
@@ -92,7 +92,7 @@ const BUILTIN_IGNORE_LINES = [
 ];
 
 const TEMPLATE_HEADER = [
-  "# ZCode 工作区文件搜索忽略规则（.zcodiumignore）",
+  "# nekcode 工作区文件搜索忽略规则（.nekignore）",
   "# 语法与 .gitignore 一致，只影响 ZCode 的 @ 文件候选 / Command Center / 文件树搜索，",
   "# 不影响文件树浏览、上传或 Agent 文件访问。",
   "# 修改 .gitignore 不会自动同步到本文件；可在设置页「从 .gitignore 同步」。",
@@ -138,7 +138,7 @@ function buildBuiltinDefaultsSection(gitignoreContent: string | null): string {
 }
 
 /**
- * 构建 `.zcodiumignore` 初始内容：.gitignore 规则拷贝 + 双标记分区（默认排除段 / 自定义区）。
+ * 构建 `.nekignore` 初始内容：.gitignore 规则拷贝 + 双标记分区（默认排除段 / 自定义区）。
  * 附加默认段是行为兼容要求：.gitignore 未声明 node_modules 等目录的仓库若仅严格拷贝，
  * 依赖目录会被整棵放开扫描（再次出现全仓扫描的性能问题）；默认段随文件
  * 交给用户编辑，删除即放开，维持"单一真相源、无代码级并集"的承诺。
@@ -299,7 +299,7 @@ async function atomicWriteIgnoreFile(path: string, content: string): Promise<voi
 
 /**
  * 读取失败时的可见降级链：`.gitignore` 内容 → 内置默认规则。
- * 只有「.zcodiumignore 读取失败」才走这里；文件不存在不算降级（见 load 主流程）。
+ * 只有「.nekignore 读取失败」才走这里；文件不存在不算降级（见 load 主流程）。
  */
 async function loadFallbackIgnoreRules(
   rootPath: string,
@@ -342,7 +342,7 @@ async function loadFallbackIgnoreRules(
 }
 
 /**
- * 扫描前加载 `.zcodiumignore` 规则。只读，绝不隐式写盘：
+ * 扫描前加载 `.nekignore` 规则。只读，绝不隐式写盘：
  * - 文件存在 → 内容原样生效（唯一权威规则源）；
  * - 文件缺失（正常状态）→ 内存合成「保存后才会落盘的初始内容」：
  *   `.gitignore` 拷贝 + 内置默认段；不创建、不改名、不做自动迁移；
@@ -451,7 +451,7 @@ export async function transformWorkspaceFileSearchIgnore(
 }
 
 /**
- * 设置页保存：唯一允许创建/改写 `.zcodiumignore` 的入口（原子写整个文件），
+ * 设置页保存：唯一允许创建/改写 `.nekignore` 的入口（原子写整个文件），
  * 下次扫描读取即为新内容。
  */
 export async function writeWorkspaceFileSearchIgnore(

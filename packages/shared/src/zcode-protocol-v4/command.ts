@@ -132,10 +132,6 @@ export const commandPayloadSchemas = {
     workspaceMode: z.enum(["preserve", "rewind"]).optional(),
   }),
   retryTurn: z.object({ target: conversationRowTargetSchema }),
-  setAssistantFeedback: z.object({
-    target: conversationRowTargetSchema,
-    feedback: z.enum(["like", "dislike"]).nullable(),
-  }),
   sendQueuedNow: z.object({ queueItemId: z.string() }),
   editQueueItem: z.object({ queueItemId: z.string(), newText: z.string() }),
   // beforeQueueItemId = null → 移到队尾。
@@ -219,7 +215,6 @@ export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Se
   "forkUserMessage",
   "editUserQuery",
   "retryTurn",
-  "setAssistantFeedback",
   "sendQueuedNow",
   "editQueueItem",
   "reorderQueueItem",
@@ -237,7 +232,6 @@ export const ROW_TARGETING_COMMANDS: ReadonlySet<CommandType> = new Set([
   "forkUserMessage",
   "editUserQuery",
   "retryTurn",
-  "setAssistantFeedback",
 ]);
 
 // ── 信封 ──

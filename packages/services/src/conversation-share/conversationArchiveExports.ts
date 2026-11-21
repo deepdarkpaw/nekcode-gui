@@ -57,7 +57,7 @@ export class ConversationArchiveExports {
       return {
         archiveId: id,
         byteLength: bytes.length,
-        suggestedName: `conversation-${name}.zcodium`,
+        suggestedName: `conversation-${name}.nekcode`,
       };
     } catch (error) {
       this.remove(id);

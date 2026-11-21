@@ -1,2 +1,2 @@
-// 产品文档入口统一收口，避免不同菜单跳到不一致的文档站。
-export const ZCODE_PRODUCT_DOCS_URL = "https://github.com/axiom-desu/ZCodium#readme";
+// 产品文档入口统一收口：GUI 与 CLI 是同一个 nek，共用 nek 的用户手册。
+export const ZCODE_PRODUCT_DOCS_URL = "https://deepdarkpaw.github.io/nekcode/gui/";

@@ -60,7 +60,7 @@ test("explicit user OTLP export retains measurements and random association with
   const body = JSON.parse(calls[0].init.body);
   const resource = body.resourceLogs[0];
   assert.deepEqual(resource.resource.attributes, [
-    { key: "service.name", value: { stringValue: "ZCodium" } },
+    { key: "service.name", value: { stringValue: "nekcode" } },
   ]);
   const record = resource.scopeLogs[0].logRecords[0];
   assert.equal(record.traceId, traceId);

@@ -16,7 +16,6 @@ import {
   type DesktopCommandId,
   type Locale,
 } from "@zcode/shared";
-import { readDesktopHelpConfig } from "./desktopHelpConfig.js";
 import { showAboutDialog } from "./about.js";
 import { checkForUpdateMenuClick } from "./autoUpdater.js";
 import { syncWindowControlsOverlayForZoomLevel } from "./desktopWindowButtonPosition.js";
@@ -96,9 +95,9 @@ async function clearAllDataAndRelaunch(options: {
   const { rm } = await import("node:fs/promises");
   try {
     await rm(options.credentialsDir, { recursive: true, force: true });
-    options.logger.info("[clear-all-data] deleted ~/.zcodium/v2");
+    options.logger.info("[clear-all-data] deleted ~/.nek/gui/v2");
   } catch (error) {
-    options.logger.error("[clear-all-data] failed to delete ~/.zcodium/v2:", error);
+    options.logger.error("[clear-all-data] failed to delete ~/.nek/gui/v2:", error);
   }
 
   for (const win of BrowserWindow.getAllWindows()) {
@@ -121,34 +120,6 @@ async function clearAllDataAndRelaunch(options: {
 
   app.relaunch();
   app.exit(0);
-}
-
-async function readLocalHelpConfig(logger: { warn: (...args: unknown[]) => void }) {
-  try {
-    return await readDesktopHelpConfig({
-      isPackaged: app.isPackaged,
-      appPath: app.getAppPath(),
-      resourcesPath: process.resourcesPath,
-    });
-  } catch (error) {
-    logger.warn("[help] failed to read bundled config:", error);
-    return undefined;
-  }
-}
-
-export async function resolveCommunityUrl(options: {
-  locale: Locale;
-  logger: { warn: (...args: unknown[]) => void };
-}): Promise<string | undefined> {
-  return (await readLocalHelpConfig(options.logger))?.community_urls?.[options.locale];
-}
-
-async function openCommunity(
-  locale: Locale,
-  logger: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void },
-) {
-  const communityUrl = await resolveCommunityUrl({ locale, logger });
-  if (communityUrl) await shell.openExternal(communityUrl);
 }
 
 async function promptCustomZCodeEndpoint(
@@ -464,9 +435,6 @@ export async function executeDesktopCommand(options: {
       return;
     case DesktopCommandIds.RelaunchApp:
       await options.onRelaunchApp();
-      return;
-    case DesktopCommandIds.OpenCommunity:
-      await openCommunity(options.currentApplicationLocale, options.logger);
       return;
     case DesktopCommandIds.ExportLogs:
       await exportLogs();

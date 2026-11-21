@@ -181,7 +181,7 @@ test("failed or uncertain commit preserves attachments and retry uses the same s
       const input = { archiveId: "handle", clientRequestId: "request" };
       setFailure(mode);
       await assert.rejects(importer().import(decoded, sha, input, "first"));
-      assert.equal((await readdir(join(root, ".zcodium-share"))).length, 1);
+      assert.equal((await readdir(join(root, ".nekcode-share"))).length, 1);
       const original = creates[0];
       assert.deepEqual(
         await readFile(
@@ -298,7 +298,7 @@ test("independent Host owners serialize imports and deletion allows a fresh sess
     );
     assert.notEqual(third.sessionId, results[0].sessionId);
     assert.equal(creates.length, 2);
-    assert.equal((await readdir(join(root, ".zcodium-share"))).length, 1);
+    assert.equal((await readdir(join(root, ".nekcode-share"))).length, 1);
   });
 });
 
@@ -335,7 +335,7 @@ test("remote destination falls back to local owner without leaking identity; dis
 test("untrusted receipts and changed recovery files cannot authorize deletion or a second commit", async () => {
   await fixture(async ({ root, creates, importer, setFailure }) => {
     const sha = hash("untrusted");
-    const directory = join(root, ".zcodium-share", "archive-" + sha);
+    const directory = join(root, ".nekcode-share", "archive-" + sha);
     await mkdir(directory, { recursive: true });
     await writeFile(join(directory, "keep.txt"), "user content");
     await assert.rejects(

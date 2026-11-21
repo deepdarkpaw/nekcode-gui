@@ -140,7 +140,7 @@ export class ConversationArchiveImporter {
         "Invalid conversation archive identity",
       );
     const shareId = `archive-${sha}`;
-    const shareRoot = join(workspacePath, ".zcodium-share");
+    const shareRoot = join(workspacePath, ".nekcode-share");
     await mkdir(shareRoot, { recursive: true });
     if (!(await lstat(shareRoot)).isDirectory())
       throw new ConversationShareServiceError(
@@ -161,8 +161,8 @@ export class ConversationArchiveImporter {
     operationId: string,
   ): Promise<ImportConversationShareResult> {
     const shareId = `archive-${sha}`;
-    const importRoot = join(workspacePath, ".zcodium-share", shareId);
-    const receiptPath = join(importRoot, ".zcodium-share-import.json");
+    const importRoot = join(workspacePath, ".nekcode-share", shareId);
+    const receiptPath = join(importRoot, ".nekcode-share-import.json");
     let receipt: Receipt | undefined;
     try {
       const entry = await lstat(importRoot);
@@ -237,7 +237,7 @@ export class ConversationArchiveImporter {
         mimeType: artifact.mime_type,
         sha256: artifact.sha256,
         name,
-        workspaceRelativePath: `.zcodium-share/${shareId}/shared-artifacts/${name}`,
+        workspaceRelativePath: `.nekcode-share/${shareId}/shared-artifacts/${name}`,
       };
     });
     const storedConversation = JSON.stringify({

@@ -134,9 +134,9 @@ export function createDiagnosticsExporter(
               resourceLogs: [
                 {
                   resource: {
-                    attributes: [{ key: "service.name", value: { stringValue: "ZCodium" } }],
+                    attributes: [{ key: "service.name", value: { stringValue: "nekcode" } }],
                   },
-                  scopeLogs: [{ scope: { name: "zcodium.diagnostics", version: "1" }, logRecords }],
+                  scopeLogs: [{ scope: { name: "nekcode.diagnostics", version: "1" }, logRecords }],
                 },
               ],
             }),

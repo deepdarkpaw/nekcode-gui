@@ -1209,7 +1209,7 @@ export class ConversationShareService implements IConversationShareService {
   /**
    * 按 contextId 找回导入时落盘的公开 rows。
    *
-   * 目录名用的是 share_id 而不是 contextId（二者不等价），所以扫 .zcodium-share/ 下各
+   * 目录名用的是 share_id 而不是 contextId（二者不等价），所以扫 .nekcode-share/ 下各
    * importRoot 并比对文件内的 contextId —— 不额外维护索引，历史导入也能被读到。
    * 内容来自磁盘，属跨存储边界，必须过 schema 再交给渲染层。
    */
@@ -1217,7 +1217,7 @@ export class ConversationShareService implements IConversationShareService {
     workspacePath: string;
     contextId: string;
   }): Promise<ImportedConversationShare | null> {
-    const shareRoot = join(input.workspacePath, ".zcodium-share");
+    const shareRoot = join(input.workspacePath, ".nekcode-share");
     let entries: Dirent[];
     try {
       entries = await readdir(shareRoot, { withFileTypes: true });

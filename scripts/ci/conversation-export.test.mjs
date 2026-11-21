@@ -17,7 +17,7 @@ test("exports are bounded, connection scoped, expire and clean up failed produce
     other = Symbol();
   const bytes = Buffer.alloc(600_000, 42);
   const first = await exports.create(owner, "CON:/report. ", async () => bytes);
-  assert.match(first.suggestedName, /^conversation-.+\.zcodium$/);
+  assert.match(first.suggestedName, /^conversation-.+\.nekcode$/);
   assert.equal(first.byteLength, bytes.length);
   assert.throws(() => exports.read(other, first.archiveId, 0));
   assert.throws(() => exports.read(owner, first.archiveId, -1));
@@ -230,18 +230,18 @@ test("native data save atomically replaces files and leaves no staging directory
   );
   const directory = await mkdtemp(join(tmpdir(), "zcodium-save-"));
   try {
-    const target = join(directory, "report.zcodium");
+    const target = join(directory, "report.nekcode");
     await writeFile(target, "previous");
     const bytes = Buffer.alloc(51 * 1024 * 1024, 37);
     await writeSavedFile(target, bytes);
     assert.deepEqual(await readFile(target), bytes);
-    assert.deepEqual(await readdir(directory), ["report.zcodium"]);
+    assert.deepEqual(await readdir(directory), ["report.nekcode"]);
     const blocked = join(directory, "blocked");
     await mkdir(blocked);
     await writeFile(join(blocked, "keep"), "old data");
     await assert.rejects(writeSavedFile(blocked, Buffer.from("new")));
     assert.equal(await readFile(join(blocked, "keep"), "utf8"), "old data");
-    assert.deepEqual((await readdir(directory)).sort(), ["blocked", "report.zcodium"]);
+    assert.deepEqual((await readdir(directory)).sort(), ["blocked", "report.nekcode"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

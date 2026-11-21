@@ -2678,29 +2678,6 @@ export function SessionPane({
     [dispatchRetryTurn],
   );
 
-  const handleAssistantFeedback = useCallback(
-    async (
-      target: ConversationRowTarget,
-      feedback: "like" | "dislike" | null,
-    ): Promise<boolean> => {
-      const current = snapshotRef.current;
-      if (!sessionId || current === null) return false;
-      const ack = await dispatchCommand(
-        "setAssistantFeedback",
-        { target, feedback },
-        sessionId,
-        current.revision,
-        current.logEpoch,
-      );
-      const accepted = ack.status === "accepted" || ack.status === "duplicate";
-      if (!accepted) {
-        logger.warn(`[v4-pane] assistant 反馈被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-      }
-      return accepted;
-    },
-    [dispatchCommand, sessionId],
-  );
-
   const handleDeleteQueueItem = useCallback(
     (queueItemId: string) => {
       const current = snapshotRef.current;
@@ -3986,9 +3963,6 @@ export function SessionPane({
               rowContext={rowContext}
               onFork={forkActionsEnabled ? handleFork : undefined}
               onRetry={retryActionsEnabled ? handleRetry : undefined}
-              onFeedbackChange={
-                !readOnly && !selectionSideChat && sessionId ? handleAssistantFeedback : undefined
-              }
               onEdit={editActionsEnabled ? handleEdit : undefined}
               canLoadOlder={timelineSnapshot ? hasOlderRows(timelineSnapshot) : false}
               loadingOlder={timelineSnapshot ? state.loadingOlder : false}

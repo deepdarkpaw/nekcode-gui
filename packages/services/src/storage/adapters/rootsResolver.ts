@@ -1,6 +1,6 @@
 import { ZCODE_USER_DATA_DIR_NAME } from "@zcode/shared";
 /**
- * 数据根解析：R1 = 家目录下的 .zcodium（永远存在），R2 = 自定义数据存储路径下的 .zcodium（仅当设置了且 ≠ 家目录）。
+ * 数据根解析：R1 = 家目录下的 .nek/gui（永远存在），R2 = 自定义数据存储路径下的 .nek/gui（仅当设置了且 ≠ 家目录）。
  * 路径来源由调用方注入（desktop host 传 homedir 与 getDataBaseDir），模块内不读环境变量。
  */
 import { join, resolve } from "node:path";

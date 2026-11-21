@@ -21,7 +21,6 @@ import {
 import { getInstalledEditors } from "./editors.js";
 import { getApplicationIcon } from "./applicationIcons.js";
 import { exportLogs } from "./exportLogs.js";
-import { resolveCommunityUrl } from "./desktopCommandHandlers.js";
 import { openInEditor } from "./openInEditor.js";
 import {
   openResourceManager,
@@ -248,21 +247,6 @@ export function registerPlatformIpcHandlers(options: {
   ipcMain.handle(PlatformChannels.OpenInFileManager, async (_event, rawPath: string) =>
     openPathInFileManager(rawPath, options.logger),
   );
-
-  ipcMain.handle(PlatformChannels.CanOpenCommunity, async (_event, locale: unknown) => {
-    const result = localeSchema.safeParse(locale);
-    if (!result.success) {
-      options.logger.warn("[community] invalid locale:", formatZodError(result.error));
-      return false;
-    }
-
-    const communityUrl = await resolveCommunityUrl({
-      locale: result.data,
-      logger: options.logger,
-    });
-
-    return typeof communityUrl === "string" && communityUrl.length > 0;
-  });
 
   ipcMain.handle(
     PlatformChannels.AcknowledgePostUpdateReleaseNotes,

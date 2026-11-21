@@ -1,5 +1,5 @@
 export const OPENROUTER_ATTRIBUTION_HEADERS = {
-  "X-OpenRouter-Title": "ZCodium",
+  "X-OpenRouter-Title": "nekcode",
   "X-OpenRouter-Categories": "programming-app",
 } as const;
 

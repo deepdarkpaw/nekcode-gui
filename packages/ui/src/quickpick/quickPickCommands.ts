@@ -1,6 +1,5 @@
 export type QuickPickCommandIcon =
   | "book"
-  | "community"
   | "diff"
   | "folder"
   | "message"
@@ -48,7 +47,6 @@ interface QuickPickCommandHandlers {
   openSkillsSettings: () => void;
   openMcpSettings: () => void;
   switchTheme: () => void;
-  openCommunity: () => void | Promise<void>;
   openProductDocs: () => void | Promise<void>;
   toggleSidebar: () => void;
   toggleTerminal: () => void;
@@ -58,7 +56,6 @@ interface QuickPickCommandHandlers {
 
 interface CreateQuickPickCommandsOptions {
   allowOpenWorkspace: boolean;
-  canOpenCommunity: boolean;
   isSidebarVisible: boolean;
   supportsTerminal?: boolean;
   supportsReview?: boolean;
@@ -74,7 +71,6 @@ interface CreateQuickPickCommandsOptions {
 
 export function createQuickPickCommands({
   allowOpenWorkspace,
-  canOpenCommunity,
   isSidebarVisible,
   supportsTerminal = true,
   supportsReview = true,
@@ -180,17 +176,6 @@ export function createQuickPickCommands({
       run: handlers.openMcpSettings,
     },
   ];
-
-  if (canOpenCommunity) {
-    commands.push({
-      id: "community",
-      sectionId: "app",
-      titleId: "quickPick.command.community",
-      icon: "community",
-      keywords: ["community", "users", "chat", "用户社群", "社群"],
-      run: handlers.openCommunity,
-    });
-  }
 
   commands.push({
     id: "product-docs",

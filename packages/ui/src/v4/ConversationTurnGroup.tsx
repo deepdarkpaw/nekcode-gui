@@ -50,11 +50,7 @@ import {
 import { ConversationAgentToolCallRow } from "@/v4/ConversationAgentToolCallRow.js";
 import { ConversationFileSummaryPanel } from "@/v4/ConversationFileSummaryPanel.js";
 import { ConversationAssistantTextActions } from "@/v4/ConversationRowView.js";
-import { readAssistantFeedback } from "@/v4/ConversationRowView.js";
-import type {
-  AssistantFeedbackHandler,
-  EditWorkspaceRewindAvailability,
-} from "@/v4/ConversationRowView.js";
+import type { EditWorkspaceRewindAvailability } from "@/v4/ConversationRowView.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";
 import type {
   AssistantWorkRow,
@@ -72,7 +68,6 @@ interface ConversationTurnGroupProps {
   context: ConversationRowRenderContext;
   onFork?: (target: ConversationRowTarget) => void;
   onRetry?: (target: ConversationRowTarget) => void;
-  onFeedbackChange?: AssistantFeedbackHandler;
   onEdit?: (
     target: ConversationRowTarget,
     newText: string,
@@ -719,7 +714,6 @@ function ConversationTurnGroupImpl({
   context,
   onFork,
   onRetry,
-  onFeedbackChange,
   onEdit,
   shareSelection,
 }: ConversationTurnGroupProps) {
@@ -965,13 +959,9 @@ function ConversationTurnGroupImpl({
             // assistant text 内联渲染，会插到 summary 前面，读起来像 summary 不是本轮收尾。
             <ConversationAssistantTextActions
               rowId={latestAssistantTextRow.rowId}
-              entityId={latestAssistantTextRow.entityId}
               text={assistantCopyText}
               createdAt={latestAssistantTextRow.createdAt}
-              feedback={readAssistantFeedback(latestAssistantTextRow)}
-              sessionId={context.sessionId}
               onRetry={canRetryLatestAssistant ? onRetry : undefined}
-              onFeedbackChange={onFeedbackChange}
               hookInvocations={unit.hookInvocations}
               turnId={unit.turnId}
               className="opacity-0 transition-opacity group-hover/assistant-turn:opacity-100 focus-within:opacity-100"

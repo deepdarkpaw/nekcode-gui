@@ -128,7 +128,7 @@ try {
           await (
             await chooser
           ).setFiles({
-            name: "conversation.zcodium",
+            name: "conversation.nekcode",
             mimeType: "application/octet-stream",
             buffer: Buffer.from([80, 75, 0, 255, 42]),
           });
@@ -185,7 +185,7 @@ try {
     await (
       await chooser
     ).setFiles({
-      name: "conversation.zcodium",
+      name: "conversation.nekcode",
       mimeType: "application/octet-stream",
       buffer: Buffer.from([80, 75, 42]),
     });

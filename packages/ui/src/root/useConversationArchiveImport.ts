@@ -219,7 +219,7 @@ export function useConversationArchiveImport(options: Options) {
     busyRef.current = true;
     setBusy(true);
     void platform
-      .selectFileData({ accept: ".zcodium", maxBytes: CONVERSATION_ARCHIVE_LIMITS.archiveBytes })
+      .selectFileData({ accept: ".nekcode", maxBytes: CONVERSATION_ARCHIVE_LIMITS.archiveBytes })
       .then(async (file) => {
         if (generation.current !== owner) return;
         if (file) await runImport(file.data, input);

@@ -843,7 +843,6 @@ export const zcodePersistedMessageSchema = z.object({
   // 导致新消息结束后 UI 仍然只能看到“Worked”。这里补上字段以保留持久化值。
   durationMs: z.number().int().nonnegative().optional(),
   interrupted: z.boolean().optional(),
-  feedback: z.enum(["like", "dislike"]).optional(),
   attachments: z.array(zcodePromptAttachmentSchema).optional(),
   tools: z.array(zcodePersistedToolCallSchema).optional(),
   thought: z.string().optional(),

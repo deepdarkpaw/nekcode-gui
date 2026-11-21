@@ -43,17 +43,17 @@ export function getDataBaseDir(): string {
   return defaultDataBaseDir;
 }
 
-/** {dataBaseDir}/.zcodium */
+/** {dataBaseDir}/.nek/gui */
 export function getZCodeDataRootDir(): string {
   return join(getDataBaseDir(), ZCODE_USER_DATA_DIR_NAME);
 }
 
-/** 非项目对话共享的真实工作目录；默认 ~/.zcodium/workspace/default。 */
+/** 非项目对话共享的真实工作目录；默认 ~/.nek/gui/workspace/default。 */
 export function getConversationWorkspaceDir(): string {
   return join(getZCodeDataRootDir(), "workspace", "default");
 }
 
-/** {dataBaseDir}/.zcodium/v2 */
+/** {dataBaseDir}/.nek/gui/v2 */
 export function getAppConfigDir(): string {
   return join(getZCodeDataRootDir(), "v2");
 }
@@ -117,10 +117,10 @@ function collectWindowsForbiddenAppInstallDirs(
   const candidates = [
     options.appInstallDir,
     readEnvValue(env, ZCODE_WINDOWS_APP_INSTALL_DIR_ENV),
-    programFiles ? win32.join(programFiles, "ZCodium") : null,
-    programFilesX86 ? win32.join(programFilesX86, "ZCodium") : null,
-    programW6432 ? win32.join(programW6432, "ZCodium") : null,
-    localAppData ? win32.join(localAppData, "Programs", "ZCodium") : null,
+    programFiles ? win32.join(programFiles, "nekcode") : null,
+    programFilesX86 ? win32.join(programFilesX86, "nekcode") : null,
+    programW6432 ? win32.join(programW6432, "nekcode") : null,
+    localAppData ? win32.join(localAppData, "Programs", "nekcode") : null,
   ];
   const seen = new Set<string>();
   const result: string[] = [];
@@ -174,7 +174,7 @@ export function getGitCheckpointIndexRootDir(): string {
   return join(getZCodeDataRootDir(), "git-checkpoint-index");
 }
 
-/** ~/.zcodium/v2/tasks-index.sqlite */
+/** ~/.nek/gui/v2/tasks-index.sqlite */
 export function getTasksIndexDatabasePath(): string {
   return join(getAppConfigDir(), "tasks-index.sqlite");
 }
@@ -192,12 +192,12 @@ export function getWorkspaceHash(workspacePath: string, workspaceIdentity?: stri
     .slice(0, 12);
 }
 
-/** ~/.zcodium/v2/sessions/{workspaceHash} */
+/** ~/.nek/gui/v2/sessions/{workspaceHash} */
 function getTaskSessionDir(workspacePath: string, workspaceIdentity?: string): string {
   return join(getAppConfigDir(), "sessions", getWorkspaceHash(workspacePath, workspaceIdentity));
 }
 
-/** ~/.zcodium/v2/sessions/{workspaceHash}/{taskId}.json */
+/** ~/.nek/gui/v2/sessions/{workspaceHash}/{taskId}.json */
 export function getLegacyTaskSessionSnapshotPath(
   workspacePath: string,
   taskId: string,
@@ -206,7 +206,7 @@ export function getLegacyTaskSessionSnapshotPath(
   return join(getTaskSessionDir(workspacePath, workspaceIdentity), `${taskId}.json`);
 }
 
-/** ~/.zcodium/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
+/** ~/.nek/gui/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
 export function getLegacyDeletedTaskSessionSnapshotPath(
   workspacePath: string,
   taskId: string,
@@ -216,7 +216,7 @@ export function getLegacyDeletedTaskSessionSnapshotPath(
 }
 
 /**
- * Copy the .zcodium/v2 data directory from one base dir to another.
+ * Copy the .nek/gui/v2 data directory from one base dir to another.
  * Excludes setting.json and its transient atomic-write siblings — bootstrap
  * state must only live at the default homedir location.
  */

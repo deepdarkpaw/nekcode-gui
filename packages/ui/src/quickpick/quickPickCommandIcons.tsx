@@ -10,14 +10,12 @@ import {
   SettingsIcon,
   SquareTerminalIcon,
   SunIcon,
-  UsersIcon,
   WandSparkles,
 } from "lucide-react";
 import type { QuickPickCommandIcon } from "@/quickpick/quickPickCommands.js";
 
 export const QUICK_PICK_ICON_BY_KIND = {
   book: BookOpenIcon,
-  community: UsersIcon,
   diff: FileDiffIcon,
   folder: FolderOpenIcon,
   message: MessageCirclePlus,

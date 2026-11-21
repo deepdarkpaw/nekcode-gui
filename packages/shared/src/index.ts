@@ -130,7 +130,6 @@ export * from "./oauth.js";
 export * from "./desktopMenu.js";
 export * from "./e2e-test-bridge.js";
 export * from "./remoteAppConfig.js";
-export * from "./helpAppConfig.js";
 export * from "./onboardingRecord.js";
 export * from "./remoteResourcePackages.js";
 export {

@@ -49,7 +49,6 @@ import {
   type TraceId,
   type ZCodeAgentMcpServer,
   type ZCodeApiRetryStatus,
-  type ZCodeAssistantMessageFeedback,
   type ZCodeBackgroundTaskControlItem,
   type ZCodeBackgroundTaskNotificationInfo,
   type ZCodeCancelTaskCommandResult,
@@ -71,7 +70,6 @@ import {
   type ZCodePromptAttachment,
   type ZCodeProvider,
   type ZCodeSessionEvent,
-  type ZCodeSessionFile,
   type ZCodeSessionMode,
   type ZCodeSessionSettingsState,
   type ZCodeSessionStateSnapshot,
@@ -2552,19 +2550,6 @@ export function createZCodeTaskServiceAdapter(
       return snapshot.settings.model.current ?? null;
     },
 
-    async setAssistantMessageFeedback(params): Promise<ZCodeSessionFile> {
-      const snapshot = await service.getTaskSnapshot(params);
-      if (!snapshot) {
-        unsupported("setAssistantMessageFeedback");
-      }
-      const assistantMessages = snapshot.messages.filter((message) => message.role === "assistant");
-      const targetMessage = assistantMessages[params.turnIndex];
-      if (targetMessage) {
-        targetMessage.feedback = params.feedback as ZCodeAssistantMessageFeedback | undefined;
-      }
-      return snapshot;
-    },
-
     async scanImportableClaudeSessions(params: {
       workspacePath?: string;
       workspaceIdentity?: string;
@@ -2773,7 +2758,7 @@ export function createZCodeTaskServiceAdapter(
 
     async getTaskSessionFilePath(params) {
       return {
-        path: `${params.workspacePath}/${params.taskId}.zcodium-session`,
+        path: `${params.workspacePath}/${params.taskId}.nekcode-session`,
         exists: false,
       };
     },

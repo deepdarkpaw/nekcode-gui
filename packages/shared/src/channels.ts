@@ -87,7 +87,7 @@ export const PlatformChannels = {
   SelectFile: "zcode:select-file",
   /** 打开系统多文件选择框 */
   SelectFiles: "zcode:select-files",
-  /** Renderer → Main：写入宿主 ~/.zcodium 临时文本附件 */
+  /** Renderer → Main：写入宿主 ~/.nek/gui 临时文本附件 */
   CreateTempTextAttachment: "zcode:create-temp-text-attachment",
   /** Renderer → Main：通过原生另存为对话框保存文件 */
   SaveFile: "zcode:save-file",
@@ -154,7 +154,7 @@ export const PlatformChannels = {
   SetResourceUsageSamplingActive: "zcode:set-resource-usage-sampling-active",
   /** 打开资源管理器窗口（其他窗口触发） */
   OpenResourceManager: "zcode:open-resource-manager",
-  /** 资源管理器「存储」tab：开始扫描本机 .zcodium 占用（main 持有 StorageService，Worker 线程遍历） */
+  /** 资源管理器「存储」tab：开始扫描本机 .nek/gui 占用（main 持有 StorageService，Worker 线程遍历） */
   StorageStartScan: "zcode:storage-start-scan",
   /** 资源管理器「存储」tab：取消扫描 */
   StorageCancelScan: "zcode:storage-cancel-scan",
@@ -168,8 +168,6 @@ export const PlatformChannels = {
   StorageScanProgress: "zcode:storage-scan-progress",
   /** Renderer → Main：打开外部 URL（用于 OAuth 跳转浏览器） */
   OpenExternal: "zcode:open-external",
-  /** Renderer → Main：查询当前语言下是否存在可用的用户社群入口 */
-  CanOpenCommunity: "zcode:can-open-community",
   /** Renderer → Main：在系统文件管理器中打开路径 */
   OpenInFileManager: "zcode:open-in-file-manager",
   /** Renderer → Main：使用系统默认应用打开本地文件 */
@@ -185,7 +183,7 @@ export const PlatformChannels = {
   TaskNotificationSound: "zcode:task-notification-sound",
   /** Main → Preload：用户点击了系统通知，携带 taskId 让 renderer 跳转到对应任务 */
   TaskNotificationClick: "zcode:task-notification-click",
-  /** Renderer → Main：导出日志（打包 ~/.zcodium/v2 及外部 agent 日志为 zip 并在 Finder 中显示） */
+  /** Renderer → Main：导出日志（打包 ~/.nek/gui/v2 及外部 agent 日志为 zip 并在 Finder 中显示） */
   ExportLogs: "zcode:export-logs",
   /** Renderer → Main：截取当前窗口作为反馈附件 */
   CaptureWindowScreenshot: "zcode:capture-window-screenshot",
@@ -533,10 +531,6 @@ export interface PlatformChannelMap {
   [PlatformChannels.OpenExternal]: {
     request: string;
     response: void;
-  };
-  [PlatformChannels.CanOpenCommunity]: {
-    request: Locale;
-    response: boolean;
   };
   [PlatformChannels.OpenInFileManager]: {
     request: string;

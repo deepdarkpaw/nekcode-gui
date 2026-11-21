@@ -9,7 +9,6 @@ import {
   BookOpenIcon,
   CircleHelpIcon,
   InfoIcon,
-  UsersIcon,
   RefreshCwIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
@@ -47,9 +46,6 @@ export function WorkspaceHelpMenuButton({
     platform,
     intl,
   });
-  const handleOpenCommunity = () => {
-    void platform.openCommunity();
-  };
   const handleOpenResourceManager = () => {
     void platform.executeDesktopCommand(DesktopCommandIds.OpenResourceManager);
   };
@@ -86,10 +82,6 @@ export function WorkspaceHelpMenuButton({
         <DropdownMenuItem onSelect={helpMenuActions.openProductDocs}>
           <BookOpenIcon className="size-4" />
           {intl.formatMessage({ id: "workspaceHeader.help.docs" })}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={handleOpenCommunity}>
-          <UsersIcon className="size-4" />
-          {intl.formatMessage({ id: "workspaceHeader.help.community" })}
         </DropdownMenuItem>
         {/* Windows/Linux 没有原生菜单栏，自绘标题栏箭头菜单也已下线，
             资源管理器只能从这里进；Web 端没有该窗口，不渲染。 */}

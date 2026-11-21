@@ -521,13 +521,6 @@ function assertConversationSharePublicProjection(input: {
           );
         }
       }
-    } else if (row.kind === "assistantText") {
-      if (row.feedback !== undefined) {
-        throwProjectionError(
-          "invalid_conversation",
-          "Conversation public assistant text contains local feedback",
-        );
-      }
     } else if (row.kind === "toolCall") {
       if (!PUBLIC_TOOL_CALL_ID.test(row.toolCallId)) {
         throwProjectionError(
