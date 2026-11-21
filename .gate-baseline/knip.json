@@ -198,10 +198,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000devDependencies\u0000package.json\u0000@release-it/conventional-changelog",
-      "count": 1
-    },
-    {
       "key": "knip\u0000devDependencies\u0000package.json\u0000@tanstack/react-virtual",
       "count": 1
     },
@@ -210,19 +206,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000devDependencies\u0000package.json\u0000conventional-changelog-writer",
-      "count": 1
-    },
-    {
       "key": "knip\u0000devDependencies\u0000package.json\u0000dotenv",
       "count": 1
     },
     {
       "key": "knip\u0000devDependencies\u0000package.json\u0000istanbul-lib-instrument",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000devDependencies\u0000package.json\u0000lint-staged",
       "count": 1
     },
     {
@@ -434,22 +422,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/mcpUserDirectory/index.ts\u0000MCP_SOURCE_DESCRIPTORS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/mcpUserDirectory/index.ts\u0000getSourceDescriptor",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/mcpUserDirectory/types.ts\u0000MCP_SOURCE_DESCRIPTORS",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/mcpUserDirectory/types.ts\u0000getSourceDescriptor",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/desktop/src/main/remoteCredentialSafeStorage.ts\u0000REMOTE_CREDENTIAL_FILE_NAME",
       "count": 1
     },
@@ -463,14 +435,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/fs/atomicFileUtils.ts\u0000atomicWriteJson",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/hooks/workspaceHookConfigMutation.ts\u0000WorkspaceHookMutationError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/hooks/workspaceHookConfigMutation.ts\u0000writeWorkspaceHookConfiguredToggle",
       "count": 1
     },
     {
@@ -626,15 +590,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/controlApi.ts\u0000toCatalogModel",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/copyApi.ts\u0000copyItemKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/documents.ts\u0000readCheckedDocument",
       "count": 1
     },
     {
@@ -682,23 +638,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000NekConfigRuntime",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000apiKeyView",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000copyItemKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000createLocalNekConfigHostExecutor",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/index.ts\u0000createNekControlClient",
       "count": 1
     },
     {
@@ -750,10 +694,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/modelsDocument.ts\u0000BUILTIN_PROVIDER_IDS",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/modelsDocument.ts\u0000apiKeyView",
       "count": 1
     },
@@ -767,10 +707,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/modelsReferences.ts\u0000rewriteModelReference",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/paths.ts\u0000PROJECT_CONFIG_DIR_NAME",
       "count": 1
     },
     {
@@ -802,10 +738,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/runtime.ts\u0000targetKeyOf",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/nek-config-api/settingsApi.ts\u0000validateSettingsPatch",
       "count": 1
     },
@@ -834,10 +766,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/remote-sync/remoteSyncWriteAccess.ts\u0000checkRemoteSyncDirectoriesWriteAccess",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/session/claude-native/claudeNativeSessionImportParser.ts\u0000extractClaudeNativeSessionHeadInfo",
       "count": 1
     },
@@ -850,23 +778,7 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/services/src/skills/skillDiscoveryWalk.ts\u0000SKILL_SCAN_EXCLUDED_DIRECTORY_NAMES",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/services/src/storage/app/scanJob.ts\u0000isAbortError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/subagents/subagentStorage.ts\u0000resolveConfigPath",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/subagents/subagentStorage.ts\u0000resolveUserHomeDir",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/services/src/subagents/subagentStorage.ts\u0000resolveZCodeStorageRoot",
       "count": 1
     },
     {
@@ -971,10 +883,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/hooks/index.ts\u0000useOnboardingRecordService",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/hooks/index.ts\u0000useSkills",
       "count": 1
     },
     {
@@ -1250,10 +1158,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/nek/status/index.ts\u0000NekSubagentTranscriptView",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/nek/status/index.ts\u0000NekTodoPanelView",
       "count": 1
     },
@@ -1283,14 +1187,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/onboarding/NekOnboardingSteps.tsx\u0000OnboardingActionError",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/OnboardingDialog.tsx\u0000shouldAutoScanOnboardingSessions",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/onboarding/OnboardingFlowParts.tsx\u0000OnboardingAgentSettingsStep",
       "count": 1
     },
     {
@@ -1326,39 +1222,11 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/ExternalAgentImportDialog.tsx\u0000McpServersImportDialog",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/RemoteSkillSyncDialog.tsx\u0000RemoteSkillSyncSelectionList",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/RemoteSkillSyncDialog.tsx\u0000shouldToggleRemoteSkillSyncCardSelection",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/RemoteSkillSyncSelectionList.tsx\u0000shouldToggleRemoteSkillSyncCardSelection",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/RemoteSyncActions.tsx\u0000useRemoteSyncDialogIntent",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/NekSettingsContext.tsx\u0000sameTarget",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/mock/mockMcp.ts\u0000projectMcpFile",
       "count": 1
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/modelsDoc.ts\u0000maskApiKey",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/api/nekErrors.ts\u0000isNekConflictError",
       "count": 1
     },
     {
@@ -1438,14 +1306,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/pages/providers/ModelTable.tsx\u0000modelThinkingLevels",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/pages/providers/ProviderDetail.tsx\u0000apiLabelId",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/ui/src/settings/nek/pages/providers/ProviderIdDialogs.tsx\u0000ReferenceList",
       "count": 1
     },
@@ -1471,10 +1331,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/shortcuts/useActionShortcuts.ts\u0000useEffectiveActionBindings",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/store/subagentsStore.ts\u0000refreshLoadedSubagentsStoreForWorkspace",
       "count": 1
     },
     {
@@ -1706,10 +1562,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000scripts/release-it/changelog-writer.mjs\u0000extractCommitBodyBullets",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000scripts/remote-native-search-tools-config.mjs\u0000LEGACY_REMOTE_RIPGREP_ARCHIVE_SHA256_BY_TARGET",
       "count": 1
     },
@@ -1858,18 +1710,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000files\u0000packages/ui/src/settings/SettingsResourceGroupHeader.tsx\u0000packages/ui/src/settings/SettingsResourceGroupHeader.tsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/test/localDiagnostics.test.ts\u0000packages/ui/test/localDiagnostics.test.ts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000packages/ui/test/nonCliAcpRetirement.test.ts\u0000packages/ui/test/nonCliAcpRetirement.test.ts",
-      "count": 1
-    },
-    {
       "key": "knip\u0000files\u0000packages/zcode-server-cli/scripts/verify-remote-ssh-target.mjs\u0000packages/zcode-server-cli/scripts/verify-remote-ssh-target.mjs",
       "count": 1
     },
@@ -1899,10 +1739,6 @@
     },
     {
       "key": "knip\u0000files\u0000scripts/ci/fixtures/conversation-navigator.jsx\u0000scripts/ci/fixtures/conversation-navigator.jsx",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000files\u0000scripts/ci/fixtures/local-context.jsx\u0000scripts/ci/fixtures/local-context.jsx",
       "count": 1
     },
     {
@@ -1958,18 +1794,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/desktop/src/main/mcpUserDirectory/index.ts\u0000McpConfigKeyName",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/desktop/src/main/mcpUserDirectory/index.ts\u0000McpSourceDescriptor",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/desktop/src/main/mcpUserDirectory/types.ts\u0000McpSourceDescriptor",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/desktop/src/main/networkTelemetryAggregator.ts\u0000NetworkErrorKind",
       "count": 1
     },
@@ -2011,10 +1835,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/git/repo/gitCliRepo.ts\u0000GitResolvedRepository",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/hooks/workspaceHookConfigMutation.ts\u0000AtomicWorkspaceHookConfigWriteOptions",
       "count": 1
     },
     {
@@ -2347,14 +2167,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/services/src/nek-config-api/revision.ts\u0000NekRevisionParts",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/nek-config-api/runtime.ts\u0000NekTargetContext",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/services/src/nek-config-api/settingsDocument.ts\u0000NekSettingsDocument",
       "count": 1
     },
     {
@@ -2758,10 +2570,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/NekSubagentTranscriptView.tsx\u0000NekSubagentTranscriptViewProps",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/nek/status/NekTodoPanelView.tsx\u0000NekTodoPanelViewProps",
       "count": 1
     },
@@ -2806,10 +2614,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/index.ts\u0000NekSubagentTranscriptViewProps",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/nek/status/index.ts\u0000NekTodoPanelViewProps",
       "count": 1
     },
@@ -2846,10 +2650,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/useQueueBarController.ts\u0000QueueBarItem",
-      "count": 1
-    },
-    {
       "key": "knip\u0000types\u0000packages/ui/src/nek/status/useRetryBannerController.ts\u0000RetryBannerController",
       "count": 1
     },
@@ -2863,22 +2663,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/nek/status/useSubagentCardController.ts\u0000SubagentCardController",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/useSubagentCardController.ts\u0000SubagentCardView",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/useSubagentTranscriptController.ts\u0000SubagentTranscriptController",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/useSubagentTranscriptController.ts\u0000TranscriptKeyInput",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/nek/status/useSubagentTranscriptController.ts\u0000TranscriptLoadState",
       "count": 1
     },
     {
@@ -2955,14 +2739,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/remote/nek/NekRemotePromptHost.tsx\u0000NekRemotePromptHostProps",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/remote/nek/NekRemoteStatusBanner.tsx\u0000NekRemoteStatusBannerProps",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/remote/nek/connectionStatusController.ts\u0000RemoteConnectionStatusState",
       "count": 1
     },
     {
@@ -3063,10 +2839,6 @@
     },
     {
       "key": "knip\u0000types\u0000packages/ui/src/remote/nek/remotePromptQueueStore.ts\u0000RemotePromptResponder",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000types\u0000packages/ui/src/settings/RemoteSkillSyncDialog.tsx\u0000RemoteSkillSyncRow",
       "count": 1
     },
     {
@@ -3315,14 +3087,6 @@
     },
     {
       "key": "knip\u0000unlisted\u0000scripts/ci/desktop-workspace-deep-link.test.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-context-smoke.mjs\u0000esbuild",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000unlisted\u0000scripts/ci/local-context-smoke.mjs\u0000playwright-core",
       "count": 1
     },
     {

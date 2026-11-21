@@ -128,11 +128,12 @@ const { onboardingRecordFileSchema } = await tsImport(
   "../../packages/shared/src/onboardingRecord.ts",
   import.meta.url,
 );
-test("legacy onboarding records retain preferences without persisting analytics fields", () => {
+test("legacy onboarding records retain preferences without persisting analytics or retired fields", () => {
   const entry = {
     userId: null,
     occupation: "writer",
     interfaceMode: "office",
+    // ZCodium 记忆功能已退役（nek 没有对应设置），旧记录里的该偏好读取时丢弃。
     memoryEnabled: false,
     proactiveSuggestionsEnabled: true,
     completedAt: "2026-09-22",
@@ -143,7 +144,12 @@ test("legacy onboarding records retain preferences without persisting analytics 
     deviceMid: "legacy-device",
     entries: [entry],
   });
-  const { uploadState: _removed, userId: _identity, ...preferences } = entry;
+  const {
+    uploadState: _removed,
+    userId: _identity,
+    memoryEnabled: _retired,
+    ...preferences
+  } = entry;
   assert.deepEqual(JSON.parse(JSON.stringify(parsed)), { version: 1, entries: [preferences] });
 });
 
