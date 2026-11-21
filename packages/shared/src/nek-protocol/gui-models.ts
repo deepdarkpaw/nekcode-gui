@@ -19,7 +19,7 @@ export interface NekModelScopeDiagnostic {
  *
  * `patterns` 是 cwd 生效设置（global ← 受信任 project 深合并）中的 `enabledModels` 原文；
  * `models` 由 nek 自己的 `resolveModelScopeFromModels` 对可用模型解析得到，顺序与 CLI 一致。
- * `patterns` 为空表示未设置范围：CLI 显示全部可用模型，此时 `models` 也为空。
+ * `models` 为空时 CLI 显示全部可用模型，不论是未设置 `patterns` 还是所有模式都未匹配。
  */
 export interface NekModelScopeResult {
   patterns: string[];

@@ -529,7 +529,6 @@ const enUS: Record<string, string> = {
   "chat.toolbar.model.loadFailedRetry": "Models failed to load. Retry",
   "chat.toolbar.model.showAll": "Show all models",
   "chat.toolbar.model.showScoped": "Show CLI model list",
-  "chat.toolbar.model.scopeEmpty": "No available models match the CLI scope",
   "chat.toolbar.model.outsideScope": "Current · outside scope",
   "chat.toolbar.model.loading": "Loading models…",
   "chat.toolbar.model.remoteWaiting": "Waiting for remote models",
@@ -3568,7 +3567,9 @@ const enUS: Record<string, string> = {
   "settings.nek.scoped.keepOne":
     "Keep at least one model. Clearing the scope shows all available models.",
   "settings.nek.scoped.exclusionHint":
-    "With no scope set, unchecking a model lists all the others explicitly. Removing a pattern match replaces the scope with individual models.",
+    "If no models match the scope, unchecking a model lists all the others explicitly. Removing a pattern match replaces the scope with individual models.",
+  "settings.nek.scoped.noMatches":
+    "No models match the CLI model list patterns. Showing all available models.",
   "settings.nek.scoped.useAll": "Use all models",
   "settings.nek.scoped.useAllHint": "To clear the last pattern, choose Use all models.",
   "settings.nek.scoped.readConflict": "The model list changed during the read. Please retry.",

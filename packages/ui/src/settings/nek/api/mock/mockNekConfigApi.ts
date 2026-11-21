@@ -365,6 +365,7 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
       this.copyFailures.clear();
       const machine = this.machineOf(to);
       const before = new Map(machine.models.value.map((provider) => [provider.id, provider]));
+      const availableBefore = models.availableModels(machine);
       const touch = this.touchFor(to);
       const result = settings.copy(
         this.machineOf(from),
@@ -374,6 +375,7 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
         touch,
         (key) => failures.get(key),
       );
+      const scope = mockModelScope(machine, availableBefore, selection.targetCwd);
       for (const provider of machine.models.value) {
         if (
           result.items.some(
@@ -386,6 +388,7 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
             provider,
             selection.targetCwd,
             touch,
+            scope.models,
           );
         }
       }

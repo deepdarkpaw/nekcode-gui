@@ -1,6 +1,7 @@
 import {
   NEK_THINKING_LEVELS,
   type NekCatalogModel,
+  type NekModelScopeEntry,
   type NekModelScopeResult,
   type NekProviderConfig,
   type NekThinkingLevel,
@@ -99,6 +100,7 @@ export function updateMockModelScope(
   after: NekProviderConfig | undefined,
   cwd: string | undefined,
   touch: Touch,
+  scoped: readonly NekModelScopeEntry[] = [],
   previousId?: string,
 ): void {
   const effective = scopeFile(machine, cwd);
@@ -124,10 +126,21 @@ export function updateMockModelScope(
       }
       return [pattern];
     });
-    if (after && (!before || before.id === after.id) && !previousId && file === effective) {
+    if (
+      scoped.length &&
+      after &&
+      (!before || before.id === after.id) &&
+      !previousId &&
+      file === effective
+    ) {
+      const alreadyScoped = new Set(scoped.map(refOf));
       for (const { id } of added) {
         const ref = `${after.id}/${id}`;
-        if (!next.some((pattern) => suffixAfter(pattern, ref) !== undefined)) next.push(ref);
+        if (
+          !alreadyScoped.has(ref) &&
+          !next.some((pattern) => suffixAfter(pattern, ref) !== undefined)
+        )
+          next.push(ref);
       }
     }
     if (JSON.stringify(patterns) !== JSON.stringify(next)) {

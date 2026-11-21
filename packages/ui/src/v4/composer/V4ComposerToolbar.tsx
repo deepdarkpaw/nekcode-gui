@@ -192,10 +192,10 @@ function V4ComposerModelControlsImpl({
     [modelSelectionView],
   );
   const scope = modelSelectionView?.scope;
-  const hasScope = Boolean(scope?.patterns.length);
+  const hasScope = Boolean(scope?.models.length);
   const showScoped = hasScope && !showAllModels;
   const scopedGroups = useMemo(
-    () => (scope?.patterns.length ? buildScopedModelSelectGroups(scope, modelSelectGroups) : []),
+    () => (scope?.models.length ? buildScopedModelSelectGroups(scope, modelSelectGroups) : []),
     [scope, modelSelectGroups],
   );
   const scopeActions = useMemo(
@@ -504,9 +504,6 @@ function V4ComposerModelControlsImpl({
           modelGroups={showScoped ? scopedGroups : modelSelectGroups}
           showProviderLevel={!showScoped}
           footerActions={scopeActions}
-          emptyLabel={
-            showScoped ? intl.formatMessage({ id: "chat.toolbar.model.scopeEmpty" }) : undefined
-          }
           leadingItems={
             currentOutsideScope
               ? [

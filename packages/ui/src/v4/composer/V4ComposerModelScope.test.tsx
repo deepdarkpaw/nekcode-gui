@@ -113,18 +113,29 @@ describe("composer CLI model list", () => {
     expect(select).toHaveBeenCalledWith("b", "second", { provider: "a", model: "current" });
   });
 
-  it("shows all providers for an unrestricted list and never widens a nonempty unmatched scope", async () => {
-    renderToolbar({ ...scoped, scope: { patterns: [], models: [], diagnostics: [] } });
-    openMenu();
-    expect(await screen.findByText("Provider A")).toBeDefined();
-    expect(screen.queryByText("显示全部模型")).toBeNull();
-    cleanup();
-    renderToolbar({ ...scoped, scope: { patterns: ["gone"], models: [], diagnostics: [] } });
-    openMenu();
-    expect(await screen.findByText("没有可用模型匹配 CLI 范围")).toBeDefined();
-    expect(screen.queryByText("Provider A")).toBeNull();
-    expect(screen.getByText("显示全部模型")).toBeDefined();
-  });
+  it.each([[], ["gone"]].map((patterns) => ({ patterns })))(
+    "shows all providers without a scope toggle when no models resolve ($patterns)",
+    async ({ patterns }) => {
+      renderToolbar({
+        ...scoped,
+        scope: {
+          patterns,
+          models: [],
+          diagnostics: patterns.map((pattern) => ({
+            code: "no-match",
+            pattern,
+            message: "No models match",
+          })),
+        },
+      });
+      openMenu();
+      expect(await screen.findByText("Provider A")).toBeDefined();
+      expect(screen.getByText("Provider B")).toBeDefined();
+      expect(screen.queryByText("显示全部模型")).toBeNull();
+      expect(screen.queryByText("显示 CLI 模型列表")).toBeNull();
+      expect(screen.queryByText("当前 · 范围外")).toBeNull();
+    },
+  );
 
   it("shows the scope RPC error and offers retry, not an unrestricted menu", () => {
     const { retry } = renderToolbar(scoped, {

@@ -133,6 +133,29 @@ function overridesOf(draft: NekProviderDraft): NekProviderOverrides {
   };
 }
 
+/** 读目标 nek 的解析结果，模型菜单和写入流程共用同一条准入路径。 */
+export async function readModelScope(
+  runtime: NekConfigRuntime,
+  target: NekConfigTarget,
+  cwd?: string,
+  context?: NekModelReadContext,
+): Promise<NekModelScopeResult> {
+  const control = await runtime.control(target, context);
+  const directory = cwd?.trim();
+  const scope = await control.call(
+    { type: "get_model_scope", ...(directory ? { cwd: directory } : {}) },
+    context,
+  );
+  if (
+    !Array.isArray(scope?.patterns) ||
+    !Array.isArray(scope.models) ||
+    !Array.isArray(scope.diagnostics)
+  ) {
+    throw new Error("Invalid get_model_scope response from nek");
+  }
+  return scope;
+}
+
 export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
   return {
     getModelCatalog: async (target, ids, context) => {
@@ -154,22 +177,7 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
       return (data.models ?? []).map(toCatalogModel);
     },
 
-    getModelScope: async (target, cwd, context) => {
-      const control = await runtime.control(target, context);
-      const directory = cwd?.trim();
-      const scope = await control.call(
-        { type: "get_model_scope", ...(directory ? { cwd: directory } : {}) },
-        context,
-      );
-      if (
-        !Array.isArray(scope?.patterns) ||
-        !Array.isArray(scope.models) ||
-        !Array.isArray(scope.diagnostics)
-      ) {
-        throw new Error("Invalid get_model_scope response from nek");
-      }
-      return scope;
-    },
+    getModelScope: (target, cwd, context) => readModelScope(runtime, target, cwd, context),
 
     listBuiltinTools: async (target) => {
       const control = await runtime.control(target);

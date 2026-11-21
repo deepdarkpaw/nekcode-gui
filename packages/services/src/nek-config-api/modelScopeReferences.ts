@@ -1,3 +1,4 @@
+import type { NekModelScopeEntry } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 import type { NekModelsSnapshot } from "./modelsDocument.js";
 
@@ -62,7 +63,7 @@ export function modelScopeReferenceEdit(
     }
   }
   if (!providers.size && !refs.size && !added.length) return undefined;
-  return (patterns: readonly string[], effective: boolean): string[] => {
+  const apply = (patterns: readonly string[], scoped: readonly NekModelScopeEntry[]): string[] => {
     const next = patterns.flatMap((original) => {
       const pattern = original.trim();
       const slash = pattern.indexOf("/");
@@ -74,8 +75,13 @@ export function modelScopeReferenceEdit(
       if (replacement === null) return [];
       return [replacement === undefined ? original : `${replacement}${suffix}`];
     });
-    if (!effective || patterns.length === 0 || added.length === 0) return next;
+    if (!scoped.length || !patterns.length || !added.length) return next;
     const present = new Set(next.map((pattern) => splitKnownRef(pattern.trim(), afterRefs)[0]));
-    return [...next, ...added.filter((ref) => !present.has(ref.toLowerCase()))];
+    const alreadyScoped = new Set(scoped.map(({ provider, id }) => `${provider}/${id}`));
+    return [
+      ...next,
+      ...added.filter((ref) => !present.has(ref.toLowerCase()) && !alreadyScoped.has(ref)),
+    ];
   };
+  return { hasAdditions: added.length > 0, apply };
 }

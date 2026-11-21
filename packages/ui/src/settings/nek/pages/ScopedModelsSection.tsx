@@ -147,6 +147,11 @@ export function ScopedModelsSection() {
         {() => (
           <>
             <ModelScopeSaveFeedback editor={editor} />
+            {editor.data?.scope.patterns.length && editor.data.scope.models.length === 0 ? (
+              <p role="status" className="text-ui-sm text-warning">
+                {intl.formatMessage({ id: "settings.nek.scoped.noMatches" })}
+              </p>
+            ) : null}
             <p className="text-ui-sm text-foreground-subtle">
               {intl.formatMessage({ id: "settings.nek.scoped.exclusionHint" })}
             </p>

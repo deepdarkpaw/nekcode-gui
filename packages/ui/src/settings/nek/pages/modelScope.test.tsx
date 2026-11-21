@@ -24,25 +24,48 @@ async function checkedScope(model: string, checked: boolean) {
 }
 
 describe("CLI model scope in settings", () => {
-  it("starts with all checked for an empty scope and unchecking a provider row writes every other available model", async () => {
+  it.each([[], ["missing-model"]].map((patterns) => ({ patterns })))(
+    "checks all models and explicitly saves the remaining ones on exclusion when none resolve ($patterns)",
+    async ({ patterns }) => {
+      const env = createNekTestEnv();
+      const settings = await env.config.readSettings(LOCAL_TARGET, "global");
+      await env.config.patchSettings(LOCAL_TARGET, "global", { enabledModels: patterns }, settings);
+      const available = await env.config.listAvailableModels(LOCAL_TARGET);
+      render(<ProvidersPage />, { wrapper: env.wrapper });
+      await checkedScope("deepseek/deepseek-reasoner", true);
+      fireEvent.click(await checkedScope("deepseek/deepseek-chat", true));
+      await checkedScope("deepseek/deepseek-chat", false);
+      expect((await env.config.readSettings(LOCAL_TARGET, "global")).values.enabledModels).toEqual(
+        available
+          .map(({ provider, id }) => `${provider}/${id}`)
+          .filter((ref) => ref !== "deepseek/deepseek-chat"),
+      );
+      cleanup();
+      render(<DefaultModelPage />, { wrapper: env.wrapper });
+      await checkedScope("deepseek/deepseek-chat", false);
+      fireEvent.click(screen.getByRole("button", { name: "使用全部模型" }));
+      await checkedScope("deepseek/deepseek-chat", true);
+      expect((await env.config.getModelScope(LOCAL_TARGET)).patterns).toEqual([]);
+    },
+  );
+
+  it("shows the resolved-empty explanation and preserves the original no-match diagnostic", async () => {
     const env = createNekTestEnv();
     const settings = await env.config.readSettings(LOCAL_TARGET, "global");
-    await env.config.patchSettings(LOCAL_TARGET, "global", { enabledModels: [] }, settings);
-    const available = await env.config.listAvailableModels(LOCAL_TARGET);
-    render(<ProvidersPage />, { wrapper: env.wrapper });
-    fireEvent.click(await checkedScope("deepseek/deepseek-chat", true));
-    await checkedScope("deepseek/deepseek-chat", false);
-    expect((await env.config.readSettings(LOCAL_TARGET, "global")).values.enabledModels).toEqual(
-      available
-        .map(({ provider, id }) => `${provider}/${id}`)
-        .filter((ref) => ref !== "deepseek/deepseek-chat"),
+    await env.config.patchSettings(
+      LOCAL_TARGET,
+      "global",
+      { enabledModels: ["missing-model"] },
+      settings,
     );
-    cleanup();
     render(<DefaultModelPage />, { wrapper: env.wrapper });
-    await checkedScope("deepseek/deepseek-chat", false);
-    fireEvent.click(screen.getByRole("button", { name: "使用全部模型" }));
+    const notice = await screen.findByText(
+      "CLI 模型列表的模式没有匹配任何模型，当前按全部模型显示。",
+    );
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(screen.getByText(/No models match pattern "missing-model"/)).toBeDefined();
     await checkedScope("deepseek/deepseek-chat", true);
-    expect((await env.config.getModelScope(LOCAL_TARGET)).patterns).toEqual([]);
+    expect((await env.config.getModelScope(LOCAL_TARGET)).patterns).toEqual(["missing-model"]);
   });
 
   it("shows nek diagnostics and keeps explicit reasoning on remaining glob matches", async () => {

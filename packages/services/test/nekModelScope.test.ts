@@ -27,14 +27,26 @@ const modelFile = (...ids: string[]) =>
 const settingsFile = (enabledModels: string[]) =>
   JSON.stringify({ enabledModels, keep: { unknown: true } });
 
-function fixture(patterns?: string[], project?: string[]) {
-  return createHarness({
+function fixture(patterns?: string[], project?: string[], matched = true) {
+  const h = createHarness({
     localFiles: {
       [modelsPath]: modelFile("old"),
       ...(patterns ? { [settingsPath]: settingsFile(patterns) } : {}),
       ...(project ? { [projectSettingsPath]: settingsFile(project) } : {}),
     },
   });
+  h.control.readModelScope = (cwd) => {
+    const current = scopeOf(
+      h,
+      cwd && h.control.projectTrusted && project ? projectSettingsPath : settingsPath,
+    );
+    return {
+      patterns: current,
+      models: matched ? [{ provider: "CPA", id: "old" }] : [],
+      diagnostics: [],
+    };
+  };
+  return h;
 }
 
 function scopeOf(harness: ReturnType<typeof fixture>, path = settingsPath) {
@@ -177,16 +189,36 @@ test("manual, batch/import, fetched and inline provider models append exact ids 
 for (const scenario of [
   {
     name: "trusted project with a scope",
-    project: ["project/original"],
+    project: ["CPA/old:high"],
     trusted: true,
+    matched: true,
     append: "project",
   },
-  { name: "trusted project with empty scope", project: [], trusted: true, append: "neither" },
-  { name: "untrusted project", project: ["project/original"], trusted: false, append: "global" },
+  {
+    name: "trusted project with empty scope",
+    project: [],
+    trusted: true,
+    matched: false,
+    append: "neither",
+  },
+  {
+    name: "trusted project with no matching models",
+    project: ["missing/*"],
+    trusted: true,
+    matched: false,
+    append: "neither",
+  },
+  {
+    name: "untrusted project",
+    project: ["project/original"],
+    trusted: false,
+    matched: true,
+    append: "global",
+  },
 ] as const) {
   test(`new model respects ${scenario.name}`, async (t) => {
     const project = [...scenario.project];
-    const h = fixture(["CPA/old"], project);
+    const h = fixture(["CPA/old"], project, scenario.matched);
     t.after(() => h.api.dispose());
     h.control.projectTrusted = scenario.trusted;
     await h.api.addModels(LOCAL, "CPA", [{ id: "new" }], {
@@ -213,6 +245,39 @@ test("an absent or empty scope stays unrestricted when adding models", async (t)
   }
 });
 
+test("new models do not expand a scope which matches nothing before saving", async (t) => {
+  const patterns = ["CPA/new", "missing/*"];
+  const h = fixture(patterns, undefined, false);
+  t.after(() => h.api.dispose());
+  const options = await h.api.readModelsConfig(LOCAL);
+  await h.api.addModels(LOCAL, "CPA", [{ id: "new" }, { id: "not-in-range" }], options);
+  assert.equal(h.local.files.get(settingsPath), settingsFile(patterns));
+  assert.deepEqual(
+    (await h.api.readModelsConfig(LOCAL)).providers[0]?.models.map(({ id }) => id),
+    ["old", "new", "not-in-range"],
+  );
+  assert.deepEqual(h.control.commands, [{ type: "get_model_scope" }]);
+});
+
+test("an RPC failure or a stale scope cannot silently save a configured model addition", async (t) => {
+  const h = fixture(["CPA/old"]);
+  t.after(() => h.api.dispose());
+  const options = await h.api.readModelsConfig(LOCAL);
+  const add = () => h.api.addModels(LOCAL, "CPA", [{ id: "new" }], options);
+  h.control.readModelScope = () => {
+    throw new Error("scope read failed");
+  };
+  await assert.rejects(add(), /scope read failed/);
+  h.control.readModelScope = () => ({
+    patterns: ["other/old"],
+    models: [{ provider: "other", id: "old" }],
+    diagnostics: [],
+  });
+  await expectNekError(add, "conflict");
+  assert.equal(h.local.writes.length, 0);
+  assert.equal(h.local.files.get(settingsPath), settingsFile(["CPA/old"]));
+});
+
 test("model/provider rename and delete rewrite definite scope references in both documents", async (t) => {
   const h = fixture(["cpa/old:high", "CPA/*", "other/model"], ["CPA/old:low", "other/model"]);
   t.after(() => h.api.dispose());
@@ -235,44 +300,59 @@ test("model/provider rename and delete rewrite definite scope references in both
   assert.deepEqual(scopeOf(h), ["other/model"]);
 });
 
-test("provider copy appends to the destination workspace without touching source scope", async (t) => {
-  const h = createHarness({
-    localFiles: {
-      [modelsPath]: modelFile("old", "new"),
-      [settingsPath]: settingsFile(["CPA/old"]),
-    },
-    remoteFiles: {
-      [remoteSettingsPath]: settingsFile(["remote/global"]),
-      [projectSettingsPath]: settingsFile(["remote/project"]),
-    },
-  });
-  t.after(() => h.api.dispose());
-  h.control.projectTrusted = true;
-  const selection = {
-    providers: ["CPA"],
-    logins: [],
-    mcpServers: [],
-    defaults: false,
-    compaction: false,
-  };
-  const result = await h.api.copy(LOCAL, REMOTE, { ...selection, targetCwd: PROJECT }, {});
-  assert.deepEqual(result.items, [{ key: "provider:CPA", status: "copied" }]);
-  assert.deepEqual(
-    readJson(h.remote, projectSettingsPath),
-    JSON.parse(settingsFile(["remote/project", "CPA/old", "CPA/new"])),
-  );
-  assert.equal(h.remote.files.get(remoteSettingsPath), settingsFile(["remote/global"]));
-  assert.deepEqual(scopeOf(h), ["CPA/old"]);
+for (const matched of [true, false]) {
+  test(`provider copy only appends to a destination scope with matches (${matched})`, async (t) => {
+    const h = createHarness({
+      localFiles: {
+        [modelsPath]: modelFile("old", "new"),
+        [settingsPath]: settingsFile(["CPA/old"]),
+      },
+      remoteFiles: {
+        [remoteSettingsPath]: settingsFile(["remote/global"]),
+        [projectSettingsPath]: settingsFile(["remote/project"]),
+      },
+    });
+    t.after(() => h.api.dispose());
+    h.control.projectTrusted = true;
+    h.control.readModelScope = (cwd) => {
+      assert.equal(cwd, PROJECT);
+      return {
+        patterns: ["remote/project"],
+        models: matched ? [{ provider: "remote", id: "project" }] : [],
+        diagnostics: [],
+      };
+    };
+    const selection = {
+      providers: ["CPA"],
+      logins: [],
+      mcpServers: [],
+      defaults: false,
+      compaction: false,
+    };
+    const result = await h.api.copy(LOCAL, REMOTE, { ...selection, targetCwd: PROJECT }, {});
+    assert.deepEqual(result.items, [{ key: "provider:CPA", status: "copied" }]);
+    assert.deepEqual(
+      readJson(h.remote, projectSettingsPath),
+      JSON.parse(
+        settingsFile(matched ? ["remote/project", "CPA/old", "CPA/new"] : ["remote/project"]),
+      ),
+    );
+    assert.equal(h.remote.files.get(remoteSettingsPath), settingsFile(["remote/global"]));
+    assert.deepEqual(scopeOf(h), ["CPA/old"]);
 
-  const withDefaults = await h.api.copy(
-    LOCAL,
-    REMOTE,
-    { ...selection, defaults: true },
-    { "defaults:defaults": "overwrite" },
-  );
-  assert.equal(withDefaults.items.find(({ key }) => key === "defaults:defaults")?.status, "copied");
-  assert.deepEqual(readJson(h.remote, remoteSettingsPath), JSON.parse(settingsFile(["CPA/old"])));
-});
+    const withDefaults = await h.api.copy(
+      LOCAL,
+      REMOTE,
+      { ...selection, defaults: true },
+      { "defaults:defaults": "overwrite" },
+    );
+    assert.equal(
+      withDefaults.items.find(({ key }) => key === "defaults:defaults")?.status,
+      "copied",
+    );
+    assert.deepEqual(readJson(h.remote, remoteSettingsPath), JSON.parse(settingsFile(["CPA/old"])));
+  });
+}
 
 test("a conflicting settings lock prevents writing models and the same model write can retry", async (t) => {
   const h = fixture(["CPA/old"]);

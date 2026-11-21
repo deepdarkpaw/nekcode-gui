@@ -24,7 +24,7 @@ import {
   type MockMachine,
 } from "./mockMachine.js";
 import { MOCK_CATALOG } from "./mockSeed.js";
-import { updateMockModelScope } from "./mockModelScope.js";
+import { mockModelScope, updateMockModelScope } from "./mockModelScope.js";
 
 export type Touch = (file: MockFile<unknown>) => string;
 
@@ -78,7 +78,8 @@ export function saveProvider(
     api: rest.api ?? "",
     ...(resolvedKey ? { apiKey: resolvedKey } : {}),
   };
-  updateMockModelScope(machine, existing, next, options.cwd, touch);
+  const scope = mockModelScope(machine, availableModels(machine), options.cwd);
+  updateMockModelScope(machine, existing, next, options.cwd, touch, scope.models);
   machine.models.value = existing
     ? machine.models.value.map((item) => (item.id === write.id ? next : item))
     : [...machine.models.value, next];
@@ -97,7 +98,16 @@ export function updateModels(
   assertRevision(machine.models, revision);
   const provider = findProvider(machine, providerId);
   const next = update(provider.models);
-  updateMockModelScope(machine, provider, { ...provider, models: next }, cwd, touch, previousId);
+  const scope = mockModelScope(machine, availableModels(machine), cwd);
+  updateMockModelScope(
+    machine,
+    provider,
+    { ...provider, models: next },
+    cwd,
+    touch,
+    scope.models,
+    previousId,
+  );
   provider.models = next;
   return touch(machine.models);
 }

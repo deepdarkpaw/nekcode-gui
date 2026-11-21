@@ -49,15 +49,17 @@ export function useCliModelScope() {
     });
   }, [cwd, reload, subscribeChanges]);
   const data = query.status === "ready" ? query.data : undefined;
+  const members = data?.scope.models.length ? data.scope.models : data?.available;
   const membership = useMemo(() => {
     const available = new Set(
       data?.available.map(({ provider, id }) => formatModelRef(provider, id)),
     );
-    const included = data?.scope.patterns.length
-      ? new Set(data.scope.models.map(({ provider, id }) => formatModelRef(provider, id)))
-      : available;
+    const included =
+      members === data?.available
+        ? available
+        : new Set(members?.map(({ provider, id }) => formatModelRef(provider, id)));
     return { available, included };
-  }, [data]);
+  }, [data, members]);
   const save = useAsyncAction(async (patterns: string[]) => {
     if (!data) throw new Error(intl.formatMessage({ id: "settings.nek.error.notLoaded" }));
     try {
@@ -69,7 +71,7 @@ export function useCliModelScope() {
     await reload();
   });
   const toggle = (refs: readonly string[], checked: boolean) => {
-    if (!data) return;
+    if (!data || !members) return;
     if (checked) {
       void save.run([
         ...data.scope.patterns,
@@ -79,7 +81,6 @@ export function useCliModelScope() {
     }
     const removed = new Set(refs);
     // 即使某项来自通配符，也能只排除指定模型；保留原生顺序和显式思考档位。
-    const members = data.scope.patterns.length ? data.scope.models : data.available;
     const remaining = members.flatMap(({ provider, id, ...model }) => {
       const ref = formatModelRef(provider, id);
       if (removed.has(ref)) return [];

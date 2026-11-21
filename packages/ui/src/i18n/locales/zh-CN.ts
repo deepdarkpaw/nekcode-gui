@@ -490,7 +490,6 @@ const zhCN: Record<string, string> = {
   "chat.toolbar.model.loadFailedRetry": "模型加载失败，重试",
   "chat.toolbar.model.showAll": "显示全部模型",
   "chat.toolbar.model.showScoped": "显示 CLI 模型列表",
-  "chat.toolbar.model.scopeEmpty": "没有可用模型匹配 CLI 范围",
   "chat.toolbar.model.outsideScope": "当前 · 范围外",
   "chat.toolbar.model.loading": "模型加载中…",
   "chat.toolbar.model.remoteWaiting": "等待远程模型",
@@ -3378,7 +3377,8 @@ const zhCN: Record<string, string> = {
   "settings.nek.scoped.unavailable": "nek 当前无法使用此模型",
   "settings.nek.scoped.keepOne": "至少保留一个模型。清空范围会显示全部可用模型。",
   "settings.nek.scoped.exclusionHint":
-    "未设置范围时，取消勾选会改为明确列出其余模型。移出由模式匹配的模型时，会把范围展开成具体模型。",
+    "没有匹配的范围模型时，取消勾选会改为明确列出其余模型。移出由模式匹配的模型时，会把范围展开成具体模型。",
+  "settings.nek.scoped.noMatches": "CLI 模型列表的模式没有匹配任何模型，当前按全部模型显示。",
   "settings.nek.scoped.useAll": "使用全部模型",
   "settings.nek.scoped.useAllHint": "要清空最后一条范围，请选择「使用全部模型」。",
   "settings.nek.scoped.readConflict": "读取期间模型列表已变化，请重试。",
