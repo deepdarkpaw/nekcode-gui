@@ -521,11 +521,11 @@ jobs:
 
   release:
     name: Release
-    # 发布必须等全部必需 lane 成功：静态门禁、四条测试车道、浏览器冒烟、两个平台打包。
+    # 发布必须等全部必需 lane 成功：静态门禁、测试、浏览器冒烟、远端资源和桌面打包。
     # macOS 打包默认跳过，release 仍要等它（needs），但允许 skipped；
     # 任一必需 job 失败或取消都满足不了这里的 success 判定，绝不 publish。
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.tests.result == 'success' && needs.browser-checks.result == 'success' && needs.build.result == 'success' && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') }}
-    needs: [checks, tests, browser-checks, build, build-macos]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && needs.checks.result == 'success' && needs.tests.result == 'success' && needs.browser-checks.result == 'success' && needs.remote-assets.result == 'success' && needs.build.result == 'success' && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') }}
+    needs: [checks, tests, browser-checks, remote-assets, build, build-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -545,6 +545,11 @@ jobs:
         with:
           pattern: desktop-*
           path: dist/artifacts
+      # 与打包 job 取同次运行的同一份归档，由 assemble 平铺并校验，禁止另行重打包。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: bundled-remote-linux-x64
+          path: dist/artifacts/bundled-remote-linux-x64
       # 安装包平铺到 dist/release-assets，Windows/macOS 的更新元数据按架构合并成一份。
       # electron-updater 按 latest.yml / latest-mac.yml 拉取更新（provider=github），
       # 缺一份就会 ERR_UPDATER_CHANNEL_FILE_NOT_FOUND。

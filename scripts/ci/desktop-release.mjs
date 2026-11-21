@@ -20,6 +20,23 @@ import {
 } from "../../packages/desktop/scripts/desktop-update-info.mjs";
 import { publishRelease, releaseNotes, releaseTitle } from "./desktop-release-publish.mjs";
 
+async function remoteReleaseArchives(artifactsRoot, version) {
+  // check-version 在安装依赖之前运行；仅 assemble/publish 需要加载共享 manifest 校验器。
+  const { bundledRemoteReleaseArchives } = await import("../bundle-remote-assets.mjs");
+  return bundledRemoteReleaseArchives(artifactsRoot, version);
+}
+
+async function assetSha256(file) {
+  const hash = createHash("sha256");
+  const handle = await open(file, "r");
+  try {
+    for await (const chunk of handle.createReadStream()) hash.update(chunk);
+  } finally {
+    await handle.close();
+  }
+  return hash.digest("hex");
+}
+
 export {
   mergeUpdateInfo,
   readUpdateInfo,
@@ -186,6 +203,7 @@ export async function assembleReleaseAssets({
   if ((await readdir(destination)).length)
     throw new Error(`Artifact directory must be empty: ${destination}`);
 
+  const remoteArchives = await remoteReleaseArchives(artifactsRoot, version);
   const documents = new Map();
   for (const identity of identities) {
     for (const platform of platforms) {
@@ -232,6 +250,11 @@ export async function assembleReleaseAssets({
     await writeFile(join(destination, name), await stringifyUpdateInfo(mergeUpdateInfo(bucket)));
     written.push(name);
   }
+  for (const { name, file, sha256 } of remoteArchives) {
+    const target = join(destination, name);
+    await copyFile(file, target);
+    if ((await assetSha256(target)) !== sha256) throw new Error(`SHA256 mismatch: ${name}`);
+  }
   return written.sort();
 }
 
@@ -252,6 +275,7 @@ export async function verifyReleaseAssets(
   version,
   identity = resolveDesktopProductIdentity(),
   platforms = Object.keys(extensions),
+  artifactsRoot = join(directory, "..", "artifacts"),
 ) {
   validateReleasePlatforms(platforms);
   const identities = Array.isArray(identity) ? identity : [identity];
@@ -261,11 +285,14 @@ export async function verifyReleaseAssets(
   if (new Set(identityKeys).size !== identityKeys.length) {
     throw new Error("Duplicate release identity");
   }
-  const names = identities
-    .flatMap((item) =>
+  const remoteArchives = await remoteReleaseArchives(artifactsRoot, version);
+  const remoteChecksums = new Map(remoteArchives.map(({ name, sha256 }) => [name, sha256]));
+  const names = [
+    ...identities.flatMap((item) =>
       platforms.flatMap((platform) => artifactNames(platform, version, undefined, item)),
-    )
-    .sort();
+    ),
+    ...remoteChecksums.keys(),
+  ].sort();
   if (new Set(names).size !== names.length) throw new Error("Duplicate release asset filenames");
   const requiredUpdateInfoNames = releaseUpdateInfoNames(identities).filter((name) =>
     platforms.includes(updateInfoPlatformOf(name)),
@@ -306,14 +333,11 @@ export async function verifyReleaseAssets(
   }
   const sums = [];
   for (const [index, file] of files.entries()) {
-    const hash = createHash("sha256");
-    const handle = await open(file, "r");
-    try {
-      for await (const chunk of handle.createReadStream()) hash.update(chunk);
-    } finally {
-      await handle.close();
-    }
-    sums.push(`${hash.digest("hex")}  ${names[index]}\n`);
+    const name = names[index];
+    const hash = await assetSha256(file);
+    const expected = remoteChecksums.get(name);
+    if (expected && hash !== expected) throw new Error(`SHA256 mismatch: ${name}`);
+    sums.push(`${hash}  ${name}\n`);
   }
   const checksumFile = join(directory, "SHA256SUMS");
   await writeFile(checksumFile, sums.join(""));

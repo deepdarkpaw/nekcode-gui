@@ -1,8 +1,19 @@
 import { z } from "zod";
-import { ACTIVE_REMOTE_RESOURCE_PACKAGE_IDS } from "./remoteResourcePackages.js";
+import {
+  ACTIVE_REMOTE_RESOURCE_PACKAGE_IDS,
+  type RemoteResourcePackageId,
+} from "./remoteResourcePackages.js";
 
 export const BUNDLED_REMOTE_PLATFORM = "linux-x64";
 export const BUNDLED_REMOTE_MANIFEST = `manifest-${BUNDLED_REMOTE_PLATFORM}.json`;
+
+/** 发布与 SSH 部署共用文件名；调用方须先校验构建版本。 */
+export function bundledRemoteReleaseAssetName(
+  version: string,
+  id: RemoteResourcePackageId,
+): string {
+  return `nekcode-gui-server-${version}-${BUNDLED_REMOTE_PLATFORM}-${id}.tar.gz`;
+}
 
 const mounts: Record<string, string> = {
   "server-bundle": "server",

@@ -7,8 +7,13 @@ import { tsImport } from "tsx/esm/api";
 import { verifyArchiveSha256 } from "./remote-node-runtime.mjs";
 import { getBuildMetadata } from "../packages/desktop/scripts/build-metadata.mjs";
 
-const { BUNDLED_REMOTE_MANIFEST, parseBundledRemoteManifest, remoteComponentRequiredPaths } =
-  await tsImport("@zcode/shared/bundled-remote-assets", import.meta.url);
+const {
+  BUNDLED_REMOTE_MANIFEST,
+  BUNDLED_REMOTE_PLATFORM,
+  bundledRemoteReleaseAssetName,
+  parseBundledRemoteManifest,
+  remoteComponentRequiredPaths,
+} = await tsImport("@zcode/shared/bundled-remote-assets", import.meta.url);
 export { remoteComponentRequiredPaths };
 const run = promisify(execFile);
 
@@ -27,11 +32,28 @@ async function containedFile(directory, path) {
   return file;
 }
 
-export async function verifyBundledRemoteAssets(directory, version) {
-  const manifest = parseBundledRemoteManifest(
-    JSON.parse(await readFile(join(directory, BUNDLED_REMOTE_MANIFEST), "utf8")),
+async function readBundledRemoteManifest(directory, version) {
+  return parseBundledRemoteManifest(
+    JSON.parse(await readFile(await containedFile(directory, BUNDLED_REMOTE_MANIFEST), "utf8")),
     version,
   );
+}
+
+/** 发行资产只改名，不重打包，压缩字节与安装包中须完全一致。 */
+export async function bundledRemoteReleaseArchives(artifactsRoot, version) {
+  const directory = join(artifactsRoot, `bundled-remote-${BUNDLED_REMOTE_PLATFORM}`);
+  const manifest = await readBundledRemoteManifest(directory, version);
+  return Promise.all(
+    manifest.components.map(async ({ id, artifactPath, sha256 }) => ({
+      name: bundledRemoteReleaseAssetName(version, id),
+      file: await containedFile(directory, artifactPath),
+      sha256,
+    })),
+  );
+}
+
+export async function verifyBundledRemoteAssets(directory, version) {
+  const manifest = await readBundledRemoteManifest(directory, version);
   for (const component of manifest.components) {
     await verifyArchiveSha256(
       await containedFile(directory, component.artifactPath),
