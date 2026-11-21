@@ -40,8 +40,6 @@ const runtime = vi.hoisted(() => {
         },
       },
     },
-    commands: [],
-    subagents: { agents: [], loading: false, error: null },
     files: { items: [], loading: false, error: null, title: "Files", emptyText: "No files" },
     sessions: {
       items: [],
@@ -55,8 +53,6 @@ const runtime = vi.hoisted(() => {
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
   useWorkspaceServicesResolution: () => runtime.resolution,
 }));
-vi.mock("@/hooks/useSlashCommands.js", () => ({ useSlashCommands: () => runtime.commands }));
-vi.mock("@/hooks/useSubagents.js", () => ({ useSubagents: () => runtime.subagents }));
 vi.mock("./providers/fileMentionProvider.js", () => ({
   useFileMentionProvider: () => runtime.files,
 }));
@@ -146,12 +142,10 @@ function mount(sessionId: string | null = "session-1") {
         <SlashCommandPlugin
           workspacePath="/workspace"
           sessionId={sessionId}
-          provider={ZCODE_AGENT_PROVIDER}
           container={document.body}
         />
         <MentionPlugin
           workspacePath="/workspace"
-          sessionId={sessionId}
           provider={ZCODE_AGENT_PROVIDER}
           container={document.body}
         />
@@ -194,10 +188,11 @@ describe("nek skill completion wiring", () => {
     async (key) => {
       mount();
       await typeText("为什么无法\n\n/gal");
-      await screen.findByRole("option", { name: "@skill:galanalyzer" });
+      await screen.findByRole("option", { name: "galanalyzer" });
       expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledWith({
         workspacePath: "/workspace",
         sessionId: "session-1",
+        includeSlashCatalog: true,
       });
       await act(async () => {
         editor.dispatchCommand(
@@ -213,29 +208,32 @@ describe("nek skill completion wiring", () => {
     },
   );
 
-  it.each(["/pdf", "@pdf", "@skill:pdf", "$pdf"])(
-    "SC2/SC3/SC4: %s can select a skill from a custom path using the same canonical output",
+  it("selects a skill from a custom path without sending that path", async () => {
+    mount();
+    await typeText("/pdf");
+    fireEvent.click(await screen.findByRole("option", { name: "pdf" }));
+    await waitFor(() => expect(markdown()).toBe("@skill:pdf "));
+    expect(parseMentionMarkdown(markdown())).toEqual([
+      { type: "skill", label: "pdf" },
+      { type: "text", text: " " },
+    ]);
+  });
+
+  it.each(["@", "@pdf", "@skill:pdf", "$pdf"])(
+    "%s does not request or suggest skills",
     async (input) => {
       mount();
       await typeText(input);
-      const option = await screen.findByRole("option", {
-        name: input.startsWith("/") ? "@skill:pdf" : "pdf",
-      });
-      fireEvent.click(option);
-      await waitFor(() => expect(markdown()).toBe("@skill:pdf "));
-      expect(markdown()).not.toContain("/custom/");
-      expect(parseMentionMarkdown(markdown())).toEqual([
-        { type: "skill", label: "pdf" },
-        { type: "text", text: " " },
-      ]);
+      expect(screen.queryByRole("option", { name: "pdf" })).toBeNull();
+      expect(runtime.getSkillReferenceCatalog).not.toHaveBeenCalled();
+      expect(markdown()).toBe(input);
     },
   );
 
-  it("SC3: @ includes skills without removing file/session routes, while @skill: is explicit", () => {
-    expect(getMentionPanelGroupOrder("@")).toEqual(["skills", "files", "sessions"]);
-    expect(getMentionPanelGroupOrder("@", "skill:p")).toEqual(["skills"]);
+  it("retains file and conversation routes for @ and #", () => {
+    expect(getMentionPanelGroupOrder("@")).toEqual(["files", "sessions"]);
     expect(getMentionPanelGroupOrder("#")).toEqual(["sessions"]);
-    expect(getMentionPanelGroupOrder("$")).toEqual(["skills"]);
+    expect(getMentionPanelGroupOrder("$")).toEqual([]);
   });
 
   it("SC1: catalog failures stay visible and reopening explicitly retries rather than showing a false empty list", async () => {
@@ -246,8 +244,11 @@ describe("nek skill completion wiring", () => {
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     await typeText("normal text");
     await typeText("/pdf");
-    await screen.findByRole("option", { name: "@skill:pdf" });
+    await screen.findByRole("option", { name: "pdf" });
     expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledTimes(2);
-    expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledWith({ workspacePath: "/workspace" });
+    expect(runtime.getSkillReferenceCatalog).toHaveBeenCalledWith({
+      workspacePath: "/workspace",
+      includeSlashCatalog: true,
+    });
   });
 });

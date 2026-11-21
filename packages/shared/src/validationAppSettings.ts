@@ -1,6 +1,5 @@
 /* oxlint-disable eslint(max-lines) -- AppSettings schema 聚合历史迁移、默认值和 patch 校验，拆分会削弱设置迁移的单一入口。 */
 import { z } from "zod";
-import { appToolSearchModeSchema } from "./app-runtime-preferences.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { wslUserSchema } from "./wslUserValidation.js";
 import { normalizeZCodeEndpointOrigin } from "./zcodeEndpoint.js";
@@ -29,7 +28,6 @@ const nonEmptyStringSchema = z.string().trim().min(1);
 
 export const localeSchema = z.enum(["zh-CN", "en-US"]);
 const localePreferenceSchema = z.enum(["system", "zh-CN", "en-US"]);
-const zcodeInteractionBehaviorSchema = z.enum(["queue", "guide"]);
 const electronReleaseChannelSchema = z.enum(["stable", "preview"]);
 const desktopZoomLevelSchema = z.number().int().min(-3).max(5);
 const desktopWindowSizeSchema = z.object({
@@ -37,7 +35,7 @@ const desktopWindowSizeSchema = z.object({
   height: z.number().int().min(640),
   maximized: z.boolean(),
 });
-export const integratedTerminalShellSelectionSchema = z.discriminatedUnion("mode", [
+const integratedTerminalShellSelectionSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("auto"),
   }),
@@ -416,18 +414,12 @@ const appSettingsObjectSchema = z.object({
   messageStreamShowTodos: z.boolean().default(false),
   toolGroupingExploreEnabled: z.boolean().default(true),
   toolGroupingTerminalEnabled: z.boolean().default(true),
-  zcodeInteractionBehavior: zcodeInteractionBehaviorSchema.default("queue"),
-  askUserQuestionAutoResolutionEnabled: z.boolean().default(true),
   providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema.default({}),
   providerFamilyDomain: providerFamilyDomainSchema.optional(),
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().default(false),
-  nativeSearchEnhancementsEnabled: z.boolean().default(true),
-  // 缺省 Off 不覆盖用户已保存的 Auto/Local；旧设置缺字段即 Off。
-  toolSearchMode: appToolSearchModeSchema.default("off"),
   onboardingOccupation: appSettingsOccupationSchema.nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
-  memoryEnabled: z.boolean().default(false),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).default([]),
   lastActiveTabIndex: z.number().int().nonnegative().default(0),
   lastActiveTaskByWorkspace: z.record(z.string(), z.string()).optional(),
@@ -478,14 +470,10 @@ export const appSettingsPatchSchema = z.object({
   messageStreamShowTodos: z.boolean().optional(),
   toolGroupingExploreEnabled: z.boolean().optional(),
   toolGroupingTerminalEnabled: z.boolean().optional(),
-  zcodeInteractionBehavior: zcodeInteractionBehaviorSchema.optional(),
-  askUserQuestionAutoResolutionEnabled: z.boolean().optional(),
   providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema.optional(),
   providerFamilyDomain: z.union([providerFamilyDomainSchema, z.literal("")]).optional(),
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().optional(),
-  nativeSearchEnhancementsEnabled: z.boolean().optional(),
-  toolSearchMode: appToolSearchModeSchema.optional(),
   onboardingOccupation: z
     .enum([
       "office",
@@ -505,7 +493,6 @@ export const appSettingsPatchSchema = z.object({
     ])
     .nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
-  memoryEnabled: z.boolean().optional(),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).optional(),
   lastActiveTabIndex: z.number().int().nonnegative().optional(),
   lastActiveTaskByWorkspace: z.record(z.string(), z.string()).optional(),

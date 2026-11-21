@@ -8,7 +8,7 @@ import type {
   WSLDistro,
 } from "@zcode/shared";
 import { TID_REMOTE_KIND_DOCKER, TID_REMOTE_KIND_SSH, TID_REMOTE_KIND_WSL } from "@zcode/shared";
-import type { IMcpSyncService, IServiceAccessor, ISkillSyncService } from "@zcode/services";
+import type { IServiceAccessor } from "@zcode/services";
 import {
   AlertTriangleIcon,
   ChevronRightIcon,
@@ -23,11 +23,6 @@ import type { SSHAuthMethod } from "@/hooks/useRemoteConnectionForm.js";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import {
-  RemoteSyncDialogs,
-  RemoteSyncDropdownButton,
-  shouldShowRemoteSyncActions,
-} from "@/settings/RemoteSyncActions.js";
 export { RemoteConnectionConnectingStep } from "@/remote-connection/RemoteConnectionConnectingStep.js";
 
 function getKindIcon(kind: RemoteTarget["kind"]) {
@@ -307,49 +302,19 @@ export function RemoteConnectionSettingsStep({
 
 export function RemoteConnectionDirectoryStep({
   services,
-  remoteTarget,
-  localSkillSyncService,
-  remoteSkillSyncService,
-  localMcpSyncService,
-  remoteMcpSyncService,
-  localWorkspacePath,
   selecting = false,
   onSelect,
   onBack,
   onCancel,
-  onSkillsSynced,
-  onMcpSynced,
 }: {
   services: IServiceAccessor | null;
-  remoteTarget?: RemoteTarget | null;
-  localSkillSyncService?: ISkillSyncService;
-  remoteSkillSyncService?: ISkillSyncService | null;
-  localMcpSyncService?: IMcpSyncService;
-  remoteMcpSyncService?: IMcpSyncService | null;
-  localWorkspacePath?: string;
   selecting?: boolean;
   onSelect: (path: string) => void;
   onBack: () => void;
   onCancel: () => void;
-  onSkillsSynced?: () => Promise<void> | void;
-  onMcpSynced?: () => Promise<void> | void;
 }) {
   const { intl } = useZCodeIntl();
   const [selectedPath, setSelectedPath] = useState("");
-  const [remoteSkillSyncOpen, setRemoteSkillSyncOpen] = useState(false);
-  const [remoteMcpSyncOpen, setRemoteMcpSyncOpen] = useState(false);
-  const canShowRemoteSyncActions = shouldShowRemoteSyncActions({
-    remoteSessionId: remoteTarget ? "directory-step" : null,
-    remoteTarget,
-    clientMode: "desktop-continuous",
-    hasLocalSourceService: Boolean(localSkillSyncService || localMcpSyncService),
-  });
-  const canSyncRemoteSkills = Boolean(
-    canShowRemoteSyncActions && localSkillSyncService && remoteSkillSyncService,
-  );
-  const canSyncRemoteMcp = Boolean(
-    canShowRemoteSyncActions && localMcpSyncService && remoteMcpSyncService,
-  );
 
   if (!services) {
     return (
@@ -378,13 +343,6 @@ export function RemoteConnectionDirectoryStep({
       <div className="flex flex-col flex-1 min-h-0 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-success bg-success px-4 py-3 text-ui-base text-success-foreground">
           <span>{intl.formatMessage({ id: "remote.success" })}</span>
-          <RemoteSyncDropdownButton
-            canSyncSkills={canSyncRemoteSkills}
-            canSyncMcp={canSyncRemoteMcp}
-            mcpDisabled={!selectedPath.trim()}
-            onOpenSkillSync={() => setRemoteSkillSyncOpen(true)}
-            onOpenMcpSync={() => setRemoteMcpSyncOpen(true)}
-          />
         </div>
         {/* 该容器之前不是 flex，导致子级 DirectoryBrowser 的 flex-1 无法拿到有效高度，
             目录项变多时 overflow-y-auto 不生效，列表不能垂直滚动。 */}
@@ -431,28 +389,6 @@ export function RemoteConnectionDirectoryStep({
           )}
         </Button>
       </div>
-      <RemoteSyncDialogs
-        canSyncSkills={canSyncRemoteSkills}
-        canSyncMcp={canSyncRemoteMcp}
-        skillOpen={remoteSkillSyncOpen}
-        mcpOpen={remoteMcpSyncOpen}
-        onSkillOpenChange={setRemoteSkillSyncOpen}
-        onMcpOpenChange={setRemoteMcpSyncOpen}
-        localSkillSyncService={localSkillSyncService}
-        remoteSkillSyncService={remoteSkillSyncService}
-        localMcpSyncService={localMcpSyncService}
-        remoteMcpSyncService={remoteMcpSyncService}
-        remoteTarget={remoteTarget}
-        skillWorkspacePath=""
-        mcpWorkspacePath={selectedPath.trim()}
-        mcpLocalWorkspacePath={localWorkspacePath}
-        onSkillsSynced={async () => {
-          await onSkillsSynced?.();
-        }}
-        onMcpSynced={async () => {
-          await onMcpSynced?.();
-        }}
-      />
     </div>
   );
 }

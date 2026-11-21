@@ -100,7 +100,7 @@ export function DiagnosticsList({
 export function DisconnectedState() {
   const { intl } = useZCodeIntl();
   const host = useNekHostApi();
-  const { targetInfo, target, refreshTargets } = useNekTarget();
+  const { targetInfo, target, refreshTargets, fixedTarget } = useNekTarget();
   return (
     <NekEmptyState
       icon={<PlugZapIcon className="size-5" aria-hidden="true" />}
@@ -108,9 +108,13 @@ export function DisconnectedState() {
         { id: "settings.nek.target.disconnectedTitle" },
         { host: targetInfo?.label ?? "" },
       )}
-      description={intl.formatMessage({ id: "settings.nek.target.disconnectedDescription" })}
+      description={intl.formatMessage({
+        id: fixedTarget
+          ? "settings.nek.resources.reconnectWorkspace"
+          : "settings.nek.target.disconnectedDescription",
+      })}
       action={
-        target.kind === "remote" ? (
+        target.kind === "remote" && !fixedTarget ? (
           <AsyncButton
             onClick={async () => {
               await host.connectHost(target.connectionId);

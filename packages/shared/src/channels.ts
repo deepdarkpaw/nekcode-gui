@@ -1,13 +1,6 @@
 import type { RendererHeapSample } from "./validation.js";
 /* eslint-disable max-lines -- 通信频道和请求响应映射必须集中定义，避免跨进程 channel 字符串散落。 */
-import type {
-  ResourceUsageSnapshot,
-  LoadCliMcpFromUserDirectoryRequest,
-  LoadCliMcpFromUserDirectoryResult,
-  MigrateLegacyCommonMcpRequest,
-  MigrateLegacyCommonMcpResult,
-  SaveCliMcpToUserDirectoryRequest,
-} from "./index.js";
+import type { ResourceUsageSnapshot } from "./index.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type { StorageCleanRequest, StorageCleanResult, StorageUsageSnapshot } from "./storage.js";
 import type {
@@ -70,24 +63,10 @@ export const ServiceChannels = {
   FileWatcher: "file-watcher",
   /** nek-backed model selection on the target machine. */
   ModelSelection: "model-selection",
+  /** 工作区执行端上的 nek 配置维护。 */
+  NekWorkspaceConfig: "nek-workspace-config",
   /** ZCode 客户端场景配置服务 */
   ClientScenes: "client-scenes",
-  /** Skills 管理服务 */
-  Skills: "skills",
-  /** SSH 远程 skills 同步服务 */
-  SkillSync: "skill-sync",
-  /** SSH 远程 MCP 同步服务 */
-  McpSync: "mcp-sync",
-  /** Subagents 管理服务 */
-  Subagents: "subagents",
-  /** Commands 管理服务 */
-  Commands: "commands",
-  /** Hooks 管理服务 */
-  Hooks: "hooks",
-  /** Memory 管理服务 */
-  Memory: "memory",
-  /** 首次启动设置同步服务 */
-  SettingsSync: "settings-sync",
   /** Composer 附件在 host-local 与 remote runtime 之间的预传服务 */
   PromptAttachmentTransfer: "prompt-attachment-transfer",
   /** Onboarding 完成记录服务（本地持久化，后续上传服务器） */
@@ -136,10 +115,6 @@ export const PlatformChannels = {
   ListDockerContainers: "zcode:list-docker-containers",
   /** Renderer → Main：列出 SSH config 里可用于快速填表的 alias */
   ListSSHConfigAliases: "zcode:list-ssh-config-aliases",
-  /** Renderer → Main：从用户目录加载 CLI MCP 配置 */
-  LoadMcpFromUserDirectory: "zcode:load-mcp-from-user-directory",
-  /** Renderer → Main：保存 CLI MCP 配置到用户目录 */
-  SaveMcpToUserDirectory: "zcode:save-mcp-to-user-directory",
   /** Renderer 日志转发到 main 进程统一存储 */
   Log: "zcode:log",
   /** Renderer → Main：同步当前窗口所有 tab 的 workspace 路径 */
@@ -266,8 +241,6 @@ export const PlatformChannels = {
   SetApplicationLocale: "zcode:set-application-locale",
   /** Renderer → Main：同步标题栏亮暗色，用于原生窗口控制按钮配色 */
   SetTitleBarTheme: "zcode:set-title-bar-theme",
-  /** Renderer → Main：迁移旧版 Common MCP 配置 */
-  MigrateLegacyCommonMcp: "zcode:migrate-legacy-common-mcp",
 } as const;
 
 export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof PlatformChannels];
@@ -516,18 +489,6 @@ export interface PlatformChannelMap {
   [PlatformChannels.ListSSHConfigAliases]: {
     request: void;
     response: SSHConfigAliasOption[];
-  };
-  [PlatformChannels.LoadMcpFromUserDirectory]: {
-    request: LoadCliMcpFromUserDirectoryRequest;
-    response: LoadCliMcpFromUserDirectoryResult;
-  };
-  [PlatformChannels.SaveMcpToUserDirectory]: {
-    request: SaveCliMcpToUserDirectoryRequest;
-    response: { success: boolean; error?: string };
-  };
-  [PlatformChannels.MigrateLegacyCommonMcp]: {
-    request: MigrateLegacyCommonMcpRequest;
-    response: MigrateLegacyCommonMcpResult;
   };
   [PlatformChannels.Log]: {
     request: { level: "info" | "warn" | "error"; args: unknown[] };

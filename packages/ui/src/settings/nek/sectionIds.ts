@@ -10,6 +10,8 @@ export const NEK_SETTINGS_SECTION_IDS = [
   "nekMcp",
   "nekAgent",
   "nekProject",
+  "nekSkills",
+  "nekPrompts",
   "nekRemoteHosts",
   "nekAppearance",
   "nekShortcuts",

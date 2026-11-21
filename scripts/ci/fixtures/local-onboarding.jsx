@@ -15,7 +15,6 @@ const fixture = (window.onboardingFixture = {
   entry: {
     occupation: "product",
     interfaceMode: "office",
-    memoryEnabled: false,
     proactiveSuggestionsEnabled: false,
     completedAt: "2026-09-24",
   },

@@ -59,9 +59,6 @@ export function OccupationOnboarding({
   const [mode, setMode] = useState<InterfaceMode | null>(savedInterfaceMode);
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const preferences = step === 2;
-  const requestOnboardingDialog = useZCodeStore((state) => state.requestOnboardingDialog);
-  const [migration, setMigration] = useState(false);
-  const [memory, setMemory] = useState(savedInterfaceMode === "office");
   const [suggestions, setSuggestions] = useState(savedInterfaceMode === "office");
   const suggestionsEditedRef = useRef(false);
   const [saving, setSaving] = useState(false);
@@ -90,7 +87,6 @@ export function OccupationOnboarding({
         setInterfaceMode(nextMode);
         setMode(nextMode);
         if (nextMode !== mode) {
-          setMemory(nextMode === "office");
           if (nextMode === "office" && !suggestionsEditedRef.current) setSuggestions(true);
         }
         return;
@@ -163,10 +159,7 @@ export function OccupationOnboarding({
     );
     const initialMode = entry?.interfaceMode ?? savedInterfaceMode;
     setMode(initialMode);
-    // 编程模式默认关闭主动工作记忆；办公模式才恢复上次的勾选。
-    setMemory(initialMode === "office" && (entry?.memoryEnabled ?? true));
     setSuggestions(entry?.proactiveSuggestionsEnabled ?? initialMode === "office");
-    setMigration(false);
     setError(false);
   };
   useEffect(() => {
@@ -196,14 +189,12 @@ export function OccupationOnboarding({
         // settings 侧保持既有语义：跳过落保守默认值（职业 other / 偏好关），
         // "跳过也算答案"的区分度只体现在 onboarding-record.json 里。
         onboardingOccupation: occupation ?? "other",
-        memoryEnabled: skip ? false : memory,
         proactiveSuggestionsEnabled: !skip && mode === "office" && suggestions,
       });
 
       // 偏好保存成功后结束引导，本地完成记录的错误单独处理。
       setStep(0);
       setRequested(false);
-      if (!skip && migration) requestOnboardingDialog("migration");
       logger.info("[occupation-onboarding] 偏好保存完成", { interfaceMode: mode });
       if (onboardingRecord) {
         try {
@@ -214,7 +205,6 @@ export function OccupationOnboarding({
           await appendOnboardingRecord(onboardingRecord, {
             occupation,
             interfaceMode: mode,
-            memoryEnabled: skip ? null : memory,
             proactiveSuggestionsEnabled: skip ? null : mode === "office" && suggestions,
             completedAt: new Date().toISOString(),
           });
@@ -276,8 +266,6 @@ export function OccupationOnboarding({
                       saving={saving}
                       onSelect={(value) => {
                         markUserEdited();
-                        // 重选当前编程模式也应清除旧记录带来的默认勾选。
-                        setMemory(value === "office");
                         if (value !== mode) {
                           if (value === "office" && !suggestionsEditedRef.current)
                             setSuggestions(true);
@@ -289,38 +277,23 @@ export function OccupationOnboarding({
                     />
                   ) : preferences ? (
                     <div className="mt-8 space-y-3">
-                      {(["suggestions", "memory", "migration"] as const)
-                        .filter((key) => key !== "suggestions" || mode === "office")
-                        .map((key) => (
-                          <label
-                            key={key}
-                            className="grid cursor-pointer grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 rounded-xl border border-card-border bg-card dark:bg-surface/40 p-5 text-ui-base transition-colors hover:bg-surface-hover"
-                          >
-                            <Checkbox
-                              checked={
-                                key === "migration"
-                                  ? migration
-                                  : key === "memory"
-                                    ? memory
-                                    : suggestions
-                              }
-                              disabled={saving}
-                              onCheckedChange={(checked) => {
-                                markUserEdited();
-                                if (key === "migration") setMigration(checked === true);
-                                else if (key === "memory") setMemory(checked === true);
-                                else {
-                                  suggestionsEditedRef.current = true;
-                                  setSuggestions(checked === true);
-                                }
-                              }}
-                            />
-                            <span className="font-medium">{t(key)}</span>
-                            <span className="col-start-2 text-ui-sm font-normal text-foreground-subtle">
-                              {t(`${key}Description`)}
-                            </span>
-                          </label>
-                        ))}
+                      {mode === "office" && (
+                        <label className="grid cursor-pointer grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 rounded-xl border border-card-border bg-card p-5 text-ui-base hover:bg-surface-hover">
+                          <Checkbox
+                            checked={suggestions}
+                            disabled={saving}
+                            onCheckedChange={(checked) => {
+                              markUserEdited();
+                              suggestionsEditedRef.current = true;
+                              setSuggestions(checked === true);
+                            }}
+                          />
+                          <span className="font-medium">{t("suggestions")}</span>
+                          <span className="col-start-2 text-ui-sm text-foreground-subtle">
+                            {t("suggestionsDescription")}
+                          </span>
+                        </label>
+                      )}
                     </div>
                   ) : (
                     <OnboardingOccupationGrid

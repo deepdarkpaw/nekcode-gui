@@ -876,9 +876,6 @@ async function createWindowRemoteConnectionHandle(params: {
         taskRealtimePort: activeSessionRealtimePort ?? undefined,
       }),
     promptAttachmentTransferService,
-    runtimePreferencesBridge: {
-      onError: (error: unknown) => logger.warn("remote runtime preferences bridge failed", error),
-    },
   });
 
   let disposed = false;

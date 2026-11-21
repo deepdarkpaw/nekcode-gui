@@ -52,6 +52,7 @@ interface NekSettingsContextValue {
   target: NekConfigTarget;
   targetKey: string;
   targetInfo: NekConfigTargetInfo | undefined;
+  fixedTarget: boolean;
   setTarget: (target: NekConfigTarget) => void;
   refreshTargets: () => Promise<void>;
   subscribeChanges: (listener: ChangeListener) => () => void;
@@ -133,19 +134,24 @@ export function NekSettingsProvider({
   apis,
   projectCwd,
   projectEnvironmentKey,
+  workspaceTarget,
   children,
 }: {
   apis: NekSettingsApis;
   projectCwd?: string;
   projectEnvironmentKey?: string | null;
+  workspaceTarget?: NekConfigTargetInfo;
   children: ReactNode;
 }) {
   const config = useMemo(() => wrapNekConfigApi(apis.config), [apis.config]);
   const { targets, refreshTargets } = useTargetsLoader(config);
-  const target = useNekTargetSelection((state) => state.target);
+  const selectedTarget = useNekTargetSelection((state) => state.target);
   const setTarget = useNekTargetSelection((state) => state.setTarget);
+  const target = workspaceTarget?.target ?? selectedTarget;
+  const fixedTarget = workspaceTarget !== undefined;
   const targetKey = targetKeyOf(target);
-  const targetInfo = targets.list.find((info) => targetKeyOf(info.target) === targetKey);
+  const targetInfo =
+    workspaceTarget ?? targets.list.find((info) => targetKeyOf(info.target) === targetKey);
   const subscribeChanges = useWatchHub(config, target, targetInfo?.connected === true, projectCwd);
   const [writeVersion, setWriteVersion] = useState(0);
   const notifyWrite = useCallback(() => setWriteVersion((version) => version + 1), []);
@@ -166,6 +172,7 @@ export function NekSettingsProvider({
       target,
       targetKey,
       targetInfo,
+      fixedTarget,
       setTarget,
       refreshTargets,
       subscribeChanges,
@@ -182,6 +189,7 @@ export function NekSettingsProvider({
       target,
       targetKey,
       targetInfo,
+      fixedTarget,
       setTarget,
       refreshTargets,
       subscribeChanges,
@@ -211,7 +219,7 @@ export function useNekHostApi(): INekSettingsHostApi {
 
 /** 当前配置目标与目标列表。 */
 export function useNekTarget() {
-  const { target, targetKey, targetInfo, targets, setTarget, refreshTargets } =
+  const { target, targetKey, targetInfo, targets, fixedTarget, setTarget, refreshTargets } =
     useNekSettingsContext();
-  return { target, targetKey, targetInfo, targets, setTarget, refreshTargets };
+  return { target, targetKey, targetInfo, targets, fixedTarget, setTarget, refreshTargets };
 }

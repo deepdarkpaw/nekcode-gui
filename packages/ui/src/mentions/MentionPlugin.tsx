@@ -3,7 +3,6 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import type { ZCodeProvider } from "@zcode/shared";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { createPortal } from "react-dom";
-import { WandSparkles } from "lucide-react";
 import {
   $createTextNode,
   BLUR_COMMAND,
@@ -43,7 +42,6 @@ import {
 import { $createPromptMentionNode } from "./nodes/PromptMentionNode.js";
 import { useFileMentionProvider } from "./providers/fileMentionProvider.js";
 import { useSessionsMentionProvider } from "./providers/sessionsMentionProvider.js";
-import { useSkillsMentionProvider } from "./providers/skillsMentionProvider.js";
 import type { MentionItem } from "./mentionTypes.js";
 import {
   getActivePromptInputTokenReplacementRange,
@@ -56,8 +54,6 @@ interface MentionPluginProps {
   container?: HTMLElement | null;
   workspacePath: string;
   workspaceIdentity?: string;
-  /** 已有 Session 的 id；null/undefined = 新建草稿。决定 Plugins 分组的 catalog authority。 */
-  sessionId?: string | null;
   disabled?: boolean;
 }
 
@@ -126,7 +122,6 @@ function shouldFreezeMentionRecalcWhileComposing(isComposing: boolean, userAgent
 export function MentionPlugin({
   workspacePath,
   workspaceIdentity,
-  sessionId,
   provider,
   container,
   disabled = false,
@@ -148,25 +143,8 @@ export function MentionPlugin({
     () => getPromptInputTriggerSignature(activeTrigger),
     [activeTrigger],
   );
-  const isOpen =
-    !disabled &&
-    (activeTrigger?.trigger === "@" ||
-      activeTrigger?.trigger === "$" ||
-      activeTrigger?.trigger === "#");
-  const groupOrder = getMentionPanelGroupOrder(activeTrigger?.trigger, deferredActiveQuery);
-
-  // 修复说明：之前把 @ 面板拆成了两层，导致用户输入 query 后还要再确认一次，
-  // 实际感受像“按回车之后才开始搜”。现在改成单层分组面板，query 一变化就直接展示各分组结果。
-  const skillsResult = useSkillsMentionProvider(
-    workspacePath,
-    workspaceIdentity,
-    sessionId ?? null,
-    deferredActiveQuery,
-    isOpen && groupOrder.includes("skills"),
-    false,
-    intl.formatMessage({ id: "chat.mention.skills.empty" }),
-    intl.formatMessage({ id: "chat.mention.skills.title" }),
-  );
+  const isOpen = !disabled && (activeTrigger?.trigger === "@" || activeTrigger?.trigger === "#");
+  const groupOrder = getMentionPanelGroupOrder(activeTrigger?.trigger);
   const fileDefaultPreviewLimit = !hasActiveQuery
     ? MENTION_FILES_ONLY_DEFAULT_PREVIEW_LIMIT
     : MENTION_DEFAULT_GROUP_PREVIEW_LIMIT;
@@ -207,17 +185,9 @@ export function MentionPlugin({
         errorText: sessionsResult.error?.message ?? null,
         emptyText: sessionsResult.emptyText,
       },
-      skills: {
-        id: "skills",
-        title: skillsResult.title,
-        items: skillsResult.items,
-        loading: skillsResult.loading,
-        errorText: skillsResult.error?.message ?? null,
-        emptyText: skillsResult.emptyText,
-      },
     } satisfies Record<MentionPanelGroupId, MentionResultGroup<MentionItem>>;
 
-    // @ 同时发现 nek 技能、文件与对话；@skill: 只查技能，# / $ 保留单分组入口。
+    // 技能只在斜杠面板发现；手写 @skill: 保持普通文本语义。
     return buildVisibleMentionGroups(groupOrder.map((groupId) => groupsById[groupId]));
   }, [
     fileResult.emptyText,
@@ -231,11 +201,6 @@ export function MentionPlugin({
     sessionsResult.items,
     sessionsResult.loading,
     sessionsResult.title,
-    skillsResult.emptyText,
-    skillsResult.error,
-    skillsResult.items,
-    skillsResult.loading,
-    skillsResult.title,
   ]);
 
   const flatItems = useMemo(() => panelGroups.flatMap((group) => group.items), [panelGroups]);
@@ -254,24 +219,7 @@ export function MentionPlugin({
           disabledReason: item.disabledReason,
           // @ 面板之前只用 label/description 自己拼文件行，导致图标、文件名和路径展示
           // 跟输入框里的 mention token 不一致。这里统一复用 fileDisplay，让面板和 token 使用同一套文件语义展示。
-          content:
-            item.category === "files" ? (
-              <ContextMentionOptionContent item={item} workspacePath={workspacePath} />
-            ) : item.category === "skills" ? (
-              <span className="min-w-0 flex flex-1 items-center gap-2">
-                {/* skills 候选项需要和命令类项保持一致的主次信息密度，
-                    这里保留图标 + 名称主文案，再把描述压成右侧弱信息，而不是额外占第二行。 */}
-                <WandSparkles className="size-3.5 shrink-0 text-foreground" />
-                <span className="shrink-0 whitespace-nowrap text-ui-base font-medium text-foreground">
-                  {item.label}
-                </span>
-                <span className="min-w-0 truncate text-ui-xs text-foreground-subtlest">
-                  {item.description}
-                </span>
-              </span>
-            ) : item.category === "sessions" ? (
-              <ContextMentionOptionContent item={item} workspacePath={workspacePath} />
-            ) : undefined,
+          content: <ContextMentionOptionContent item={item} workspacePath={workspacePath} />,
         })),
         loading: group.loading,
         loadingText: intl.formatMessage({
@@ -337,9 +285,7 @@ export function MentionPlugin({
         );
         if (
           !nextActiveToken ||
-          (nextActiveToken.trigger !== "@" &&
-            nextActiveToken.trigger !== "$" &&
-            nextActiveToken.trigger !== "#")
+          (nextActiveToken.trigger !== "@" && nextActiveToken.trigger !== "#")
         ) {
           activeTokenRef.current = null;
           dismissedSignatureRef.current = null;
@@ -395,9 +341,7 @@ export function MentionPlugin({
           : extractActivePromptInputTrigger(selectionState.textBeforeCursor);
         if (
           !activeMentionTrigger ||
-          (activeMentionTrigger.trigger !== "@" &&
-            activeMentionTrigger.trigger !== "$" &&
-            activeMentionTrigger.trigger !== "#")
+          (activeMentionTrigger.trigger !== "@" && activeMentionTrigger.trigger !== "#")
         ) {
           return;
         }
@@ -569,9 +513,7 @@ export function MentionPlugin({
     ? ""
     : activeTrigger?.trigger === "#"
       ? intl.formatMessage({ id: "chat.mention.sessions.searchHint" })
-      : activeTrigger?.trigger === "$"
-        ? intl.formatMessage({ id: "chat.mention.skills.searchHint" })
-        : intl.formatMessage({ id: "chat.mention.searchHint" });
+      : intl.formatMessage({ id: "chat.mention.searchHint" });
   const panelEmptyText = hasActiveQuery
     ? intl.formatMessage({ id: "chat.mention.emptyResults" })
     : "";

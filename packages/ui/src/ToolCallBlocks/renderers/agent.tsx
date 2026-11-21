@@ -5,8 +5,6 @@ import { MessageResponse } from "@/components/ai-elements/message.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSubagentColorFromName, SUBAGENT_TEXT_COLOR_CLASS } from "@/lib/subagentColors.js";
-import { useSubagentsContextStore } from "@/store/subagentsContextStore.js";
-import { useSubagentsStore } from "@/store/subagentsStore.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { ToolLayout } from "../ToolLayout.js";
@@ -139,10 +137,6 @@ function AgentNameText({ color, name }: { color: AgentColor; name: string }) {
   );
 }
 
-function normalizeAgentLookupValue(value: string): string {
-  return value.trim().toLowerCase();
-}
-
 function BackgroundAgentProcessSection({
   outputFile,
   hasActivity,
@@ -214,34 +208,8 @@ export function AgentToolCallBlock(context: ToolCallBlockRenderContext) {
   const fallbackLabel = formatAgentMessage(intl, "chat.toolCall.agent.fallback", "SubAgent");
   const primaryText = getAgentPrimaryText(toolCall, fallbackLabel);
   const agentName = getAgentKindLabel(toolCall, "", context.authoritativeAgentType);
-  const configuredAgentsFromContext = useSubagentsContextStore((state) => {
-    const candidates = Object.values(state.contexts).filter(
-      (candidate) => candidate.workspacePath === context.workspacePath && candidate.loaded,
-    );
-    // 同一 remote path 可能对应多个 workspaceIdentity；缺少 identity 时宁可回退默认色，
-    // 也不能猜一个桶并把另一远端 workspace 的 Agent 配置串进来。
-    return candidates.length === 1 ? candidates[0]?.agents : undefined;
-  });
-  const configuredAgentsFromHook = useSubagentsStore((state) => state.agents);
-  const configuredAgents =
-    configuredAgentsFromContext && configuredAgentsFromContext.length > 0
-      ? configuredAgentsFromContext
-      : configuredAgentsFromHook.length > 0
-        ? configuredAgentsFromHook
-        : useSubagentsStore.getState().agents;
-  const configuredAgentColor = useMemo(() => {
-    const lookupName = normalizeAgentLookupValue(agentName);
-    if (!lookupName) {
-      return undefined;
-    }
-    return configuredAgents.find((agent) => {
-      const name = normalizeAgentLookupValue(agent.name);
-      const id = normalizeAgentLookupValue(agent.id);
-      return name === lookupName || id === lookupName;
-    })?.color;
-  }, [agentName, configuredAgents]);
   const agentColor = agentName
-    ? (configuredAgentColor ?? getAgentColor(toolCall) ?? resolveSubagentColorFromName(agentName))
+    ? (getAgentColor(toolCall) ?? resolveSubagentColorFromName(agentName))
     : null;
   const agentNameDetail =
     agentName && agentColor ? <AgentNameText color={agentColor} name={agentName} /> : null;

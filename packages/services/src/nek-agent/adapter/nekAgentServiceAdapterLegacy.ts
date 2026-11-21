@@ -8,6 +8,7 @@ import type {
   V4AttachmentPreviewSourceResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { toNekPromptAttachments } from "./attachmentInput.js";
+import type { ZCodeSlashCommand } from "@zcode/shared";
 import type { NekPlanSummary } from "@zcode/shared/nek-protocol";
 import type { NekSessionCommandEnvelope } from "./types.js";
 import { isNekState } from "../service/types.js";
@@ -66,6 +67,35 @@ function planRow(
   );
 }
 
+async function composerCommands(
+  target: NekAgentServiceAdapterLegacyTarget,
+  cwd: string,
+  sessionKey?: string,
+): Promise<ZCodeSlashCommand[]> {
+  if (sessionKey) {
+    return (await target.service.getCommands(sessionKey))
+      .filter((command) => command.source !== "skill")
+      .map((command) => ({
+        name: command.name,
+        description: command.description ?? "",
+        source: "custom",
+      }));
+  }
+  const control = await target.service.commandContext().control();
+  const { resources } = await control.call<"list_resources">({
+    type: "list_resources",
+    cwd,
+    resourceType: "prompts",
+  });
+  return resources
+    .filter((resource) => resource.enabled)
+    .map((resource) => ({
+      name: resource.name,
+      description: resource.description ?? "",
+      source: "custom",
+    }));
+}
+
 export function createNekLegacyMethods(
   target: NekAgentServiceAdapterLegacyTarget,
   maxPreviewRows?: number,
@@ -80,9 +110,6 @@ export function createNekLegacyMethods(
       return null;
     },
     onDynamicStorageStartupState: emptyEvent,
-    async syncAppRuntimePreferences() {
-      return;
-    },
     async getWorkspaceRuntimeIdentity(input) {
       return runtimeLifecycle.getIdentity(input.workspacePath);
     },
@@ -159,10 +186,6 @@ export function createNekLegacyMethods(
         slashCommands: [],
       };
     },
-    grantWorkspaceHookTrust: () => unsupported("grantWorkspaceHookTrust"),
-    async listMcpServerStatuses() {
-      return { statuses: {} };
-    },
     async getSkillReferenceCatalog(input) {
       const sessionKey = input.sessionId
         ? target.resolveSessionKey(input, input.sessionId)
@@ -170,9 +193,14 @@ export function createNekLegacyMethods(
       if (input.sessionId && !sessionKey)
         throw new Error(`nek session ${input.sessionId} is not open in ${input.workspacePath}`);
       // nek owns discovery, trust and enabled resources; the adapter only projects its targets.
-      const targets = await target.service.getMentionTargets(
-        sessionKey ? { sessionKey } : { cwd: input.workspacePath },
-      );
+      const [targets, commands] = await Promise.all([
+        target.service.getMentionTargets(
+          sessionKey ? { sessionKey } : { cwd: input.workspacePath },
+        ),
+        input.includeSlashCatalog
+          ? composerCommands(target, input.workspacePath, sessionKey)
+          : undefined,
+      ]);
       const skills = targets
         .filter((item) => item.kind === "skill")
         .map((skill) => {
@@ -190,7 +218,11 @@ export function createNekLegacyMethods(
             enabled: true as const,
           };
         });
-      return { authority: sessionKey ? "session" : "workspace", skills };
+      return {
+        authority: sessionKey ? "session" : "workspace",
+        skills,
+        ...(commands && { commands, agents: targets.filter((item) => item.kind === "agent") }),
+      };
     },
     collectLocalRuntimeChildProcesses: () => unsupported("collectLocalRuntimeChildProcesses"),
     generateWorkspaceText: () => unsupported("generateWorkspaceText"),
@@ -255,8 +287,6 @@ export function createNekLegacyMethods(
       await target.service.setMode({ sessionKey, mode: input.mode });
       return (await bindingSnapshot(target, input)) satisfies LegacyModeResult;
     },
-    respondSessionRuntimePreferences: () => unsupported("respondSessionRuntimePreferences"),
-    onDynamicSessionRuntimePreferencesRequest: emptyEvent,
     onDynamicProcessResourceSample: emptyEvent,
     onDynamicMcpTelemetry: emptyEvent,
     onDynamicMcpResourceSamples: emptyEvent,

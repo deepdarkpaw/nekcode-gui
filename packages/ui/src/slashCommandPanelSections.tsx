@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { WandSparklesIcon } from "lucide-react";
 import type { IntlInstance } from "@/i18n/IntlProvider.js";
 import type { PromptInputSuggestionItem } from "@/lib/promptInputTriggers.js";
 import {
@@ -52,6 +53,10 @@ export function useSlashCommandMentionPanelSections(
           description: suggestion.description,
           content: (
             <span className="min-w-0 flex-1 flex items-center gap-2">
+              <WandSparklesIcon
+                aria-hidden="true"
+                className="size-3.5 shrink-0 text-foreground-subtle"
+              />
               <span className="truncate text-ui-base font-medium text-foreground max-w-[40%]">
                 {suggestion.label}
               </span>

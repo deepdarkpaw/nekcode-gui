@@ -3,11 +3,6 @@ import type {
   IntegratedTerminalShellOption,
   IntegratedTerminalShellSelection,
   LocalePreference,
-  ZCodeInteractionBehavior,
-} from "@zcode/shared";
-import {
-  TID_SETTINGS_ASK_USER_QUESTION_AUTO_RESOLUTION_SWITCH,
-  TID_SETTINGS_NATIVE_SEARCH_SWITCH,
 } from "@zcode/shared";
 import { useState, useCallback, useEffect } from "react";
 import type { IPlatformService } from "@zcode/shared";
@@ -41,7 +36,6 @@ export { type SettingsSectionId };
 export { createSettingsPageConfig, resolveSettingsSectionForPlatform };
 
 const TASK_AUTO_ARCHIVE_DAY_OPTIONS = [3, 7, 14, 30] as const;
-const ZCODE_INTERACTION_BEHAVIOR_OPTIONS: readonly ZCodeInteractionBehavior[] = ["queue", "guide"];
 
 export function GeneralSectionContent({
   localePreference,
@@ -59,7 +53,6 @@ export function GeneralSectionContent({
   terminalFontFamily = "",
   integratedTerminalShell = { mode: "auto" },
   integratedTerminalShellOptions = [],
-  nativeSearchEnhancementsEnabled,
   httpProxy = "",
   httpProxyNoProxy = "",
   httpProxyCaCertPath = "",
@@ -76,14 +69,11 @@ export function GeneralSectionContent({
   messageStreamShowTodos,
   toolGroupingExploreEnabled,
   toolGroupingTerminalEnabled,
-  zcodeInteractionBehavior,
-  askUserQuestionAutoResolutionEnabled = true,
   onDataBaseDirChange,
   onSelectDataBaseDir,
   onTerminalInheritSystemProfileChange = async () => {},
   onTerminalFontFamilyChange = async () => {},
   onIntegratedTerminalShellChange = async () => {},
-  onNativeSearchEnhancementsEnabledChange,
   onHttpProxyChange = async () => {},
   onHttpProxyNoProxyChange = async () => {},
   onHttpProxyCaCertPathChange = async () => {},
@@ -98,8 +88,6 @@ export function GeneralSectionContent({
   onMessageStreamShowTodosChange,
   onToolGroupingExploreEnabledChange,
   onToolGroupingTerminalEnabledChange,
-  onZCodeInteractionBehaviorChange,
-  onAskUserQuestionAutoResolutionEnabledChange = async () => {},
   onOpenOnboardingDialog,
 }: {
   localePreference: LocalePreference;
@@ -117,7 +105,6 @@ export function GeneralSectionContent({
   terminalFontFamily: string;
   integratedTerminalShell?: IntegratedTerminalShellSelection;
   integratedTerminalShellOptions?: IntegratedTerminalShellOption[];
-  nativeSearchEnhancementsEnabled: boolean;
   httpProxy?: string;
   httpProxyNoProxy?: string;
   httpProxyCaCertPath?: string;
@@ -135,14 +122,11 @@ export function GeneralSectionContent({
   messageStreamShowTodos: boolean;
   toolGroupingExploreEnabled: boolean;
   toolGroupingTerminalEnabled: boolean;
-  zcodeInteractionBehavior: ZCodeInteractionBehavior;
-  askUserQuestionAutoResolutionEnabled?: boolean;
   onDataBaseDirChange: (dir: string) => Promise<void>;
   onSelectDataBaseDir: () => Promise<string | null>;
   onTerminalInheritSystemProfileChange: (enabled: boolean) => Promise<void>;
   onTerminalFontFamilyChange: (fontFamily: string) => Promise<void>;
   onIntegratedTerminalShellChange?: (selection: IntegratedTerminalShellSelection) => Promise<void>;
-  onNativeSearchEnhancementsEnabledChange: (enabled: boolean) => Promise<void>;
   onHttpProxyChange?: (httpProxy: string) => Promise<void>;
   onHttpProxyNoProxyChange?: (noProxy: string) => Promise<void>;
   onHttpProxyCaCertPathChange?: (caCertPath: string) => Promise<void>;
@@ -157,8 +141,6 @@ export function GeneralSectionContent({
   onMessageStreamShowTodosChange: (enabled: boolean) => Promise<void>;
   onToolGroupingExploreEnabledChange: (enabled: boolean) => Promise<void>;
   onToolGroupingTerminalEnabledChange: (enabled: boolean) => Promise<void>;
-  onZCodeInteractionBehaviorChange: (behavior: ZCodeInteractionBehavior) => Promise<void>;
-  onAskUserQuestionAutoResolutionEnabledChange?: (enabled: boolean) => Promise<void>;
   onOpenOnboardingDialog: () => void;
 }) {
   const { intl } = useZCodeIntl();
@@ -413,26 +395,6 @@ export function GeneralSectionContent({
             }
           />
         ) : null}
-        <SettingsRow
-          label={intl.formatMessage({
-            id: "settings.nativeSearchEnhancements",
-          })}
-          description={intl.formatMessage({
-            id: "settings.nativeSearchEnhancementsDescription",
-          })}
-          control={
-            <Switch
-              aria-label={intl.formatMessage({
-                id: "settings.nativeSearchEnhancements",
-              })}
-              checked={nativeSearchEnhancementsEnabled}
-              data-testid={TID_SETTINGS_NATIVE_SEARCH_SWITCH}
-              onCheckedChange={(checked) => {
-                void onNativeSearchEnhancementsEnabledChange(checked);
-              }}
-            />
-          }
-        />
       </SettingsGroupCard>
 
       <SettingsGroupCard>
@@ -658,53 +620,6 @@ export function GeneralSectionContent({
       </SettingsGroupCard>
 
       <SettingsGroupCard>
-        <SettingsRow
-          label={intl.formatMessage({ id: "settings.zcodeInteractionBehavior" })}
-          description={intl.formatMessage({
-            id: "settings.zcodeInteractionBehaviorDescription",
-          })}
-          control={
-            <Select
-              value={zcodeInteractionBehavior}
-              onValueChange={(value) => {
-                void onZCodeInteractionBehaviorChange(value as ZCodeInteractionBehavior);
-              }}
-            >
-              <SelectTrigger size="lg" className="w-[260px] min-w-0 justify-between">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ZCODE_INTERACTION_BEHAVIOR_OPTIONS.map((behavior) => (
-                  <SelectItem key={behavior} value={behavior}>
-                    {intl.formatMessage({
-                      id: `settings.zcodeInteractionBehavior.option.${behavior}`,
-                    })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-        />
-        <SettingsRow
-          label={intl.formatMessage({
-            id: "settings.askUserQuestionAutoResolution",
-          })}
-          description={intl.formatMessage({
-            id: "settings.askUserQuestionAutoResolutionDescription",
-          })}
-          control={
-            <Switch
-              aria-label={intl.formatMessage({
-                id: "settings.askUserQuestionAutoResolution",
-              })}
-              checked={askUserQuestionAutoResolutionEnabled}
-              data-testid={TID_SETTINGS_ASK_USER_QUESTION_AUTO_RESOLUTION_SWITCH}
-              onCheckedChange={(checked) => {
-                void onAskUserQuestionAutoResolutionEnabledChange(checked);
-              }}
-            />
-          }
-        />
         <SettingsRow
           label={intl.formatMessage({ id: "settings.messageStreamShowReasoning" })}
           description={intl.formatMessage({

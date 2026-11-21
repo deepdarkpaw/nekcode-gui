@@ -2,15 +2,7 @@
 import { logger } from "@/logger.js";
 import { isNekSettingsSectionId, type NekSettingsSectionId } from "@/settings/nek/sectionIds.js";
 
-export type SettingsSectionId =
-  | "general"
-  | "migration"
-  | "memory"
-  | "skill"
-  | "commands"
-  | "hooks"
-  | "workspaceFileSearch"
-  | NekSettingsSectionId;
+export type SettingsSectionId = "general" | "workspaceFileSearch" | NekSettingsSectionId;
 
 const SETTINGS_SECTION_INTENT_KEY = "zcode-settings-section-intent";
 const SETTINGS_SECTION_INTENT_EVENT = "zcode:settings-section-intent",
@@ -28,7 +20,13 @@ const LEGACY_SECTION_REDIRECTS = {
   appearance: "nekAppearance",
   shortcuts: "nekShortcuts",
   subagents: "nekAgent",
-} as const satisfies Record<string, NekSettingsSectionId>;
+  skill: "nekSkills",
+  skills: "nekSkills",
+  commands: "nekPrompts",
+  migration: "nekAgent",
+  hooks: "general",
+  memory: "general",
+} as const satisfies Record<string, SettingsSectionId>;
 
 type SettingsSectionInput = SettingsSectionId | keyof typeof LEGACY_SECTION_REDIRECTS;
 
@@ -37,16 +35,7 @@ interface SettingsSectionIntentEventDetail {
 }
 
 function isSettingsSectionId(value: string): value is SettingsSectionId {
-  return (
-    value === "general" ||
-    value === "migration" ||
-    value === "memory" ||
-    value === "skill" ||
-    value === "commands" ||
-    value === "hooks" ||
-    value === "workspaceFileSearch" ||
-    isNekSettingsSectionId(value)
-  );
+  return value === "general" || value === "workspaceFileSearch" || isNekSettingsSectionId(value);
 }
 
 export function isSettingsSectionEnabled(section: SettingsSectionId): boolean {
@@ -95,10 +84,6 @@ function readLastSettingsSectionPreference(
 
   try {
     const raw = storage.getItem(SETTINGS_LAST_SECTION_STORAGE_KEY);
-    if (raw === "skills") {
-      storage.setItem(SETTINGS_LAST_SECTION_STORAGE_KEY, "skill");
-      return "skill";
-    }
     // 旧版“代码预览”已并入“外观”，保留用户上次停留位置的迁移语义。
     if (raw === "codePreview") {
       storage.setItem(SETTINGS_LAST_SECTION_STORAGE_KEY, "nekAppearance");
@@ -196,10 +181,6 @@ function consumePendingSettingsSection(
       window.sessionStorage.removeItem(SETTINGS_SECTION_INTENT_KEY);
     }
 
-    if (raw === "skills") {
-      // 旧 Skills 使用复数 id；迁移到当前独立 skill 分区。
-      return "skill";
-    }
     if (raw && isSettingsSectionInput(raw)) {
       return resolveSettingsSection(raw, fallbackSection);
     }

@@ -228,19 +228,9 @@ export function instructionsFile(
       );
 }
 
-export function resources(machine: MockMachine, cwd?: string) {
-  const dir = machine.agentDir;
-  return {
-    skills: [
-      { name: "pdf", path: `${dir}/skills/pdf/SKILL.md`, description: "Read and render PDF files" },
-      { name: "release-notes", path: `${dir}/skills/release-notes/SKILL.md` },
-    ],
-    prompts: [
-      { name: "review", path: `${dir}/prompts/review.md`, description: "Review staged changes" },
-    ],
-    extensions: [{ name: "llama", path: `${dir}/extensions/llama.ts` }],
-    directories: { agentDir: dir, projectDir: cwd ? `${cwd}/.nek` : undefined },
-  };
+export function extensions(machine: MockMachine) {
+  const directory = `${machine.agentDir}/extensions`;
+  return { directory, extensions: [{ name: "llama", path: `${directory}/llama.ts` }] };
 }
 
 export function projectTrust(machine: MockMachine, cwd: string): NekProjectTrust {

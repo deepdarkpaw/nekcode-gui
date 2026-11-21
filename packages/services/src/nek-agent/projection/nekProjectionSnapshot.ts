@@ -207,7 +207,7 @@ export function buildAvailability(compacting = false): SessionActionAvailability
     fork: compactLock,
     compact: compactLock,
     switchModelConfig: ALLOWED,
-    setFollowupMode: ALLOWED,
+    setFollowupMode: { allowed: false, reasonCode: "nek_settings_only" },
     queueEdit: ALLOWED,
     sendQueuedNow: compactLock,
     pauseGoal: ALLOWED,

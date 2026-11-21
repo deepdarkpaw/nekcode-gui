@@ -33,7 +33,7 @@ export function NekPageFrame({
   children: ReactNode;
 }) {
   const { intl } = useZCodeIntl();
-  const { isMock, targetInfo } = useNekSettingsContext();
+  const { isMock, targetInfo, fixedTarget } = useNekSettingsContext();
   // 写盘后的自动 reload 失败：所有页面都要提示（进程级失败与页面无关）。
   useNekReloadNotifications();
   return (
@@ -61,7 +61,7 @@ export function NekPageFrame({
             </span>
           ) : null}
           {actions}
-          {usesTarget ? <TargetSwitcher /> : null}
+          {usesTarget && !fixedTarget ? <TargetSwitcher /> : null}
         </div>
       </div>
       <DocumentBanners documents={documents} />

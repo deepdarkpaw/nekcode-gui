@@ -39,12 +39,6 @@ export const ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME = ".nek/gui-server";
 /** 用户级 App 配置子目录名，即 `~/.nek/gui/v2`。 */
 export const ZCODE_APP_CONFIG_SUBDIR_NAME = "v2";
 
-/** 工作区级配置目录名，即 `<workspace>/.zcodium`。 */
-export const ZCODE_WORKSPACE_CONFIG_DIR_NAME = ".zcodium";
-
-/** 工作区级 hooks 配置文件名（与 `.zcodium/config.json` 并存的一种形态）。 */
-export const ZCODE_WORKSPACE_CONFIG_FILE_NAME = "zcodium.json";
-
 /** 工作区文件搜索忽略规则文件名。 */
 export const ZCODE_WORKSPACE_IGNORE_FILE_NAME = ".zcodiumignore";
 

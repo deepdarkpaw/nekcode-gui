@@ -94,14 +94,6 @@ export {
 export { createFsVolumeProbe } from "./storage/adapters/volumeProbe.js";
 export { runStorageScan } from "./storage/adapters/inProcessScanRunner.js";
 export { createClientScenesService } from "./client-scenes/clientScenesService.js";
-export { createSkillsService } from "./skills/skillsService.js";
-export { createSkillSyncService } from "./skill-sync/skillSyncService.js";
-export { createMcpSyncService } from "./mcp-sync/mcpSyncService.js";
-export { createSubagentsService } from "./subagents/subagentsService.js";
-export { createCommandsService } from "./commands/commandsService.js";
-export { createHooksService } from "./hooks/hooksService.js";
-export { createMemoryService } from "./memory/memoryService.js";
-export { createSettingsSyncService } from "./settings-sync/settingsSyncService.js";
 export {
   encodeConversationArchive,
   decodeConversationArchive,

@@ -24,7 +24,6 @@ import {
 import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
-import { useSettings } from "@/hooks/useSettingService.js";
 import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
 import { initializeNewTaskDraft } from "@/v4/composer/newTaskDraft.js";
 import {
@@ -34,7 +33,6 @@ import {
   V4_DRAFT_SCOPE_ROOT,
   type V4ComposerDraft,
 } from "@/v4/composer/composerDraftStore.js";
-import { resolveAppFollowupMode } from "@/v4/composer/followupModeSettings.js";
 import { logger } from "@/logger.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 
@@ -123,8 +121,6 @@ export function useDraftConfigControl(params: {
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
   const zcodeSessionService = useZCodeSessionService(workspacePath, null, workspaceIdentity);
-  const { settings: sharedSettings } = useSettings();
-  const appFollowupMode = resolveAppFollowupMode(sharedSettings);
   const scopeId = sessionId ?? V4_DRAFT_SCOPE_ROOT;
   const scopeKey = JSON.stringify([workspaceKey, scopeId]);
   const loadedScope = useMemo(
@@ -272,12 +268,8 @@ export function useDraftConfigControl(params: {
   );
   const resolveInitialDraftConfig = useCallback((): Partial<SessionConfigState> | undefined => {
     if (!draftConfigRef.current.mode) return undefined;
-    const config = { ...draftConfigRef.current };
-    if (appFollowupMode) {
-      config.followupMode = appFollowupMode;
-    }
-    return config;
-  }, [appFollowupMode]);
+    return { ...draftConfigRef.current };
+  }, []);
 
   const updateComposerContent = useCallback(
     (content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention" | "attachments">) => {
@@ -496,13 +488,8 @@ export function useDraftConfigControl(params: {
 }
 
 /** createSession payload 的草稿 config 片段（无选择时返回空对象，不携带 config 键）。 */
-export function buildDraftCreateConfigPayload(
-  draftConfig: Partial<SessionConfigState>,
-  appFollowupMode?: SessionConfigState["followupMode"] | null,
-): { config?: Partial<SessionConfigState> } {
-  const config: Partial<SessionConfigState> = { ...draftConfig };
-  if (appFollowupMode) {
-    config.followupMode = appFollowupMode;
-  }
-  return Object.keys(config).length > 0 ? { config } : {};
+export function buildDraftCreateConfigPayload(draftConfig: Partial<SessionConfigState>): {
+  config?: Partial<SessionConfigState>;
+} {
+  return Object.keys(draftConfig).length > 0 ? { config: { ...draftConfig } } : {};
 }

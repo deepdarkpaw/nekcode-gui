@@ -180,17 +180,6 @@ export type {
   ZCodeSessionWorkspaceTarget,
 } from "./zcode-session/zcodeSession.js";
 
-// Hooks service — IHooksService is both a type (interface) and value (descriptor).
-export { IHooksService } from "./hooks/hooks.js";
-
-// Memory service — IMemoryService is both a type (interface) and value (descriptor).
-export {
-  IMemoryService,
-  PROJECT_MEMORY_FILE_CHANGED_ERROR_CODE,
-  PROJECT_MEMORY_PREVIEW_LIMIT_EXCEEDED_ERROR_CODE,
-} from "./memory/memory.js";
-export type { ProjectMemoryFileSummary, ProjectMemoryWorkspaceSummary } from "./memory/memory.js";
-
 export type { SessionRealtimePort } from "./session/sessionRealtimePort.js";
 
 // FileWatcher service — IFileWatcherService is both a type (interface) and value (descriptor)
@@ -208,19 +197,11 @@ export {
   type ClientScenesResponse,
 } from "./client-scenes/clientScenes.js";
 
-// Skills service — ISkillsService is both a type (interface) and value (descriptor)
-export { ISkillsService } from "./skills/skills.js";
-export { ISkillSyncService } from "./skill-sync/skillSync.js";
-export { IMcpSyncService } from "./mcp-sync/mcpSync.js";
-
-// Subagents service — ISubagentsService is both a type (interface) and value (descriptor)
-export { ISubagentsService } from "./subagents/subagents.js";
-
-// Commands service — ICommandsService is both a type (interface) and value (descriptor)
-export { ICommandsService } from "./commands/commands.js";
-
-export { ISettingsSyncService } from "./settings-sync/settingsSync.js";
-
+export {
+  INekWorkspaceConfigService,
+  NEK_WORKSPACE_CONFIG_METHODS,
+  type NekWorkspaceConfigMethod,
+} from "./nek-config-api/workspaceConfigService.js";
 export { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 export type {
   PromptAttachmentStageParams,

@@ -5,10 +5,6 @@
  */
 export { acquireFileLock } from "./node/atomicFileLock.js";
 export {
-  migrateUserSubagentMarkdown,
-  migrateSubagentStateFile,
-} from "./node/subagentMarkdownMigration.js";
-export {
   migrateLegacyUserDataRoot,
   type MigrateLegacyUserDataRootOptions,
   type MigrateLegacyUserDataRootResult,

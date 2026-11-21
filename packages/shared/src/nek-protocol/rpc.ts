@@ -328,6 +328,8 @@ export interface NekRpcResponseDataMap extends NekHistoryResponseData {
   set_project_trust: NekGuiRpcResponseData["set_project_trust"];
   test_web_search: NekGuiRpcResponseData["test_web_search"];
   mcp_test: NekGuiRpcResponseData["mcp_test"];
+  list_resources: NekGuiRpcResponseData["list_resources"];
+  set_resource_enabled: NekGuiRpcResponseData["set_resource_enabled"];
   extension_call: NekGuiRpcResponseData["extension_call"];
 }
 

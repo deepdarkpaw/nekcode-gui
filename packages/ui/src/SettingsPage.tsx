@@ -1,4 +1,3 @@
-import { logger } from "@/logger.js";
 /* oxlint-disable eslint(max-lines) */
 import { ArrowLeft, Rocket, type LucideIcon } from "lucide-react";
 import {
@@ -14,7 +13,6 @@ import type {
   IntegratedTerminalShellOption,
   IntegratedTerminalShellSelection,
   Locale,
-  ZCodeInteractionBehavior,
 } from "@zcode/shared";
 import {
   TID_SETTINGS_BACK_BUTTON,
@@ -28,19 +26,15 @@ import { toast } from "@/components/ui/toast.js";
 import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
-import { getPathLeaf } from "@/lib/path.js";
 import {
   addPendingSettingsSectionListener,
   consumeInitialSettingsSection,
   resolveSettingsSection,
   writeLastSettingsSectionPreference,
 } from "@/lib/settingsNavigation.js";
-import { CapabilitySection } from "@/settings/CapabilitySection.js";
-import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
-import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
-import { MigrationSection } from "@/settings/MigrationSection.js";
 import { NekSettingsSection } from "@/settings/nek/NekSettingsSection.js";
+import { useSettingsWorkspaceBinding } from "@/settings/nek/api/useSettingsWorkspaceBinding.js";
 import { isNekSettingsSectionId } from "@/settings/nek/sectionIds.js";
 import { SETTINGS_FRAME_CONTENT_CLASSNAME } from "@/settings/SettingsPageParts.js";
 import {
@@ -60,7 +54,7 @@ import { WorkspaceSidebarFooter } from "@/WorkspaceSidebarFooter.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
 import { useSelectDirectory } from "@/hooks/usePlatform.js";
-import { ServiceProvider, useServices } from "@/hooks/useServices.js";
+import { useServices } from "@/hooks/useServices.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
@@ -119,7 +113,6 @@ export function SettingsPage({
   windowsWindowControlsRightPaddingPx: _windowsWindowControlsRightPaddingPx,
   captionWorkspacePath,
   onBack,
-  onCreateTask,
 }: {
   isDesktop?: boolean;
   isWindowsDesktop?: boolean;
@@ -177,12 +170,16 @@ export function SettingsPage({
   const activeWorkspaceIdentity = useTabStore(
     (state) => state.activeWorkspaceIdentity ?? undefined,
   );
+  const projectCwd = activeWorkspacePath ?? captionWorkspacePath;
+  const activeWorkspaceTab = workspaceTabs.find(
+    (tab) => tab.workspacePath === projectCwd && tab.workspaceIdentity === activeWorkspaceIdentity,
+  );
+  const workspaceConfig = useSettingsWorkspaceBinding(projectCwd, activeWorkspaceTab);
+  // 模型范围读写只把活动工作区的项目路径交给同一台机器上的 nek（见 useModelScopeCwd）。
   const activeRemoteTab = activeWorkspaceIdentity
     ? workspaceTabs.find((tab) => tab.workspaceIdentity === activeWorkspaceIdentity)
     : workspaceTabs.find(
-        (tab) =>
-          tab.workspacePath === (activeWorkspacePath ?? captionWorkspacePath) &&
-          (tab.remoteSessionId || tab.remoteTarget),
+        (tab) => tab.workspacePath === projectCwd && (tab.remoteSessionId || tab.remoteTarget),
       );
   const activeRemoteTarget = activeRemoteTab?.remoteTarget;
   const projectEnvironmentKey = activeRemoteTarget
@@ -192,27 +189,8 @@ export function SettingsPage({
       : undefined;
   const selectDirectory = useSelectDirectory();
   const services = useServices();
-  const onboardingRecordService = services.onboardingRecordService;
   const localHostServices = useBaseWorkspaceServices();
   const { settings: sharedSettings, update: updateSharedSettings } = useSettings();
-  const memoryWorkspaceDisplayNames = useMemo(() => {
-    const names = new Set<string>();
-    // Memory Scope 的项目顺序以 settings.json recentProjects 为准；打开中的
-    // Workspace 只补充尚未持久化的项目，不能抢占最近项目排序。
-    for (const path of sharedSettings?.recentProjects ?? []) {
-      const name = getPathLeaf(path).trim();
-      if (name) names.add(name);
-    }
-    for (const tab of workspaceTabs) {
-      const name = tab.label.trim() || getPathLeaf(tab.workspacePath).trim();
-      if (name) names.add(name);
-    }
-    return [...names];
-  }, [sharedSettings?.recentProjects, workspaceTabs]);
-  const memoryEnabled = sharedSettings?.memoryEnabled === true;
-  const nativeSearchEnhancementsEnabled = sharedSettings?.nativeSearchEnhancementsEnabled !== false;
-  const askUserQuestionAutoResolutionEnabled =
-    sharedSettings?.askUserQuestionAutoResolutionEnabled !== false;
   const [dataBaseDir, setDataBaseDir] = useState("");
   const [terminalInheritSystemProfile, setTerminalInheritSystemProfile] = useState(true);
   const [terminalFontFamily, setTerminalFontFamily] = useState("");
@@ -237,8 +215,6 @@ export function SettingsPage({
   const [messageStreamShowTodos, setMessageStreamShowTodos] = useState(false);
   const [toolGroupingExploreEnabled, setToolGroupingExploreEnabled] = useState(true);
   const [toolGroupingTerminalEnabled, setToolGroupingTerminalEnabled] = useState(true);
-  const [zcodeInteractionBehavior, setZCodeInteractionBehavior] =
-    useState<ZCodeInteractionBehavior>("queue");
   const [defaultHomeDir, setDefaultHomeDir] = useState("");
   const [hostPlatform, setHostPlatform] = useState("");
 
@@ -278,7 +254,6 @@ export function SettingsPage({
         setMessageStreamShowTodos(settings.messageStreamShowTodos ?? false);
         setToolGroupingExploreEnabled(settings.toolGroupingExploreEnabled ?? true);
         setToolGroupingTerminalEnabled(settings.toolGroupingTerminalEnabled ?? true);
-        setZCodeInteractionBehavior(settings.zcodeInteractionBehavior ?? "queue");
       })
       .catch(() => {});
     // 这里配置的是本地全局设置。远端 workspace 激活时 useServices()
@@ -310,7 +285,6 @@ export function SettingsPage({
     setMessageStreamShowTodos(sharedSettings.messageStreamShowTodos ?? false);
     setToolGroupingExploreEnabled(sharedSettings.toolGroupingExploreEnabled ?? true);
     setToolGroupingTerminalEnabled(sharedSettings.toolGroupingTerminalEnabled ?? true);
-    setZCodeInteractionBehavior(sharedSettings.zcodeInteractionBehavior ?? "queue");
     setReceivePreviewUpdates(sharedSettings.receivePreviewUpdates ?? false);
     setAutoDownloadAndInstallUpdates(sharedSettings.autoDownloadAndInstallUpdates ?? false);
   }, [sharedSettings]);
@@ -335,32 +309,6 @@ export function SettingsPage({
       setIntegratedTerminalShell(selection);
     },
     [services.settingService],
-  );
-  const handleNativeSearchEnhancementsEnabledChange = useCallback(
-    async (enabled: boolean) => {
-      await updateSharedSettings({ nativeSearchEnhancementsEnabled: enabled });
-    },
-    [updateSharedSettings],
-  );
-  const handleAskUserQuestionAutoResolutionEnabledChange = useCallback(
-    async (enabled: boolean) => {
-      await updateSharedSettings({ askUserQuestionAutoResolutionEnabled: enabled });
-    },
-    [updateSharedSettings],
-  );
-  const handleMemoryEnabledChange = useCallback(
-    async (enabled: boolean) => {
-      await (async () => {
-        await updateSharedSettings({ memoryEnabled: enabled });
-        // 手动修改反向回写 record，换号同步不会复活旧值；失败不阻塞开关。
-        await onboardingRecordService
-          ?.updateRecordPreferences({ memoryEnabled: enabled })
-          .catch((cause: unknown) => {
-            logger.warn("[settings] 回写引导记录失败", cause);
-          });
-      })();
-    },
-    [updateSharedSettings],
   );
   const handleHttpProxyChange = useCallback(
     async (proxy: string) => {
@@ -490,13 +438,6 @@ export function SettingsPage({
     async (enabled: boolean) => {
       await updateSharedSettings({ toolGroupingTerminalEnabled: enabled });
       setToolGroupingTerminalEnabled(enabled);
-    },
-    [updateSharedSettings],
-  );
-  const handleZCodeInteractionBehaviorChange = useCallback(
-    async (behavior: ZCodeInteractionBehavior) => {
-      await updateSharedSettings({ zcodeInteractionBehavior: behavior });
-      setZCodeInteractionBehavior(behavior);
     },
     [updateSharedSettings],
   );
@@ -793,9 +734,11 @@ export function SettingsPage({
                       <div className="space-y-8">
                         {isNekSettingsSectionId(activeSection) ? (
                           <NekSettingsSection
+                            key={`${activeSection}:${settingsSectionNavigationVersion}`}
                             sectionId={activeSection}
-                            projectCwd={activeWorkspacePath ?? captionWorkspacePath}
+                            projectCwd={projectCwd}
                             projectEnvironmentKey={projectEnvironmentKey}
+                            workspace={workspaceConfig}
                             isWindowsDesktop={Boolean(isWindowsDesktop)}
                           />
                         ) : activeSection === "general" ? (
@@ -820,7 +763,6 @@ export function SettingsPage({
                             terminalFontFamily={terminalFontFamily}
                             integratedTerminalShell={integratedTerminalShell}
                             integratedTerminalShellOptions={integratedTerminalShellOptions}
-                            nativeSearchEnhancementsEnabled={nativeSearchEnhancementsEnabled}
                             httpProxy={httpProxy}
                             httpProxyNoProxy={httpProxyNoProxy}
                             httpProxyCaCertPath={httpProxyCaCertPath}
@@ -837,10 +779,6 @@ export function SettingsPage({
                             messageStreamShowTodos={messageStreamShowTodos}
                             toolGroupingExploreEnabled={toolGroupingExploreEnabled}
                             toolGroupingTerminalEnabled={toolGroupingTerminalEnabled}
-                            zcodeInteractionBehavior={zcodeInteractionBehavior}
-                            askUserQuestionAutoResolutionEnabled={
-                              askUserQuestionAutoResolutionEnabled
-                            }
                             onDataBaseDirChange={handleDataBaseDirChange}
                             onSelectDataBaseDir={selectDirectory}
                             onTerminalInheritSystemProfileChange={
@@ -848,9 +786,6 @@ export function SettingsPage({
                             }
                             onTerminalFontFamilyChange={handleTerminalFontFamilyChange}
                             onIntegratedTerminalShellChange={handleIntegratedTerminalShellChange}
-                            onNativeSearchEnhancementsEnabledChange={
-                              handleNativeSearchEnhancementsEnabledChange
-                            }
                             onHttpProxyChange={handleHttpProxyChange}
                             onHttpProxyNoProxyChange={handleHttpProxyNoProxyChange}
                             onHttpProxyCaCertPathChange={handleHttpProxyCaCertPathChange}
@@ -877,48 +812,7 @@ export function SettingsPage({
                             onToolGroupingTerminalEnabledChange={
                               handleToolGroupingTerminalEnabledChange
                             }
-                            onZCodeInteractionBehaviorChange={handleZCodeInteractionBehaviorChange}
-                            onAskUserQuestionAutoResolutionEnabledChange={
-                              handleAskUserQuestionAutoResolutionEnabledChange
-                            }
                             onOpenOnboardingDialog={() => requestOnboardingDialog()}
-                          />
-                        ) : activeSection === "memory" ? (
-                          <ServiceProvider services={localHostServices}>
-                            {/* Memory catalog 始终使用本地 Host，避免远程 workspace 误读本机数据。 */}
-                            <MemorySettingsSection
-                              memoryEnabled={memoryEnabled}
-                              memoryService={localHostServices.memoryService}
-                              onMemoryEnabledChange={handleMemoryEnabledChange}
-                              projectMemoryViewerAvailable={Boolean(isDesktop)}
-                              workspaceDisplayNames={memoryWorkspaceDisplayNames}
-                            />
-                          </ServiceProvider>
-                        ) : activeSection === "skill" ? (
-                          <CapabilitySection
-                            key={`skill:${settingsSectionNavigationVersion}`}
-                            mode="skill"
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            onCreateTask={onCreateTask}
-                          />
-                        ) : activeSection === "migration" ? (
-                          <MigrationSection
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            isDesktop={isDesktop}
-                          />
-                        ) : activeSection === "commands" ? (
-                          <CapabilitySection
-                            mode="command"
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
-                            onCreateTask={onCreateTask}
-                          />
-                        ) : activeSection === "hooks" ? (
-                          <HooksSection
-                            workspacePath={activeWorkspacePath}
-                            workspaceIdentity={activeWorkspaceIdentity}
                           />
                         ) : activeSection === "workspaceFileSearch" ? (
                           <WorkspaceFileSearchSection

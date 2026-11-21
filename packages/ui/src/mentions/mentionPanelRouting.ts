@@ -1,29 +1,17 @@
 import type { PromptInputTrigger } from "@/lib/promptInputTriggers.js";
 
-export type MentionPanelGroupId = "files" | "sessions" | "skills";
+export type MentionPanelGroupId = "files" | "sessions";
 export type SessionMentionWorkspaceScope = "current-workspace" | "same-authority-workspaces";
 
-const CONTEXT_GROUP_ORDER: readonly MentionPanelGroupId[] = ["skills", "files", "sessions"];
+const CONTEXT_GROUP_ORDER: readonly MentionPanelGroupId[] = ["files", "sessions"];
 const SESSION_GROUP_ORDER: readonly MentionPanelGroupId[] = ["sessions"];
-const SKILL_GROUP_ORDER: readonly MentionPanelGroupId[] = ["skills"];
 
-/**
- * 输入触发器只负责发现入口，不改变候选选中后的 canonical mention。
- * `#` 与 `$`（含输入层归一后的 `¥` / `￥`）继续保留旧单分组面板。
- */
+/** `@` 只发现上下文，`#` 保留会话入口；技能候选只由 `/` 面板提供。 */
 export function getMentionPanelGroupOrder(
   trigger: PromptInputTrigger | null | undefined,
-  query = "",
 ): readonly MentionPanelGroupId[] {
-  if (trigger === "@") {
-    return /^skill:/i.test(query) ? SKILL_GROUP_ORDER : CONTEXT_GROUP_ORDER;
-  }
-  if (trigger === "#") {
-    return SESSION_GROUP_ORDER;
-  }
-  if (trigger === "$") {
-    return SKILL_GROUP_ORDER;
-  }
+  if (trigger === "@") return CONTEXT_GROUP_ORDER;
+  if (trigger === "#") return SESSION_GROUP_ORDER;
   return [];
 }
 

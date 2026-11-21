@@ -1,12 +1,4 @@
-import {
-  Settings,
-  Settings2,
-  Terminal,
-  Anchor,
-  Brain,
-  WandSparkles,
-  FileSearch,
-} from "lucide-react";
+import { Settings, Settings2, FileSearch } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import {
   NEK_SETTINGS_GROUPS,
@@ -14,7 +6,7 @@ import {
   type NekSettingsGroupId,
 } from "./nek/sections.js";
 
-type SettingsSectionGroupId = "basics" | "agentCapabilities" | NekSettingsGroupId;
+type SettingsSectionGroupId = "basics" | NekSettingsGroupId;
 
 interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -28,14 +20,7 @@ interface SettingsSectionDefinition {
 const BASE_SETTINGS_SECTION_GROUPS: Array<{
   id: SettingsSectionGroupId;
   titleId: string;
-}> = [
-  ...NEK_SETTINGS_GROUPS,
-  { id: "basics", titleId: "settings.sidebar.group.basics" },
-  {
-    id: "agentCapabilities",
-    titleId: "settings.sidebar.group.agentCapabilities",
-  },
-];
+}> = [...NEK_SETTINGS_GROUPS, { id: "basics", titleId: "settings.sidebar.group.basics" }];
 
 const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   ...NEK_SETTINGS_SECTIONS,
@@ -44,30 +29,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: Settings2,
     titleId: "settings.systemTitle",
     groupId: "basics",
-  },
-  {
-    id: "memory",
-    icon: Brain,
-    titleId: "settings.memory",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "skill",
-    icon: WandSparkles,
-    titleId: "settings.skills.title",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "commands",
-    icon: Terminal,
-    titleId: "settings.commands.title",
-    groupId: "agentCapabilities",
-  },
-  {
-    id: "hooks",
-    icon: Anchor,
-    titleId: "settings.hooks.title",
-    groupId: "agentCapabilities",
   },
   // 工作区搜索范围（.zcodiumignore）：面向所有用户的基础工作区行为配置，收在基础设置末尾。
   {

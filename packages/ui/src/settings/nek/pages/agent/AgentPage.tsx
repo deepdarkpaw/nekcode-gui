@@ -1,6 +1,6 @@
 /**
  * Agent：nek.yaml（plan 目录与模式快捷键、todo 结束提醒、子代理并发 / 保留 / 等待上限）、
- * 子代理预设、全局 AGENTS.md、skills / prompts / extensions 只读列表与打开目录。
+ * 子代理预设、全局 AGENTS.md 与约定的全局扩展目录。
  */
 import { FolderOpenIcon } from "lucide-react";
 import type { NekConfigTarget } from "@zcode/shared/nek-protocol";
@@ -130,59 +130,35 @@ export function OpenDirectoryButton({ target, path }: { target: NekConfigTarget;
 
 function ResourcesSection() {
   const { intl } = useZCodeIntl();
-  const { projectCwd } = useNekSettingsContext();
   const { target } = useNekTarget();
-  const resources = useNekQuery(
-    (api, current) => api.listResources(current, projectCwd),
-    [projectCwd],
-  );
-  const dir = resources.data?.directories.agentDir ?? "";
-  const groups = [
-    { key: "skills", items: resources.data?.skills ?? [], path: `${dir}/skills` },
-    { key: "prompts", items: resources.data?.prompts ?? [], path: `${dir}/prompts` },
-    { key: "extensions", items: resources.data?.extensions ?? [], path: `${dir}/extensions` },
-  ] as const;
+  const resources = useNekQuery((api, current) => api.listExtensions(current), []);
   return (
     <SettingSection
-      title={intl.formatMessage({ id: "settings.nek.agent.resources" })}
-      description={intl.formatMessage({ id: "settings.nek.agent.resourcesHint" })}
+      title={intl.formatMessage({ id: "settings.nek.agent.extensions" })}
+      description={intl.formatMessage({ id: "settings.nek.agent.extensionsHint" })}
     >
       <DocumentGate documents={[resources]}>
-        {() => (
-          <div className="grid gap-3 md:grid-cols-3">
-            {groups.map((group) => (
-              <section
-                key={group.key}
-                className="flex flex-col gap-1 rounded-xl border border-card-border bg-card p-3"
-              >
-                <header className="flex items-center justify-between gap-2">
-                  <h4 className="text-ui-sm font-medium">
-                    {intl.formatMessage(
-                      { id: `settings.nek.agent.resources.${group.key}` },
-                      { count: group.items.length },
-                    )}
-                  </h4>
-                  <OpenDirectoryButton target={target} path={group.path} />
-                </header>
-                {group.items.length === 0 ? (
-                  <p className="text-ui-sm text-foreground-subtlest">—</p>
-                ) : null}
+        {() =>
+          resources.data && (
+            <section className="flex flex-col gap-1 rounded-xl border border-card-border bg-card p-3">
+              <header className="flex items-center justify-between gap-2">
+                <span className="break-all font-mono text-ui-sm">{resources.data.directory}</span>
+                <OpenDirectoryButton target={target} path={resources.data.directory} />
+              </header>
+              {resources.data.extensions.length ? (
                 <ul className="flex flex-col gap-0.5">
-                  {group.items.map((item) => (
-                    <li key={item.path} className="flex flex-col" title={item.path}>
-                      <span className="truncate font-mono text-ui-sm">{item.name}</span>
-                      {"description" in item && item.description ? (
-                        <span className="truncate text-ui-xs text-foreground-subtle">
-                          {item.description}
-                        </span>
-                      ) : null}
+                  {resources.data.extensions.map((item) => (
+                    <li key={item.path} title={item.path} className="truncate font-mono text-ui-sm">
+                      {item.name}
                     </li>
                   ))}
                 </ul>
-              </section>
-            ))}
-          </div>
-        )}
+              ) : (
+                <p className="text-ui-sm text-foreground-subtle">—</p>
+              )}
+            </section>
+          )
+        }
       </DocumentGate>
     </SettingSection>
   );

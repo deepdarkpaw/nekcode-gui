@@ -2,10 +2,9 @@
  * slashCommandHelpers — 纯函数辅助工具，供 SlashCommandPlugin.tsx 使用
  */
 import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical";
-import type { AgentSummary, Locale, SkillSummary, ZCodeSlashCommand } from "@zcode/shared";
-import type { MentionItem } from "@/mentions/mentionTypes.js";
-import { mapSubagentsToMentionItemsForTest } from "@/mentions/providers/subagentsMentionProvider.js";
-import { mapSkillsToMentionItemsForTest } from "@/mentions/providers/skillsMentionProvider.js";
+import type { Locale, ZCodeSkillReferenceCatalogEntry, ZCodeSlashCommand } from "@zcode/shared";
+import type { NekMentionTarget } from "@zcode/shared/nek-protocol";
+import { resolveSkillSourceLabel } from "@/lib/skillSourceLabel.js";
 import type { PromptInputSuggestionItem } from "./lib/promptInputTriggers.js";
 
 export interface SlashCommandPluginProps {
@@ -106,43 +105,35 @@ export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInpu
 }
 
 export function buildSubagentSuggestions(
-  agents: Array<
-    Pick<
-      AgentSummary,
-      "id" | "name" | "description" | "path" | "scope" | "source" | "enabled" | "modelSelection"
-    >
-  >,
+  agents: readonly NekMentionTarget[],
 ): PromptInputSuggestionItem[] {
-  return mapSubagentsToMentionItemsForTest(agents).map((item) =>
-    mapSubagentMentionItemToSuggestion(item),
-  );
-}
-
-export function buildSkillSuggestions(
-  skills: Array<Pick<SkillSummary, "id" | "name" | "description" | "path" | "scope">>,
-  locale?: Locale,
-): PromptInputSuggestionItem[] {
-  return mapSkillsToMentionItemsForTest(skills, locale).map((item) => ({
-    id: item.id,
+  return agents.map((agent) => ({
+    id: `subagent:${agent.name}`,
     trigger: "/",
-    value: item.value,
-    label: `@skill:${item.value}`,
-    description: item.description,
-    keywords: [...new Set([...(item.keywords ?? []), "skill", "skills", item.value])],
-    data: item.data,
+    value: agent.name,
+    label: agent.name,
+    description: agent.description ?? "",
+    keywords: [agent.name, agent.description ?? "", "subagent", "agent"],
+    data: { path: agent.location },
   }));
 }
 
-function mapSubagentMentionItemToSuggestion(item: MentionItem): PromptInputSuggestionItem {
-  return {
-    id: item.id,
-    trigger: "/",
-    value: item.value,
-    label: item.label,
-    description: item.description,
-    keywords: [...new Set([...(item.keywords ?? []), "subagent", "agent"])],
-    data: item.data,
-  };
+export function buildSkillSuggestions(
+  skills: ReadonlyArray<ZCodeSkillReferenceCatalogEntry>,
+  locale?: Locale,
+): PromptInputSuggestionItem[] {
+  return skills.map((skill) => {
+    const source = resolveSkillSourceLabel(skill.scope, locale);
+    return {
+      id: `skill:${skill.id}`,
+      trigger: "/",
+      value: skill.name,
+      label: skill.name,
+      description: skill.description ? `${source} · ${skill.description}` : source,
+      keywords: [skill.name, skill.description, "skill", "skills", skill.scope],
+      data: { path: skill.path, scope: skill.scope },
+    };
+  });
 }
 
 export function getTextAroundCursor() {

@@ -26,8 +26,16 @@ export function useNekReloadNotifications(): void {
   useEffect(() => {
     const t = (id: string, values?: Record<string, string | number>) =>
       intlRef.current.formatMessage({ id }, values);
+    const activeTarget = targetRef.current;
     const report = (outcome: NekSessionReloadOutcome) => {
-      if (outcome.failures.length === 0) return false;
+      if (outcome.failures.length === 0) {
+        if (outcome.deferred > 0)
+          toast(t("settings.nek.resources.reloadDeferred"), {
+            variant: "info",
+            dedupeKey: `nek-reload-deferred:${targetKey}`,
+          });
+        return false;
+      }
       toast(
         t("settings.nek.reload.failed", {
           count: outcome.failures.length,
@@ -40,7 +48,7 @@ export function useNekReloadNotifications(): void {
           actionLabel: t("settings.nek.reload.retry"),
           onAction: () => {
             void api
-              .reloadRunningSessions(targetRef.current)
+              .reloadRunningSessions(activeTarget)
               .then((retried) => {
                 if (!report(retried)) {
                   toast(t("settings.nek.reload.recovered"), { variant: "info" });

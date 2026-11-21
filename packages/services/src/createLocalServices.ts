@@ -27,14 +27,6 @@ import { ConversationShareService } from "./conversation-share/conversationShare
 import { createLocalConversationShareArtifactSource } from "./conversation-share/conversationShareArtifactSource.js";
 import { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 import { IClientScenesService } from "./client-scenes/clientScenes.js";
-import { ISkillsService } from "./skills/skills.js";
-import { ISkillSyncService } from "./skill-sync/skillSync.js";
-import { IMcpSyncService } from "./mcp-sync/mcpSync.js";
-import { ISubagentsService } from "./subagents/subagents.js";
-import { ICommandsService } from "./commands/commands.js";
-import { IHooksService } from "./hooks/hooks.js";
-import { IMemoryService } from "./memory/memory.js";
-import { ISettingsSyncService } from "./settings-sync/settingsSync.js";
 import { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 import { createFileService } from "./file/fileService.js";
 import { createMediaPreviewService } from "./media-preview/mediaPreview.js";
@@ -50,6 +42,10 @@ import { createObservableSettingService } from "./setting/observableSettingServi
 import { createCredentialService } from "./credential/credentialService.js";
 import { createBroadcastService } from "./broadcast/broadcastService.js";
 import { createNekRuntimeServices } from "./createNekRuntimeServices.js";
+import {
+  createWorkspaceConfigService,
+  INekWorkspaceConfigService,
+} from "./nek-config-api/index.js";
 import type { ZCodeAgentCommandResolver } from "./zcode-agent/zcodeAgentCommand.js";
 import { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
 import { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
@@ -62,14 +58,6 @@ import { createNekModelFactsSource } from "./model-provider/nekModelFacts.js";
 import { createNekModelSelectionService } from "./model-provider/nekModelSelectionService.js";
 import { createLocalNekConfigTargetHost } from "./nek-config-api/index.js";
 import { createClientScenesService } from "./client-scenes/clientScenesService.js";
-import { createSkillsService } from "./skills/skillsService.js";
-import { createSkillSyncService } from "./skill-sync/skillSyncService.js";
-import { createMcpSyncService } from "./mcp-sync/mcpSyncService.js";
-import { createSubagentsService } from "./subagents/subagentsService.js";
-import { createCommandsService } from "./commands/commandsService.js";
-import { createHooksService } from "./hooks/hooksService.js";
-import { createMemoryService } from "./memory/memoryService.js";
-import { createSettingsSyncService } from "./settings-sync/settingsSyncService.js";
 import { createLocalPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransferService.js";
 import {
   createHostApiNetworkTransport,
@@ -221,24 +209,7 @@ export function createLocalServices(options: CreateLocalServicesOptions): Servic
     .register(IFileWatcherService, createFileWatcherService())
     .register(IModelSelectionService, modelSelectionService)
     .register(IClientScenesService, createClientScenesService())
-    .register(ISkillsService, createSkillsService({ isDesktopRuntime: true }))
-    .register(ISkillSyncService, createSkillSyncService())
-    .register(
-      IMcpSyncService,
-      createMcpSyncService({
-        listMcpServerStatuses: (params) => zcodeAgentService.listMcpServerStatuses(params),
-      }),
-    )
-    .register(ISubagentsService, createSubagentsService({ isDesktopRuntime: true }))
-    .register(ICommandsService, createCommandsService({ isDesktopRuntime: true }))
-    .register(
-      IHooksService,
-      createHooksService({
-        grantWorkspaceHookTrust: (params) => zcodeAgentService.grantWorkspaceHookTrust(params),
-      }),
-    )
-    .register(IMemoryService, createMemoryService())
-    .register(ISettingsSyncService, createSettingsSyncService({ settingService }))
+    .register(INekWorkspaceConfigService, createWorkspaceConfigService(nekConfigApi))
     .register(IPromptAttachmentTransferService, createLocalPromptAttachmentTransferService());
   registerHostApiNetworkTransportForDispose(services, hostApiNetworkTransport);
   registerLocalServiceResources(services, {

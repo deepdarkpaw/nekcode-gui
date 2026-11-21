@@ -254,6 +254,7 @@ export class NekConfigRuntime {
   publishWrite(
     target: NekConfigTarget,
     files: ReadonlyArray<{ path: string; revision: string }>,
+    scope?: { cwd?: string },
   ): void {
     const key = targetKeyOf(target);
     this.watchHub.publish(
@@ -263,8 +264,16 @@ export class NekConfigRuntime {
     if (!this.autoReload) return;
     const agentDir = this.target(target).layout.agentDir;
     const workspaces = new Set(files.map((file) => workspaceOfWrite(agentDir, file.path)));
-    const cwd = workspaces.size === 1 ? [...workspaces][0] : undefined;
-    const modelsOnly = files.every((file) => basename(file.path) === "models.json");
+    const cwd = scope ? scope.cwd : workspaces.size === 1 ? [...workspaces][0] : undefined;
+    this.reloadAfterWrite(
+      target,
+      cwd,
+      files.every((file) => basename(file.path) === "models.json"),
+    );
+  }
+
+  reloadAfterWrite(target: NekConfigTarget, cwd?: string, modelsOnly = false): void {
+    if (!this.autoReload) return;
     void this.reload(target, cwd, modelsOnly, !cwd)
       .then((result) => this.emitReloadResult(target, result))
       .catch((error: unknown) => {

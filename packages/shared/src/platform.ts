@@ -6,13 +6,6 @@ import type {
   SSHConnectOptions,
   WSLConnectOptions,
 } from "./remoteTarget.js";
-import type {
-  LoadCliMcpFromUserDirectoryRequest,
-  LoadCliMcpFromUserDirectoryResult,
-  MigrateLegacyCommonMcpRequest,
-  MigrateLegacyCommonMcpResult,
-  SaveCliMcpToUserDirectoryRequest,
-} from "./mcp.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type {
   PostUpdateReleaseNotesPayload,
@@ -376,21 +369,6 @@ export interface IPlatformService {
 
   /** 列出当前机器 SSH config 中可用于快速填表的 alias */
   listSSHConfigAliases(): Promise<SSHConfigAliasOption[]>;
-
-  /** 读取宿主环境中的原生 MCP 用户目录配置；手机远控通过已连接桌面 host 转发。 */
-  loadMcpFromUserDirectory?(
-    payload?: LoadCliMcpFromUserDirectoryRequest,
-  ): Promise<LoadCliMcpFromUserDirectoryResult>;
-
-  /** 写入宿主环境中的原生 MCP 用户目录配置；普通 Web 没有宿主时返回 unsupported。 */
-  saveMcpToUserDirectory?(
-    payload: SaveCliMcpToUserDirectoryRequest,
-  ): Promise<{ success: boolean; error?: string }>;
-
-  /** 迁移旧版 Common MCP 配置；仅宿主环境可执行，手机远控通过 desktop attachment 转发。 */
-  migrateLegacyCommonMcp?(
-    payload?: MigrateLegacyCommonMcpRequest,
-  ): Promise<MigrateLegacyCommonMcpResult>;
 
   /** 打开外部 URL（用于 OAuth 跳转浏览器） */
   openExternal(url: string): void;

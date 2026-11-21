@@ -10,7 +10,19 @@
  * `nek-agent/config/nekConfigFs` 的锁（`lockSync(path, { realpath: false })` + 同样的退避）；
  * 远端执行器必须提供等价能力，否则 settings 写入会以 `io` 失败（绝不无锁写入）。
  */
-import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { NekRpcProcessHandle } from "../nek-agent/nekRpcClient.js";
@@ -45,6 +57,10 @@ export interface NekConfigHostExecutor {
   /** `.tmp` + rename 原子写；父目录按需创建。 */
   writeFileAtomic: (path: string, content: string) => Promise<void>;
   stat: (path: string) => Promise<NekHostStat | null>;
+  resourceEntryKind: (path: string) => Promise<"directory" | "file" | "other" | null>;
+  readResourceFile: (path: string, maxBytes: number) => Promise<string>;
+  /** 临时文件独占创建；新增资源不得覆盖已有文件。 */
+  writeResourceFile: (path: string, content: string, createOnly: boolean) => Promise<void>;
   listDir: (path: string) => Promise<NekHostDirEntry[]>;
   remove: (path: string) => Promise<void>;
   rename: (from: string, to: string) => Promise<void>;
@@ -87,6 +103,41 @@ function expandTilde(path: string, home: string): string {
   return path;
 }
 
+async function readBoundedResource(path: string, maxBytes: number): Promise<string> {
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, size, buffer.length - size, size);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    if (size > maxBytes) throw new Error(`Resource exceeds ${maxBytes / 1024} KB: ${path}`);
+    return buffer.toString("utf8", 0, size);
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeResourceFile(
+  path: string,
+  content: string,
+  createOnly: boolean,
+): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+  try {
+    if (createOnly) await link(temporary, path);
+    else await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
+}
+
 /** 本机执行器：Node fs + `nek gui-info` 定位的启动器。 */
 export function createLocalNekConfigHostExecutor(
   options: LocalNekConfigHostExecutorOptions = {},
@@ -111,7 +162,18 @@ export function createLocalNekConfigHostExecutor(
   return {
     id: "local",
     homeDir: () => home,
-    agentDir: () => resolveAgentDir(home, env),
+    agentDir: () => options.agentDir ?? resolveAgentDir(home, env),
+    async resourceEntryKind(path) {
+      try {
+        const entry = await lstat(path);
+        return entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other";
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
+    },
+    readResourceFile: readBoundedResource,
+    writeResourceFile,
     readFile: async (path) => {
       try {
         return await readFile(path, "utf-8");
@@ -269,6 +331,21 @@ export function createMemoryNekConfigHostExecutor(
       mtimes.delete(from);
       setFile(to, content);
       writes.push(`rename:${from}->${to}`);
+    },
+    resourceEntryKind: async (path) => {
+      const entry = await executor.stat(path);
+      return entry === null ? null : entry.isDirectory ? "directory" : "file";
+    },
+    readResourceFile: async (path, maxBytes) => {
+      const content = files.get(path);
+      if (content === undefined) throw new Error(`Missing resource: ${path}`);
+      if (Buffer.byteLength(content) > maxBytes)
+        throw new Error(`Resource exceeds ${maxBytes / 1024} KB: ${path}`);
+      return content;
+    },
+    writeResourceFile: async (path, content, createOnly) => {
+      if (createOnly && files.has(path)) throw new Error(`Resource already exists: ${path}`);
+      await executor.writeFileAtomic(path, content);
     },
     spawnNek: async (args) => {
       if (!options.spawn) {

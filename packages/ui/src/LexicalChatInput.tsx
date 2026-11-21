@@ -1530,7 +1530,6 @@ export function LexicalChatInput({
           workspacePath={workspacePath}
           workspaceIdentity={workspaceIdentity}
           sessionId={skillCatalogSessionId ?? taskId}
-          provider={activeTaskProvider}
           container={triggerPanelContainer}
           disabled={disabled}
           excludedCommandNames={excludedSlashCommandNames}
@@ -1540,7 +1539,6 @@ export function LexicalChatInput({
           <MentionPlugin
             workspacePath={workspacePath}
             workspaceIdentity={workspaceIdentity}
-            sessionId={skillCatalogSessionId ?? taskId}
             provider={activeTaskProvider}
             container={triggerPanelContainer}
             disabled={disabled}
