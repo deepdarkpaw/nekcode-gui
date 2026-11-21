@@ -3,7 +3,7 @@ import { measureOperation } from "@/lib/diagnostics/operations.js";
  * useSettingService —— 设置服务 hooks
  */
 import { useState, useEffect, useCallback } from "react";
-import { APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL, type AppSettings } from "@zcode/shared";
+import type { AppSettings } from "@zcode/shared";
 import type { ISettingService } from "@zcode/services";
 import { useServices } from "./useServices.js";
 import { usePlatform } from "./usePlatform.js";
@@ -107,7 +107,7 @@ async function refreshSettingsStore(settingService: ISettingService | undefined)
 
 /** 获取和更新应用设置 */
 export function useSettings() {
-  const { broadcastService, settingService, zcodeAgentService } = useServices();
+  const { settingService } = useServices();
   const platform = usePlatform();
   const settingsStore = getSettingsStore(settingService);
   const [snapshot, setSnapshot] = useState<SettingsSnapshot>(settingsStore.snapshot);
@@ -143,28 +143,8 @@ export function useSettings() {
       await measureOperation("settings", () => settingService.update(patch));
       platform.syncAppSettings?.(patch);
       await refresh();
-      if (typeof patch.askUserQuestionAutoResolutionEnabled === "boolean") {
-        const preferences = {
-          askUserQuestionAutoResolutionEnabled:
-            patch.askUserQuestionAutoResolutionEnabled ??
-            settingsStore.snapshot.settings?.askUserQuestionAutoResolutionEnabled !== false,
-        };
-        const syncResults = await Promise.allSettled([
-          zcodeAgentService.syncAppRuntimePreferences(preferences),
-        ]);
-        const syncError = syncResults.find(
-          (result): result is PromiseRejectedResult => result.status === "rejected",
-        )?.reason;
-        await broadcastService.send({
-          channel: APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
-          payload: preferences,
-        });
-        if (syncError) {
-          throw syncError;
-        }
-      }
     },
-    [broadcastService, settingService, settingsStore, zcodeAgentService, platform, refresh],
+    [settingService, platform, refresh],
   );
 
   return {

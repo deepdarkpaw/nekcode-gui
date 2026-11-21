@@ -13,7 +13,6 @@ export type {
   IntegratedTerminalShellSelection,
   Locale,
   LocalePreference,
-  ZCodeInteractionBehavior,
   TabId,
   TabState,
   ResourceUsageCategory,
@@ -38,8 +37,6 @@ export {
   ZCODE_REMOTE_INSTALL_ROOT_DIR_NAME,
   ZCODE_USER_DATA_DIR_NAME,
   ZCODE_USER_DATA_MIGRATION_MARKER_FILE_NAME,
-  ZCODE_WORKSPACE_CONFIG_DIR_NAME,
-  ZCODE_WORKSPACE_CONFIG_FILE_NAME,
   ZCODE_WORKSPACE_IGNORE_FILE_NAME,
 } from "./appDirNames.js";
 export {
@@ -110,7 +107,6 @@ export * from "./conversation-archive.js";
 export * from "./conversation-preview-artifacts.js";
 export * from "./zcode-session-task-status.js";
 export * from "./zcode-tool-projection-memory.js";
-export * from "./zcode-slash-command-help.js";
 export * from "./zcodeEndpoint.js";
 export * from "./zcode-agent-policy.js";
 export * from "./zcode-media-policy.js";
@@ -197,15 +193,8 @@ export * from "./model-selection-key.js";
 export * from "./model-selection.js";
 export * from "./legacy-model-provider-identity.js";
 export * from "./official-glm-model-id.js";
-export * from "./skills-types.js";
-export * from "./skill-sync.js";
-export * from "./mcp-sync.js";
-export * from "./remote-sync.js";
-export * from "./subagents-types.js";
-export * from "./settings-source.js";
+export type { AgentColor } from "./subagents-types.js";
 export * from "./settings-errors.js";
-export * from "./app-runtime-preferences.js";
-export * from "./command-types.js";
 export * from "./lineChangeStat.js";
 export * from "./process-names.js";
 export * from "./mcp.js";
@@ -218,19 +207,12 @@ export * from "./tool-call-summary.js";
 export * from "./tool-identity.js";
 export * from "./streaming-tool-input-preview.js";
 export * from "./tool-plan-adapter.js";
-export * from "./settings-sync.js";
 export * from "./uuid.js";
 export * from "./forceUpdate.js";
 export * from "./intranetProbe.js";
 export * from "./intranetDefaults.js";
-export * from "./hooks.js";
 export * from "./openrouter-attribution.js";
 export * from "./workspaceSessionRestore.js";
-export * from "./skill-scan-policy.js";
-export {
-  parseSubagentMarkdownSelection,
-  formatSubagentMarkdownModel,
-} from "./subagent-markdown-selection.js";
 export * from "./memoryDiagnostics.js";
 export * from "./database-startup.js";
 export * from "./execution-state.js";

@@ -112,7 +112,7 @@ export function buildSubagentSuggestions(
     trigger: "/",
     value: agent.name,
     label: agent.name,
-    description: agent.description,
+    description: agent.description ?? "",
     keywords: [agent.name, agent.description ?? "", "subagent", "agent"],
     data: { path: agent.location },
   }));

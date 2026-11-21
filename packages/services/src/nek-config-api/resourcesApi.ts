@@ -33,7 +33,7 @@ async function list(
   const context = runtime.target(target);
   const control = await runtime.control(target);
   const { resourceType, cwd } = query;
-  const result: NekListResourcesResult = await control.call({
+  const result: NekListResourcesResult = await control.call<"list_resources">({
     type: "list_resources",
     resourceType,
     ...(cwd ? { cwd } : {}),
@@ -99,7 +99,7 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
       const context = runtime.target(target);
       const control = await runtime.control(target);
       checkTarget(runtime, context);
-      const result = await control.call({
+      const result = await control.call<"set_resource_enabled">({
         type: "set_resource_enabled",
         resourceType,
         path,

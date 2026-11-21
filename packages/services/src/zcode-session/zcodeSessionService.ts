@@ -24,7 +24,6 @@ import type {
 } from "#src/zcode-session/zcodeSession.js";
 import { formatModelPickerValue } from "#src/zcode-agent/zcodeConfigOptions.js";
 import { createZCodeSessionApiRetryRuntimeTracker } from "#src/zcode-session/zcodeSessionApiRetry.js";
-import { appendWorkspaceToFilesystemMcpServers } from "#src/session/mcpWorkspaceScope.js";
 import { repairEmptyImportedClaudeSessionSnapshot } from "#src/zcode-session/importedClaudeSessionRepair.js";
 import { createZCodeDeferredDraftRegistry } from "#src/zcode-session/zcodeSessionDraftRegistry.js";
 
@@ -169,22 +168,6 @@ export function createZCodeSessionService({
     );
   }
 
-  async function withResolvedMcpServers<
-    T extends ZCodeSessionCreateParams | ZCodeSessionResumeParams,
-  >(params: T): Promise<T> {
-    const mcpServers = appendWorkspaceToFilesystemMcpServers(
-      params.mcpServers,
-      params.workspacePath,
-    );
-    if (mcpServers === params.mcpServers) {
-      return params;
-    }
-    // desktop-continuous session 路径绕过 legacy task adapter，之前不会执行
-    // filesystem MCP 的 workspace 注入，导致同一 MCP 在直接 session 首发时缺少当前项目授权。
-    // 这里只改发往 runtime 的临时参数，不回写用户配置，避免污染跨 workspace 的 MCP 设置。
-    return { ...params, mcpServers };
-  }
-
   return {
     async initializeWorkspace(params: ZCodeSessionWorkspaceTarget) {
       const result = await agentService.initialize(params);
@@ -212,7 +195,7 @@ export function createZCodeSessionService({
     async createSession(params: ZCodeSessionCreateParams) {
       const startedAt = Date.now();
       const sessionTraceId = params.sessionTraceId ?? createSessionTraceId();
-      const agentParams = await withResolvedMcpServers({ ...params, sessionTraceId });
+      const agentParams = { ...params, sessionTraceId };
       logger.info(sessionTraceId, "[zcode-session-service] createSession 分配 session trace", {
         persistence: agentParams.persistence,
         workspaceIdentity: agentParams.workspaceIdentity,
@@ -265,8 +248,7 @@ export function createZCodeSessionService({
 
     async resumeSession(params: ZCodeSessionResumeParams) {
       const startedAt = Date.now();
-      const { broadcastSnapshot: shouldBroadcastSnapshot = true, ...resumeParams } = params;
-      const agentParams = await withResolvedMcpServers(resumeParams);
+      const { broadcastSnapshot: shouldBroadcastSnapshot = true, ...agentParams } = params;
       let snapshot = await repairEmptyImportedClaudeSession(
         withApiRetryRuntime(await agentService.resumeSession(agentParams)),
         agentParams,

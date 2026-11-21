@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useRef, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
@@ -47,38 +47,6 @@ export function SettingsBreadcrumbProvider({
       {children}
     </SettingsBreadcrumbContext.Provider>
   );
-}
-
-/**
- * 将 section 内既有页面状态和返回动作投影到 Settings 顶栏，但不拥有或持久化导航状态。
- */
-export function SettingsBreadcrumbReporter({
-  items,
-  onSectionSelect,
-}: {
-  items: readonly SettingsBreadcrumbItem[];
-  onSectionSelect?: () => void;
-}) {
-  const report = useContext(SettingsBreadcrumbContext);
-  const actionsRef = useRef(items.map((item) => item.onSelect));
-  const sectionActionRef = useRef(onSectionSelect);
-  actionsRef.current = items.map((item) => item.onSelect);
-  sectionActionRef.current = onSectionSelect;
-  const signature = JSON.stringify(items.map((item) => item.label));
-
-  useEffect(() => {
-    const labels = JSON.parse(signature) as string[];
-    const dispose = report?.({
-      items: labels.map((label, index) => ({
-        label,
-        onSelect: actionsRef.current[index] ? () => actionsRef.current[index]?.() : undefined,
-      })),
-      onSectionSelect: sectionActionRef.current ? () => sectionActionRef.current?.() : undefined,
-    });
-    return dispose;
-  }, [report, signature]);
-
-  return null;
 }
 
 export function SettingsHeaderBreadcrumb({

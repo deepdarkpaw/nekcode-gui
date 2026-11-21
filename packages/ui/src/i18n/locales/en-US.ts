@@ -1485,53 +1485,6 @@ const enUS: Record<string, string> = {
   "settings.integratedTerminalShellDescription":
     "Applies to new sessions only. On Windows, Bash uses this shell; Auto tries Git Bash, then cmd.exe.",
   "settings.integratedTerminalShell.auto": "Auto",
-  "settings.nativeSearchEnhancements": "Enhanced Find and Grep",
-  "settings.nativeSearchEnhancementsDescription":
-    "Use enhanced Find and Grep in new sessions and sessions restored after an app restart. Active sessions keep their current setting; Find remains unchanged on Windows.",
-  "settings.memory": "Memory",
-  "settings.memory.workspaceMemory": "Workspace Memory",
-  "settings.memoryDescription":
-    "Save and reuse long-term context in workspaces. Applies to new sessions and may increase model requests and token costs.",
-  "settings.memory.viewer.disabled": "Enable Workspace Memory to view saved memories.",
-  "settings.memory.viewer.localOnly":
-    "Memory details are available only in the local desktop app. Open Memory settings there to view them.",
-  "settings.memory.viewer.title": "Saved workspace memories",
-  "settings.memory.viewer.description": "Browse memories saved by workspace on this device.",
-  "settings.memory.viewer.projectsDescription":
-    "Select a project to view all of its saved memories.",
-  "settings.memory.viewer.refresh": "Refresh",
-  "settings.memory.viewer.loading": "Loading memories…",
-  "settings.memory.viewer.empty": "No saved workspace memories",
-  "settings.memory.viewer.workspaces": "Workspaces",
-  "settings.memory.viewer.files": "Files",
-  "settings.memory.viewer.searchPlaceholder": "Search memory files…",
-  "settings.memory.viewer.searchEmpty": "No memory files found.",
-  "settings.memory.viewer.workspaceSearchPlaceholder": "Search workspaces…",
-  "settings.memory.viewer.workspaceSearchEmpty": "No workspaces found.",
-  "settings.memory.viewer.itemCount.one": "{count} item",
-  "settings.memory.viewer.itemCount.other": "{count} items",
-  "settings.memory.viewer.memoryCount.one": "{count} memory",
-  "settings.memory.viewer.memoryCount.other": "{count} memories",
-  "settings.memory.viewer.updated.justNow": "Just now",
-  "settings.memory.viewer.updated.minutesAgo": "{count} min ago",
-  "settings.memory.viewer.updated.today": "Today {time}",
-  "settings.memory.viewer.updated.yesterday": "Yesterday {time}",
-  "settings.memory.viewer.updated.weekday": "{weekday} {time}",
-  "settings.memory.viewer.updated.weekdayZh": "周{weekday}",
-  "settings.memory.viewer.updated.date": "{date} {time}",
-  "settings.memory.viewer.updated.dateMonthDay": "{month}/{day}",
-  "settings.memory.viewer.updated.dateYearMonthDay": "{year}/{month}/{day}",
-  "settings.memory.viewer.tree": "Memory files",
-  "settings.memory.viewer.indexMissing": "MEMORY.md (not generated)",
-  "settings.memory.viewer.collapse": "Collapse memory items",
-  "settings.memory.viewer.expand": "Expand memory items",
-  "settings.memory.viewer.fileLoading": "Loading file…",
-  "settings.memory.viewer.fileDeleted":
-    "This memory file has been deleted. Refresh the file list to update it.",
-  "settings.memory.viewer.fileTooLarge": "This memory file exceeds the 5 MiB preview limit.",
-  "settings.memory.viewer.fileChanged":
-    "This memory file was updated while being read. Reopen it or refresh the file list.",
-  "settings.memory.viewer.noSelection": "Select a memory file to preview it.",
   "settings.httpProxy": "HTTP Proxy",
   "settings.httpProxyDescription":
     "Route model, MCP, command-tool, and app renderer egress traffic through this proxy; system environment variables are not read. Leave blank and that traffic connects directly, while the embedded browser follows your system proxy settings. Restart the app to take effect.",
@@ -1594,14 +1547,6 @@ const enUS: Record<string, string> = {
   "settings.toolGroupingTerminal": "Group terminal commands",
   "settings.toolGroupingTerminalDescription":
     "Group consecutive non-read-only shell commands into a Terminal section.",
-  "settings.zcodeInteractionBehavior": "Interaction behavior",
-  "settings.zcodeInteractionBehaviorDescription":
-    "While nek is running, add follow-up actions to the queue or guide them to run after the next tool call.",
-  "settings.zcodeInteractionBehavior.option.queue": "Queue",
-  "settings.zcodeInteractionBehavior.option.guide": "Guide",
-  "settings.askUserQuestionAutoResolution": "Automatically continue questions",
-  "settings.askUserQuestionAutoResolutionDescription":
-    "When enabled, Agent questions automatically continue after 5 minutes without an answer. When disabled, current and future questions wait for your response.",
   "settings.performanceMode": "Performance mode",
   "settings.performanceModeDescription": "Simplify rendered output to improve performance.",
   "settings.taskAutoArchive": "Auto-archive old tasks",

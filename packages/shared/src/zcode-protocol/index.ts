@@ -1,4 +1,3 @@
-import { appToolSearchModeSchema } from "../app-runtime-preferences.js";
 import { sharedContextImportProvenanceSchema } from "../zcode-protocol-v4/shared-context-import.js";
 import {
   databaseMigrationFactsSchema,
@@ -28,7 +27,6 @@ import { errorAttributionSchema } from "../zcode-protocol-v4/snapshot.js";
 // 后台详情共享精简的只读响应 schema，不携带命令或计时元数据。
 export * from "../background-bash-output.js";
 export * from "../process-diagnostic.js";
-import { integratedTerminalShellSelectionSchema } from "../validationAppSettings.js";
 import {
   zcodeSyntheticUserMessageSourceSchema as legacyZcodeSyntheticUserMessageSourceSchema,
   zcodeDeliveryKindSchema,
@@ -501,76 +499,6 @@ export const zcodeProtocolMcpServerSchema = z.union([
     .strict(),
 ]);
 export type ZCodeProtocolMcpServer = z.infer<typeof zcodeProtocolMcpServerSchema>;
-
-export const zcodeMcpServerStatusKindSchema = z.enum([
-  "connecting",
-  "connected",
-  "disabled",
-  "disconnected",
-  "failed",
-  "untrusted",
-]);
-export const MCP_SERVER_FAILURE_KINDS = [
-  "config_invalid",
-  "runtime_unavailable",
-  "process_start_failed",
-  "network_unreachable",
-  "connection_timeout",
-  "protocol_negotiation_failed",
-  "tool_list_failed",
-  "unexpected_disconnect",
-  "oauth_authorization_failed",
-  "official_origin_untrusted",
-  "not_authenticated",
-  "coding_plan_required",
-  "server_not_found",
-  "server_unavailable",
-  "rate_limited",
-  "server_internal_error",
-  "protocol_error",
-  "status_unavailable",
-  "connection_failed",
-] as const;
-export const mcpServerFailureKindSchema = z.enum(MCP_SERVER_FAILURE_KINDS);
-export type McpServerFailureKind = z.infer<typeof mcpServerFailureKindSchema>;
-export const zcodeMcpServerStatusSnapshotSchema = z
-  .object({
-    status: zcodeMcpServerStatusKindSchema,
-    transport: z.enum(["stdio", "http", "sse"]),
-    toolCount: z.number().int().nonnegative(),
-    updatedAt: nonEmptyString,
-    error: z.string().optional(),
-    failureKind: mcpServerFailureKindSchema.optional(),
-    serverRequestId: nonEmptyString.optional(),
-    protocolEra: z.enum(["legacy", "modern"]).optional(),
-    authorization: z
-      .object({
-        type: z.literal("oauth_authorization_code"),
-        authorizationUrl: nonEmptyString,
-        startedAt: nonEmptyString,
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
-export type ZCodeMcpServerStatusSnapshot = z.infer<typeof zcodeMcpServerStatusSnapshotSchema>;
-
-export const zcodeMcpListModeSchema = z.enum(["connect", "status"]);
-export type ZCodeMcpListMode = z.infer<typeof zcodeMcpListModeSchema>;
-
-export const zcodeMcpListParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    mcpServers: z.array(zcodeProtocolMcpServerSchema).optional(),
-    mode: zcodeMcpListModeSchema.default("connect"),
-  })
-  .strict();
-export const zcodeMcpListResultSchema = z
-  .object({
-    statuses: z.record(z.string(), zcodeMcpServerStatusSnapshotSchema),
-  })
-  .strict();
-export type ZCodeMcpListResult = z.infer<typeof zcodeMcpListResultSchema>;
 
 export const zcodeSessionImportMessageSchema = z
   .object({
@@ -1436,50 +1364,6 @@ export const zcodeSessionEventsParamsSchema = z
   .strict();
 export type ZCodeSessionEventsParams = z.infer<typeof zcodeSessionEventsParamsSchema>;
 
-export const zcodeSessionRuntimePreferencesScopeSchema = z.enum([
-  "runtime-materialization",
-  "user-execution",
-]);
-export type ZCodeSessionRuntimePreferencesScope = z.infer<
-  typeof zcodeSessionRuntimePreferencesScopeSchema
->;
-
-export const ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS = 15_000;
-
-export const zcodeSessionRequestRuntimePreferencesParamsSchema = z
-  .object({
-    sessionId: nonEmptyString,
-    scope: zcodeSessionRuntimePreferencesScopeSchema,
-  })
-  .strict();
-export type ZCodeSessionRequestRuntimePreferencesParams = z.infer<
-  typeof zcodeSessionRequestRuntimePreferencesParamsSchema
->;
-
-export const DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY = "preflight-v1" as const;
-
-// 3.12.2：legacy 仅为旧协议接收兼容；Runtime 一律归一为上面的共享默认策略。
-export const zcodeModelContextBudgetStrategySchema = z.enum(["legacy", "preflight-v1"]);
-export type ZCodeModelContextBudgetStrategy = z.infer<typeof zcodeModelContextBudgetStrategySchema>;
-
-export const zcodeSessionRuntimePreferencesResultSchema = z
-  .object({
-    nativeSearchEnhancementsEnabled: z.boolean(),
-    // 旧 Host 缺少该字段时按 Off；不在协议边界伪造成 auto。
-    toolSearchMode: appToolSearchModeSchema.default("off"),
-    memoryEnabled: z.boolean().default(false),
-    askUserQuestionAutoResolutionEnabled: z.boolean().default(true),
-    integratedTerminalShell: integratedTerminalShellSelectionSchema.optional(),
-    // 兼容旧 Host：缺少字段时在协议解析边界使用当前默认策略。
-    modelContextBudgetStrategy: zcodeModelContextBudgetStrategySchema.default(
-      DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
-    ),
-  })
-  .strict();
-export type ZCodeSessionRuntimePreferencesResult = z.infer<
-  typeof zcodeSessionRuntimePreferencesResultSchema
->;
-
 // 旧 RPC 调用方可能绕过 TypeScript；先拒绝退休字段，再做 Host→Agent 参数投影，
 // 否则投影丢掉闲时身份后，旧派发会静默变成使用个人模型的普通输入。
 const retiredIdleExecutionGuardSchema = z
@@ -1761,37 +1645,6 @@ export const zcodeWorkspacePresentationSchema = z
   })
   .strict();
 export type ZCodeWorkspacePresentation = z.infer<typeof zcodeWorkspacePresentationSchema>;
-const workspaceHookSha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
-export const zcodeWorkspaceHookTrustGrantParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    bundleDigest: workspaceHookSha256DigestSchema,
-    hookDeclarationDigest: workspaceHookSha256DigestSchema,
-  })
-  .strict();
-export type ZCodeWorkspaceHookTrustGrantParams = z.infer<
-  typeof zcodeWorkspaceHookTrustGrantParamsSchema
->;
-export const zcodeWorkspaceHookTrustGrantReasonCodeSchema = z.enum([
-  "workspace_hooks_blocked_by_policy",
-  "workspace_hooks_bundle_changed",
-  "workspace_hooks_snapshot_mismatch",
-  "workspace_hooks_policy_requires_pretrust",
-  "workspace_hooks_trust_store_corrupt",
-  "workspace_hooks_config_unreadable",
-]);
-export type ZCodeWorkspaceHookTrustGrantReasonCode = z.infer<
-  typeof zcodeWorkspaceHookTrustGrantReasonCodeSchema
->;
-export const zcodeWorkspaceHookTrustGrantResultSchema = z
-  .object({
-    accepted: z.boolean(),
-    reasonCode: zcodeWorkspaceHookTrustGrantReasonCodeSchema.optional(),
-  })
-  .strict();
-export type ZCodeWorkspaceHookTrustGrantResult = z.infer<
-  typeof zcodeWorkspaceHookTrustGrantResultSchema
->;
 const zcodeWorkspaceModelToolCallSchema = z
   .object({
     id: nonEmptyString,
@@ -1883,34 +1736,6 @@ export const zcodeWorkspaceCancelGenerateTextParamsSchema = z
 export const zcodeWorkspaceCancelGenerateTextResultSchema = z
   .object({ operationId: nonEmptyString, cancelled: z.boolean() })
   .strict();
-
-export const zcodeInteractionPreferencesSchema = z
-  .object({
-    askUserQuestionAutoResolutionEnabled: z.boolean(),
-  })
-  .strict();
-export type ZCodeInteractionPreferences = z.infer<typeof zcodeInteractionPreferencesSchema>;
-
-export const zcodeWorkspaceUpdateInteractionPreferencesParamsSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    preferences: zcodeInteractionPreferencesSchema,
-  })
-  .strict();
-export type ZCodeWorkspaceUpdateInteractionPreferencesParams = z.infer<
-  typeof zcodeWorkspaceUpdateInteractionPreferencesParamsSchema
->;
-
-export const zcodeWorkspaceUpdateInteractionPreferencesResultSchema = z
-  .object({
-    workspace: zcodeWorkspaceRefSchema,
-    askUserQuestionAutoResolutionEnabled: z.boolean(),
-    snoozedInteractionCount: z.number().int().nonnegative(),
-  })
-  .strict();
-export type ZCodeWorkspaceUpdateInteractionPreferencesResult = z.infer<
-  typeof zcodeWorkspaceUpdateInteractionPreferencesResultSchema
->;
 
 export const zcodePermissionRequestParamsSchema = z
   .object({
@@ -2014,7 +1839,6 @@ export const zcodeProtocolMethods = {
   sessionResume: "session/resume",
   sessionList: "session/list",
   sessionSubagents: "session/subagents",
-  sessionRequestRuntimePreferences: "session/requestRuntimePreferences",
   sessionRead: "session/read",
   sessionMessages: "session/messages",
   sessionEvents: "session/events",
@@ -2044,14 +1868,11 @@ export const zcodeProtocolMethods = {
   sessionSetThoughtLevel: "session/setThoughtLevel",
   sessionSetMode: "session/setMode",
   workspaceReadPresentation: "workspace/readPresentation",
-  workspaceHookTrustGrant: "workspace/hooks/trustGrant",
   // 进程级 Account Provider Config 与 workspace 运行目录分离。
-  workspaceUpdateInteractionPreferences: "workspace/updateInteractionPreferences",
   // LLM 执行面在 CLI，直连不可行；消费仅 services 内部
   // （commit message），待 v4 workspace 查询/命令面覆盖后移除。
   workspaceGenerateText: "workspace/generateText",
   workspaceCancelGenerateText: "workspace/cancelGenerateText",
-  mcpList: "mcp/list",
   skillsReferenceCatalog: "skills/referenceCatalog",
   // ZCode Protocol 对 agent 只暴露 session-first 方法；task 是 UI 投影概念，不能泄露进协议方法名。
   // @deprecated：host 已改走 v4/conversation/usage。
@@ -2065,24 +1886,6 @@ export const zcodeProtocolMethods = {
 export type ZCodeProtocolMethod = (typeof zcodeProtocolMethods)[keyof typeof zcodeProtocolMethods];
 
 export const zcodeProtocolEmptyResultSchema = z.object({}).strict();
-
-// 最新 V4 主链已不再依赖旧版全量方法表；这里仅保留仍被兼容测试消费的最小契约集合，
-// 避免重新引入已移除的 legacy 方法。
-export const zcodeProtocolSessionMethodContracts = {
-  [zcodeProtocolMethods.workspaceHookTrustGrant]: {
-    params: zcodeWorkspaceHookTrustGrantParamsSchema,
-    result: zcodeWorkspaceHookTrustGrantResultSchema,
-  },
-  [zcodeProtocolMethods.mcpList]: {
-    params: zcodeMcpListParamsSchema,
-    result: zcodeMcpListResultSchema,
-  },
-} as const satisfies Partial<
-  Record<ZCodeProtocolMethod, { params: z.ZodTypeAny; result: z.ZodTypeAny }>
->;
-
-export type ZCodeProtocolSessionMethodContract =
-  (typeof zcodeProtocolSessionMethodContracts)[keyof typeof zcodeProtocolSessionMethodContracts];
 
 /** 仅存储准备子进程的私有控制帧，原始路径不进入业务事件或遥测。 */
 export const zcodeStoragePreparationFrameSchema = z.discriminatedUnion("method", [

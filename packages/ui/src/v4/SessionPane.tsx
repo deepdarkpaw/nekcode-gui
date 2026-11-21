@@ -79,7 +79,6 @@ import {
 } from "@/v4/composer/useDraftConfigControl.js";
 import type { ModelSelectionSource } from "@/v4/composer/V4ComposerToolbar.js";
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
-import { resolveAppFollowupMode } from "@/v4/composer/followupModeSettings.js";
 import {
   createComposerSubmissionConfig,
   type ComposerSubmissionConfig,
@@ -116,7 +115,6 @@ import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
 import { PendingCommandRecoveryBanner } from "@/v4/PendingCommandRecoveryBanner.js";
 import { useConversationFork } from "@/v4/useConversationFork.js";
 import { ConversationLockedBanner } from "@/v4/ConversationLockedBanner.js";
-import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
@@ -1181,14 +1179,10 @@ export function SessionPane({
   );
   const { settings: sharedSettings } = useSettings();
 
-  const appFollowupMode = resolveAppFollowupMode(sharedSettings);
   const messageStreamShowReasoning = sharedSettings?.messageStreamShowReasoning ?? true;
   const messageStreamShowTodos = sharedSettings?.messageStreamShowTodos ?? false;
   const toolGroupingExploreEnabled = sharedSettings?.toolGroupingExploreEnabled ?? true;
   const toolGroupingTerminalEnabled = sharedSettings?.toolGroupingTerminalEnabled ?? true;
-  const snapshotSessionId = snapshot?.sessionId ?? null;
-  const snapshotFollowupMode = snapshot?.config.followupMode ?? null;
-  const snapshotRevision = snapshot?.revision ?? null;
 
   // 注入模式：theme/codePreviewSettings 在宿主取 store，
   // 经稳定引用的 rowContext 下发给 memo 行组件（MessageResponse/ToolCallBlocks）。
@@ -1925,9 +1919,6 @@ export function SessionPane({
     workspaceIdentity,
     workspacePath,
   });
-  const ensureDraftPrewarmConfigBeforeSendRef = useRef<(targetSessionId: string) => Promise<void>>(
-    async () => undefined,
-  );
   const effectiveSessionId = sessionId ?? prewarmSessionId;
   const showModelChangeNotice = useCallback(
     (sourceModel: ModelSelectionSource | null, targetModel: ModelSelectionSource) => {
@@ -2228,14 +2219,6 @@ export function SessionPane({
         return "confirmationRequired" as const;
       }
       // 冻结的 Submission 保留用户选择；准入前不再插入官方套餐推荐或额外的选择写入路径。
-      const prewarmTargetBeforeSend =
-        sessionId === null ? prewarmBindingRef.current?.sessionId : null;
-      if (prewarmTargetBeforeSend) {
-        // 屏障只保证已经入队的命令完成；若点击配置时预热 session/snapshot 尚未
-        // 就绪，命令可能当时没有目标。首发绑定确定的预热 session 前再同步一次
-        // 草稿权威配置，禁止 UI 新值与 runtime 旧值分叉。
-        await ensureDraftPrewarmConfigBeforeSendRef.current(prewarmTargetBeforeSend);
-      }
       // slash 命令优先：已有 session 直接消费；draft 首发 /goal 先建空会话再发命令。
       // 携带附件或网页元素上下文时不消费为 v4 原生命令（compact/goal 等无附件语义），随 sendText 直发。
       if (sessionId && slashCommand) {
@@ -2303,7 +2286,6 @@ export function SessionPane({
         }
         const draftConfigPayload = buildDraftCreateConfigPayload(
           { ...draftConfigRef.current, modelSelection: submission.modelSelection },
-          appFollowupMode,
         );
         const createAck = await dispatchCommand(
           "createSession",
@@ -2378,7 +2360,6 @@ export function SessionPane({
         // 才使用冻结的初始化元组。否则 provider fallback 后会把 localStorage 旧模型重新写回。
         const draftConfigPayload = buildDraftCreateConfigPayload(
           { ...draftConfigRef.current, modelSelection: submission.modelSelection },
-          appFollowupMode,
         );
         if (readyAttachments.length === 0 && !sharedContextRefs?.length) {
           const ack = await dispatchCommand(
@@ -2480,7 +2461,6 @@ export function SessionPane({
       ensureDraftModelReadyForSend,
       availableSelectionSideSlashCommandNames,
       appSlashCommands,
-      appFollowupMode,
       handleDraftSessionCreated,
 
       handleDraftSwitchMode,
@@ -2844,140 +2824,6 @@ export function SessionPane({
       logger.warn(`[v4-pane] 恢复暂停队列被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
     }
   }, [dispatchCommand, sessionId]);
-
-  // 配置面 CAS 命令的 stale 重试。模型→思考深度→模式连续操作时，前一条命令的
-  // revision bump 可能尚未回流到本地投影，直接用本地 revision 会被 CAS 判 stale。
-  // stale ack 带 revisionAtDecision（CLI 当前 revision），用它重试即可收敛（有界 3 次）。
-  // m5：目标 = effective session（已绑定会话或草稿预热会话）；投影必须与目标
-  // 同源（snapshot.sessionId 校验），防止预热切换瞬间用错 revision。
-  const dispatchConfigCas = useCallback(
-    async (
-      type: CommandType,
-      payload: Record<string, unknown>,
-      options?: { initialBaseRevision?: number; targetSessionId?: string },
-    ): Promise<CommandAck | null> => {
-      const targetSessionId =
-        options?.targetSessionId ?? sessionId ?? prewarmBindingRef.current?.sessionId ?? null;
-      const current = snapshotRef.current;
-      if (!targetSessionId) {
-        recordV4CommandAck({
-          type: `ui:${type}`,
-          status: "skipped",
-          reasonCode: "no-session",
-          at: Date.now(),
-        });
-        return null;
-      }
-      // draft 预热会话已经创建、snapshot 尚未投影时，旧逻辑直接跳过
-      // 配置 CAS；首发随后沿用 runtime 的 build 缺省。CAS 本身支持 stale revision
-      // 回包重试，因此无 snapshot 时从 0 起步也能确定收敛，不能把“未投影”当成功。
-      let baseRevision =
-        options?.initialBaseRevision ??
-        (current?.sessionId === targetSessionId ? current.revision : 0);
-      let lastAck: CommandAck | null = null;
-      try {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const ack = await dispatchCommand(type, payload, targetSessionId, baseRevision);
-          lastAck = ack;
-          if (ack.status === "stale") {
-            baseRevision = ack.revisionAtDecision;
-            continue;
-          }
-          if (ack.status !== "accepted" && ack.status !== "noop") {
-            logger.warn(`[v4-pane] ${type} 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-          }
-          return ack;
-        }
-        logger.warn(`[v4-pane] ${type} 连续 stale，放弃重试`);
-        return lastAck;
-      } catch (error) {
-        if (isProviderNotReadyError(error)) {
-          // provider readiness 竞态被配置 CAS 吞成 null 后，首发会改写成
-          // missing-ack，草稿页无法恢复成模型配置引导。确定性启动门禁必须原样上抛。
-          throw error;
-        }
-        // 生产 renderer 日志关闭，异常也进 ack 调试缓冲，避免静默丢失。
-        recordV4CommandAck({
-          type: `ui:${type}`,
-          status: "dispatch-error",
-          reasonCode: String(error),
-          at: Date.now(),
-        });
-        logger.warn(`[v4-pane] ${type} 失败: ${String(error)}`);
-        return null;
-      }
-    },
-    [dispatchCommand, sessionId],
-  );
-
-  const ensureDraftPrewarmConfigBeforeSend = useCallback(
-    async (targetSessionId: string) => {
-      // followupMode 仍是 Session 行为设置；模型与模式属于本次 Submission，随 sendText
-      // 原子提交，不能在发送前通过 CAS 改写共享 Session。
-      const desiredConfig = buildDraftCreateConfigPayload(
-        draftConfigRef.current,
-        appFollowupMode,
-      ).config;
-      if (!desiredConfig) return;
-      const projectedConfig =
-        snapshotRef.current?.sessionId === targetSessionId ? snapshotRef.current.config : null;
-
-      const requireAcceptedConfigAck = (type: CommandType, ack: CommandAck | null) => {
-        if (
-          ack &&
-          (ack.status === "accepted" || ack.status === "noop" || ack.status === "duplicate")
-        ) {
-          return;
-        }
-        throw new Error(
-          `${type} 未在首发前收敛: ${ack?.status ?? "missing-ack"} ${ack?.reasonCode ?? ""}`,
-        );
-      };
-
-      if (
-        desiredConfig.followupMode &&
-        desiredConfig.followupMode !== projectedConfig?.followupMode
-      ) {
-        const ack = await dispatchConfigCas(
-          "setFollowupMode",
-          { mode: desiredConfig.followupMode },
-          { targetSessionId },
-        );
-        requireAcceptedConfigAck("setFollowupMode", ack);
-      }
-    },
-    [appFollowupMode, dispatchConfigCas, draftConfigRef],
-  );
-  ensureDraftPrewarmConfigBeforeSendRef.current = ensureDraftPrewarmConfigBeforeSend;
-
-  const followupModeSyncKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    const targetSessionId = sessionId ?? prewarmSessionId;
-    if (!targetSessionId || !appFollowupMode || snapshotRevision === null) return;
-    if (snapshotSessionId !== targetSessionId) return;
-    if (snapshotFollowupMode === appFollowupMode) {
-      followupModeSyncKeyRef.current = `${targetSessionId}:${appFollowupMode}:synced`;
-      return;
-    }
-    const syncKey = `${targetSessionId}:${appFollowupMode}:${snapshotRevision}`;
-    if (followupModeSyncKeyRef.current === syncKey) return;
-    followupModeSyncKeyRef.current = syncKey;
-    // 交互行为的用户事实源是 app 设置页；v4 投影 followupMode 只是
-    // CLI/runtime 同步结果。这里把设置变更补发成既有 setFollowupMode 命令，
-    // 避免 composer 再暴露一个同义“追加模式”入口造成上下游分叉。
-    void configCommandBarrier.enqueue(() =>
-      dispatchConfigCas("setFollowupMode", { mode: appFollowupMode }),
-    );
-  }, [
-    appFollowupMode,
-    configCommandBarrier,
-    dispatchConfigCas,
-    prewarmSessionId,
-    sessionId,
-    snapshotFollowupMode,
-    snapshotRevision,
-    snapshotSessionId,
-  ]);
 
   // Composer 选择表达“下一次提交”。点击只更新 renderer intent；Session Selection
   // 在 Submission 真正开跑（Guide 为下一次 model-step）时由 CLI/Core 更新。
@@ -3923,14 +3769,6 @@ export function SessionPane({
             recoverableCommand.replay.kind === "input" ? handleResendPendingCommand : undefined
           }
           onDismiss={handleDismissPendingRecovery}
-        />
-      ) : null}
-      {sessionId && snapshot?.workspaceHookAdmission ? (
-        <WorkspaceHookPendingBanner
-          sessionId={sessionId}
-          workspacePath={workspacePath}
-          workspaceIdentity={workspaceIdentity}
-          admission={snapshot.workspaceHookAdmission}
         />
       ) : null}
       {/*

@@ -84,7 +84,7 @@ export function createOnboardingRecordService(): IOnboardingRecordService {
     updateRecordPreferences(patch) {
       // 在入队时冻结补丁，防止调用方在排队期间修改已接受的偏好。
       const accepted = onboardingRecordFileSchema.shape.entries.element
-        .pick({ memoryEnabled: true, proactiveSuggestionsEnabled: true })
+        .pick({ proactiveSuggestionsEnabled: true })
         .partial()
         .parse(patch);
       return enqueueWrite(async () => {

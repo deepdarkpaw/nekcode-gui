@@ -11,7 +11,6 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { usePendingInteractionTaskNotifications } from "@/hooks/useTaskNotifications.js";
 import { logger } from "@/logger.js";
 import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
-import { useWorkspaceHookReviewStore } from "@/store/workspaceHookReviewStore.js";
 import {
   getTaskUiState,
   getWorkspaceState,
@@ -41,7 +40,7 @@ interface V4InteractionDialogsProps {
   focusComposer?: () => void;
 }
 
-/** 通用 Dialog 只渲染 userInput：workspaceHookReview 由 Settings/Hooks 行内处理。 */
+/** 通用 Dialog 只渲染 userInput。 */
 function isPendingUserInput(
   interaction: PendingInteraction,
 ): interaction is PendingInteraction & { payload: UserInputRequestPayload } {
@@ -101,7 +100,6 @@ export function V4InteractionDialogs({
   sessionId,
   workspacePath,
   workspaceIdentity,
-  remoteSessionId,
   snapshot,
   onCommandSettled,
   onPlanInteractionAccepted,
@@ -109,22 +107,12 @@ export function V4InteractionDialogs({
   focusComposer,
 }: V4InteractionDialogsProps) {
   const { sendCommand } = useV4Conversation();
-  const connectWorkspaceHookCommands = useWorkspaceHookReviewStore((state) => state.connect);
-  const disconnectWorkspaceHookCommands = useWorkspaceHookReviewStore((state) => state.disconnect);
-  const upsertWorkspaceHookReview = useWorkspaceHookReviewStore((state) => state.upsert);
-  const clearWorkspaceHookReview = useWorkspaceHookReviewStore((state) => state.clear);
   const platform = useOptionalPlatform();
   const { intl } = useZCodeIntl();
   // task 切换时 sessionId 会先更新，旧 task snapshot 可能再保留一帧。
   // 若直接使用旧 snapshot，会把当前 task 的 renderer-local 问答草稿误判为过期并清理。
   const currentSnapshot = getCurrentSessionInteractionSnapshot(sessionId, snapshot);
-  // workspaceHookReview 是 Settings/Hooks 处理的特殊交互，不能由通用 Dialog 渲染；
-  // 但它可以和 userInput 共存，固定读取 [0] 会遮挡后续真正需要弹窗的交互。
-  // 这里只选择本组件可渲染的首个交互。
   const pending = currentSnapshot?.pendingInteractions.find(isPendingUserInput) ?? null;
-  const workspaceHookReview = currentSnapshot?.pendingInteractions.find(
-    (interaction) => interaction.payload.kind === "workspaceHookReview",
-  );
   const notificationEnabled = useZCodeStoreWithDefault((state) => state.notificationEnabled, true);
   const botElicitationProgress = useZCodeSessionStore(
     (state) =>
@@ -142,48 +130,6 @@ export function V4InteractionDialogs({
     platform,
     formatMessage: intl.formatMessage,
   });
-  useEffect(() => {
-    connectWorkspaceHookCommands(sessionId, {
-      sessionId,
-      workspacePath,
-      workspaceIdentity,
-      remoteSessionId,
-      sendCommand,
-      onCommandSettled,
-    });
-    return () => disconnectWorkspaceHookCommands(sessionId, sendCommand);
-  }, [
-    connectWorkspaceHookCommands,
-    disconnectWorkspaceHookCommands,
-    onCommandSettled,
-    sendCommand,
-    sessionId,
-    workspaceIdentity,
-    remoteSessionId,
-    workspacePath,
-  ]);
-  useEffect(() => {
-    if (!workspaceHookReview || workspaceHookReview.payload.kind !== "workspaceHookReview") {
-      clearWorkspaceHookReview(sessionId);
-      return;
-    }
-    upsertWorkspaceHookReview(sessionId, {
-      request: workspaceHookReview.payload,
-      workspacePath,
-      sendCommand,
-      onCommandSettled,
-    });
-    // 软门禁：不再强制跳转 Settings/Hooks。
-    // 用户通过 WorkspaceHookPendingBanner 的 [去审核] 按钮主动打开 Hooks 设置。
-  }, [
-    clearWorkspaceHookReview,
-    onCommandSettled,
-    sendCommand,
-    sessionId,
-    upsertWorkspaceHookReview,
-    workspaceHookReview,
-    workspacePath,
-  ]);
   const autoResolutionIntentRef = useRef(createInteractionAutoResolutionIntentTracker());
   const loggedSnoozeSourceIdsRef = useRef(new Set<string>());
   const resolveInteraction = useCallback(

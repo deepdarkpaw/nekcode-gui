@@ -107,15 +107,6 @@ export async function sendConversationCommand(
     case "switchCollaborationMode":
       await setModeFromPayload(context.service, binding.sessionKey, payload);
       return acceptedCommand(envelope, revision);
-    case "setFollowupMode":
-      await context.service
-        .commandContext()
-        .writableTarget(binding.sessionKey)
-        .client.call({
-          type: "set_follow_up_mode",
-          mode: readString(payload, "mode") === "guide" ? "all" : "one-at-a-time",
-        });
-      return acceptedCommand(envelope, revision);
     case "renameSession":
       await context.service.renameSession({
         sessionKey: binding.sessionKey,

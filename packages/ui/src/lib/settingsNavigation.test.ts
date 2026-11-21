@@ -18,6 +18,12 @@ const REDIRECTS = [
   ["appearance", "nekAppearance"],
   ["shortcuts", "nekShortcuts"],
   ["subagents", "nekAgent"],
+  ["skill", "nekSkills"],
+  ["skills", "nekSkills"],
+  ["commands", "nekPrompts"],
+  ["migration", "nekAgent"],
+  ["hooks", "general"],
+  ["memory", "general"],
 ] as const;
 
 beforeEach(() => {
@@ -69,9 +75,9 @@ describe("retired settings section redirects", () => {
   it("keeps workspace file search hidden and preserves the active sections", () => {
     const { settingsSections } = createSettingsPageConfig();
     expect(settingsSections.map((section) => section.id).toSorted()).toEqual(
-      [...NEK_SETTINGS_SECTION_IDS, "general", "memory", "skill", "commands", "hooks"].toSorted(),
+      [...NEK_SETTINGS_SECTION_IDS, "general"].toSorted(),
     );
-    expect(NEK_SETTINGS_SECTION_IDS).toHaveLength(13);
+    expect(NEK_SETTINGS_SECTION_IDS).toHaveLength(15);
     expect(resolveSettingsSection("workspaceFileSearch", "nekMcp")).toBe("nekMcp");
   });
 });

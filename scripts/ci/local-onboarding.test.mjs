@@ -10,7 +10,6 @@ const { createOnboardingRecordService, getDataBaseDir, setDataBaseDir, getAppCon
 const entry = {
   occupation: "writer",
   interfaceMode: "office",
-  memoryEnabled: false,
   proactiveSuggestionsEnabled: true,
   completedAt: "2026-09-24T12:00:00Z",
 };
@@ -44,7 +43,7 @@ test("local onboarding retains latest preferences and removes account attributio
       version: 1,
       deviceMid: "fixture-device",
       entries: [
-        { ...entry, userId: "fixture-account", uploadState: "pending" },
+        { ...entry, userId: "fixture-account", uploadState: "pending", memoryEnabled: true },
         { ...entry, occupation: "developer", completedAt: "2026-09-22T12:00:00Z", userId: null },
       ],
     }),
@@ -52,7 +51,7 @@ test("local onboarding retains latest preferences and removes account attributio
   assert.deepEqual(await service.getLatestEntry(), entry);
   assert.doesNotMatch(
     JSON.stringify(await service.getRecords()),
-    /userId|fixture-account|deviceMid|uploadState/,
+    /userId|fixture-account|deviceMid|uploadState|memoryEnabled/,
   );
   assert.equal(service.claimAnonymousRecord, undefined);
   assert.equal(service.syncSettingsFromRecord, undefined);
@@ -61,14 +60,13 @@ test("local onboarding retains latest preferences and removes account attributio
   // Read after accepted writes must wait for the same owner queue.
   assert.deepEqual(await service.getLatestEntry(), {
     ...entry,
-    memoryEnabled: true,
     proactiveSuggestionsEnabled: false,
   });
   await Promise.all([accepted, update]);
   const persisted = JSON.parse(await readFile(file, "utf8"));
   assert.deepEqual(persisted, {
     version: 1,
-    entries: [{ ...entry, memoryEnabled: true, proactiveSuggestionsEnabled: false }],
+    entries: [{ ...entry, proactiveSuggestionsEnabled: false }],
   });
   assert.deepEqual(await createOnboardingRecordService().getLatestEntry(), persisted.entries[0]);
   await service.clearRecords();

@@ -36,7 +36,7 @@ export function resourceRelativePath(root: string, file: string): string[] | und
   if (
     !relative ||
     paths.isAbsolute(relative) ||
-    parts.some((part) => !part || part === ".." || /[:\\\u0000]/u.test(part))
+    parts.some((part) => !part || part === ".." || /[:\\]/u.test(part) || part.includes("\0"))
   )
     return;
   return parts;

@@ -22,7 +22,7 @@ export function useSettingsWorkspaceBinding(
   );
   const { nekWorkspaceConfigService } = services;
   return useMemo(() => {
-    if (!cwd) return;
+    if (!cwd) return { service: nekWorkspaceConfigService };
     const target: NekConfigTarget = isRemoteTarget
       ? { kind: "remote", connectionId: remoteSessionId ?? tab?.workspaceIdentity ?? cwd }
       : LOCAL_TARGET;

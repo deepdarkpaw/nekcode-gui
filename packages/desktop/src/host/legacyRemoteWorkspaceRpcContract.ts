@@ -14,11 +14,6 @@ const LEGACY_REMOTE_WORKSPACE_RPC_CHANNELS = [
   "zcodeAgentService",
   "zcodeSessionService",
   "fileWatcherService",
-  "skillsService",
-  "skillSyncService",
-  "mcpSyncService",
-  "commandsService",
-  "hooksService",
   "modelSelectionService",
   "nekWorkspaceConfigService",
 ] as const satisfies readonly (keyof IServiceAccessor)[];

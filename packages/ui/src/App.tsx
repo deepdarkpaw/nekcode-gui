@@ -12,7 +12,6 @@ import { useAppKeyboard } from "@/hooks/useAppKeyboard.js";
 import { useNekActionHandlers, useNekActionKeyboard } from "@/shortcuts/nekActionDispatcher.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceActiveTaskState } from "@/hooks/useWorkspaceActiveTaskState.js";
-import { useEnsureWorkspaceMcpLoaded } from "@/hooks/useEnsureWorkspaceMcpLoaded.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly, isWorkspaceTab } from "@/store/tabStore.js";
 import type { TaskChatMessage as TestChatMessage } from "@/lib/taskChatMessageTypes.js";
@@ -707,8 +706,6 @@ export function App({
     services,
     setTestMessages,
   });
-
-  useEnsureWorkspaceMcpLoaded(workspaceAbsPath, workspaceIdentity, workspaceRpcReady);
 
   const testActions = useMemo<TestActions>(
     () => ({

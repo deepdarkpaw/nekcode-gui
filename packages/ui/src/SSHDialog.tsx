@@ -41,7 +41,6 @@ import {
   type RemoteWizardStep,
 } from "@/RemoteConnectionWizardChrome.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
-import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import type { VariantProps } from "class-variance-authority";
 
 interface RemoteConnectionDialogProps {
@@ -145,7 +144,6 @@ export function RemoteConnectionDialog({
   const directoryBrowserServices = useRemoteWorkspaceSessionStore((state) =>
     connectedSessionId ? (state.sessionsById[connectedSessionId]?.services ?? null) : null,
   );
-  const baseServices = useBaseWorkspaceServices();
   const flowSnapshot = useMemo(
     () => ({
       currentStep,
@@ -580,12 +578,6 @@ export function RemoteConnectionDialog({
                   <div data-testid={TID_SSH_SUCCESS} className="h-full">
                     <RemoteConnectionDirectoryStep
                       services={directoryBrowserServices}
-                      remoteTarget={pendingRemoteTarget}
-                      localSkillSyncService={baseServices.skillSyncService}
-                      remoteSkillSyncService={directoryBrowserServices?.skillSyncService ?? null}
-                      localMcpSyncService={baseServices.mcpSyncService}
-                      remoteMcpSyncService={directoryBrowserServices?.mcpSyncService ?? null}
-                      localWorkspacePath={localWorkspacePath}
                       selecting={selectingDirectory}
                       onSelect={(path) => {
                         void handleSelectDirectory(path);
@@ -603,8 +595,6 @@ export function RemoteConnectionDialog({
                       onCancel={() => {
                         void handleCloseRequest();
                       }}
-                      onSkillsSynced={async () => undefined}
-                      onMcpSynced={async () => undefined}
                     />
                   </div>
                 ) : null}

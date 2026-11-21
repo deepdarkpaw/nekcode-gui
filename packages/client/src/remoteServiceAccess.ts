@@ -18,14 +18,6 @@ import {
   IModelSelectionService,
   INekWorkspaceConfigService,
   IClientScenesService,
-  ISkillsService,
-  ISkillSyncService,
-  IMcpSyncService,
-  ISubagentsService,
-  ICommandsService,
-  IHooksService,
-  IMemoryService,
-  ISettingsSyncService,
   IPromptAttachmentTransferService,
   IWindowControllerService,
   type IServiceAccessor,
@@ -56,14 +48,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly modelSelectionService: IModelSelectionService;
   readonly nekWorkspaceConfigService: INekWorkspaceConfigService;
   readonly clientScenesService: IClientScenesService;
-  readonly skillsService: ISkillsService;
-  readonly skillSyncService: ISkillSyncService;
-  readonly mcpSyncService: IMcpSyncService;
-  readonly subagentsService: ISubagentsService;
-  readonly commandsService: ICommandsService;
-  readonly hooksService: IHooksService;
-  readonly memoryService: IMemoryService;
-  readonly settingsSyncService: ISettingsSyncService;
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
 
   constructor(channelClient: IChannelClient) {
@@ -125,30 +109,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.clientScenesService = ProxyChannel.toService<IClientScenesService>(
       channelClient.getChannel(IClientScenesService.channelName),
-    );
-    this.skillsService = ProxyChannel.toService<ISkillsService>(
-      channelClient.getChannel(ISkillsService.channelName),
-    );
-    this.skillSyncService = ProxyChannel.toService<ISkillSyncService>(
-      channelClient.getChannel(ISkillSyncService.channelName),
-    );
-    this.mcpSyncService = ProxyChannel.toService<IMcpSyncService>(
-      channelClient.getChannel(IMcpSyncService.channelName),
-    );
-    this.subagentsService = ProxyChannel.toService<ISubagentsService>(
-      channelClient.getChannel(ISubagentsService.channelName),
-    );
-    this.commandsService = ProxyChannel.toService<ICommandsService>(
-      channelClient.getChannel(ICommandsService.channelName),
-    );
-    this.hooksService = ProxyChannel.toService<IHooksService>(
-      channelClient.getChannel(IHooksService.channelName),
-    );
-    this.memoryService = ProxyChannel.toService<IMemoryService>(
-      channelClient.getChannel(IMemoryService.channelName),
-    );
-    this.settingsSyncService = ProxyChannel.toService<ISettingsSyncService>(
-      channelClient.getChannel(ISettingsSyncService.channelName),
     );
     this.promptAttachmentTransferService = ProxyChannel.toService<IPromptAttachmentTransferService>(
       channelClient.getChannel(IPromptAttachmentTransferService.channelName),

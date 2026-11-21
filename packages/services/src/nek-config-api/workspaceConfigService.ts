@@ -42,7 +42,7 @@ export interface INekWorkspaceConfigService {
     ...args: WorkspaceArgs<Parameters<INekConfigApi[M]>>
   ): ReturnType<INekConfigApi[M]>;
   onDynamicConfigChange(cwd?: string): Event<ConfigChange>;
-  readonly onDidReload: Event<NekSessionReloadOutcome>;
+  onDynamicDidReload(): Event<NekSessionReloadOutcome>;
 }
 
 export const INekWorkspaceConfigService = createServiceDescriptor<INekWorkspaceConfigService>(

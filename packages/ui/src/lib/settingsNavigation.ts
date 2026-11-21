@@ -2,13 +2,7 @@
 import { logger } from "@/logger.js";
 import { isNekSettingsSectionId, type NekSettingsSectionId } from "@/settings/nek/sectionIds.js";
 
-export type SettingsSectionId =
-  | "general"
-  | "migration"
-  | "memory"
-  | "hooks"
-  | "workspaceFileSearch"
-  | NekSettingsSectionId;
+export type SettingsSectionId = "general" | "workspaceFileSearch" | NekSettingsSectionId;
 
 const SETTINGS_SECTION_INTENT_KEY = "zcode-settings-section-intent";
 const SETTINGS_SECTION_INTENT_EVENT = "zcode:settings-section-intent",
@@ -29,7 +23,10 @@ const LEGACY_SECTION_REDIRECTS = {
   skill: "nekSkills",
   skills: "nekSkills",
   commands: "nekPrompts",
-} as const satisfies Record<string, NekSettingsSectionId>;
+  migration: "nekAgent",
+  hooks: "general",
+  memory: "general",
+} as const satisfies Record<string, SettingsSectionId>;
 
 type SettingsSectionInput = SettingsSectionId | keyof typeof LEGACY_SECTION_REDIRECTS;
 
@@ -38,14 +35,7 @@ interface SettingsSectionIntentEventDetail {
 }
 
 function isSettingsSectionId(value: string): value is SettingsSectionId {
-  return (
-    value === "general" ||
-    value === "migration" ||
-    value === "memory" ||
-    value === "hooks" ||
-    value === "workspaceFileSearch" ||
-    isNekSettingsSectionId(value)
-  );
+  return value === "general" || value === "workspaceFileSearch" || isNekSettingsSectionId(value);
 }
 
 export function isSettingsSectionEnabled(section: SettingsSectionId): boolean {

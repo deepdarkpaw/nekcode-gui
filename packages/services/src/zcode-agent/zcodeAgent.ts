@@ -20,8 +20,8 @@ import type {
   ZCodeMcpResourceSample,
   ZCodeToolExecResource,
   ZCodeProcessChildProcess,
-  ZCodeMcpListResult,
   ZCodeSkillsReferenceCatalogResult,
+  ZCodeSlashCommand,
   ZCodeUserInputRequestParams,
   ZCodeUserInputResponse,
   ZCodeSessionEvent,
@@ -29,8 +29,6 @@ import type {
   ZCodeSessionMode,
   ZCodeSessionPersistence,
   ZCodeSessionSendResult,
-  ZCodeSessionRequestRuntimePreferencesParams,
-  ZCodeSessionRuntimePreferencesResult,
   ZCodeSessionStateSnapshot,
   ZCodeSessionSubagentsResult,
   ZCodeStateUpdatedNotification,
@@ -38,7 +36,6 @@ import type {
   ZCodeWorkspacePresentation,
   ZCodeWorkspaceGenerateTextResult,
   ZCodeWorkspaceGenerateTextParams,
-  ZCodeWorkspaceHookTrustGrantResult,
 } from "@zcode/shared";
 import type {
   ClientHello,
@@ -79,6 +76,7 @@ import type {
   NekAgentTypeInfo,
   NekExtensionUiResponse,
   NekInteractionFrame,
+  NekMentionTarget,
   NekSessionStats,
   NekStatusFrame,
   NekStatusQueue,
@@ -89,7 +87,6 @@ import { createServiceDescriptor } from "../descriptors.js";
 
 export * from "./zcodeAgentWorkspaceParams.js";
 import type {
-  ZCodeAgentListMcpServerStatusesParams,
   ZCodeAgentSkillReferenceCatalogParams,
   ZCodeAgentWorkspaceTarget,
 } from "./zcodeAgentWorkspaceParams.js";
@@ -209,11 +206,6 @@ export interface ZCodeAgentReadSessionEventsParams extends ZCodeAgentSessionTarg
 
 export type ZCodeAgentReadWorkspacePresentationParams = ZCodeAgentWorkspaceTarget;
 
-export interface ZCodeAgentGrantWorkspaceHookTrustParams extends ZCodeAgentWorkspaceTarget {
-  bundleDigest: string;
-  hookDeclarationDigest: string;
-}
-
 export interface ZCodeAgentSendPromptParamsBase extends ZCodeAgentSessionTarget {
   modelSelection?: ModelSelection;
   modelExecution?: import("@zcode/shared/zcode-protocol-v4").CommandPayloadMap["sendText"]["modelExecution"];
@@ -276,17 +268,6 @@ export interface ZCodeAgentGenerateWorkspaceTextParams extends ZCodeAgentWorkspa
    * 还会被 onRequestTimeout 误判 stale 杀进程。
    */
   requestTimeoutMs?: number;
-}
-
-export interface ZCodeAgentSessionRuntimePreferencesRequest extends ZCodeSessionRequestRuntimePreferencesParams {
-  requestId: string;
-}
-
-export interface ZCodeAgentRespondSessionRuntimePreferencesParams {
-  requestId: string;
-  resolution:
-    | { status: "resolved"; preferences: ZCodeSessionRuntimePreferencesResult }
-    | { status: "failed"; message: string };
 }
 
 export interface ZCodeAgentSessionSubscribeParams extends ZCodeAgentSessionTarget {
@@ -448,10 +429,6 @@ export type ZCodeAgentServiceEvent =
     }
   | { type: "snapshot"; snapshot: ZCodeSessionStateSnapshot };
 
-export interface ZCodeAgentAppRuntimePreferences {
-  askUserQuestionAutoResolutionEnabled: boolean;
-}
-
 export interface ZCodeAgentLocalRuntimeChildProcesses {
   pid: number;
   provider: string;
@@ -475,10 +452,6 @@ export interface IZCodeAgentService {
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ZCodeAgentStorageStartupSnapshot>;
   initialize(params: ZCodeAgentWorkspaceTarget): Promise<ZCodeAgentInitializeResult>;
-  /**
-   * 同步 App 全局运行时偏好到所有已活动 workspace；不得为此启动空闲 Agent。
-   */
-  syncAppRuntimePreferences(preferences: ZCodeAgentAppRuntimePreferences): Promise<void>;
   getWorkspaceRuntimeIdentity(
     params: ZCodeAgentWorkspaceTarget,
   ): Promise<ZCodeAgentWorkspaceRuntimeIdentity>;
@@ -513,16 +486,11 @@ export interface IZCodeAgentService {
   readWorkspacePresentation(
     params: ZCodeAgentReadWorkspacePresentationParams,
   ): Promise<ZCodeWorkspacePresentation>;
-  /** 无 task/session 的 Settings 预信任；Agent 会重新发现并校验 canonical snapshot。 */
-  grantWorkspaceHookTrust(
-    params: ZCodeAgentGrantWorkspaceHookTrustParams,
-  ): Promise<ZCodeWorkspaceHookTrustGrantResult>;
-  listMcpServerStatuses(params: ZCodeAgentListMcpServerStatusesParams): Promise<ZCodeMcpListResult>;
   /** Composer Skill 引用 catalog；带 sessionId 时读取该 runtime 的冻结快照。 */
   getSkillReferenceCatalog(params: ZCodeAgentSkillReferenceCatalogParams): Promise<
     ZCodeSkillsReferenceCatalogResult & {
-      commands?: import("@zcode/shared").ZCodeSlashCommand[];
-      agents?: import("@zcode/shared/nek-protocol").NekMentionTarget[];
+      commands?: ZCodeSlashCommand[];
+      agents?: NekMentionTarget[];
     }
   >;
   /**
@@ -549,10 +517,6 @@ export interface IZCodeAgentService {
   setModel(params: ZCodeAgentSetModelParams): Promise<ZCodeSessionStateSnapshot>;
   setThoughtLevel(params: ZCodeAgentSetThoughtLevelParams): Promise<ZCodeSessionStateSnapshot>;
   setMode(params: ZCodeAgentSetModeParams): Promise<ZCodeSessionStateSnapshot>;
-  respondSessionRuntimePreferences(
-    params: ZCodeAgentRespondSessionRuntimePreferencesParams,
-  ): Promise<void>;
-  onDynamicSessionRuntimePreferencesRequest(): Event<ZCodeAgentSessionRuntimePreferencesRequest>;
   /**
    * nek 的扩展 UI 交互通道：dialog / structured / notify 统一从这里到渲染层。
    *

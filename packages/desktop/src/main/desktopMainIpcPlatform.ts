@@ -13,10 +13,7 @@ import {
   type DesktopCommandId,
   type ApplicationIconRequest,
   type Locale,
-  type LoadCliMcpFromUserDirectoryRequest,
-  type MigrateLegacyCommonMcpRequest,
   type OpenInEditorOptions,
-  type SaveCliMcpToUserDirectoryRequest,
   type CreateTempTextAttachmentRequest,
   type UpdateStatePayload,
   type WindowControlsOverlayReadyPayload,
@@ -38,11 +35,6 @@ import { resolveDesktopZoomLevelFromFactor } from "./desktopZoom.js";
 import { resolveDesktopWindowChromeState } from "./desktopWindowChromeState.js";
 import { handleWindowUnreadCountSync } from "./desktopWindowLifecycle.js";
 import { captureWindowScreenshot, openPathInFileManager } from "./desktopMainIpcHelpers.js";
-import {
-  loadCliMcpFromUserDirectory,
-  migrateLegacyCommonMcp,
-  saveCliMcpToUserDirectory,
-} from "./mcpUserDirectory/index.js";
 import { createTempTextAttachment } from "./tempTextAttachment.js";
 import { registerDesktopSaveFileIpcHandler } from "./desktopSaveFile.js";
 import { registerDesktopPrintToPdfIpcHandler } from "./desktopPrintToPdf.js";
@@ -155,34 +147,6 @@ export function registerPlatformIpcHandlers(options: {
   ipcMain.on(PlatformChannels.OpenResourceManager, () => {
     openResourceManager();
   });
-
-  ipcMain.handle(
-    PlatformChannels.LoadMcpFromUserDirectory,
-    async (_event, payload?: LoadCliMcpFromUserDirectoryRequest) => {
-      return loadCliMcpFromUserDirectory(payload);
-    },
-  );
-
-  ipcMain.handle(
-    PlatformChannels.SaveMcpToUserDirectory,
-    async (_event, payload: SaveCliMcpToUserDirectoryRequest) => {
-      try {
-        await saveCliMcpToUserDirectory(payload);
-        return { success: true };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        options.logger.warn("[mcp-user-directory] save failed", message);
-        return { success: false, error: message };
-      }
-    },
-  );
-
-  ipcMain.handle(
-    PlatformChannels.MigrateLegacyCommonMcp,
-    async (_event, payload?: MigrateLegacyCommonMcpRequest) => {
-      return migrateLegacyCommonMcp(payload);
-    },
-  );
 
   ipcMain.handle(PlatformChannels.SetTitleBarTheme, (event, theme: string) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender);

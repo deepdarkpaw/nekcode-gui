@@ -77,7 +77,7 @@ async function composerCommands(
       }));
   }
   const control = await target.service.commandContext().control();
-  const { resources } = await control.call({
+  const { resources } = await control.call<"list_resources">({
     type: "list_resources",
     cwd,
     resourceType: "prompts",
@@ -105,9 +105,6 @@ export function createNekLegacyMethods(
       return null;
     },
     onDynamicStorageStartupState: emptyEvent,
-    async syncAppRuntimePreferences() {
-      return;
-    },
     async getWorkspaceRuntimeIdentity(input) {
       return runtimeLifecycle.getIdentity(input.workspacePath);
     },
@@ -183,10 +180,6 @@ export function createNekLegacyMethods(
         mode: "agent",
         slashCommands: [],
       };
-    },
-    grantWorkspaceHookTrust: () => unsupported("grantWorkspaceHookTrust"),
-    async listMcpServerStatuses() {
-      return { statuses: {} };
     },
     async getSkillReferenceCatalog(input) {
       const sessionKey = input.sessionId
@@ -289,8 +282,6 @@ export function createNekLegacyMethods(
       await target.service.setMode({ sessionKey, mode: input.mode });
       return (await bindingSnapshot(target, input)) satisfies LegacyModeResult;
     },
-    respondSessionRuntimePreferences: () => unsupported("respondSessionRuntimePreferences"),
-    onDynamicSessionRuntimePreferencesRequest: emptyEvent,
     onDynamicProcessResourceSample: emptyEvent,
     onDynamicMcpTelemetry: emptyEvent,
     onDynamicMcpResourceSamples: emptyEvent,

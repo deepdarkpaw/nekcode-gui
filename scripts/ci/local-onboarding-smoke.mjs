@@ -108,7 +108,7 @@ try {
       await page.getByText("Workspace ready").waitFor();
       await page.waitForFunction(() => window.onboardingFixture.writes.length === 1);
       const result = await page.evaluate(() => window.onboardingFixture);
-      assert.equal(result.writes[0].memoryEnabled, null);
+      assert.equal("memoryEnabled" in result.writes[0], false);
       assert.equal(result.writes[0].proactiveSuggestionsEnabled, null);
       assert.equal("userId" in result.writes[0], false);
       assert.equal(result.settingsWrites.length, 1);
@@ -153,7 +153,7 @@ try {
   const saved = await page.evaluate(() => window.onboardingFixture.writes[0]);
   assert.equal(saved.occupation, "developer");
   assert.equal(saved.interfaceMode, "coding");
-  assert.equal(saved.memoryEnabled, false);
+  assert.equal("memoryEnabled" in saved, false);
   assert.equal(saved.proactiveSuggestionsEnabled, false);
   throw error;
 } finally {

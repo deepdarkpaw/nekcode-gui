@@ -5,6 +5,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { INekWorkspaceConfigService } from "@zcode/services";
 import type { NekConfigTargetInfo } from "@zcode/shared/nek-protocol";
+import { remoteAgentServiceGeneration } from "@/lib/remoteAgentServiceGeneration.js";
 import { LOCAL_TARGET, NekSettingsProvider } from "./api/NekSettingsContext.js";
 import { withWorkspaceConfigTarget } from "./api/workspaceConfigTarget.js";
 import { resolveNekSettingsApis } from "./api/registry.js";
@@ -26,7 +27,7 @@ import { ResourcesPage } from "./pages/resources/ResourcesPage.js";
 
 export interface SettingsWorkspaceBinding {
   service: INekWorkspaceConfigService;
-  info: NekConfigTargetInfo;
+  info?: NekConfigTargetInfo;
   openRemotePath?: (path: string, pathKind: "file" | "directory") => Promise<void>;
 }
 
@@ -70,7 +71,10 @@ export function NekSettingsSection({
 }) {
   const base = useMemo(() => resolveNekSettingsApis(), []);
   const scoped =
-    sectionId === "nekSkills" || sectionId === "nekPrompts" || sectionId === "nekProject";
+    sectionId === "nekSkills" ||
+    sectionId === "nekPrompts" ||
+    sectionId === "nekProject" ||
+    sectionId === "nekMcp";
   const workspaceService = scoped && !base.isMock ? workspace?.service : undefined;
   const workspaceTarget = workspaceService && projectCwd ? workspace?.info : undefined;
   const target = workspaceTarget?.target ?? LOCAL_TARGET;
@@ -84,6 +88,7 @@ export function NekSettingsSection({
   const render = PAGES[sectionId];
   return (
     <NekSettingsProvider
+      key={workspaceService ? remoteAgentServiceGeneration(workspaceService) : 0}
       apis={apis}
       projectCwd={projectCwd ?? undefined}
       workspaceTarget={workspaceTarget}

@@ -26,7 +26,7 @@ export function withWorkspaceConfigTarget(
       if (name === "onReloadResult") {
         return ((target, listener) => {
           if (!sameTarget(target, workspaceTarget)) return api.onReloadResult(target, listener);
-          const lease = service.onDidReload(listener);
+          const lease = service.onDynamicDidReload()(listener);
           return () => lease.dispose();
         }) satisfies INekConfigApi["onReloadResult"];
       }

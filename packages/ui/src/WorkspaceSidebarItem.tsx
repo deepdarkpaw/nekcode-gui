@@ -72,14 +72,6 @@ import {
 import { useRemotePinnedTaskStore } from "@/store/remotePinnedTaskStore.js";
 import { useRemoteTimelineTaskStore } from "@/store/remoteTimelineTaskStore.js";
 import { logger } from "@/logger.js";
-import {
-  RemoteSyncDialogs,
-  RemoteSyncMenuItems,
-  shouldShowRemoteSyncActions,
-} from "@/settings/RemoteSyncActions.js";
-import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
-import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
-import { useMcpStore } from "@/store/mcpStore.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { releaseWorkspaceRuntimeAfterProjectRemoval } from "@/lib/workspaceRuntimeRelease.js";
 import {
@@ -240,20 +232,12 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   );
   const showReconnectAction = Boolean(isDisconnectedRemoteWorkspace);
   const showFileTreeAction = Boolean(onOpenFileTree && !isDisconnectedRemoteWorkspace);
-  const showRemoteSkillSyncAction = shouldShowRemoteSyncActions({
-    remoteSessionId: tab.remoteSessionId,
-    remoteTarget: tab.remoteTarget,
-    clientMode: "desktop-continuous" as const,
-    hasLocalSourceService: Boolean(baseServices.skillSyncService),
-  });
   // 远端工作区在“重连中”时，之前只有轻微背景呼吸效果，
   // 在侧边栏高密度列表里不够醒目，用户很难快速判断哪个容器仍在连接。
   // 这里复用 BorderBeam，只在重连进行中激活，让连接态反馈更清晰，
   // 同时避免在普通空闲态或断连态误显示为“仍在运行”。
   const shouldShowRemoteConnectingBorderBeam = isReconnectPending;
   const [isRemoteErrorCopied, setIsRemoteErrorCopied] = useState(false);
-  const [remoteSkillSyncOpen, setRemoteSkillSyncOpen] = useState(false);
-  const [remoteMcpSyncOpen, setRemoteMcpSyncOpen] = useState(false);
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
@@ -908,13 +892,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                           </DropdownMenuTrigger>
                         </ControlHintTooltip>
                         <DropdownMenuContent align="end" onClick={handleActionMenuClick}>
-                          <RemoteSyncMenuItems
-                            canSyncSkills={showRemoteSkillSyncAction}
-                            canSyncMcp={showRemoteSkillSyncAction}
-                            stopMouseDownPropagation
-                            onOpenSkillSync={() => setRemoteSkillSyncOpen(true)}
-                            onOpenMcpSync={() => setRemoteMcpSyncOpen(true)}
-                          />
                           <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
                             onMouseDown={(event) => {
@@ -1121,45 +1098,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
           />
         </CollapsibleContent>
       </Collapsible>
-      <RemoteSyncDialogs
-        canSyncSkills={showRemoteSkillSyncAction}
-        canSyncMcp={showRemoteSkillSyncAction}
-        skillOpen={remoteSkillSyncOpen}
-        mcpOpen={remoteMcpSyncOpen}
-        onSkillOpenChange={setRemoteSkillSyncOpen}
-        onMcpOpenChange={setRemoteMcpSyncOpen}
-        localSkillSyncService={baseServices.skillSyncService}
-        remoteSkillSyncService={services.skillSyncService}
-        localMcpSyncService={baseServices.mcpSyncService}
-        remoteMcpSyncService={services.mcpSyncService}
-        remoteTarget={tab.remoteTarget}
-        skillWorkspacePath={tab.workspacePath}
-        mcpWorkspacePath={tab.workspacePath}
-        mcpLocalWorkspacePath={tab.localWorkspacePath}
-        workspaceIdentity={tab.workspaceIdentity}
-        onSkillsSynced={async () => {
-          await invalidateDeferredDraftSessionForSkillChange({
-            zcodeSessionService: services.zcodeSessionService,
-            workspacePath: tab.workspacePath,
-            workspaceIdentity: tab.workspaceIdentity,
-            reason: "sidebar-remote-skill-sync",
-          });
-          await refreshSharedSkillStoreForWorkspace({
-            workspacePath: tab.workspacePath,
-            workspaceIdentity: tab.workspaceIdentity,
-            skillsService: services.skillsService,
-          });
-        }}
-        onMcpSynced={async () => {
-          await useMcpStore
-            .getState()
-            .ensureLoadedForWorkspace(
-              tab.workspacePath,
-              services.mcpSyncService,
-              tab.workspaceIdentity,
-            );
-        }}
-      />
     </li>
   );
 });

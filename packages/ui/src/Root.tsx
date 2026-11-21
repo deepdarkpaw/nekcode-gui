@@ -14,12 +14,7 @@ import { reportUiLaunchToInput } from "@/lib/diagnostics/uiPerformance.js";
 /* eslint-disable max-lines -- Root 当前集中编排启动和 workspace shell wiring，先保持入口收口避免跨层状态拆散。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LucideProvider, RefreshCw } from "lucide-react";
-import {
-  APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
-  DesktopCommandIds,
-  appRuntimePreferencesChangedBroadcastPayloadSchema,
-  type RemoteTarget,
-} from "@zcode/shared";
+import { DesktopCommandIds, type RemoteTarget } from "@zcode/shared";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { Button } from "@/components/ui/button.js";
 import { PlatformProvider } from "@/hooks/usePlatform.js";
@@ -39,7 +34,6 @@ import {
   shouldOpenFallbackWorkspaceAfterCreate,
 } from "@/lib/rootStartupGate.js";
 import { StoreProvider, useZCodeStore } from "@/store/StoreProvider.js";
-import { setMcpStorePlatform } from "@/store/mcpStore.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { TabStoreProvider, useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
 import { isSettingsTab, isWorkspaceTab } from "@/store/tabStore.js";
@@ -48,7 +42,6 @@ import { RootShell } from "@/root/RootShell.js";
 import { RootWorkspaceContent } from "@/root/RootWorkspaceContent.js";
 import { resolveRootWorkspaceShellTarget } from "@/root/rootWorkspaceShellTarget.js";
 import { OccupationOnboarding } from "@/onboarding/OccupationOnboarding.js";
-import { OnboardingDialog } from "@/onboarding/OnboardingDialog.js";
 import { NekOnboardingModal } from "@/onboarding/NekOnboardingModal.js";
 import { NekRemotePromptHost } from "@/remote/nek/NekRemotePromptHost.js";
 import { RpcSubscriptionFaultNotifier } from "@/RpcSubscriptionFaultNotifier.js";
@@ -76,7 +69,6 @@ import {
 } from "@/lib/codeCommentContext.js";
 import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
-import { useSettings } from "@/hooks/useSettingService.js";
 import { CLOSE_ACTIVE_CONTEXT_REQUEST_EVENT } from "@/lib/closeActiveContext.js";
 import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
 
@@ -147,20 +139,17 @@ function RootInner({
   initialWorkspaceLoadingFallback,
 }: RootProps) {
   useEffect(() => {
-    setMcpStorePlatform(platform);
     setUiDiagnosticReporter(
       platform.reportDiagnostic ? (record) => platform.reportDiagnostic!(record) : null,
     );
 
     return () => {
-      setMcpStorePlatform(null);
       setUiDiagnosticReporter(null);
     };
   }, [isDesktop, platform]);
 
   const { intl, locale } = useZCodeIntl();
   const theme = useZCodeStore((state) => state.theme);
-  const { settings: appSettings, refresh: refreshAppSettings } = useSettings();
   const rootModelSelectionRead = useModelSelectionServiceView(services.modelSelectionService);
   const rootModelSelectionErrorNode =
     rootModelSelectionRead.state.status === "error" ? (
@@ -203,23 +192,6 @@ function RootInner({
 
   useEffect(() => {
     const disposable = services.broadcastService.onMessage((message) => {
-      if (message.channel === APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL) {
-        const parsed = appRuntimePreferencesChangedBroadcastPayloadSchema.safeParse(
-          message.payload,
-        );
-        if (!parsed.success) {
-          logger.warn("[settings] 丢弃无效的运行时偏好广播", {
-            issues: parsed.error.issues,
-          });
-          return;
-        }
-        void refreshAppSettings();
-        void services.zcodeAgentService.syncAppRuntimePreferences(parsed.data).catch((error) => {
-          logger.warn("[settings] 同步跨窗口运行时偏好失败", error);
-        });
-        return;
-      }
-
       if (message.channel === CODE_COMMENT_PREVIEW_RESTORE_BROADCAST_CHANNEL) {
         if (!isCodeCommentPayload(message.payload) || !message.payload.id) {
           return;
@@ -248,21 +220,7 @@ function RootInner({
     return () => {
       disposable.dispose();
     };
-  }, [refreshAppSettings, services.broadcastService, services.zcodeAgentService]);
-
-  useEffect(() => {
-    if (!appSettings) {
-      return;
-    }
-    void services.zcodeAgentService
-      .syncAppRuntimePreferences({
-        askUserQuestionAutoResolutionEnabled:
-          appSettings.askUserQuestionAutoResolutionEnabled !== false,
-      })
-      .catch((error) => {
-        logger.warn("[settings] 初始化运行时偏好失败", error);
-      });
-  }, [appSettings?.askUserQuestionAutoResolutionEnabled, services.zcodeAgentService]);
+  }, [services.broadcastService]);
 
   const tabs = useTabStore((state) => state.tabs);
   const windowWorkspaceTabs = useMemo(() => tabs.filter(isWorkspaceTab), [tabs]);
@@ -910,17 +868,6 @@ function RootInner({
               isWindowsDesktop={isWindowsDesktop}
             />
           )}
-          <ScopedErrorBoundary
-            scope="onboarding-dialog"
-            resetKeys={[workspaceShellIdentity?.trim() || workspaceShellPath]}
-            variant="silent"
-          >
-            <OnboardingDialog
-              workspacePath={workspaceShellPath || undefined}
-              workspaceIdentity={workspaceShellIdentity}
-              isDesktop={isDesktop}
-            />
-          </ScopedErrorBoundary>
         </OccupationOnboarding>
       </RootShell>
     </ConversationImportProvider>

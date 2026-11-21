@@ -46,14 +46,16 @@ export function ResourceOpenButton({
     <AsyncButton
       variant="ghost"
       size="icon-sm"
-      aria-label={label}
-      title={label}
+      label={label}
       icon={icon}
       disabled={disabled}
       disabledReason={intl.formatMessage({ id: "settings.nek.openDir.remote" }, { path })}
-      onClick={() =>
-        target.kind === "remote" ? openRemotePath?.(path, kind) : host.openPath(target, path)
-      }
+      onClick={() => {
+        if (target.kind === "local") return host.openPath(target, path);
+        if (!openRemotePath)
+          throw new Error(intl.formatMessage({ id: "settings.nek.resources.openFailed" }));
+        return openRemotePath(path, kind);
+      }}
     />
   );
 }
@@ -127,8 +129,7 @@ export function ResourceRow({
               variant="ghost"
               size="icon-sm"
               icon={<PencilIcon />}
-              title={editLabel}
-              aria-label={editLabel}
+              label={editLabel}
               onClick={onEdit}
             />
           )}

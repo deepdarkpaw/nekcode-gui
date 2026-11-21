@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- GUI 扩展命令与类型化响应集中映射，避免两份协议声明漂移。 */
 /**
  * nek GUI RPC 扩展协议（契约）。
  *

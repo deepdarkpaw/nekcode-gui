@@ -14,14 +14,6 @@ import type { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 import type { IModelSelectionService } from "./model-provider/modelSelectionService.js";
 import type { IClientScenesService } from "./client-scenes/clientScenes.js";
 import type { INekWorkspaceConfigService } from "./nek-config-api/workspaceConfigService.js";
-import type { ISkillsService } from "./skills/skills.js";
-import type { ISkillSyncService } from "./skill-sync/skillSync.js";
-import type { IMcpSyncService } from "./mcp-sync/mcpSync.js";
-import type { ISubagentsService } from "./subagents/subagents.js";
-import type { ICommandsService } from "./commands/commands.js";
-import type { IHooksService } from "./hooks/hooks.js";
-import type { IMemoryService } from "./memory/memory.js";
-import type { ISettingsSyncService } from "./settings-sync/settingsSync.js";
 import type { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IWindowControllerService } from "./window-controller/windowController.js";
 import type { IOnboardingRecordService } from "./onboarding/onboardingRecord.js";
@@ -51,14 +43,5 @@ export interface IServiceAccessor {
   readonly modelSelectionService: IModelSelectionService;
   readonly clientScenesService: IClientScenesService;
   readonly nekWorkspaceConfigService: INekWorkspaceConfigService;
-  /** 闲时任务管理（独立服务面）。 */
-  readonly skillsService: ISkillsService;
-  readonly skillSyncService: ISkillSyncService;
-  readonly mcpSyncService: IMcpSyncService;
-  readonly subagentsService: ISubagentsService;
-  readonly commandsService: ICommandsService;
-  readonly hooksService: IHooksService;
-  readonly memoryService: IMemoryService;
-  readonly settingsSyncService: ISettingsSyncService;
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
 }

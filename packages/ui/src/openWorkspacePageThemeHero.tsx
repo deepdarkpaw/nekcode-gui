@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-import { cn } from "@/components/lib/utils.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { resolveTheme } from "@/useTheme.js";
 import type { Theme } from "@/useTheme.js";
@@ -71,32 +69,4 @@ export function useResolvedThemeHeroPalette(): ThemeHeroPalette {
     theme === "system" ? (resolveTheme(theme) === "dark" ? "dark" : "light") : theme;
 
   return getThemeHeroPalette(resolvedTheme);
-}
-
-export function ThemeHeroVisual(props: {
-  className?: string;
-  contentClassName?: string;
-  children?: ReactNode;
-}) {
-  const palette = useResolvedThemeHeroPalette();
-
-  return (
-    <div className={cn("relative overflow-hidden", palette.panel, props.className)}>
-      <div
-        className={cn(
-          "pointer-events-none absolute left-[-12%] top-[18%] h-[42rem] w-[42rem] rounded-full blur-3xl",
-          palette.glowPrimary,
-        )}
-      />
-      <div
-        className={cn(
-          "pointer-events-none absolute right-[-18%] bottom-[-14%] h-[36rem] w-[36rem] rounded-full blur-3xl",
-          palette.glowSecondary,
-        )}
-      />
-      {props.children ? (
-        <div className={cn("relative z-10", props.contentClassName)}>{props.children}</div>
-      ) : null}
-    </div>
-  );
 }

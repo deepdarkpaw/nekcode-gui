@@ -21,9 +21,6 @@ import type {
   UpdateCheckResultPayload,
   UpdateStatePayload,
   ZCodeStdioTapDevState,
-  LoadCliMcpFromUserDirectoryRequest,
-  MigrateLegacyCommonMcpRequest,
-  SaveCliMcpToUserDirectoryRequest,
   SaveFileRequest,
   SaveFileResult,
   PrintPageToPdfResult,
@@ -209,12 +206,6 @@ contextBridge.exposeInMainWorld("zcode", {
   listDockerContainers: () => ipcRenderer.invoke(PlatformChannels.ListDockerContainers),
   listSSHConfigAliases: (): Promise<SSHConfigAliasOption[]> =>
     ipcRenderer.invoke(PlatformChannels.ListSSHConfigAliases),
-  loadMcpFromUserDirectory: (payload?: LoadCliMcpFromUserDirectoryRequest) =>
-    ipcRenderer.invoke(PlatformChannels.LoadMcpFromUserDirectory, payload ?? {}),
-  saveMcpToUserDirectory: (payload: SaveCliMcpToUserDirectoryRequest) =>
-    ipcRenderer.invoke(PlatformChannels.SaveMcpToUserDirectory, payload),
-  migrateLegacyCommonMcp: (payload?: MigrateLegacyCommonMcpRequest) =>
-    ipcRenderer.invoke(PlatformChannels.MigrateLegacyCommonMcp, payload ?? {}),
   /** renderer 日志通过 IPC 传到 main 进程统一存储 */
   log: (level: "info" | "warn" | "error", args: unknown[]) =>
     ipcRenderer.send(PlatformChannels.Log, { level, args }),

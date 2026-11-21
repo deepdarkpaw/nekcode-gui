@@ -2,7 +2,6 @@ import type { RemoteResourcePackageSelection } from "./remoteResourcePackages.js
 import type { ProviderFamilyDomain } from "./model-provider-family.js";
 import type { ProviderFamilyConnectionSelectionSettings } from "./provider-family-connection-selection.js";
 import type { WorkspacePurpose } from "./workspacePurpose.js";
-import type { AppToolSearchMode } from "./app-runtime-preferences.js";
 
 // ── Domain types ──
 
@@ -116,7 +115,6 @@ export type Locale = "zh-CN" | "en-US";
 export type LocalePreference = "system" | Locale;
 
 /** ZCode 运行中继续输入时的交互行为 */
-export type ZCodeInteractionBehavior = "queue" | "guide";
 
 /** 桌面端 Electron 自动更新发布通道。 */
 export type ElectronReleaseChannel = "stable" | "preview";
@@ -325,11 +323,6 @@ export interface AppSettings {
   toolGroupingExploreEnabled?: boolean;
   /** 是否把连续的非只读 Shell 工具调用聚合成 Terminal。 */
   toolGroupingTerminalEnabled?: boolean;
-  /** ZCode 运行中继续输入时，是排队到下一轮，还是引导到下一次工具调用后运行 */
-  zcodeInteractionBehavior?: ZCodeInteractionBehavior;
-  /** Agent 提问五分钟无人回答时是否允许自动继续；缺失按开启兼容旧配置。 */
-  askUserQuestionAutoResolutionEnabled?: boolean;
-  /** 是否完整保留 Model I/O；开启后不轮转、不限额重置、不压缩或裁剪，鉴权信息仍会脱敏。 */
   /** 设置页中每个 Provider Family 当前唯一的结构化连接选择。 */
   providerFamilyConnectionSelections?: ProviderFamilyConnectionSelectionSettings;
   /** ZAI / BigModel 账号 provider family 运行域。 */
@@ -338,12 +331,6 @@ export interface AppSettings {
   providerFamilyDomainUpdatedAt?: number;
   /** 旧 oauth/provider 状态是否已经尝试迁移到 providerFamilyDomain。 */
   providerFamilyDomainMigrated?: boolean;
-  /** 新建或冷恢复 Session 是否为 Bash 注入 bfs/ugrep 增强；默认启用。 */
-  nativeSearchEnhancementsEnabled?: boolean;
-  /** 新建或冷恢复 Session 的工具搜索模式；缺省 Off，热 resume 保持原值。 */
-  toolSearchMode?: AppToolSearchMode;
-  /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
-  memoryEnabled?: boolean;
   onboardingOccupation?:
     | "office"
     | "developer"

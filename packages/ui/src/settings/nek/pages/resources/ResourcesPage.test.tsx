@@ -25,13 +25,13 @@ for (const resourceType of ["skills", "prompts"] as const satisfies readonly Nek
     await env.config.setResourceEnabled(LOCAL, { ...query, path: entry.path, enabled: false });
     await env.config.setProjectTrust(LOCAL, MOCK_PROJECT_CWD, false);
     render(<ResourcesPage resourceType={resourceType} />, { wrapper: env.wrapper });
-    const label = `Enable ${entry.name}`;
+    const label = `启用 ${entry.name}`;
     const toggle = await screen.findByRole("switch", { name: label });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByRole("heading", { name: "Global", exact: true })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Project", exact: true })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Manage project trust" })).toBeTruthy();
-    expect(screen.getByText(/This project is not trusted/u)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "全局" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "项目" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "管理项目信任" })).toBeTruthy();
+    expect(screen.getByText(/此项目未受信任/u)).toBeTruthy();
     env.config.failNext("setResourceEnabled", { code: "io", message: "nek override rejected" });
     fireEvent.click(toggle);
     expect((await screen.findByRole("alert")).textContent).toContain("nek override rejected");
@@ -57,10 +57,10 @@ for (const resourceType of ["skills", "prompts"] as const satisfies readonly Nek
     const toggle = vi.spyOn(env.config, "setResourceEnabled");
     render(<ResourcesPage resourceType={resourceType} />, { wrapper: env.wrapper });
     await act(async () => useNekTargetSelection.getState().setTarget(REMOTE));
-    fireEvent.click(await screen.findByRole("switch", { name: "Enable remote-only" }));
+    fireEvent.click(await screen.findByRole("switch", { name: "启用 remote-only" }));
     await waitFor(() =>
       expect(toggle).toHaveBeenCalledWith(REMOTE, { ...query, path: entry.path, enabled: false }),
     );
-    expect(screen.queryByText(/This project is not trusted/u)).toBeNull();
+    expect(screen.queryByText(/此项目未受信任/u)).toBeNull();
   });
 }

@@ -14,10 +14,7 @@ export function createWorkspaceConfigService(api: INekConfigApi): INekWorkspaceC
       throw new Error(`Not a workspace configuration command: ${name}`);
     }
     try {
-      return await (Reflect.get(api, name) as (...args: unknown[]) => Promise<unknown>)(
-        LOCAL,
-        ...args,
-      );
+      return await Reflect.apply(Reflect.get(api, name), api, [LOCAL, ...args]);
     } catch (error) {
       // 远程 RPC 只透传 Error.message；带 code 的普通对象才能保留冲突语义。
       throw asNekConfigError(error).toJSON();
@@ -26,6 +23,6 @@ export function createWorkspaceConfigService(api: INekConfigApi): INekWorkspaceC
   return {
     callConfig: callConfig as INekWorkspaceConfigService["callConfig"],
     onDynamicConfigChange: (cwd) => (listener) => ({ dispose: api.watch(LOCAL, listener, cwd) }),
-    onDidReload: (listener) => ({ dispose: api.onReloadResult(LOCAL, listener) }),
+    onDynamicDidReload: () => (listener) => ({ dispose: api.onReloadResult(LOCAL, listener) }),
   };
 }

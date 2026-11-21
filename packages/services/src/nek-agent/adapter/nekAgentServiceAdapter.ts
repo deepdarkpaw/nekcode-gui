@@ -57,7 +57,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly prepareStorage: IZCodeAgentService["prepareStorage"];
   declare readonly getStorageStartupState: IZCodeAgentService["getStorageStartupState"];
   declare readonly onDynamicStorageStartupState: IZCodeAgentService["onDynamicStorageStartupState"];
-  declare readonly syncAppRuntimePreferences: IZCodeAgentService["syncAppRuntimePreferences"];
   declare readonly getWorkspaceRuntimeIdentity: IZCodeAgentService["getWorkspaceRuntimeIdentity"];
   declare readonly createSession: IZCodeAgentService["createSession"];
   declare readonly resumeSession: IZCodeAgentService["resumeSession"];
@@ -73,8 +72,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly readSessionDebug: IZCodeAgentService["readSessionDebug"];
   declare readonly readSessionEvents: IZCodeAgentService["readSessionEvents"];
   declare readonly readWorkspacePresentation: IZCodeAgentService["readWorkspacePresentation"];
-  declare readonly grantWorkspaceHookTrust: IZCodeAgentService["grantWorkspaceHookTrust"];
-  declare readonly listMcpServerStatuses: IZCodeAgentService["listMcpServerStatuses"];
   declare readonly getSkillReferenceCatalog: IZCodeAgentService["getSkillReferenceCatalog"];
   declare readonly collectLocalRuntimeChildProcesses: IZCodeAgentService["collectLocalRuntimeChildProcesses"];
   declare readonly generateWorkspaceText: IZCodeAgentService["generateWorkspaceText"];
@@ -85,8 +82,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly setModel: IZCodeAgentService["setModel"];
   declare readonly setThoughtLevel: IZCodeAgentService["setThoughtLevel"];
   declare readonly setMode: IZCodeAgentService["setMode"];
-  declare readonly respondSessionRuntimePreferences: IZCodeAgentService["respondSessionRuntimePreferences"];
-  declare readonly onDynamicSessionRuntimePreferencesRequest: IZCodeAgentService["onDynamicSessionRuntimePreferencesRequest"];
   declare readonly onDynamicProcessResourceSample: IZCodeAgentService["onDynamicProcessResourceSample"];
   declare readonly onDynamicMcpTelemetry: IZCodeAgentService["onDynamicMcpTelemetry"];
   declare readonly onDynamicMcpResourceSamples: IZCodeAgentService["onDynamicMcpResourceSamples"];

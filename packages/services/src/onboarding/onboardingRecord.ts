@@ -13,9 +13,7 @@ export interface IOnboardingRecordService {
   getLatestEntry(): Promise<OnboardingRecordEntry | null>;
   /** 手动修改偏好后同步本地记录；运行时事实仍属于 Setting。 */
   updateRecordPreferences(
-    patch: Partial<
-      Pick<OnboardingRecordEntryInput, "memoryEnabled" | "proactiveSuggestionsEnabled">
-    >,
+    patch: Partial<Pick<OnboardingRecordEntryInput, "proactiveSuggestionsEnabled">>,
   ): Promise<void>;
   /** 读取不含身份字段的本地记录；文件不存在返回 null。 */
   getRecords(): Promise<OnboardingRecordFile | null>;
