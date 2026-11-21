@@ -26,8 +26,12 @@ import { compareSemverVersions } from "../forceUpdate.js";
 /** 协议版本：任何不兼容的改动都要递增。GUI 要求 `protocolVersion === NEK_GUI_PROTOCOL_VERSION`。 */
 export const NEK_GUI_PROTOCOL_VERSION = 1;
 
-/** Complete-turn history pages (historyPages=2), append observations and the negotiated live stream. */
-export const NEK_GUI_MIN_VERSION = "0.5.1-beta.4";
+/**
+ * Complete-turn history pages (historyPages=2), append observations and the negotiated live stream,
+ * plus list_resources / set_resource_enabled / get_model_scope (capabilities resources=1, modelScope=1),
+ * nek-only skill discovery and /nek-build --revision.
+ */
+export const NEK_GUI_MIN_VERSION = "0.5.1-beta.7";
 
 export function isNekGuiVersionSupported(version: unknown): boolean {
   if (typeof version !== "string") return false;
