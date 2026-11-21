@@ -3,6 +3,7 @@ import { readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout } from "node:timers/promises";
+import { tsImport } from "tsx/esm/api";
 import { bundleRemoteAssets } from "../bundle-remote-assets.mjs";
 import { createRemoteAssetFixture } from "./remoteAssetsFixture.mjs";
 import {
@@ -11,6 +12,7 @@ import {
   remoteDeploymentFixture,
 } from "./remoteDeploymentFixture.mjs";
 
+const { formatRemoteAssetTransferProgress } = await tsImport("@zcode/shared", import.meta.url);
 const options = { skip: !hasTestShell, timeout: 90_000 };
 const liveFiles = [
   "node",
@@ -118,30 +120,38 @@ for (const downloader of ["curl", "wget"]) {
   );
 }
 
-for (const [behavior, reason, code] of [
-  ["404", "http", 404],
-  ["tampered", "checksum"],
-  ["timeout", "timeout"],
-  ["missing", "missing-downloader"],
+for (const [downloader, behavior, reason, requests, code] of [
+  ["curl", "404", "http", 1, 404],
+  ["curl", "tampered", "checksum", 1],
+  ["curl", "stalled", "stalled", 1],
+  ["curl", "timeout", "timeout", 1],
+  ["wget", "stalled", "stalled", 2],
+  ["wget", "busybox-stalled", "stalled", 2],
+  ["wget", "timeout", "timeout", 2],
+  [undefined, "missing", "missing-downloader", 0],
 ]) {
   test(
-    `SSH ${behavior} emits a specific warning before switching to the bundled upload`,
+    `SSH ${downloader ?? "no downloader"} ${behavior} emits a specific warning before bundled upload`,
     options,
     async (t) => {
       const progress = captureProgress(t);
       const fixture = await remoteDeploymentFixture(t, {
         kind: "ssh",
-        downloader: behavior === "missing" ? undefined : "curl",
+        downloader,
         behavior,
       });
       assert.equal(await fixture.deploy(), true);
       assert.equal(fixture.uploads.length, 6);
-      assert.equal((await fixture.requests()).length, behavior === "missing" ? 0 : 1);
+      assert.equal((await fixture.requests()).length, requests);
       await assertInstalledAndClean(fixture);
       const fallback = progress().find((item) => item.remoteAssetTransfer === "upload-fallback");
-      assert.equal(fallback?.reason, reason);
-      assert.equal(fallback?.statusCode, code);
+      assert.ok(fallback);
+      assert.equal(fallback.reason, reason);
+      assert.equal(fallback.statusCode, code);
       assert.ok(fallback.durationMs >= 0);
+      const message = formatRemoteAssetTransferProgress(fallback);
+      if (reason === "stalled") assert.match(message, /下载停滞/u);
+      if (reason === "timeout") assert.match(message, /下载超时/u);
       const uploading = progress().find((item) => item.remoteAssetTransfer === "bundled-upload");
       assert.ok(uploading && progress().indexOf(fallback) < progress().indexOf(uploading));
       assert.ok(

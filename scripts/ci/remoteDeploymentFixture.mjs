@@ -75,11 +75,22 @@ async function writeTool(bin, name, script) {
 async function writeFakeDownloader(bin, data, downloader, behavior, fetchLog) {
   const reportStatus =
     downloader === "curl" ? 'printf "%s" "$1"' : 'printf "  HTTP/1.1 %s test\\n" "$1" >&2';
+  const lowSpeed =
+    "curl: (28) Operation too slow. Less than 32768 bytes/sec transferred the last 20 seconds";
+  const readTimeout = "Read error at byte 10/100 (Connection timed out). Giving up.";
   const body = {
     404: `printf '%s' partial > "$out"; status 404; exit ${downloader === "curl" ? 22 : 8}`,
     tampered: 'printf %s tampered > "$out"; status 200; exit 0',
     cancel: 'printf %s partial > "$out"; exec sleep 20',
-    timeout: `status 000; exit ${downloader === "curl" ? 28 : 124}`,
+    stalled:
+      downloader === "curl"
+        ? `status 200; printf '%s\\n' '${lowSpeed}' >&2; exit 28`
+        : `status 200; printf '%s\\n' '${readTimeout}' >&2; exit 4`,
+    "busybox-stalled": "status 200; printf '%s\\n' 'wget: download timed out' >&2; exit 1",
+    timeout:
+      downloader === "curl"
+        ? `status 200; printf '%s\\n' '${lowSpeed}' 'curl: (28) Operation timed out after 61001 milliseconds' >&2; exit 28`
+        : `status 200; printf '%s\\n' '${readTimeout}' >&2; exit 124`,
     success: data.manifest.components
       .map(
         ({ id, artifactPath }) => `
@@ -96,7 +107,11 @@ async function writeFakeDownloader(bin, data, downloader, behavior, fetchLog) {
     downloader,
     `
     [ "$HTTPS_PROXY" = fake-proxy ]
+    [ "$LC_ALL" = C ]
     ${downloader === "wget" ? '[ "$https_proxy" = fake-proxy ]' : ""}
+    if [ "$#" -eq 1 ] && [ "$1" = --version ]; then
+      ${behavior === "busybox-stalled" ? "exit 1" : "printf '%s\\n' 'GNU Wget 1.21.3'; exit 0"}
+    fi
     status() { ${reportStatus}; }
     out= url=
     while [ "$#" -gt 0 ]; do

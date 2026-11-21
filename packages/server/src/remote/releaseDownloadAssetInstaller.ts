@@ -12,8 +12,21 @@ import { quotePosixShellArg } from "./posixShell.js";
 
 const RELEASE_ROOT = "https://github.com/deepdarkpaw/nekcode-gui/releases/download";
 const CONNECT_TIMEOUT_SECONDS = 5;
-const TRANSFER_TIMEOUT_SECONDS = 35;
-const DOWNLOAD_PLAN_TIMEOUT_MS = 120_000;
+const STALL_SECONDS = 20;
+const LOW_SPEED_BYTES_PER_SECOND = 32 * 1024;
+const BUDGET_BYTES_PER_SECOND = 128 * 1024;
+const BASE_TRANSFER_SECONDS = 60;
+const MAX_TRANSFER_SECONDS = 15 * 60;
+const MAX_DOWNLOAD_ATTEMPTS = 2;
+const WGET_KILL_GRACE_SECONDS = 2;
+const PLAN_GRACE_SECONDS = 30;
+
+function transferTimeoutSeconds(bytes: number): number {
+  return Math.min(
+    MAX_TRANSFER_SECONDS,
+    BASE_TRANSFER_SECONDS + Math.ceil(bytes / BUDGET_BYTES_PER_SECOND),
+  );
+}
 
 type Fallback = Extract<RemoteAssetTransferProgress, { remoteAssetTransfer: "upload-fallback" }>;
 type DownloadFailure = Pick<Fallback, "reason" | "statusCode" | "exitCode">;
@@ -30,36 +43,59 @@ function buildCurlDownload(): string {
   return `
 run_fetch() {
   (ulimit -f "$blocks" && exec curl -q -fsSL --max-redirs 5 --proto '=https' --proto-redir '=https' \\
-    --connect-timeout ${CONNECT_TIMEOUT_SECONDS} --max-time ${TRANSFER_TIMEOUT_SECONDS} \\
-    --retry 1 --retry-max-time ${TRANSFER_TIMEOUT_SECONDS} --max-filesize "$bytes" \\
-    -w '%{http_code}' -o "$archive" "$url") > "$stage/http" 2>/dev/null &
+    --connect-timeout ${CONNECT_TIMEOUT_SECONDS} --speed-limit ${LOW_SPEED_BYTES_PER_SECOND} --speed-time ${STALL_SECONDS} \\
+    --max-time "$attempt_limit" --retry ${MAX_DOWNLOAD_ATTEMPTS - 1} --retry-max-time "$attempt_limit" --max-filesize "$bytes" \\
+    -w '%{http_code}' -o "$archive" "$url") > "$stage/http" 2> "$download_log" &
   wait_for_fetch
   http=$(cat "$stage/http")
+  # 低速与硬超时都是 exit 28；只判最后一次尝试，不让重试前的低速覆盖最终超时。
+  if [ "$fetch_code" -eq 28 ] && awk '/^curl: [(]28[)] / { stalled = /Operation too slow[.]/ } END { exit !stalled }' "$download_log"; then
+    fetch_failure=stalled
+  fi
 }
 `;
 }
 
 function buildWgetDownload(): string {
   // wget 通常只读小写代理变量；大小写同时存在时保留远端用户显式设置的小写值。
-  // -T 同时覆盖 GNU/BusyBox；timeout 限制单次调用的总时长（含 DNS、重定向和内置重试）。
+  // -T 同时覆盖 GNU/BusyBox 的读取超时；GNU 关闭内置重试，由该脚本统一控制尝试次数。
   return `
 if [ -z "\${https_proxy+x}" ] && [ -n "\${HTTPS_PROXY+x}" ]; then export https_proxy="$HTTPS_PROXY"; fi
 if [ -z "\${http_proxy+x}" ] && [ -n "\${HTTP_PROXY+x}" ]; then export http_proxy="$HTTP_PROXY"; fi
 if [ -z "\${no_proxy+x}" ] && [ -n "\${NO_PROXY+x}" ]; then export no_proxy="$NO_PROXY"; fi
+wget_gnu=0
+if wget --version 2>/dev/null | awk 'NR == 1 && /^GNU Wget[[:space:]]/ { found=1 } END { exit !found }'; then
+  wget_gnu=1
+fi
 run_fetch() {
-  for attempt in 1 2; do
-    (ulimit -f "$blocks" && exec timeout -k 2 ${TRANSFER_TIMEOUT_SECONDS} wget -T ${CONNECT_TIMEOUT_SECONDS} -S -O "$archive" "$url") > /dev/null 2> "$stage/wget.log" &
+  set -- -T ${STALL_SECONDS}
+  if [ "$wget_gnu" -eq 1 ]; then
+    set -- "$@" --tries=1 --dns-timeout=${CONNECT_TIMEOUT_SECONDS} --connect-timeout=${CONNECT_TIMEOUT_SECONDS}
+  fi
+  attempt=0
+  while [ "$attempt" -lt ${MAX_DOWNLOAD_ATTEMPTS} ]; do
+    attempt=$((attempt + 1))
+    (ulimit -f "$blocks" && exec timeout -k ${WGET_KILL_GRACE_SECONDS} "$attempt_limit" wget "$@" -S -O "$archive" "$url") > /dev/null 2> "$download_log" &
     wait_for_fetch
-    http=$(awk '/^[[:space:]]*HTTP\\/[0-9.]+ [1-5][0-9][0-9]/ { status=$2 } END { print status+0 }' "$stage/wget.log")
-    [ "$fetch_code" -ne 0 ] || break
+    http=$(awk '/^[[:space:]]*HTTP\\/[0-9.]+ [1-5][0-9][0-9]/ { status=$2 } END { print status+0 }' "$download_log")
+    [ "$fetch_code" -ne 0 ] || return 0
     case "$http" in 4[0-9][0-9]) break ;; esac
   done
+  case "$fetch_code" in
+    124|137|143) fetch_failure=timeout ;;
+    *)
+      if awk -v http="$http" '/^(Read error|wget: read error:).*[ (](Connection|Operation) timed out/ || (http >= 200 && http < 300 && /^wget: (download timed out|timeout)$/) { stalled=1 } END { exit !stalled }' "$download_log"; then
+        fetch_failure=stalled
+      fi ;;
+  esac
 }
 `;
 }
 
 function buildDownloadFunctions(downloader: Downloader): string {
   return `
+# 只在远端匹配工具的固定诊断文本；stderr 原文（可能含代理信息）不回传。
+export LC_ALL=C
 child=
 watcher=
 cleanup_download() {
@@ -91,11 +127,13 @@ ${downloader === "curl" ? buildCurlDownload() : buildWgetDownload()}
 download_archive() {
   url=$1
   bytes=$2
+  attempt_limit=$3
+  fetch_failure=transport
   # 同时限制不提供 Content-Length 或旧版 curl 的下载体；最终仍用完整 SHA 验证。
   blocks=$(( (bytes + 511) / 512 + 1 ))
   run_fetch
   case "$http" in [45][0-9][0-9]) fail_download http "$http" "$fetch_code" ;; esac
-  if [ "$fetch_code" -ne 0 ]; then fail_download transport 0 "$fetch_code"; fi
+  if [ "$fetch_code" -ne 0 ]; then fail_download "$fetch_failure" 0 "$fetch_code"; fi
 }
 `;
 }
@@ -105,6 +143,7 @@ function buildArchiveStep(
   asset: RemoteInstallAsset,
   appVersion: string,
   size: number,
+  attemptLimit: number,
 ): string {
   const { component, entry } = asset;
   const name = bundledRemoteReleaseAssetName(appVersion, component.id);
@@ -113,7 +152,7 @@ function buildArchiveStep(
   const required = component.requiredPaths.map(quotePosixShellArg);
   return [
     "assert_owner",
-    `download_archive ${url} ${size}`,
+    `download_archive ${url} ${size} ${attemptLimit}`,
     `test "$( ${checksum} )" = ${quotePosixShellArg(component.sha256)} || fail_download checksum`,
     'mkdir "$unpacked"',
     `tar -xzf "$archive" -C "$unpacked" ${required.join(" ")} || fail_download extract`,
@@ -122,13 +161,12 @@ function buildArchiveStep(
         `test -f "$unpacked"/${path} && test ! -L "$unpacked"/${path} || fail_download extract`,
     ),
     `command mv "$unpacked"/${quotePosixShellArg(entry)} "$stage"/${quotePosixShellArg(component.id)}`,
-    'rm -rf "$unpacked" "$archive" "$stage/http" "$stage/wget.log"',
+    'rm -rf "$unpacked" "$archive" "$stage/http" "$download_log"',
   ].join("\n");
 }
 
 function transportFailure(downloader: Downloader, code: number): Fallback["reason"] {
   if (downloader === "wget") {
-    if (code === 124 || code === 137) return "timeout";
     if (code === 5) return "tls";
     return "network";
   }
@@ -141,7 +179,7 @@ function transportFailure(downloader: Downloader, code: number): Fallback["reaso
 
 function readDownloadFailure(output: string, downloader: Downloader): DownloadFailure | undefined {
   const match =
-    /^nek-release-failure\t(http|checksum|extract|transport)\t(0|[45]\d\d)\t(\d{1,3})$/mu.exec(
+    /^nek-release-failure\t(http|checksum|extract|stalled|timeout|transport)\t(0|[45]\d\d)\t(\d{1,3})$/mu.exec(
       output,
     );
   if (!match) return;
@@ -153,6 +191,9 @@ function readDownloadFailure(output: string, downloader: Downloader): DownloadFa
       return { reason: "checksum" };
     case "extract":
       return { reason: "extract" };
+    case "stalled":
+    case "timeout":
+      return { reason: match[1], exitCode };
     default:
       return { reason: transportFailure(downloader, exitCode), exitCode };
   }
@@ -183,16 +224,22 @@ export class ReleaseDownloadAssetInstaller implements RemoteAssetInstaller {
     if (!snapshot.has("tar")) throw new ReleaseAssetUnavailableError({ reason: "missing-tar" });
 
     let totalBytes = 0;
+    let planSeconds = PLAN_GRACE_SECONDS;
+    const killGrace = downloader === "wget" ? WGET_KILL_GRACE_SECONDS : 0;
     const steps = assets.map((asset) => {
       const size = archiveSizes.get(asset.component.id);
       if (!size) throw new Error(`Invalid bundled archive size: ${asset.component.id}`);
       totalBytes += size;
-      return buildArchiveStep(this.options, asset, appVersion, size);
+      const attemptLimit = transferTimeoutSeconds(size);
+      // curl 的 --retry-max-time 限制重试何时开始，不会截断已经开始的重试。
+      planSeconds += MAX_DOWNLOAD_ATTEMPTS * (attemptLimit + killGrace);
+      return buildArchiveStep(this.options, asset, appVersion, size, attemptLimit);
     });
     const script = [
       buildStagingPreparation(ownerToken, this.mode),
       'archive="$stage/archive.tar.gz"',
       'unpacked="$stage/unpacked"',
+      'download_log="$stage/download.log"',
       buildDownloadFunctions(downloader),
       ...steps,
       "assert_owner",
@@ -205,7 +252,7 @@ export class ReleaseDownloadAssetInstaller implements RemoteAssetInstaller {
       backend,
       script,
       signal,
-      DOWNLOAD_PLAN_TIMEOUT_MS,
+      planSeconds * 1000,
     ).catch((error) => {
       signal?.throwIfAborted();
       if (error instanceof RemoteAssetCommandTimeoutError)
