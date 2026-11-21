@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import type { IRemoteBackend, StdioStream } from "@zcode/server/remote/backend.js";
+import { REMOTE_BASE } from "./deployShared.js";
 import { quotePosixPathArg, quotePosixShellArg } from "@zcode/server/remote/posixShell.js";
 
 const DEPLOY_LOCK_HEARTBEAT_SECONDS = 30;
 const DEPLOY_LOCK_STALE_SECONDS = 600;
 const DEFAULT_ACQUIRE_TIMEOUT_MS = 120_000;
-export const REMOTE_DEPLOY_LOCK_DIR = "~/.nek/gui-server/.deploy.lock";
+export const REMOTE_DEPLOY_LOCK_DIR = `${REMOTE_BASE}/.deploy.lock`;
 const DEFAULT_RELEASE_TIMEOUT_MS = 5_000;
 const MAX_LOCK_STDERR_LENGTH = 4_096;
 
@@ -20,6 +21,7 @@ export interface AcquireRemoteDeployLockOptions {
   ownerToken?: string;
   acquireTimeoutMs?: number;
   releaseTimeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 function destroyStreamBestEffort(stream: NodeJS.ReadableStream | NodeJS.WritableStream): void {
@@ -31,25 +33,48 @@ function destroyStreamBestEffort(stream: NodeJS.ReadableStream | NodeJS.Writable
 }
 
 function destroyLockStreamBestEffort(stream: StdioStream): void {
+  try {
+    stream.signal?.("TERM");
+  } catch {
+    // 远端可能已经关闭 channel。
+  }
   destroyStreamBestEffort(stream.stdin);
   destroyStreamBestEffort(stream.stdout);
   destroyStreamBestEffort(stream.stderr);
 }
 
-export function buildRemoteDeployLockScript(lockDir: string, ownerToken: string): string {
+export function buildRemoteDeployLockScript(
+  lockDir: string,
+  ownerToken: string,
+  acquireSeconds = DEFAULT_ACQUIRE_TIMEOUT_MS / 1000,
+): string {
   const acquiredMarker = `zcode-deploy-lock-acquired:${ownerToken}`;
   const releaseMarker = `zcode-deploy-lock-release:${ownerToken}`;
   return [
     "set -eu",
+    "umask 077",
     `lock_dir=${quotePosixPathArg(lockDir)}`,
     `owner_token=${quotePosixShellArg(ownerToken)}`,
     'owner_file="$lock_dir/owner"',
     'timestamp_file="$lock_dir/timestamp"',
     'stale_dir="$lock_dir.stale-$owner_token"',
     `mkdir -p ${quotePosixPathArg(posix.dirname(lockDir))}`,
-    'while ! mkdir "$lock_dir" 2>/dev/null; do',
-    '  lock_mtime=$({ stat -c %Y "$timestamp_file" || stat -f %m "$timestamp_file" || stat -c %Y "$lock_dir" || stat -f %m "$lock_dir"; } 2>/dev/null || printf 0)',
+    `deadline=$(($(date +%s) + ${acquireSeconds}))`,
+    "owns_lock=0",
+    "lock_heartbeat_pid=",
+    "cleanup_deploy_lock() {",
+    '  if [ -n "${lock_heartbeat_pid:-}" ]; then kill "$lock_heartbeat_pid" >/dev/null 2>&1 || true; wait "$lock_heartbeat_pid" 2>/dev/null || true; fi',
+    '  if [ "$owns_lock" -eq 0 ]; then return; fi',
+    '  current_owner=$(cat "$owner_file" 2>/dev/null || true)',
+    '  if [ "$current_owner" = "$owner_token" ]; then rm -rf "$lock_dir"; fi',
+    "}",
+    "trap cleanup_deploy_lock 0",
+    "trap 'exit 1' HUP INT TERM",
+    "while :; do",
     "  lock_now=$(date +%s)",
+    '  if [ "$lock_now" -ge "$deadline" ]; then printf "%s\\n" "[deploy-lock] lock acquisition timed out" >&2; exit 1; fi',
+    '  if mkdir "$lock_dir" 2>/dev/null; then owns_lock=1; break; fi',
+    '  lock_mtime=$({ stat -c %Y "$timestamp_file" || stat -f %m "$timestamp_file" || stat -c %Y "$lock_dir" || stat -f %m "$lock_dir"; } 2>/dev/null || printf 0)',
     `  if [ "$lock_mtime" -gt 0 ] && [ $((lock_now - lock_mtime)) -ge ${DEPLOY_LOCK_STALE_SECONDS} ]; then`,
     '    if command mv "$lock_dir" "$stale_dir" 2>/dev/null; then rm -rf "$stale_dir"; fi',
     "    continue",
@@ -60,14 +85,7 @@ export function buildRemoteDeployLockScript(lockDir: string, ownerToken: string)
     'printf %s "$$" > "$lock_dir/pid"',
     'hostname > "$lock_dir/hostname" 2>/dev/null || printf unknown > "$lock_dir/hostname"',
     'date +%s > "$timestamp_file"',
-    "lock_heartbeat_pid=",
-    "cleanup_deploy_lock() {",
-    '  if [ -n "${lock_heartbeat_pid:-}" ]; then kill "$lock_heartbeat_pid" >/dev/null 2>&1 || true; wait "$lock_heartbeat_pid" 2>/dev/null || true; fi',
-    '  current_owner=$(cat "$owner_file" 2>/dev/null || true)',
-    '  if [ "$current_owner" = "$owner_token" ]; then rm -rf "$lock_dir"; fi',
-    "}",
-    "trap cleanup_deploy_lock EXIT HUP INT TERM",
-    `(while [ "$(cat "$owner_file" 2>/dev/null || true)" = "$owner_token" ]; do date +%s > "$timestamp_file" 2>/dev/null || exit 0; sleep ${DEPLOY_LOCK_HEARTBEAT_SECONDS}; done) &`,
+    `(while [ "$(cat "$owner_file" 2>/dev/null || true)" = "$owner_token" ]; do date +%s > "$timestamp_file" 2>/dev/null || exit 0; sleep ${DEPLOY_LOCK_HEARTBEAT_SECONDS}; done) </dev/null >/dev/null 2>&1 &`,
     "lock_heartbeat_pid=$!",
     `printf '%s\n' ${quotePosixShellArg(acquiredMarker)}`,
     "release_marker=",
@@ -79,21 +97,21 @@ export function buildRemoteDeployLockScript(lockDir: string, ownerToken: string)
 function encodePosixOctal(value: string): string {
   return Array.from(
     Buffer.from(value, "utf8"),
-    (byte) => `\\${byte.toString(8).padStart(3, "0")}`,
+    (byte) => `\\0${byte.toString(8).padStart(3, "0")}`,
   ).join("");
 }
 
-function buildRemoteDeployLockCommand(lockDir: string, ownerToken: string): string {
+function buildWslDeployLockCommand(lockDir: string, ownerToken: string, script: string): string {
   const scriptPath = `${lockDir}.holder-${ownerToken}.sh`;
-  const script = buildRemoteDeployLockScript(lockDir, ownerToken);
   // wsl.exe 会先经默认 shell 重组 `bash -lc` 参数，脚本里的局部 `$var`
   // 会在真正的 shell 执行前被展开为空。用纯八进制内容落盘后再执行，同时保留 stdin 给 release marker。
   // 锁脚本只使用 POSIX 语法，显式用 sh 执行，兼容 Alpine/BusyBox 等没有 bash 的远端。
   return [
     "set -eu",
+    "umask 077",
     `mkdir -p ${quotePosixPathArg(posix.dirname(scriptPath))}`,
     `printf '%b' ${quotePosixShellArg(encodePosixOctal(script))} > ${quotePosixPathArg(scriptPath)}`,
-    `trap ${quotePosixShellArg(`rm -f ${quotePosixPathArg(scriptPath)}`)} EXIT HUP INT TERM`,
+    `trap ${quotePosixShellArg(`rm -f ${quotePosixPathArg(scriptPath)}`)} 0`,
     `sh ${quotePosixPathArg(scriptPath)}`,
   ].join("\n");
 }
@@ -128,9 +146,22 @@ export async function acquireRemoteDeployLock(
     1,
     Math.floor(options.releaseTimeoutMs ?? DEFAULT_RELEASE_TIMEOUT_MS),
   );
+  const { signal } = options;
+  signal?.throwIfAborted();
   const acquiredMarker = `zcode-deploy-lock-acquired:${ownerToken}`;
   const releaseMarker = `zcode-deploy-lock-release:${ownerToken}`;
-  const stream = await backend.exec(buildRemoteDeployLockCommand(lockDir, ownerToken));
+  const script = buildRemoteDeployLockScript(
+    lockDir,
+    ownerToken,
+    Math.ceil(acquireTimeoutMs / 1000),
+  );
+  const stream = await backend.exec(
+    backend.kind === "wsl" ? buildWslDeployLockCommand(lockDir, ownerToken, script) : script,
+  );
+  if (signal?.aborted) {
+    destroyLockStreamBestEffort(stream);
+    signal.throwIfAborted();
+  }
   const close = createStreamClosePromise(stream);
   let stderrText = "";
   const onStderr = (chunk: Buffer | string) => {
@@ -145,6 +176,7 @@ export async function acquireRemoteDeployLock(
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const cleanup = () => {
         stream.stdout.off("data", onStdout);
+        signal?.removeEventListener("abort", onAbort);
         if (timeout) {
           clearTimeout(timeout);
         }
@@ -158,21 +190,22 @@ export async function acquireRemoteDeployLock(
         cleanup();
         resolve();
       };
-      const onTimeout = () => {
-        if (settled) {
-          return;
-        }
+      const stopWaiting = (reason: unknown) => {
+        if (settled) return;
         settled = true;
         cleanup();
-        // 其他 owner 持续 heartbeat 时 stale recovery 永远不会触发，waiter 会永久挂住。
-        // deadline 后只销毁本次 waiter 的 stream，不删除远端 lock，也不 dispose 共享 backend。
+        // 只中止等待者的 channel；已有 owner 的锁和 staging 不可动。
         destroyLockStreamBestEffort(stream);
-        reject(
+        reject(reason);
+      };
+      const onAbort = () => stopWaiting(signal?.reason);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      const onTimeout = () =>
+        stopWaiting(
           new Error(
             `[deploy-lock] lock acquisition timed out after ${acquireTimeoutMs}ms (owner=${ownerToken})${stderrText.trim() ? `: ${stderrText.trim()}` : ""}`,
           ),
         );
-      };
       // 先安装 deadline 再订阅 stdout；某些 stream 在注册 data listener 时会同步吐出缓冲 marker。
       // 若顺序相反，marker 已 resolve 后才创建的 timer 会残留到 deadline。
       timeout = setTimeout(onTimeout, acquireTimeoutMs);

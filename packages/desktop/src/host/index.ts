@@ -95,7 +95,7 @@ import {
 import { createHostRemoteWorkspaceProxyState } from "./hostRemoteWorkspaceProxyState.js";
 import { createRemoteWorkspaceServiceCollection } from "./remoteWorkspaceServiceCollection.js";
 import { createRemotePromptAttachmentTransferService } from "./promptAttachmentTransferService.js";
-import { shouldReportHostConsoleError, stringifyHostLogArg } from "./hostLog.js";
+import { shouldReportHostConsoleError, stringifyRemoteConnectionProgress } from "./hostLog.js";
 import { flushHostE2ECoverage } from "./e2eCoverage.js";
 import { runHostShutdownPhases, type HostShutdownResult } from "./hostShutdownPhases.js";
 import { initializeHostApiNetworkTransportOwner } from "./hostInitialization.js";
@@ -214,9 +214,7 @@ const remoteConnectionProgressContext = createRemoteConnectionProgressContext({
         type: HostResponseTypes.RemoteWorkspaceConnectionLog,
         requestId,
         level,
-        message: safeLogArgs(args)
-          .map((arg) => stringifyHostLogArg(arg))
-          .join(" "),
+        message: stringifyRemoteConnectionProgress(safeLogArgs(args)),
       });
     } catch {
       // 连接进度上报失败不应中断 SSH/WSL/Docker 的真实连接流程。
@@ -834,7 +832,6 @@ async function createWindowRemoteConnectionHandle(params: {
     params.remoteAssets,
     await resolveDesktopRemoteRuntimeNetwork(params.target),
     (exitCode) => notifyClose({ exitCode, signal: null }),
-    params.target.kind === "ssh" ? "caller-serialized" : "remote",
     params.target.kind === "ssh" ? params.signal : undefined,
   );
 

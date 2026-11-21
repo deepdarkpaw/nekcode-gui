@@ -12,7 +12,7 @@ function lockBackend() {
   const releases: string[] = [];
   const backend = {
     exec: async (command: string) => {
-      const owner = command.match(/holder-([a-f0-9-]+)\.sh/u)?.[1] ?? "unknown";
+      const owner = command.match(/zcode-deploy-lock-acquired:([a-f0-9-]+)/u)?.[1] ?? "unknown";
       const stdout = new PassThrough();
       const stderr = new PassThrough();
       const stdin = new PassThrough();

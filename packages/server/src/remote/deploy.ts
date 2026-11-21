@@ -1,60 +1,111 @@
-import { safeLogArgs } from "@zcode/shared";
-/* eslint-disable max-lines -- 远端部署入口集中编排 server/node/agent/tool 资源，拆分需单独整理边界。 */
-import {
-  ZCODE_VERSION,
-  formatLogPrefix,
-  normalizeRemoteResourcePackageSelection,
-  type RemoteResourcePackageId,
-  type RemoteResourcePackageSelection,
-} from "@zcode/shared";
+import { safeLogArgs, ZCODE_VERSION, type RemoteAssetTransferProgress } from "@zcode/shared";
 import type { IRemoteBackend, RemoteEnvironment } from "./backend.js";
+import { BundledRemoteSource } from "./bundledRemoteSource.js";
 import {
-  deployNodePtyPrebuilds,
-  deployNodeRuntime,
-  logDeployRequired,
-} from "@zcode/server/remote/remoteAssetDeployDecision.js";
-import { REMOTE_BASE } from "@zcode/server/remote/deployShared.js";
-import { quotePosixPathArg } from "@zcode/server/remote/posixShell.js";
-import { checkServerBundleRequiredMarkers } from "@zcode/server/remote/serverBundleDeployCheck.js";
-import { deployRuntimeTools } from "@zcode/server/remote/runtimeToolDeploy.js";
-import { LocalUploadAssetInstaller } from "@zcode/server/remote/remoteAssetInstaller.js";
-import { BundledRemoteSource } from "@zcode/server/remote/bundledRemoteSource.js";
+  remoteInstallAssets,
+  selectRemoteAssetsToDeploy,
+  type RemoteInstallAsset,
+} from "./remoteAssetDeployDecision.js";
 import {
-  checkRemoteAssetComponentIdentity,
-  writeRemoteAssetComponentMeta,
-} from "@zcode/server/remote/remoteAssetLiveIdentity.js";
-import { assertSupportedRemoteEnvironment } from "@zcode/server/remote/remotePlatformSupport.js";
-import { acquireRemoteDeployLock } from "@zcode/server/remote/remoteDeployLock.js";
-
-const log = (...args: unknown[]) =>
-  console.log(...safeLogArgs([formatLogPrefix("deploy", process.pid), ...args]));
-const logWarn = (...args: unknown[]) =>
-  console.warn(...safeLogArgs([formatLogPrefix("deploy", process.pid), ...args]));
-const SERVER_BUNDLE_COMPONENT_ID = "server-bundle";
-
-export type DeployLockMode = "remote" | "caller-serialized";
+  commitRemoteAssets,
+  LocalUploadAssetInstaller,
+  type RemoteAssetInstaller,
+  type RemoteStagingOptions,
+} from "./remoteAssetInstaller.js";
+import { probeRemoteAssets, requireRemoteSha256Tool } from "./remoteAssetPreflight.js";
+import { acquireRemoteDeployLock, type RemoteDeployLockHandle } from "./remoteDeployLock.js";
+import { assertSupportedRemoteEnvironment } from "./remotePlatformSupport.js";
+import {
+  ReleaseAssetUnavailableError,
+  ReleaseDownloadAssetInstaller,
+} from "./releaseDownloadAssetInstaller.js";
 
 export interface DeployOptions {
-  /** 取消当前远端连接初始化与其拥有的上传。 */
+  /** 取消当前远端连接初始化与其拥有的传输。 */
   signal?: AbortSignal;
-  /** Read-only component archives and manifest shipped with this application. */
+  /** 桌面构建只读归档和可信清单。 */
   bundledRemoteAssetsDir?: string;
-  /** Force deploy even if versions match */
   force?: boolean;
-  /** 等待远端 install-root deploy lock 的总 deadline，默认 120 秒。 */
+  /** 等待远端安装根锁的总 deadline，默认 120 秒。 */
   deployLockAcquireTimeoutMs?: number;
-  /** 部署串行化边界；默认由远端 install-root lock 保证。 */
-  deployLockMode?: DeployLockMode;
-  /** 只在选中资源包范围内做远端部署检查和上传。 */
-  resourcePackages?: RemoteResourcePackageSelection;
 }
 
-/**
- * Deploy the zcode server to the remote machine.
- * Uploads Node.js binary, server bundle, node-pty prebuild and runtime tools.
- *
- * Returns true if a deploy was performed, false if skipped (version matches).
- */
+const log = (...args: unknown[]) => console.log(...safeLogArgs(args));
+const logWarn = (...args: unknown[]) => console.warn(...safeLogArgs(args));
+
+function reportTransfer(progress: RemoteAssetTransferProgress): void {
+  if (progress.remoteAssetTransfer === "upload-fallback") {
+    logWarn(progress);
+  } else {
+    log(progress);
+  }
+}
+
+async function stageAssets(
+  source: BundledRemoteSource,
+  assets: readonly RemoteInstallAsset[],
+  snapshot: ReadonlyMap<string, string>,
+  options: RemoteStagingOptions,
+): Promise<RemoteAssetInstaller["mode"]> {
+  if (options.backend.kind === "ssh") {
+    const { manifest, archiveSizes } = await source.getSnapshot();
+    const downloader = new ReleaseDownloadAssetInstaller(options, {
+      appVersion: manifest.appVersion,
+      snapshot,
+      archiveSizes,
+    });
+    const started = performance.now();
+    try {
+      await downloader.stage(assets);
+      return downloader.mode;
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      if (!(error instanceof ReleaseAssetUnavailableError)) throw error;
+      options.report({
+        remoteAssetTransfer: "upload-fallback",
+        durationMs: Math.round(performance.now() - started),
+        ...error.failure,
+      });
+    }
+  }
+  const uploader = new LocalUploadAssetInstaller(options, source);
+  await uploader.stage(assets);
+  return uploader.mode;
+}
+
+async function withDeployLock<T>(
+  lock: RemoteDeployLockHandle,
+  signal: AbortSignal | undefined,
+  work: () => Promise<T>,
+): Promise<T> {
+  let outcome: { ok: true; value: T } | { ok: false; error: unknown };
+  try {
+    outcome = { ok: true, value: await work() };
+  } catch (error) {
+    outcome = { ok: false, error };
+  }
+  try {
+    await lock.release();
+  } catch (releaseError) {
+    if (signal?.aborted) {
+      // 连接取消可能已关闭 backend；锁持有者收到 EOF 后在远端回收 staging。
+      logWarn("[deploy] lock release interrupted by connection cancellation", releaseError);
+      signal.throwIfAborted();
+    }
+    if (!outcome.ok) {
+      throw new AggregateError(
+        [outcome.error, releaseError],
+        "remote deployment and deploy-lock release both failed",
+      );
+    }
+    throw releaseError;
+  }
+  signal?.throwIfAborted();
+  if (!outcome.ok) throw outcome.error;
+  return outcome.value;
+}
+
+/** 持锁探测、准备并提交组件；返回值仍表示是否替换了 gui-server 主 bundle。 */
 export async function deployServer(
   backend: IRemoteBackend,
   env: RemoteEnvironment,
@@ -62,310 +113,45 @@ export async function deployServer(
 ): Promise<boolean> {
   const platformArch = `${env.platform}-${env.arch}`;
   assertSupportedRemoteEnvironment(env);
-  const selectedResourcePackageIds = normalizeRemoteResourcePackageSelection();
-  const shouldDeployResourcePackage = (packageId: RemoteResourcePackageId): boolean =>
-    selectedResourcePackageIds.includes(packageId);
+  const signal = options?.signal;
   const source = new BundledRemoteSource({
     directory: options?.bundledRemoteAssetsDir ?? "",
     appVersion: ZCODE_VERSION,
     platformArch,
-    signal: options?.signal,
+    signal,
   });
-  const getComponent = async (id: string) => {
-    const component = (await source.getManifest()).components.find((entry) => entry.id === id);
-    if (!component) throw new Error(`Bundled remote component missing: ${id}`);
-    return component;
-  };
-  const getComponentSha256 = async (id: string) => (await getComponent(id)).sha256;
-  const getExpectedComponentVersion = async (id: string) => (await getComponent(id)).version;
-  const assetDeployOptions = {
-    signal: options?.signal,
-    resolveReleaseDir: () => source.resolveReleaseDir(),
-    resolveComponentSha256: getComponentSha256,
-    resolveComponentVersion: getExpectedComponentVersion,
-  };
-  const installer = new LocalUploadAssetInstaller(
-    backend,
-    {
-      ...assetDeployOptions,
-      platformArch,
-      version: ZCODE_VERSION,
-    },
-    { log, logWarn },
-  );
-  log("remote env:", platformArch);
-  log("selected remote resource packages:", selectedResourcePackageIds.join(","));
-
-  const deployWithDecision = async (
-    serverDeployDecision: ServerDeployDecision,
-    expectedServerBundleSha256: string | null,
-  ): Promise<boolean> => {
-    // server 安装失败时远端 SHA marker 不会更新，下次连接仍判定 appVersionChanged，
-    // 因此不需要额外持久化强刷状态。
-    const shouldForceRefreshContentAddressedAssets =
-      Boolean(options?.force) ||
-      (serverDeployDecision.shouldDeploy && serverDeployDecision.appVersionChanged === true);
-
-    await deployNodeRuntime(
-      backend,
-      {
-        ...assetDeployOptions,
+  try {
+    const { manifest } = await source.getSnapshot();
+    const assets = remoteInstallAssets(manifest);
+    // 窗口内连接可合并，但多个窗口或桌面实例仍共享同一远端安装根。
+    const lock = await acquireRemoteDeployLock(backend, {
+      acquireTimeoutMs: options?.deployLockAcquireTimeoutMs,
+      signal,
+    });
+    return await withDeployLock(lock, signal, async () => {
+      const snapshot = await probeRemoteAssets(backend, manifest.appVersion, assets, signal);
+      const pending = selectRemoteAssetsToDeploy(
+        assets,
+        snapshot,
         platformArch,
-        force: Boolean(options?.force),
-        installer,
-        expectedVersion: await getExpectedComponentVersion("node-runtime"),
-      },
-      { log, logWarn },
-    );
-
-    // Check if deploy is needed
-    if (!serverDeployDecision.shouldDeploy) {
-      log("skipped — remote version matches");
-      // 主 server 版本相同只证明 node/zcode-server.cjs 可启动，不代表随包工具仍存在。
-      if (shouldDeployResourcePackage("node-pty")) {
-        await deployNodePtyPrebuilds(
-          backend,
-          env,
-          {
-            ...assetDeployOptions,
-            platformArch,
-            onlyIfMissing: true,
-            installer,
-            expectedVersion: await getExpectedComponentVersion("node-pty"),
-          },
-          { log, logWarn },
-        );
-      }
-      await deployRuntimeTools(
-        backend,
-        env,
-        {
-          ...assetDeployOptions,
-          platformArch,
-          installer,
-          selectedResourcePackageIds,
-        },
-        { log, logWarn },
+        Boolean(options?.force),
       );
-      return false;
-    }
-
-    logDeployRequired({
-      loggers: { logWarn },
-      installer,
-      componentId: SERVER_BUNDLE_COMPONENT_ID,
-      reason: serverDeployDecision.reason,
-    });
-    await installer.installFile({
-      componentId: SERVER_BUNDLE_COMPONENT_ID,
-      sourceRelativePath: "server/zcode-server.cjs",
-      remotePath: `${REMOTE_BASE}/zcode-server.cjs`,
-      // App 版本变化是新的发布边界，不能只凭历史 cache 的 `.ready`
-      // 判断 server-bundle 可复用，必须重新读取并校验当前随包制品。
-      forceRefresh: shouldForceRefreshContentAddressedAssets,
-    });
-    if (expectedServerBundleSha256) {
-      // App/version 相同不代表 server-bundle 制品相同。安装成功后才写
-      // manifest SHA marker，避免失败重试把旧 server 误判成当前制品。
-      await writeRemoteAssetComponentMeta(backend, {
-        id: SERVER_BUNDLE_COMPONENT_ID,
-        sha256: expectedServerBundleSha256,
-        platformArch,
-      });
-    }
-    log("server install done");
-
-    if (shouldDeployResourcePackage("node-pty")) {
-      await deployNodePtyPrebuilds(
-        backend,
-        env,
-        {
-          ...assetDeployOptions,
-          platformArch,
-          force: Boolean(options?.force),
-          onlyIfMissing: false,
-          installer,
-          expectedVersion: await getExpectedComponentVersion("node-pty"),
-        },
-        { log, logWarn },
-      );
-    }
-
-    log("all uploads complete");
-
-    await deployRuntimeTools(
-      backend,
-      env,
-      {
-        ...assetDeployOptions,
-        platformArch,
-        installer,
-        selectedResourcePackageIds,
-      },
-      { log, logWarn },
-    );
-
-    return true;
-  };
-
-  const deployUsingCurrentRemoteState = async (): Promise<boolean> => {
-    try {
-      const expectedServerBundleSha256 = await getComponentSha256(SERVER_BUNDLE_COMPONENT_ID);
-      const decision = options?.force
-        ? {
-            shouldDeploy: true,
-            reason: "force deploy requested",
-          }
-        : await checkServerDeployDecision(backend, {
-            platformArch,
-            expectedSha256: expectedServerBundleSha256,
-          });
-      return await deployWithDecision(decision, expectedServerBundleSha256);
-    } finally {
-      await source.dispose();
-    }
-  };
-
-  if (options?.deployLockMode === "caller-serialized") {
-    // 桌面 SSH 已由窗口级 shared Host readiness 保证同一 target 只有一个部署事务；
-    // 若仍创建 remote lock-holder，会为无额外互斥收益的路径长期占用 SSH channel。
-    // 该模式必须由已具备 single-flight 的调用方显式注入，WSL/Docker 和其他调用继续默认远端锁。
-    return deployUsingCurrentRemoteState();
-  }
-
-  const preLockDecision = options?.force
-    ? { shouldDeploy: true as const, reason: "force deploy requested" }
-    : await checkServerDeployDecision(backend, {
-        platformArch,
-        expectedSha256: null,
-      });
-  if (preLockDecision.shouldDeploy) {
-    log(`waiting for install-root lock: ${preLockDecision.reason}`);
-  }
-  const deployLock = await acquireRemoteDeployLock(backend, {
-    acquireTimeoutMs: options?.deployLockAcquireTimeoutMs,
-  });
-  let deployOutcome: { ok: true; value: boolean } | { ok: false; error: unknown };
-  try {
-    // 进程内 WSL single-flight 无法覆盖不同 Desktop/build/backend。
-    // 获得远端 install-root lock 后必须重新检查，等待者不能按过期判断重复覆盖部署目录。
-    deployOutcome = {
-      ok: true,
-      value: await deployUsingCurrentRemoteState(),
-    };
-  } catch (error) {
-    deployOutcome = { ok: false, error };
-  }
-
-  let releaseOutcome: { ok: true } | { ok: false; error: unknown };
-  try {
-    await deployLock.release();
-    releaseOutcome = { ok: true };
-  } catch (error) {
-    releaseOutcome = { ok: false, error };
-  }
-  if (!deployOutcome.ok && !releaseOutcome.ok) {
-    // finally 内直接抛 release 错误会覆盖真正的部署失败，排障只能看到次生症状。
-    // AggregateError 同时保留 deploy 与 release 两条因果链，且 release deadline 保证这里有界返回。
-    throw new AggregateError(
-      [deployOutcome.error, releaseOutcome.error],
-      "remote deployment and deploy-lock release both failed",
-    );
-  }
-  if (!deployOutcome.ok) {
-    throw deployOutcome.error;
-  }
-  if (!releaseOutcome.ok) {
-    throw releaseOutcome.error;
-  }
-  return deployOutcome.value;
-}
-
-type ServerDeployDecision =
-  | { shouldDeploy: false }
-  | {
-      shouldDeploy: true;
-      reason: string;
-      appVersionChanged?: boolean;
-    };
-
-async function checkServerDeployDecision(
-  backend: IRemoteBackend,
-  options: {
-    platformArch: string;
-    expectedSha256: string | null;
-  },
-): Promise<ServerDeployDecision> {
-  try {
-    log("checking if deploy needed...");
-    const nodePath = `${REMOTE_BASE}/node`;
-    const exists = await backend.exists(nodePath);
-    log("remote node exists:", exists);
-    if (!exists) {
-      return {
-        shouldDeploy: true,
-        reason: `remote file missing path=${nodePath}`,
-      };
-    }
-
-    const serverPath = `${REMOTE_BASE}/zcode-server.cjs`;
-    const serverExists = await backend.exists(serverPath);
-    log("remote server exists:", serverExists);
-    if (!serverExists) {
-      return {
-        shouldDeploy: true,
-        reason: `remote file missing path=${serverPath}`,
-      };
-    }
-
-    // Check version
-    log("checking remote version...");
-    const stream = await backend.exec(
-      `${quotePosixPathArg(nodePath)} ${quotePosixPathArg(serverPath)} --version`,
-    );
-    const version = (await collectStdout(stream)).trim();
-    log("remote version:", JSON.stringify(version), "local:", ZCODE_VERSION);
-    if (version !== ZCODE_VERSION) {
-      return {
-        shouldDeploy: true,
-        reason: `remote server version mismatch remote=${version} expected=${ZCODE_VERSION}`,
-        appVersionChanged: true,
-      };
-    }
-    const requiredFeatureDecision = await checkServerBundleRequiredMarkers(
-      backend,
-      nodePath,
-      serverPath,
-    );
-    if (requiredFeatureDecision.shouldDeploy) {
-      return requiredFeatureDecision;
-    }
-    if (options.expectedSha256) {
-      const identityDecision = await checkRemoteAssetComponentIdentity(backend, {
-        componentId: SERVER_BUNDLE_COMPONENT_ID,
-        platformArch: options.platformArch,
-        expectedIdentity: { sha256: options.expectedSha256 },
-      });
-      if (identityDecision.shouldDeploy) {
-        return identityDecision;
+      if (!pending.length) {
+        log("[deploy] verified remote components already match");
+        return false;
       }
-    }
-    return { shouldDeploy: false };
-  } catch (err) {
-    log("checkServerDeployDecision error (will deploy):", err);
-    return {
-      shouldDeploy: true,
-      reason: `remote deploy check failed: ${String(err)}`,
-    };
-  }
-}
-
-function collectStdout(stream: import("./backend.js").StdioStream): Promise<string> {
-  return new Promise((resolve) => {
-    let data = "";
-    stream.stdout.on("data", (chunk: Buffer) => {
-      data += chunk.toString();
+      const staging = {
+        backend,
+        ownerToken: lock.ownerToken,
+        sha256Tool: requireRemoteSha256Tool(snapshot),
+        signal,
+        report: reportTransfer,
+      };
+      const mode = await stageAssets(source, pending, snapshot, staging);
+      await commitRemoteAssets(staging, mode, pending);
+      return pending.some(({ component }) => component.id === "server-bundle");
     });
-    stream.onClose(() => resolve(data));
-  });
+  } finally {
+    await source.dispose();
+  }
 }

@@ -1,3 +1,8 @@
+import {
+  formatRemoteAssetTransferProgress,
+  remoteAssetTransferProgressSchema,
+} from "@zcode/shared";
+
 const NODE_WARNING_LOG_PATTERN =
   /^\(node:\d+\)\s+(?:ExperimentalWarning|DeprecationWarning|Warning):/u;
 
@@ -9,7 +14,18 @@ export function shouldReportHostConsoleError(args: unknown[]): boolean {
   return !NODE_WARNING_LOG_PATTERN.test(message);
 }
 
-export function stringifyHostLogArg(arg: unknown): string {
+export function stringifyRemoteConnectionProgress(args: readonly unknown[]): string {
+  return args
+    .map((arg) => {
+      const transfer = remoteAssetTransferProgressSchema.safeParse(arg);
+      return transfer.success
+        ? formatRemoteAssetTransferProgress(transfer.data)
+        : stringifyHostLogArg(arg);
+    })
+    .join(" ");
+}
+
+function stringifyHostLogArg(arg: unknown): string {
   if (typeof arg === "string") {
     return arg;
   }

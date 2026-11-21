@@ -104,6 +104,7 @@ function throwIfUploadAborted(signal?: AbortSignal): void {
 }
 
 export class SSHBackend implements IRemoteBackend {
+  readonly kind = "ssh" as const;
   private client: SSHClient;
   private connected = false;
   private readonly config: ConnectConfig;
@@ -265,10 +266,15 @@ export class SSHBackend implements IRemoteBackend {
 
   async detect(): Promise<RemoteEnvironment> {
     await this.ensureConnected();
-    const reportedPlatform = normalizeRemotePlatform(await this.execSimple("uname -s"));
-    const arch = normalizeRemoteArch(await this.execSimple("uname -m"));
-    const kernelOstype = await this.readKernelOstype();
-    const platform = resolveRemotePlatform(reportedPlatform, kernelOstype);
+    const output = await this.execSimple(
+      "set -e; uname -s; uname -m; if [ -r /proc/sys/kernel/ostype ]; then command head -c 64 /proc/sys/kernel/ostype; fi",
+      1024,
+    );
+    const [system, machine, kernelOstype] = output.trim().split(/\r?\n/u);
+    if (!system || !machine) throw new Error("[ssh] incomplete remote platform probe");
+    const reportedPlatform = normalizeRemotePlatform(system);
+    const arch = normalizeRemoteArch(machine);
+    const platform = resolveRemotePlatform(reportedPlatform, kernelOstype ?? "");
 
     if (platform !== reportedPlatform) {
       console.warn(
@@ -294,8 +300,10 @@ export class SSHBackend implements IRemoteBackend {
     this.assertNotDisposed();
     const uploadLabel = formatSSHUploadLabel(resolved);
     console.log(...safeLogArgs([`[ssh] upload: resolved ${uploadLabel} to ${resolved}`]));
-    const dir = posix.dirname(resolved);
-    await this.execSimple(`mkdir -p ${quotePosixShellArg(dir)}`);
+    if (!options?.parentAlreadyExists) {
+      const dir = posix.dirname(resolved);
+      await this.execSimple(`mkdir -p ${quotePosixShellArg(dir)}`);
+    }
 
     if (this.execUploadOnly) {
       // exec-only 只缓存传输能力，不能丢掉每次上传独立的取消信号与进度回调；
@@ -352,10 +360,10 @@ export class SSHBackend implements IRemoteBackend {
         // ssh2 channels may fire 'exit' before 'close', or sometimes
         // only one of them. Listen to both to be safe.
         channel.on("exit", (code: number | null) => {
-          fireOnce(code ?? 0);
+          fireOnce(code ?? -1);
         });
-        channel.on("close", () => {
-          fireOnce(0);
+        channel.on("close", (code: number | null) => {
+          fireOnce(code ?? -1);
         });
 
         resolve({
@@ -396,7 +404,7 @@ export class SSHBackend implements IRemoteBackend {
   }
 
   /** Execute a simple command and return stdout as string */
-  private execSimple(command: string): Promise<string> {
+  private execSimple(command: string, maxOutputLength = 4_096): Promise<string> {
     this.assertNotDisposed();
     return new Promise((resolve, reject) => {
       // execSimple 同样会执行 POSIX 片段（例如 `[ -r ... ]`、变量展开）。
@@ -406,19 +414,24 @@ export class SSHBackend implements IRemoteBackend {
         let stdout = "";
         let stderr = "";
         let done = false;
+        let outputLimitExceeded = false;
         let exitCode: number | null = null;
 
         channel.on("data", (chunk: Buffer) => {
-          stdout += chunk.toString();
+          if (stdout.length + chunk.length > maxOutputLength) outputLimitExceeded = true;
+          if (!outputLimitExceeded) stdout += chunk.toString();
         });
         channel.stderr.on("data", (chunk: Buffer) => {
-          stderr += chunk.toString();
+          const remaining = 4_096 - stderr.length;
+          if (remaining > 0) stderr += chunk.subarray(0, remaining).toString();
         });
 
         const finish = (code: number) => {
           if (done) return;
           done = true;
-          if (code !== 0) {
+          if (outputLimitExceeded) {
+            reject(new Error("[ssh] remote command output exceeded its limit"));
+          } else if (code !== 0) {
             reject(new Error(`Command failed (code ${code}): ${stderr || stdout}`));
           } else {
             resolve(stdout);
@@ -446,18 +459,6 @@ export class SSHBackend implements IRemoteBackend {
 
     this.homeDirPromise = this.execSimple('printf %s "$HOME"').then((homeDir) => homeDir.trim());
     return this.homeDirPromise;
-  }
-
-  private async readKernelOstype(): Promise<string> {
-    try {
-      return (
-        await this.execSimple(
-          "if [ -r /proc/sys/kernel/ostype ]; then cat /proc/sys/kernel/ostype; fi",
-        )
-      ).trim();
-    } catch {
-      return "";
-    }
   }
 
   private shouldFallbackToExecUpload(error: unknown): boolean {
@@ -593,8 +594,10 @@ export class SSHBackend implements IRemoteBackend {
       options?.onProgress?.({ uploadedBytes, totalBytes: totalBytes ?? 0 });
     };
     throwIfUploadAborted(options?.signal);
-    const parentDir = posix.dirname(resolvedRemotePath);
-    const command = `mkdir -p ${quotePosixShellArg(parentDir)} && cat > ${quotePosixShellArg(resolvedRemotePath)}`;
+    const write = `cat > ${quotePosixShellArg(resolvedRemotePath)}`;
+    const command = options?.parentAlreadyExists
+      ? write
+      : `mkdir -p ${quotePosixShellArg(posix.dirname(resolvedRemotePath))} && ${write}`;
     console.log(
       ...safeLogArgs([
         `[ssh] upload: started via exec pipe for ${uploadLabel} (${localPath} -> ${resolvedRemotePath})`,

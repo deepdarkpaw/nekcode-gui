@@ -244,5 +244,6 @@ export * from "./processResourceTelemetry.js";
 export * from "./longTaskAttributionSummary.js";
 export * from "./diagnostics.js";
 export * from "./diagnosticPrivacy.js";
+export * from "./remoteAssetTransferProgress.js";
 
 export { memorySampleToDiagnosticRecord } from "./memoryDiagnostics.js";

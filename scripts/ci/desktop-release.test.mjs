@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -19,8 +19,13 @@ import {
 import { releaseNotes } from "./desktop-release-publish.mjs";
 import { desktopProductIdentities } from "../../packages/desktop/scripts/desktop-product-identity.mjs";
 import { collectRollingAppVersion } from "../rolling-app-version.mjs";
+import { bundleRemoteAssets } from "../bundle-remote-assets.mjs";
+import { createRemoteAssetFixture } from "./remoteAssetsFixture.mjs";
 
 const version = "3.14.0";
+const remoteAssetName = (id) => `nekcode-gui-server-${version}-linux-x64-${id}.tar.gz`;
+const remoteIds = ["server-bundle", "node-runtime", "node-pty", "bfs", "ripgrep", "ugrep"];
+const remoteNames = remoteIds.map(remoteAssetName);
 // 产物名改由构建期产品身份派生（bugfix：曾硬编码 `ZCodium-`，身份改为 `ZCodium Exp`
 // 后 CI 的 Build job 全部 ENOENT）。这里显式取 production 身份，使断言不依赖运行环境的
 // ZCODE_ENV / ZCODE_PREVIEW_IDENTITY——CI 设了 production，本机裸跑会解析成 Preview。
@@ -60,11 +65,26 @@ async function writeUpdateInfo(directory, names, flavors = [identity]) {
   }
 }
 
+async function writeRemoteArtifact(t, artifactsRoot) {
+  const { options, manifest } = await createRemoteAssetFixture(t, () => "fixture", version);
+  const directory = join(artifactsRoot, "bundled-remote-linux-x64");
+  await bundleRemoteAssets({ ...options, outputDirectory: directory });
+  return { directory, components: manifest.components };
+}
+
 async function fixture(t, names = allNames, flavors = [identity]) {
-  const directory = await mkdtemp(join(tmpdir(), "nekcode-release-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), "nekcode-release-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directory = join(root, "release-assets");
+  await mkdir(directory);
   for (const name of names) await writeFile(join(directory, name), `artifact: ${name}`);
   await writeUpdateInfo(directory, names, flavors);
+  if (names.length) {
+    const remote = await writeRemoteArtifact(t, join(root, "artifacts"));
+    for (const { id, artifactPath } of remote.components) {
+      await copyFile(join(remote.directory, artifactPath), join(directory, remoteAssetName(id)));
+    }
+  }
   return directory;
 }
 
@@ -233,7 +253,7 @@ test("missing, empty, wrong-version and extra assets block release", async (t) =
   await assert.rejects(verifyReleaseAssets(wrongVersion, version, identity));
 });
 
-test("dual-product checksums cover exactly 12 installers from both identities", async (t) => {
+test("dual-product checksums cover 12 installers and one set of remote archives", async (t) => {
   const preview = desktopProductIdentities.preview;
   const names = [
     ...artifactNames("win", version, undefined, identity),
@@ -243,11 +263,11 @@ test("dual-product checksums cover exactly 12 installers from both identities", 
   ];
   const directory = await fixture(t, names, [identity, preview]);
   const paths = await verifyReleaseAssets(directory, version, [identity, preview]);
-  // 12 个安装包 + 4 份更新元数据（Windows/macOS × 两身份，两个架构合并）+ SHA256SUMS
-  assert.equal(paths.length, 17);
+  // 12 个安装包、6 个远端组件、4 份更新元数据和 SHA256SUMS。
+  assert.equal(paths.length, 23);
   assert.equal(
     (await readFile(join(directory, "SHA256SUMS"), "utf8")).trim().split("\n").length,
-    12,
+    18,
   );
 });
 
@@ -281,19 +301,36 @@ test("dual-product verification rejects empty, duplicate, missing, empty, wrong-
   await assert.rejects(verifyReleaseAssets(extra, version, [identity, preview]), /Unexpected/);
 });
 
-test("checksums cover exactly the six validated installers and can be regenerated", async (t) => {
+test("checksums cover exactly the six validated installers and six remote archives", async (t) => {
   const directory = await fixture(t);
   const paths = await verifyReleaseAssets(directory, version, identity);
-  const expected = allNames
-    .toSorted()
-    .map((name) => {
-      const hash = createHash("sha256").update(`artifact: ${name}`).digest("hex");
-      return `${hash}  ${name}\n`;
-    })
-    .join("");
-  assert.equal(await readFile(join(directory, "SHA256SUMS"), "utf8"), expected);
-  assert.equal(paths.length, 9);
+  const expected = [];
+  for (const name of [...allNames, ...remoteNames].sort()) {
+    const bytes = await readFile(join(directory, name));
+    expected.push(`${createHash("sha256").update(bytes).digest("hex")}  ${name}\n`);
+  }
+  assert.equal(await readFile(join(directory, "SHA256SUMS"), "utf8"), expected.join(""));
+  assert.equal(paths.length, 15);
   await verifyReleaseAssets(directory, version, identity);
+});
+
+test("publish verification rejects corrupt, missing or renamed remote archives", async (t) => {
+  const directory = await fixture(t);
+  const name = remoteAssetName("node-runtime");
+  const file = join(directory, name);
+  const wrongContents = "wrong contents";
+  await writeFile(file, wrongContents);
+  // 即使有人按错误内容重写 SHA256SUMS，也必须以 CI 输入清单为准。
+  const wrongHash = createHash("sha256").update(wrongContents).digest("hex");
+  await writeFile(join(directory, "SHA256SUMS"), `${wrongHash}  ${name}\n`);
+  await assert.rejects(verifyReleaseAssets(directory, version, identity), /SHA256 mismatch/);
+  await rm(file);
+  await assert.rejects(verifyReleaseAssets(directory, version, identity), { code: "ENOENT" });
+  await writeFile(join(directory, name.replace("linux-x64", "linux-arm64")), "other archive");
+  await assert.rejects(
+    verifyReleaseAssets(directory, version, identity),
+    /Unexpected release asset/,
+  );
 });
 
 test("update metadata filenames follow electron-updater channel rules", () => {
@@ -383,10 +420,11 @@ async function artifactTree(t, flavors) {
       }
     }
   }
+  await writeRemoteArtifact(t, root);
   return root;
 }
 
-test("assemble flattens installers and merges per-architecture update metadata", async (t) => {
+test("assemble preserves the bundled remote archives and merges per-architecture update metadata", async (t) => {
   const preview = desktopProductIdentities.preview;
   const artifactsRoot = await artifactTree(t, [identity, preview]);
   const destination = await mkdtemp(join(tmpdir(), "nekcode-release-"));
@@ -400,7 +438,15 @@ test("assemble flattens installers and merges per-architecture update metadata",
   });
   assert.deepEqual(written, releaseUpdateInfoNames([identity, preview]));
   const entries = (await readdir(destination)).sort();
-  assert.equal(entries.length, 12 + 4);
+  assert.equal(entries.length, 12 + 4 + remoteNames.length);
+  for (const id of remoteIds) {
+    assert.deepEqual(
+      await readFile(join(destination, remoteAssetName(id))),
+      await readFile(
+        join(artifactsRoot, "bundled-remote-linux-x64", "components/linux-x64", id, "v1.tar.gz"),
+      ),
+    );
+  }
 
   const win = (await readUpdateInfo(join(destination, "latest.yml"))).document;
   assert.equal(win.version, version);
@@ -422,9 +468,14 @@ test("assemble flattens installers and merges per-architecture update metadata",
       artifactNames("win", version, "x64", preview)[0],
     ].sort(),
   );
-  // 组装结果必须能通过发布校验，并且只包含安装包 + 元数据 + SHA256SUMS。
-  const files = await verifyReleaseAssets(destination, version, [identity, preview]);
-  assert.equal(files.length, 17);
+  const files = await verifyReleaseAssets(
+    destination,
+    version,
+    [identity, preview],
+    undefined,
+    artifactsRoot,
+  );
+  assert.equal(files.length, 23);
 });
 
 test("assemble publishes a Windows-only release when macOS artifacts are absent", async (t) => {
@@ -437,6 +488,7 @@ test("assemble publishes a Windows-only release when macOS artifacts are absent"
     for (const name of names) await writeFile(join(directory, name), `artifact: ${name}`);
     await writeFile(join(directory, sourceUpdateInfoName("win", arch)), updateInfoYaml(names));
   }
+  await writeRemoteArtifact(t, root);
   const destination = await mkdtemp(join(tmpdir(), "nekcode-release-"));
   t.after(() => rm(destination, { recursive: true, force: true }));
 
@@ -449,8 +501,8 @@ test("assemble publishes a Windows-only release when macOS artifacts are absent"
   });
   // 没有 mac 产物时只合并 Windows 的更新元数据，不能凭空写一份 latest-mac.yml。
   assert.deepEqual(written, ["latest.yml"]);
-  const files = await verifyReleaseAssets(destination, version, [identity], ["win"]);
-  assert.equal(files.length, 4);
+  const files = await verifyReleaseAssets(destination, version, [identity], ["win"], root);
+  assert.equal(files.length, 10);
   assert.throws(
     () => releaseNotes({ productName: "nekcode", version, platforms: ["linux"] }),
     /Unsupported release platform/,
@@ -490,6 +542,22 @@ test("Windows update metadata must cover both architectures", async (t) => {
     updateInfoYaml(artifactNames("win", version, "x64", identity)),
   );
   await assert.rejects(verifyReleaseAssets(directory, version, identity, ["win"]), /incomplete/i);
+});
+
+test("assemble requires the current version's bundled remote artifact and verifies the copy", async (t) => {
+  const artifactsRoot = await artifactTree(t, [identity]);
+  const remote = join(artifactsRoot, "bundled-remote-linux-x64");
+  const manifestPath = join(remote, "manifest-linux-x64.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const assemble = async () =>
+    assembleReleaseAssets({ artifactsRoot, destination: await fixture(t, []), version });
+  await rm(manifestPath);
+  await assert.rejects(assemble(), { code: "ENOENT" });
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, appVersion: "3.13.0" }));
+  await assert.rejects(assemble(), /appVersion mismatch/);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await writeFile(join(remote, manifest.components[0].artifactPath), "corrupt");
+  await assert.rejects(assemble(), /SHA256 mismatch/);
 });
 
 test("assemble refuses metadata that points at another platform's installer", async (t) => {

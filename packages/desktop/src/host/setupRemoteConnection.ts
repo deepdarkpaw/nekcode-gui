@@ -1,7 +1,6 @@
 import { ZCODE_VERSION, type RemoteTarget } from "@zcode/shared";
 import type {
   ConnectOptions,
-  DeployLockMode,
   IRemoteBackend,
   RemoteConnection,
   RemoteRuntimeNetworkOptions,
@@ -13,7 +12,6 @@ export async function setupRemoteConnection(
   remoteAssets: Pick<ConnectOptions, "bundledRemoteAssetsDir">,
   remoteRuntimeNetwork: RemoteRuntimeNetworkOptions | undefined,
   onDidRemoteClose: (exitCode: number) => void,
-  deployLockMode: DeployLockMode = "remote",
   signal?: AbortSignal,
 ): Promise<RemoteConnection & { backend: IRemoteBackend }> {
   const { createRemoteBackend, connectRemote, pickRemoteRuntimeEnv } =
@@ -25,7 +23,6 @@ export async function setupRemoteConnection(
     signal,
     appVersion: ZCODE_VERSION,
     remoteRuntimeEnv: pickRemoteRuntimeEnv(process.env),
-    deployLockMode,
     onDidRemoteClose: ({ code }) => onDidRemoteClose(code),
   });
   return { ...connection, backend };

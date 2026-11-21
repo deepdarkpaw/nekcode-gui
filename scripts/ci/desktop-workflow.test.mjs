@@ -239,20 +239,24 @@ test("actual event expressions expand to two Windows jobs, macOS only on opt-in 
   }
 });
 
-test("release downloads every platform/arch artifact into per-job directories", async () => {
+test("release downloads installers and the same remote archive artifact used by builds", async () => {
   const jobs = await loadJobs();
   const release = jobs.release;
   const downloads = uses(release, "actions/download-artifact");
-  // 4 个 artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载，
-  // 否则后一个架构的更新元数据会静默覆盖前一个。
-  assert.equal(downloads.length, 1);
-  assert.equal(downloads[0].with?.pattern, "desktop-*");
-  assert.equal(downloads[0].with?.path, "dist/artifacts");
-  assert.equal(downloads[0].with?.["merge-multiple"], undefined);
+  // desktop artifact 各自落到 dist/artifacts/<name>/：同名 latest*.yml 不能平铺下载。
+  assert.equal(downloads.length, 2);
+  const desktop = downloads.find((step) => step.with?.pattern === "desktop-*");
+  assert.equal(desktop?.with?.path, "dist/artifacts");
+  assert.equal(desktop?.with?.["merge-multiple"], undefined);
+  const producer = uses(jobs["remote-assets"], "actions/upload-artifact")[0];
+  const remote = downloads.find((step) => step.with?.name === producer.with.name);
+  assert.equal(remote?.with?.path, "dist/artifacts/bundled-remote-linux-x64");
+  assert.equal(remote?.with?.["run-id"], undefined);
+  assert.equal(remote?.with?.repository, undefined);
   const runs = release.steps.map((step) => String(step.run ?? ""));
   const assemble = runs.findIndex((run) => run.includes("desktop-release.mjs assemble"));
   const publish = runs.findIndex((run) => run.includes("desktop-release.mjs publish"));
-  assert.ok(assemble >= 0 && publish > assemble);
+  assert.ok(remote && release.steps.indexOf(remote) < assemble && publish > assemble);
 });
 
 test("packaging jobs collect the platform update metadata required by electron-updater", async () => {
@@ -340,10 +344,17 @@ test("release still requires checks success before publishing", async () => {
   const release = jobs.release;
   // needs 列出全部必需 lane：静态门禁、四条测试车道（单个 matrix job）、浏览器冒烟、打包 job。
   // macOS 默认跳过，所以 if 条件显式允许 build-macos 为 skipped。
-  assert.deepEqual(release.needs, ["checks", "tests", "browser-checks", "build", "build-macos"]);
+  assert.deepEqual(release.needs, [
+    "checks",
+    "tests",
+    "browser-checks",
+    "remote-assets",
+    "build",
+    "build-macos",
+  ]);
   assert.match(release.if, /github\.event_name == 'push'/);
   assert.match(release.if, /github\.ref_type == 'tag'/);
-  for (const id of ["checks", "tests", "browser-checks", "build"])
+  for (const id of ["checks", "tests", "browser-checks", "remote-assets", "build"])
     assert.match(release.if, new RegExp(`needs\\.${id}\\.result == 'success'`), id);
   assert.match(release.if, /needs\.build-macos\.result == 'skipped'/);
   assert.equal(release["continue-on-error"], undefined);
@@ -364,6 +375,7 @@ test("release condition allows skipped macOS but never bypasses failed or cancel
             checks: "success",
             tests: "success",
             "browser-checks": "success",
+            "remote-assets": "success",
             build: "success",
             "build-macos": "skipped",
             ...results,
@@ -377,7 +389,7 @@ test("release condition allows skipped macOS but never bypasses failed or cancel
   assert.equal(evaluate({ "build-macos": "success" }), true);
   // 新增的测试/浏览器 lane 与原有门禁同等重要：任何失败或取消都不能 publish。
   for (const result of ["failure", "cancelled", "skipped"]) {
-    for (const id of ["checks", "tests", "browser-checks", "build"])
+    for (const id of ["checks", "tests", "browser-checks", "remote-assets", "build"])
       assert.equal(evaluate({ [id]: result }), false, `${id} ${result}`);
   }
   assert.equal(evaluate({ "build-macos": "failure" }), false);
@@ -411,6 +423,7 @@ test("parallel lanes have no serial dependency on each other", async () => {
     "checks",
     "tests",
     "browser-checks",
+    "remote-assets",
     "build",
     "build-macos",
   ]);

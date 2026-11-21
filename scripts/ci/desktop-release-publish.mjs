@@ -56,6 +56,7 @@ export function releaseNotes({ productName, version, platforms }) {
       ? "- 这是 Beta 预发布，请从本页手动下载安装；不会替换稳定版的 Latest。"
       : `- 已安装的 ${productName} 会自动检查这里的新版本。`,
     `- 安装包没有代码签名：${hints}。`,
+    "- `nekcode-gui-server-*.tar.gz` 是 Remote SSH 的 Linux x64 组件，由应用自动部署，无需手动下载。",
     "- 下载后可以用 `SHA256SUMS` 校验文件。",
   ].join("\n");
 }
