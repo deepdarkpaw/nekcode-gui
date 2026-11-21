@@ -60,8 +60,7 @@ export function createNekAgentProcessPool(
 /** RPC client 的超时与缓冲上限：长命令单独放宽，其余共用一条命令预算。 */
 export function buildNekClientOptions(input: {
   config: GuiRuntimeConfig;
-  scope: NekInteractionScope;
-  extensionUi: NekExtensionUiHandler;
+  extensionUi?: NekExtensionUiHandler;
 }): Omit<NekRpcClientOptions, "logger"> {
   const timeouts: Record<string, number> = {
     prompt: input.config.timeouts.promptPreflightMs,

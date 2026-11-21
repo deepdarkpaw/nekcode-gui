@@ -140,7 +140,6 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
           cwd: record.cwd,
           sessionPath: input.sessionPath,
           approve: approval,
-          extensionUi: this.extensionUiFor({ workspacePath: record.cwd, sessionKey: record.key }),
         },
         openTiming,
       );

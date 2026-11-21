@@ -2,11 +2,12 @@
  * 把 nek 进程里的扩展 UI 请求转成渲染层要回答的交互事件。
  *
  * nek 的 dialog/structured 请求是**阻塞**的：进程在 `extension_ui_response` 到来前一直
- * `await`。请求在 host 有界保留到回答、显式撤销或超时；临时切走工作区不是用户拒绝。
- * 渲染层重连后从这里重放仍未回答的请求，超时上限不因重连延长。
+ * `await`。临时切走工作区不代表用户拒绝；重连后从 host 重放仍在有界表中的请求。
+ * nek 的交互式审批/提问不设 GUI 超时，普通对话框仍遵循原有期限。
  *
  * 请求按「工作区 + 会话」打标：新建会话前的项目信任确认还没有会话，只有工作区。
  */
+import { NEK_STRUCTURED_KINDS } from "@zcode/shared/nek-protocol";
 import type {
   NekExtensionUiDialogAnswer,
   NekExtensionUiDialogRequest,
@@ -24,7 +25,7 @@ interface NekGuiInteractionBridgeTimers {
 }
 
 interface NekGuiInteractionBridgeOptions {
-  /** 渲染层一直不回答时的上限（毫秒）；请求自带 `timeout` 时取两者较小值。 */
+  /** 普通对话框的上限（毫秒）；请求自带 `timeout` 时取两者较小值。 */
   timeoutMs: number;
   /** 同时在等的请求上限，超出按取消收口（有界内存）。 */
   maxPending: number;
@@ -35,8 +36,8 @@ interface NekGuiInteractionBridgeOptions {
 interface PendingInteraction {
   scope: NekInteractionScope;
   request: NekExtensionUiRequest;
-  timer: unknown;
-  /** 取消（超时、撤消、无人订阅）时回给 nek 的值。 */
+  timer?: unknown;
+  /** 取消（超时或撤销）时回给 nek 的值。 */
   fallback: unknown;
   settle: (value: unknown) => void;
 }
@@ -49,7 +50,14 @@ const DEFAULT_TIMERS: NekGuiInteractionBridgeTimers = {
 function requestTimeoutMs(
   request: NekExtensionUiRequest,
   options: NekGuiInteractionBridgeOptions,
-): number {
+): number | undefined {
+  if (
+    request.method === "structured" &&
+    (request.kind === NEK_STRUCTURED_KINDS.planReview ||
+      request.kind === NEK_STRUCTURED_KINDS.askQuestion ||
+      request.kind === NEK_STRUCTURED_KINDS.switchMode)
+  )
+    return undefined;
   const requested = "timeout" in request ? request.timeout : undefined;
   if (typeof requested !== "number" || !Number.isFinite(requested) || requested <= 0) {
     return options.timeoutMs;
@@ -121,18 +129,44 @@ export class NekGuiInteractionBridge {
     const pending = this.pending.get(response.id);
     if (!pending) return false;
     this.pending.delete(response.id);
-    this.timers.clearTimeout(pending.timer);
+    if (pending.timer !== undefined) this.timers.clearTimeout(pending.timer);
     pending.settle(response);
     return true;
+  }
+
+  hasPending(scope: NekInteractionScope): boolean {
+    return [...this.pending.values()].some((entry) => sameScope(entry.scope, scope));
+  }
+
+  hasPlanReview(scope: NekInteractionScope): boolean {
+    return [...this.pending.values()].some(
+      (entry) => sameScope(entry.scope, scope) && isPlanReview(entry),
+    );
+  }
+
+  planReviewScope(id: string): NekInteractionScope | undefined {
+    const entry = this.pending.get(id);
+    return entry && isPlanReview(entry) ? entry.scope : undefined;
+  }
+
+  /** Plan 审阅在 settle hook 中等待；新输入接管它，不冒充选择「继续完善」。 */
+  supersedePlanReview(scope: NekInteractionScope): boolean {
+    let replaced = false;
+    for (const [id, entry] of this.pending) {
+      if (!sameScope(entry.scope, scope) || !isPlanReview(entry)) continue;
+      this.cancel(entry.scope, id, "superseded");
+      replaced = true;
+    }
+    return replaced;
   }
 
   /** 给某个范围生成 handler：交给该范围内 nek 进程的扩展 UI 路由。 */
   scoped(scope: NekInteractionScope): NekExtensionUiHandler {
     return {
-      dialog: async (request, signal) => await this.askDialog(scope, request, signal),
+      dialog: async (request, signal) => await this.askDialog({ ...scope }, request, signal),
       structured: async (request, signal) =>
         toStructuredAnswer(
-          await this.ask(scope, request, signal, cancelledAnswer(request.id)),
+          await this.ask({ ...scope }, request, signal, cancelledAnswer(request.id)),
           request.id,
         ),
       fireAndForget: (request) => {
@@ -150,7 +184,7 @@ export class NekGuiInteractionBridge {
     }
   }
 
-  /** 撤销 workspace 下全部待回答请求（renderer 最后一个订阅者离开）。 */
+  /** 显式关闭 workspace，撤销其全部待答请求；普通退订不走这条路径。 */
   cancelWorkspace(workspacePath: string): void {
     for (const [id, pending] of Array.from(this.pending)) {
       if (pending.scope.workspacePath === workspacePath) this.cancel(pending.scope, id);
@@ -160,7 +194,7 @@ export class NekGuiInteractionBridge {
   dispose(): void {
     for (const [id, pending] of Array.from(this.pending)) {
       this.pending.delete(id);
-      this.timers.clearTimeout(pending.timer);
+      if (pending.timer !== undefined) this.timers.clearTimeout(pending.timer);
       pending.settle(pending.fallback);
     }
     this.subscribers.clear();
@@ -193,20 +227,19 @@ export class NekGuiInteractionBridge {
         this.options.logger?.warn(`interaction ${id} ${reason}; answering cancelled`);
         this.cancel(scope, id);
       };
-      const entry: PendingInteraction = { scope, request, timer: undefined, fallback, settle };
-      // 先登记再起定时器：注入的定时器实现可能是同步的，不能让它抢在登记之前。
+      const entry: PendingInteraction = { scope, request, fallback, settle };
+      // 先登记再起定时器：注入的定时器实现可能是同步的。
       this.pending.set(id, entry);
-      entry.timer = this.timers.setTimeout(
-        () => escalate("timed out"),
-        requestTimeoutMs(request, this.options),
-      );
       signal.addEventListener("abort", onAbort, { once: true });
+      const timeout = requestTimeoutMs(request, this.options);
+      if (timeout !== undefined)
+        entry.timer = this.timers.setTimeout(() => escalate("timed out"), timeout);
     });
-    this.publish({ kind: "request", scope, request });
+    if (this.pending.has(id)) this.publish({ kind: "request", scope, request });
     return await answer;
   }
 
-  /** 并发已达上限时拒绝登记；没有订阅者的请求仍受原超时与相同容量限制。 */
+  /** 达到上限时拒绝新请求，不挤掉已展示且仍在等待的审批。 */
   private canAsk(): boolean {
     if (this.pending.size >= this.options.maxPending) {
       this.options.logger?.warn(
@@ -217,13 +250,13 @@ export class NekGuiInteractionBridge {
     return true;
   }
 
-  private cancel(scope: NekInteractionScope, id: string): void {
+  private cancel(scope: NekInteractionScope, id: string, reason?: "superseded"): void {
     const pending = this.pending.get(id);
-    if (!pending) return;
+    if (!pending || !sameScope(scope, pending.scope)) return;
     this.pending.delete(id);
-    this.timers.clearTimeout(pending.timer);
+    if (pending.timer !== undefined) this.timers.clearTimeout(pending.timer);
     pending.settle(pending.fallback);
-    this.publish({ kind: "cancel", scope, id });
+    this.publish({ kind: "cancel", scope: pending.scope, id, ...(reason ? { reason } : {}) });
   }
 
   private publish(event: NekInteractionFrame): void {
@@ -235,6 +268,12 @@ export class NekGuiInteractionBridge {
       }
     }
   }
+}
+
+function isPlanReview(entry: PendingInteraction): boolean {
+  return (
+    entry.request.method === "structured" && entry.request.kind === NEK_STRUCTURED_KINDS.planReview
+  );
 }
 
 function cancelledAnswer(id: string): NekStructuredUiResponse {

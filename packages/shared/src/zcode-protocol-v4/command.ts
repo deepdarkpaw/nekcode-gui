@@ -9,6 +9,7 @@ import { v4ConversationFileRewindPreviewResultSchema } from "./transport.js";
 import { modelSelectionSchema } from "../model-selection.js";
 import { modelExecutionSchema } from "../model-execution.js";
 import { submissionModeSchema } from "./submission.js";
+import { nekPlanRevisionSchema } from "./session-config.js";
 import {
   workspaceHookReviewCommandTargetSchema,
   workspaceHookReviewDecisionSchema,
@@ -121,6 +122,7 @@ export const commandPayloadSchemas = {
   compact: z.object({}),
   // nek forks before a persisted user message and returns its text to the editor.
   forkUserMessage: z.object({ target: conversationRowTargetSchema }),
+  executeNekPlan: nekPlanRevisionSchema.extend({ fresh: z.boolean() }).strict(),
   applyFileRewind: z.object({ target: conversationRowTargetSchema }),
   editUserQuery: z.object({
     target: conversationRowTargetSchema,
@@ -305,6 +307,7 @@ export const commandResultSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     text: z.string(),
   }),
+  z.object({ type: z.literal("executeNekPlan"), sessionId: z.string().optional() }),
   z.object({
     type: z.enum(["createSession", "createSelectionSideSession"]),
     sessionId: z.string(),

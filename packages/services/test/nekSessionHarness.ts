@@ -63,6 +63,16 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
   let streamSeq = 0;
   let streamEventId = 0;
   let streamGeneration = 0;
+  let scope = { sessionId, sessionPath };
+  const replaceSession = (identity = scope) => {
+    scope = identity;
+    streamEpoch = `fixture:${++streamGeneration}`;
+    streamSeq = 1;
+    streamEventId = 0;
+    stdout.write(
+      `${JSON.stringify({ type: "history_stream_reset", version: 1, epoch: streamEpoch, seq: 1, ...scope })}\n`,
+    );
+  };
   stdin.on("data", (chunk: Buffer) => {
     input += chunk.toString();
     for (;;) {
@@ -77,12 +87,7 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
       void Promise.resolve()
         .then(() => {
           if (command.type !== "set_history_stream") return reply(command);
-          streamEpoch = `fixture:${++streamGeneration}`;
-          streamSeq = 1;
-          streamEventId = 0;
-          stdout.write(
-            `${JSON.stringify({ type: "history_stream_reset", version: 1, epoch: streamEpoch, seq: 1, sessionId, sessionPath })}\n`,
-          );
+          replaceSession();
           return { version: 1, epoch: streamEpoch, maxEventBytes: 1048576 };
         })
         .then(
@@ -152,15 +157,18 @@ export function createProcess(reply: (command: NekRpcCommand) => unknown | Promi
         version: 1,
         epoch: streamEpoch,
         seq: ++streamSeq,
-        sessionId,
-        sessionPath,
+        ...scope,
         entryId,
         leafId,
-        ref: { command: "read_history_page", sessionPath, aroundEntryId: entryId },
+        ref: {
+          command: "read_history_page",
+          sessionPath: scope.sessionPath,
+          aroundEntryId: entryId,
+        },
       })}\n`,
     );
   };
-  return { process, commands, emit, append, isDisposed: () => disposed };
+  return { process, commands, emit, append, replaceSession, isDisposed: () => disposed };
 }
 
 export function harness(

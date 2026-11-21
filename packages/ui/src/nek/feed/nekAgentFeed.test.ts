@@ -101,6 +101,34 @@ describe("nek agent feed", () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
 
+  it("closes a superseded plan only once even if its old request arrives again", () => {
+    const { emitter, service, response } = fakeService();
+    const interactionStore = store();
+    const lease = acquireNekAgentFeed(service, target, interactionStore);
+    const frame = {
+      kind: "request",
+      scope: { ...target, sessionId: "plan" },
+      request: {
+        type: "extension_ui_request",
+        method: "structured",
+        kind: "nek.plan_review",
+        id: "r",
+        payload: {},
+      },
+    } as const;
+    emitter.fire(frame);
+    emitter.fire(frame);
+    expect(interactionStore.getState().sessions.plan?.queue).toHaveLength(1);
+    emitter.fire({ kind: "cancel", scope: frame.scope, id: "r", reason: "superseded" });
+    emitter.fire(frame);
+    expect(interactionStore.getState().getHead("plan")).toBeUndefined();
+    expect(interactionStore.getState().takeNotices("plan")).toEqual([
+      { requestId: "r", id: "nek.interaction.plan.superseded" },
+    ]);
+    expect(response).not.toHaveBeenCalled();
+    lease.release();
+  });
+
   it("shares one subscription between panes and only tears down on the last release", () => {
     const { emitter, service, dispose } = fakeService();
     const interactionStore = store();

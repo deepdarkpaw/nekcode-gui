@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { NekCustomMessage, NekCustomMessageEntry } from "@zcode/shared/nek-protocol";
+import type { NekSessionEntry } from "@zcode/shared/nek-protocol";
 import { conversationRowSchema } from "@zcode/shared/zcode-protocol-v4";
 import { NekConversationProjector } from "../src/nek-agent/nekConversationProjector.js";
 import { harness, command, params, target } from "./nekSessionHarness.js";
@@ -75,7 +75,7 @@ test("P5: accepted mode transitions update composer facts once; ordinary state r
   }
 });
 
-test("P4: live and historical plan previews retain markdown, file path and standard plan-card identity", () => {
+test("P4: a native fresh plan snapshot retains markdown, file path and plan-card identity", () => {
   const details = {
     plan: {
       name: "Plan",
@@ -85,30 +85,21 @@ test("P4: live and historical plan previews retain markdown, file path and stand
     },
     markdown: "# Plan\n\n- Do the work",
   };
-  const message: NekCustomMessage = {
-    role: "custom",
-    customType: "nek.plan_preview",
-    content: "Plan",
-    display: true,
-    details,
-    timestamp: 1000,
-  };
-  const entry: NekCustomMessageEntry = {
-    type: "custom_message",
+  const entry: NekSessionEntry = {
+    type: "custom",
     id: "plan",
     parentId: null,
     timestamp: new Date(1000).toISOString(),
-    customType: message.customType,
-    content: message.content,
-    display: true,
-    details,
+    customType: "nek.plan_snapshot",
+    data: details,
   };
   const p = new NekConversationProjector({ sessionId: "s", schedule: () => () => undefined });
   try {
-    p.handleEvent({ type: "message_start", message });
+    p.handleEvent({ type: "entry_appended", entry });
     const live = p.rows.window.find((row) => row.kind === "toolCall");
     p.loadSnapshot({ entries: [entry] });
     const history = p.rows.window.find((row) => row.kind === "toolCall");
+    assert.deepEqual(live, history);
     for (const row of [live, history]) {
       assert.ok(row?.kind === "toolCall");
       conversationRowSchema.parse(row);

@@ -2836,6 +2836,7 @@ const zhCN: Record<string, string> = {
   "nek.interaction.question.other": "其他（自行填写）",
   "nek.interaction.queue.waiting": "还有 {count} 个请求在排队",
   "nek.interaction.plan.implement": "执行计划",
+  "nek.interaction.plan.superseded": "新输入已取代上一份计划审批。",
   "nek.interaction.plan.implementFresh": "在新会话中执行",
   "nek.interaction.plan.keepPlanning": "继续完善计划",
   "nek.interaction.plan.exit": "退出 Plan 模式",

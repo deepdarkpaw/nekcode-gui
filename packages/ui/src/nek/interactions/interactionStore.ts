@@ -3,6 +3,7 @@ import type {
   NekExtensionUiFireAndForgetRequest,
   NekExtensionUiRequest,
   NekExtensionUiResponse,
+  NekInteractionCancelEvent,
 } from "@zcode/shared/nek-protocol";
 import { logger } from "@/logger.js";
 import {
@@ -67,7 +68,7 @@ export interface NekInteractionStore {
   ) => Promise<boolean>;
   cancelByUser: (sessionKey: string, requestId: string) => boolean;
   cancelByHost: (sessionKey: string, requestId: string) => boolean;
-  cancelById: (requestId: string) => boolean;
+  cancelById: (requestId: string, reason?: NekInteractionCancelEvent["reason"]) => boolean;
   /**
    * 后端已经不认识这条请求（已取消或已结算）：移除卡片，并留下一次性提示，
    * 同时把 id 记进 closedRequestIds 让迟到的回调失效。
@@ -307,9 +308,14 @@ export function createNekInteractionStore(options: NekInteractionStoreOptions) {
         refreshTicker();
         return true;
       },
-      cancelById: (requestId) => {
+      cancelById: (requestId, reason) => {
         const sessionKey = findSessionKeyByRequestId(requestId);
-        return sessionKey ? get().cancelByHost(sessionKey, requestId) : false;
+        if (!sessionKey) return false;
+        if (reason !== "superseded") return get().cancelByHost(sessionKey, requestId);
+        applyQueueEvent(sessionKey, { type: "remove", requestId, reason: "settled" });
+        pushNotice(sessionKey, { requestId, id: "nek.interaction.plan.superseded" });
+        refreshTicker();
+        return true;
       },
       setResponder: (sessionKey, responder) => {
         sessionResponders.set(sessionKey, responder);

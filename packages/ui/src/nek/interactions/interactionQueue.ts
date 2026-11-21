@@ -24,7 +24,10 @@ export interface QueueOutboxItem {
 
 export interface InteractionNotice {
   requestId: string;
-  id: "nek.interaction.cancelledByHost" | "nek.interaction.timedOut";
+  id:
+    | "nek.interaction.cancelledByHost"
+    | "nek.interaction.timedOut"
+    | "nek.interaction.plan.superseded";
 }
 
 export interface InteractionQueueState {
@@ -109,7 +112,12 @@ export function reduceInteractionQueue(
 ): InteractionQueueState {
   switch (event.type) {
     case "enqueue": {
-      if (state.queue.some((record) => record.request.id === event.record.request.id)) return state;
+      const id = event.record.request.id;
+      if (
+        state.closedRequestIds.includes(id) ||
+        state.queue.some((record) => record.request.id === id)
+      )
+        return state;
       const queue = [...state.queue, event.record];
       let next: InteractionQueueState = { ...state, queue };
       if (queue.length <= INTERACTION_QUEUE_LIMIT) return next;

@@ -140,9 +140,9 @@ export abstract class NekAgentServiceRuntimeBase {
     return await launchNekSessionProcess({
       options,
       request,
-      clientOptions: this.clientOptions({
-        workspacePath: request.cwd,
-        sessionKey: request.sessionKey,
+      clientOptions: buildNekClientOptions({
+        config: this.config,
+        extensionUi: request.extensionUi,
       }),
       logger: this.logger,
     });
@@ -151,7 +151,6 @@ export abstract class NekAgentServiceRuntimeBase {
   protected clientOptions(scope: NekInteractionScope): Omit<NekRpcClientOptions, "logger"> {
     return buildNekClientOptions({
       config: this.config,
-      scope,
       extensionUi: this.extensionUiFor(scope),
     });
   }
@@ -177,13 +176,15 @@ export abstract class NekAgentServiceRuntimeBase {
     record: NekSessionRecord,
     request: NekSessionProcessCreateOptions,
   ): Promise<NekRpcProcess> {
-    this.pendingCreates.set(record.key, request);
+    const key = record.key;
+    const scope = (record.interactionScope ??= { workspacePath: record.cwd, sessionKey: key });
+    this.pendingCreates.set(key, { ...request, extensionUi: this.extensionUiFor(scope) });
     try {
-      const process = await this.pool.acquireSession(record.key);
+      const process = await this.pool.acquireSession(key);
       this.attachProcess(record, process);
       return process;
     } finally {
-      this.pendingCreates.delete(record.key);
+      this.pendingCreates.delete(key);
     }
   }
 
@@ -417,11 +418,6 @@ export abstract class NekAgentServiceRuntimeBase {
       sessionKey: record.key,
       cwd: record.cwd,
       ...(record.path ? { sessionPath: record.path } : {}),
-      extensionUi: this.extensionUiFor({
-        workspacePath: record.cwd,
-        sessionKey: record.key,
-        sessionId: record.sessionId,
-      }),
     };
   }
 

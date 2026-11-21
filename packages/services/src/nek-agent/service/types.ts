@@ -8,6 +8,7 @@ import type {
   NekAgentMessage,
   NekHistoryMetadata,
   NekGuiInfo,
+  NekInteractionScope,
   NekProjectTrust,
   NekPromptAttachment,
   NekRpcEvent,
@@ -37,6 +38,9 @@ export interface NekSessionRecord {
   path?: string;
   cwd: string;
   process?: NekRpcProcess;
+  /** 随已获准的 nek 原生新会话迁移的进程交互范围。 */
+  interactionScope?: NekInteractionScope;
+  planBuild?: boolean;
   detachEvents?: () => void;
   detachExit?: () => void;
   modelRuntime?: NekModelRuntimeLease;

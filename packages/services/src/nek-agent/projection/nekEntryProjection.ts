@@ -3,7 +3,6 @@ import type {
   NekAgentMessage,
   NekAssistantMessage,
   NekBashExecutionMessage,
-  NekCustomMessageEntry,
   NekToolResultMessage,
 } from "@zcode/shared/nek-protocol";
 import {
@@ -22,8 +21,14 @@ import {
   toEpochMs,
 } from "./nekRows.js";
 import { mergeToolResultRow } from "./nekToolResultRow.js";
+import { projectNekPlanArtifact } from "./nekPlanArtifact.js";
 import { settleInactiveNekWorkRows } from "./nekSettledWork.js";
-import { buildConfigState, planFromNekState, summarizeUsage } from "./nekProjectionSnapshot.js";
+import {
+  buildConfigState,
+  planFromNekState,
+  readyNekPlan,
+  summarizeUsage,
+} from "./nekProjectionSnapshot.js";
 import type { NekProjectedSnapshot, NekSnapshotInput, TurnContext } from "./nekEntryShared.js";
 import {
   identity,
@@ -168,7 +173,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         }
         // `display: false` 的隐藏消息（如 `@skill:` 展开出的 `skill_mention`）不进对话记录。
         if (entry.display === false) break;
-        const row = projectCustomMessage(entry as NekCustomMessageEntry, turn, allocator);
+        const row = projectCustomMessage(entry, turn, allocator);
         if (row) push(row);
         break;
       }
@@ -376,6 +381,8 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
         // usage 计入统计，context_edit 只影响模型上下文，label 没有 v4 对应物。
         break;
     }
+    const plan = projectNekPlanArtifact(entry, turn.turnId, (id) => allocator.resolve(id));
+    if (plan) push(plan);
     // Durable history can copy the request-start timestamp into the persisted assistant entry.
     // That is not a completion time. Never report that interval as the entire turn's duration.
     if (turnOpen && entry.type === "message" && entry.message.role !== "user") {
@@ -407,7 +414,10 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
     byEntity: allocator.entityMap,
     nextRowId: allocator.nextId,
     title,
-    config: buildConfigState(input.state, provider, model, thought, mode),
+    config: {
+      ...buildConfigState(input.state, provider, model, thought, mode),
+      nekReadyPlan: readyNekPlan(input.nekState),
+    },
     usage,
     plan,
     mode,

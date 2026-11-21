@@ -215,7 +215,7 @@ export function buildPlanPreviewRow(
     revision: details.plan.revision,
   };
   return buildToolCallRow(identity, {
-    toolCallId: `${details.plan.path}#r${details.plan.revision}`,
+    toolCallId: identity.entityId,
     toolName: "nek.plan",
     status: "success",
     input,

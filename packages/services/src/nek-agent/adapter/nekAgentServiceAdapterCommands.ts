@@ -1,5 +1,9 @@
 import type { NekMode, NekThinkingLevel } from "@zcode/shared/nek-protocol";
-import type { CommandAck, CommandsQueryResult } from "@zcode/shared/zcode-protocol-v4";
+import {
+  commandPayloadSchemas,
+  type CommandAck,
+  type CommandsQueryResult,
+} from "@zcode/shared/zcode-protocol-v4";
 import type { NekSessionResult } from "../service/types.js";
 import { toNekPromptAttachments } from "./attachmentInput.js";
 import { forkUserMessage } from "./nekForkUserMessage.js";
@@ -74,6 +78,15 @@ export async function sendConversationCommand(
   switch (envelope.type) {
     case "forkUserMessage":
       return await forkUserMessage(context, input.target, binding, envelope);
+    case "executeNekPlan": {
+      const request = commandPayloadSchemas.executeNekPlan.parse(envelope.payload);
+      const fresh = await context.service.executePlan(binding.sessionKey, request);
+      if (fresh) context.bindSession(input.target, fresh);
+      return acceptedCommand(envelope, revision, {
+        type: "executeNekPlan",
+        ...(fresh ? { sessionId: fresh.sessionId } : {}),
+      });
+    }
     case "sendText": {
       const result = await sendWhenAdmissible(context, binding.sessionKey, payload);
       return acceptedCommand(envelope, revision, {
@@ -208,7 +221,12 @@ async function prepareDelivery(
   if (requested === "queue") return "follow_up";
   // 压缩中不能 stop：停掉压缩等于丢掉这次压缩。压缩期间的整段发送本来就被
   // service 挂起到压缩收口之后，因此这里再兜一次，避免 stop 打到压缩上。
-  if (requested === "startNow" && isBusy(service, sessionKey) && !service.isCompacting(sessionKey))
+  if (
+    requested === "startNow" &&
+    isBusy(service, sessionKey) &&
+    !service.isCompacting(sessionKey) &&
+    !service.isAwaitingPlanReview(sessionKey)
+  )
     await service.abort(sessionKey);
   return "steer";
 }

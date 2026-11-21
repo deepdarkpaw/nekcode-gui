@@ -2993,6 +2993,7 @@ const enUS: Record<string, string> = {
   "nek.interaction.question.other": "Other (type your own answer)",
   "nek.interaction.queue.waiting": "Requests waiting: {count}",
   "nek.interaction.plan.implement": "Implement plan",
+  "nek.interaction.plan.superseded": "New input replaced the previous plan review.",
   "nek.interaction.plan.implementFresh": "Implement in a new session",
   "nek.interaction.plan.keepPlanning": "Keep refining the plan",
   "nek.interaction.plan.exit": "Exit Plan mode",

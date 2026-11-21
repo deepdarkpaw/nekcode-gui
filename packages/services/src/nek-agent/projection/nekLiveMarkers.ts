@@ -1,21 +1,19 @@
 import type {
   NekBashResult,
   NekCompactionResult,
-  NekExtensionEvent,
   NekRpcEvent,
   NekRpcSessionState,
   NekSessionEntry,
-  NekSubagentRecord,
   NekSessionStats,
 } from "@zcode/shared/nek-protocol";
 import type { TimelineMarkerPayload, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { buildTimelineMarkerRow, buildToolCallRow, toEpochMs } from "./nekRows.js";
 import { currentTurnId, rowIdentity } from "./nekLiveTurn.js";
 import type { NekLiveContext } from "./nekLiveTurn.js";
-import { applySubagentProgress } from "./nekLiveTools.js";
 import { applyAssistantErrorMarker, applyCustomMessage } from "./nekLiveMessages.js";
+import { projectNekPlanArtifact } from "./nekPlanArtifact.js";
 import { projectSelectionEntry } from "./nekSelectionMarkers.js";
-import { buildControlState, withNekModelSelection, withNekMode } from "./nekProjectionSnapshot.js";
+import { buildControlState, withNekModelSelection } from "./nekProjectionSnapshot.js";
 
 /**
  * 时间线标记、扩展追加的条目、直接 bash 的结果与扩展状态。
@@ -159,6 +157,11 @@ export function applyRetryMarker(ctx: NekLiveContext, attempt: number): void {
 /** `entry_appended`：扩展追加的持久条目（模型变化、压缩、分支摘要、自定义消息、会话名）。 */
 export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry | undefined): void {
   if (!entry) return;
+  const plan = projectNekPlanArtifact(entry, currentTurnId(ctx), (id) => ctx.store.allocate(id));
+  if (plan) {
+    ctx.store.add(plan);
+    return;
+  }
   const createdAt = toEpochMs(entry.timestamp);
   switch (entry.type) {
     case "model_change":
@@ -329,35 +332,6 @@ export function applyBashCommandResultRow(
       },
     ),
   );
-}
-
-/** `extension_event`：`nek.state`（完整快照）与 `nek.subagent`（增量）。 */
-export function applyExtensionEvent(ctx: NekLiveContext, event: NekExtensionEvent): void {
-  if (event.name === "nek.subagent") {
-    applySubagentProgress(ctx, event.payload as NekSubagentRecord);
-    return;
-  }
-  if (event.name === "nek.state") {
-    const state = event.payload as {
-      mode?: string;
-      todos?: Array<{ id: string; content: string; status: string }>;
-    };
-    if (typeof state.mode === "string")
-      ctx.store.setState({ config: withNekMode(ctx.store.state.config, state.mode) });
-    const items = (state.todos ?? [])
-      .filter((todo) => todo.status !== "cancelled")
-      .map((todo) => ({
-        id: todo.id,
-        content: todo.content,
-        status:
-          todo.status === "in_progress"
-            ? ("inProgress" as const)
-            : todo.status === "completed"
-              ? ("completed" as const)
-              : ("pending" as const),
-      }));
-    ctx.store.setState({ plan: items.length === 0 ? null : { items, updatedAt: ctx.now() } });
-  }
 }
 
 /** `get_state` 的响应合并进快照字段。 */

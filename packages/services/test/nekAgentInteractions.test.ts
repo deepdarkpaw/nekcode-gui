@@ -9,6 +9,7 @@ import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekRpcProcessExit, NekRpcProcessHandle } from "../src/nek-agent/nekRpcClient.js";
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
 import { NekAgentInteractionChannel } from "../src/nek-agent/adapter/nekAgentInteractionChannel.js";
+import { NekGuiInteractionBridge } from "../src/nek-agent/service/guiInteractionBridge.js";
 import { NekAgentService } from "../src/nek-agent/service/nekAgentService.js";
 import type { NekExtensionUiHandler } from "../src/nek-agent/nekExtensionUiRouter.js";
 import type { NekAgentServiceOptions } from "../src/nek-agent/service/types.js";
@@ -351,6 +352,113 @@ test("P2/P3: structured mode and plan approvals survive identity-scoped reconnec
   } finally {
     unrelated.dispose();
     channel.dispose();
+    await service.dispose();
+  }
+});
+
+test("nek structured questions and approvals still replay after the old five-minute limit", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const bridge = new NekGuiInteractionBridge({ timeoutMs: 300_000, maxPending: 3 });
+  const scope = { workspacePath: "/workspace", sessionKey: "session" };
+  const signal = new AbortController();
+  const handler = bridge.scoped(scope);
+  try {
+    const kinds = ["nek.plan_review", "nek.switch_mode", "nek.ask_question"];
+    const answers = kinds.map((kind) =>
+      handler.structured!(
+        { type: "extension_ui_request", id: kind, method: "structured", kind, payload: {} },
+        signal.signal,
+      ),
+    );
+    t.mock.timers.tick(600_000);
+    const overflow = await handler.structured!(
+      {
+        type: "extension_ui_request",
+        id: "overflow",
+        method: "structured",
+        kind: "nek.plan_review",
+        payload: {},
+      },
+      signal.signal,
+    );
+    assert.deepEqual(overflow, { type: "extension_ui_response", id: "overflow", cancelled: true });
+    assert.deepEqual(
+      bridge
+        .pendingFrames(scope.workspacePath)
+        .map((frame) => frame.kind === "request" && frame.request.id),
+      kinds,
+    );
+    signal.abort();
+    assert.deepEqual(
+      await Promise.all(answers),
+      kinds.map((id) => ({ type: "extension_ui_response", id, cancelled: true })),
+    );
+    assert.deepEqual(bridge.pendingFrames(scope.workspacePath), []);
+  } finally {
+    bridge.dispose();
+  }
+});
+
+test("sending new input settles the previous plan review and it cannot replay on resubscribe", async () => {
+  const { sessions, service, frames } = harness({ askProjectTrust: () => true });
+  const channel = new NekAgentInteractionChannel(service);
+  const scope = { workspacePath: "/workspace" };
+  try {
+    const session = await service.createSession({ cwd: scope.workspacePath });
+    const proc = sessions[0]!;
+    proc.emit({
+      type: "extension_ui_request",
+      id: "old-review",
+      method: "structured",
+      kind: "nek.plan_review",
+      payload: {},
+    });
+    await waitFor(() => frames.some((frame) => frame.kind === "request"), "old review");
+    await service.sendPrompt({
+      sessionKey: session.sessionKey,
+      message: "Please revise the plan",
+      streamingBehavior: "steer",
+    });
+    assert.deepEqual(proc.responses, [
+      { type: "extension_ui_response", id: "old-review", cancelled: true },
+    ]);
+    assert.ok(
+      frames.some(
+        (frame) =>
+          frame.kind === "cancel" && frame.id === "old-review" && frame.reason === "superseded",
+      ),
+    );
+    const replay: NekInteractionFrame[] = [];
+    const returned = channel.onDynamic(scope)((frame) => replay.push(frame));
+    assert.deepEqual(replay, []);
+    returned.dispose();
+  } finally {
+    channel.dispose();
+    await service.dispose();
+  }
+});
+
+test("process exit cancels the live review without replying to the terminated process", async () => {
+  const { sessions, service, frames } = harness({ askProjectTrust: () => true });
+  try {
+    await service.createSession({ cwd: "/workspace" });
+    const proc = sessions[0]!;
+    proc.emit({
+      type: "extension_ui_request",
+      id: "review",
+      method: "structured",
+      kind: "nek.plan_review",
+      payload: {},
+    });
+    await waitFor(() => frames.some((frame) => frame.kind === "request"), "review");
+    await proc.process.dispose();
+    assert.deepEqual(proc.responses, []);
+    assert.deepEqual(service.pendingInteractions("/workspace"), []);
+    assert.equal(
+      frames.filter((frame) => frame.kind === "cancel" && frame.id === "review").length,
+      1,
+    );
+  } finally {
     await service.dispose();
   }
 });

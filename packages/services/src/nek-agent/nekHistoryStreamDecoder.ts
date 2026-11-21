@@ -57,9 +57,13 @@ export class NekHistoryStreamDecoder {
     private readonly chunkTimeoutMs = 30000,
   ) {}
 
-  begin(): void {
+  private retireEpoch(): void {
     if (this.epoch) this.retired.add(this.epoch);
     if (this.retired.size > 16) this.retired.delete(this.retired.values().next().value!);
+  }
+
+  begin(): void {
+    this.retireEpoch();
     this.clear();
     this.epoch = undefined;
     this.seq = 0;
@@ -97,15 +101,15 @@ export class NekHistoryStreamDecoder {
     return this.failed;
   }
 
-  accept(frame: NekHistoryStreamEvent): void {
+  accept(frame: NekHistoryStreamEvent, expectReplacement = false): void {
     if (this.failed) return;
     try {
-      this.consume(frame);
+      this.consume(frame, expectReplacement);
     } catch (error) {
       this.fail(error);
     }
   }
-  private consume(frame: NekHistoryStreamEvent): void {
+  private consume(frame: NekHistoryStreamEvent, expectReplacement: boolean): void {
     if (
       frame.version !== 1 ||
       typeof frame.epoch !== "string" ||
@@ -115,13 +119,14 @@ export class NekHistoryStreamDecoder {
       throw new NekHistoryStreamError("FRAME", "invalid live envelope");
     if (this.retired.has(frame.epoch)) return;
     if (frame.type === "history_stream_reset") {
-      if (!this.negotiating)
+      if (!this.negotiating && !expectReplacement)
         throw new NekHistoryStreamError(
           "RESET",
           "source owner changed; explicitly renegotiate and refetch history",
         );
-      if (frame.seq !== 1)
-        throw new NekHistoryStreamError("SEQUENCE", "reset must start at sequence 1");
+      if (frame.seq !== 1 || frame.epoch === this.epoch)
+        throw new NekHistoryStreamError("SEQUENCE", "reset must start a new epoch at sequence 1");
+      if (expectReplacement) this.retireEpoch();
       this.clear();
       this.epoch = frame.epoch;
       this.seq = 1;

@@ -53,15 +53,18 @@ export interface NekAgentCommandContext {
 export async function sendPrompt(
   context: NekAgentCommandContext,
   input: NekPromptInput,
+  supersedePlanReview: () => boolean,
 ): Promise<{ disposition: string }> {
   const target = context.writableTarget(input.sessionKey);
-  const submit = () => submitPrompt(context.writableTarget(input.sessionKey), input);
+  const submit = () =>
+    submitPrompt(context.writableTarget(input.sessionKey), input, supersedePlanReview);
   return await (target.modelRuntime ? target.modelRuntime.run("input", submit) : submit());
 }
 
 async function submitPrompt(
   target: NekAgentCommandTarget,
   input: NekPromptInput,
+  supersedePlanReview: () => boolean,
 ): Promise<{ disposition: string }> {
   const images = input.images as NekImageContent[] | undefined;
   const attachments = input.attachments?.length ? input.attachments : undefined;
@@ -73,10 +76,15 @@ async function submitPrompt(
     ...(images ? { images } : {}),
     ...(attachments ? { attachments } : {}),
   };
-  if (target.phase === "running" || target.phase === "waiting_input") {
-    if (!input.streamingBehavior)
-      throw new Error("streamingBehavior is required while nek is running");
-    if (input.streamingBehavior === "steer")
+  const replacedReview =
+    Boolean(input.message.trim() || images?.length || attachments?.length) && supersedePlanReview();
+  const wasBusy = replacedReview || target.phase === "running" || target.phase === "waiting_input";
+  // 扩展命令必须走 prompt 分发；steer/follow_up 只接普通文本或附件。
+  if (wasBusy && !(replacedReview && input.message.startsWith("/"))) {
+    const delivery = input.streamingBehavior ?? (replacedReview ? "steer" : undefined);
+    if (!delivery) throw new Error("streamingBehavior is required while nek is running");
+    // nek 在 agent_settled hook 内用 steer/follow_up 接纳并延后文本；prompt 此时会延迟 ACK。
+    if (delivery === "steer")
       return await target.client.call({
         type: "steer",
         ...content,

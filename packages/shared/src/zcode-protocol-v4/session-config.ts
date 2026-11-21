@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { modelSelectionSchema } from "../model-selection.js";
 
+export const nekPlanRevisionSchema = z.object({
+  path: z.string().min(1),
+  revision: z.number().int().positive(),
+});
+export type NekPlanRevision = z.infer<typeof nekPlanRevisionSchema>;
+
 // ── config──
 export const sessionConfigStateSchema = z.object({
   /** Session 接受并持久化的稀疏选择意图；provider/model/thought 仅为 UI effective 投影。 */
@@ -25,6 +31,8 @@ export const sessionConfigStateSchema = z.object({
       planEnabled: z.boolean(),
     })
     .optional(),
+  /** 当前会话在 Plan 模式下已准备执行的 nek 计划版本。 */
+  nekReadyPlan: nekPlanRevisionSchema.optional(),
 });
 export type SessionConfigState = z.infer<typeof sessionConfigStateSchema>;
 

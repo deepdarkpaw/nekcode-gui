@@ -1816,6 +1816,15 @@ const ToolCallRowView = memo(function ToolCallRowView({
   // toolCall 行回接 ToolCallBlocks（execute/read/edit/... renderer 按
   // tool identity 分流）。适配 memo 按 row 引用：row.delta/upserted 换新对象才重建。
   const toolCallNode = useMemo(() => toolCallRowToLegacyNode(row), [row]);
+  const plan = context.nekPlanExecution;
+  const input = row.input as { planFilePath?: unknown; revision?: unknown } | null | undefined;
+  const execute =
+    row.toolName === "nek.plan" &&
+    plan &&
+    input?.planFilePath === plan.path &&
+    input.revision === plan.revision
+      ? (fresh: boolean) => plan.run({ path: plan.path, revision: plan.revision }, fresh)
+      : undefined;
   // 工具行去掉纵向内边距（对齐 z-code-2 无 per-tool padding）；连续工具间距由
   // ConversationAssistantWorkItems 的 gap-4 组容器统一给。
   return (
@@ -1830,6 +1839,7 @@ const ToolCallRowView = memo(function ToolCallRowView({
           onOpenCodeViewer={context.onOpenCodeViewer}
           onOpenFileLink={context.onOpenFileLink}
           onOpenBrowserUrl={context.onOpenBrowserUrl}
+          onExecuteNekPlan={execute}
           onOpenPlanDetail={
             context.onOpenPlanDetail && context.sessionId
               ? (request) =>
