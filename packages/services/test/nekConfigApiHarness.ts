@@ -13,6 +13,7 @@ import type {
   NekConfigTarget,
   NekConfigTargetInfo,
   NekExtensionUiResponse,
+  NekModelScopeResult,
   NekRpcCommandOfType,
   NekRpcCommandType,
   NekRpcResponseDataFor,
@@ -48,6 +49,9 @@ export class FakeControlClient implements NekControlClient {
     { name: "read", description: "Read a file", defaultActive: true },
     { name: "powershell", description: "Run a PowerShell command", defaultActive: false },
   ];
+  modelScope: NekModelScopeResult = { patterns: [], models: [], diagnostics: [] };
+  readModelScope = (_cwd?: string): NekModelScopeResult => this.modelScope;
+  projectTrusted: boolean | null = null;
   private authListeners = new Set<(record: never) => void>();
   private handler: NekStructuredHandler | undefined;
   private loginResolve: ((value: { provider: string }) => void) | undefined;
@@ -148,6 +152,11 @@ export class FakeControlClient implements NekControlClient {
         ],
       } as NekRpcResponseDataFor<C>;
     }
+    if (type === "get_model_scope") {
+      return this.readModelScope(
+        "cwd" in command ? command.cwd : undefined,
+      ) as NekRpcResponseDataFor<C>;
+    }
     if (type === "get_model_catalog") {
       return { models: [] } as NekRpcResponseDataFor<C>;
     }
@@ -167,7 +176,7 @@ export class FakeControlClient implements NekControlClient {
     if (type === "get_project_trust") {
       return {
         cwd: PROJECT,
-        trusted: null,
+        trusted: this.projectTrusted,
         defaultProjectTrust: "ask",
         resources: [],
       } as NekRpcResponseDataFor<C>;

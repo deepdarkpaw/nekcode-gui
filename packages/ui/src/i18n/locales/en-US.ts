@@ -527,6 +527,9 @@ const enUS: Record<string, string> = {
   "modelTrajectory.usage.input": "in {count}",
   "modelTrajectory.usage.output": "out {count}",
   "chat.toolbar.model.loadFailedRetry": "Models failed to load. Retry",
+  "chat.toolbar.model.showAll": "Show all models",
+  "chat.toolbar.model.showScoped": "Show CLI model list",
+  "chat.toolbar.model.outsideScope": "Current · outside scope",
   "chat.toolbar.model.loading": "Loading models…",
   "chat.toolbar.model.remoteWaiting": "Waiting for remote models",
   "chat.toolbar.model.targetMissing": "No model target",
@@ -3558,6 +3561,19 @@ const enUS: Record<string, string> = {
   "settings.nek.scoped.remove": "Remove from scope",
   "settings.nek.scoped.selectAll": "Select all",
   "settings.nek.scoped.selectNone": "Select none",
+  "settings.nek.scoped.column": "CLI list",
+  "settings.nek.scoped.modelLabel": "Show {model} in the CLI list",
+  "settings.nek.scoped.notLoaded": "The CLI model list has not loaded",
+  "settings.nek.scoped.unavailable": "This model is not currently available in nek",
+  "settings.nek.scoped.keepOne":
+    "Keep at least one model. Clearing the scope shows all available models.",
+  "settings.nek.scoped.exclusionHint":
+    "If no models match the scope, unchecking a model lists all the others explicitly. Removing a pattern match replaces the scope with individual models.",
+  "settings.nek.scoped.noMatches":
+    "No models match the CLI model list patterns. Showing all available models.",
+  "settings.nek.scoped.useAll": "Use all models",
+  "settings.nek.scoped.useAllHint": "To clear the last pattern, choose Use all models.",
+  "settings.nek.scoped.readConflict": "The model list changed during the read. Please retry.",
   "settings.nek.compaction.pageDescription":
     "When the context fills up, nek summarizes older conversation.",
   "settings.nek.compaction.title": "Auto compaction",

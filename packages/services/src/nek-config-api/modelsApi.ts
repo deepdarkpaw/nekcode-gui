@@ -6,18 +6,14 @@
  */
 import type {
   NekAgentPresetEntry,
+  INekConfigApi,
   NekConfigRevision,
   NekConfigTarget,
-  NekModelConfig,
-  NekModelsConfigView,
-  NekProviderRenamePreview,
   NekProviderReferences,
-  NekProviderWrite,
 } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 import { NekConfigError, asNekConfigError, conflict, validationError } from "./errors.js";
 import {
-  editModelsSnapshot,
   modelWriteToValue,
   providerEdits,
   providerToView,
@@ -28,71 +24,37 @@ import {
 } from "./modelsDocument.js";
 import type { NekJsoncEdit, NekModelsSnapshot } from "./modelsDocument.js";
 import { modelsDiagnostics } from "./modelsDiagnostics.js";
-import { planReferenceRewrites, scanProviderReferences } from "./modelsReferences.js";
+import { readModelScopeDocuments } from "./modelScopeSettings.js";
+import { writeModelsAndScope } from "./modelScopeWrite.js";
+import {
+  modelThinkingPatch,
+  planReferenceRewrites,
+  scanProviderReferences,
+} from "./modelsReferences.js";
+import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import { modelsPath, settingsPath } from "./paths.js";
 import { listAgentPresets, writeAgentPreset } from "./presetsDocument.js";
 import type { NekConfigRuntime } from "./runtime.js";
-import { patchSettingsDocument, readSettingsDocument } from "./settingsDocument.js";
+import { readSettingsDocument, type NekSettingsDocument } from "./settingsDocument.js";
 import { sameRevision } from "./revision.js";
 
 const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 
 type RawModel = Record<string, unknown>;
 
-export interface NekModelsGroup {
-  readModelsConfig: (target: NekConfigTarget, cwd?: string) => Promise<NekModelsConfigView>;
-  saveProvider: (
-    target: NekConfigTarget,
-    provider: NekProviderWrite,
-    options: { revision: string; isNew: boolean },
-  ) => Promise<NekConfigRevision>;
-  deleteProvider: (
-    target: NekConfigTarget,
-    providerId: string,
-    options: { revision: string },
-  ) => Promise<NekConfigRevision>;
-  getProviderReferences: (
-    target: NekConfigTarget,
-    providerId: string,
-    cwd?: string,
-  ) => Promise<NekProviderReferences>;
-  previewProviderRename: (
-    target: NekConfigTarget,
-    from: string,
-    to: string,
-    cwd?: string,
-  ) => Promise<NekProviderRenamePreview>;
-  renameProvider: (
-    target: NekConfigTarget,
-    from: string,
-    to: string,
-    options: { revision: string; cwd?: string },
-  ) => Promise<NekConfigRevision>;
-  saveModel: (
-    target: NekConfigTarget,
-    providerId: string,
-    model: NekModelConfig,
-    options: { revision: string; previousId?: string },
-  ) => Promise<NekConfigRevision>;
-  addModels: (
-    target: NekConfigTarget,
-    providerId: string,
-    models: NekModelConfig[],
-    options: { revision: string },
-  ) => Promise<NekConfigRevision>;
-  deleteModel: (
-    target: NekConfigTarget,
-    providerId: string,
-    modelId: string,
-    options: { revision: string },
-  ) => Promise<NekConfigRevision>;
-  reorderModels: (
-    target: NekConfigTarget,
-    providerId: string,
-    modelIds: string[],
-    options: { revision: string },
-  ) => Promise<NekConfigRevision>;
-}
+export type NekModelsGroup = Pick<
+  INekConfigApi,
+  | "readModelsConfig"
+  | "saveProvider"
+  | "deleteProvider"
+  | "getProviderReferences"
+  | "previewProviderRename"
+  | "renameProvider"
+  | "saveModel"
+  | "addModels"
+  | "deleteModel"
+  | "reorderModels"
+>;
 
 function requireProvider(snapshot: NekModelsSnapshot, providerId: string): Record<string, unknown> {
   const provider = snapshot.providers[providerId];
@@ -118,17 +80,6 @@ function requireProviderId(id: string, field: string): void {
 }
 
 export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
-  const settingsOf = async (
-    target: NekConfigTarget,
-  ): Promise<{ raw: Record<string, unknown>; revision: string }> => {
-    const context = runtime.target(target);
-    const document = await readSettingsDocument(
-      context.executor,
-      settingsPath(context.layout, "global"),
-    );
-    return { raw: document.raw, revision: document.revision };
-  };
-
   const presetsOf = async (
     target: NekConfigTarget,
     cwd?: string,
@@ -143,6 +94,28 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
     return result.entries;
   };
 
+  const referencesOf = async (
+    target: NekConfigTarget,
+    providerId: string,
+    cwd?: string,
+  ): Promise<NekProviderReferences> => {
+    const { global, project } = await readModelScopeDocuments(runtime, runtime.target(target), cwd);
+    const presets = await presetsOf(target, cwd);
+    const references = scanProviderReferences({ providerId, settings: global.raw, presets });
+    if (!project) return references;
+    const projectReferences = scanProviderReferences({
+      providerId,
+      settings: project.raw,
+      presets: [],
+    });
+    return {
+      ...references,
+      enabledModels: [
+        ...new Set([...references.enabledModels, ...projectReferences.enabledModels]),
+      ],
+    };
+  };
+
   const readSnapshot = async (target: NekConfigTarget): Promise<NekModelsSnapshot> => {
     const context = runtime.target(target);
     return await readModelsSnapshot(context.executor, modelsPath(context.layout));
@@ -151,12 +124,17 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
   const save = async (
     target: NekConfigTarget,
     snapshot: NekModelsSnapshot,
-    expectedRevision: string,
+    options: Parameters<typeof writeModelsAndScope>[4],
     edits: readonly NekJsoncEdit[],
   ): Promise<NekConfigRevision> => {
-    const { executor } = runtime.target(target);
-    const revision = await editModelsSnapshot(executor, snapshot, expectedRevision, edits);
-    runtime.publishWrite(target, [{ path: snapshot.path, revision }]);
+    const { revision, written } = await writeModelsAndScope(
+      runtime,
+      target,
+      snapshot,
+      edits,
+      options,
+    );
+    runtime.publishWrite(target, written);
     return { revision };
   };
 
@@ -191,28 +169,18 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       }
       const value = providerWriteToValue(provider, existing);
       validateProviderValue(provider.id, value);
-      return await save(
-        target,
-        snapshot,
-        options.revision,
-        providerEdits(provider.id, existing, value),
-      );
+      return await save(target, snapshot, options, providerEdits(provider.id, existing, value));
     },
 
     deleteProvider: async (target, providerId, options) => {
       const snapshot = await readSnapshot(target);
       requireProvider(snapshot, providerId);
-      return await save(target, snapshot, options.revision, [
+      return await save(target, snapshot, options, [
         { pointer: ["providers", providerId], value: undefined },
       ]);
     },
 
-    getProviderReferences: async (target, providerId, cwd) =>
-      scanProviderReferences({
-        providerId,
-        settings: (await settingsOf(target)).raw,
-        presets: await presetsOf(target, cwd),
-      }),
+    getProviderReferences: referencesOf,
 
     previewProviderRename: async (target, from, to, cwd) => {
       const snapshot = await readSnapshot(target);
@@ -221,16 +189,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       if (snapshot.providers[to]) {
         throw validationError(`provider "${to}" already exists`, { to: "duplicate" });
       }
-      const settings = await settingsOf(target);
-      return {
-        from,
-        to,
-        references: scanProviderReferences({
-          providerId: from,
-          settings: settings.raw,
-          presets: await presetsOf(target, cwd),
-        }),
-      };
+      return { from, to, references: await referencesOf(target, from, cwd) };
     },
 
     renameProvider: async (target, from, to, options) => {
@@ -251,26 +210,21 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
         settings: settingsDocument.raw,
         presets,
       });
-      // 先写新键再删旧键：中途失败最多留下一个重复 provider，不会丢掉配置。
-      const revision = await editModelsSnapshot(context.executor, snapshot, options.revision, [
-        { pointer: ["providers", to], value: provider },
-        { pointer: ["providers", from], value: undefined },
-      ]);
-      const written: Array<{ path: string; revision: string }> = [
-        { path: snapshot.path, revision },
-      ];
-      const applied: string[] = [snapshot.path];
+      const { revision, written } = await writeModelsAndScope(
+        runtime,
+        target,
+        snapshot,
+        [
+          { pointer: ["providers", to], value: provider },
+          { pointer: ["providers", from], value: undefined },
+        ],
+        {
+          ...options,
+          rename: { kind: "provider", from, to },
+          globalSettings: { document: settingsDocument, patch: () => plan.settingsPatch },
+        },
+      );
       try {
-        if (Object.keys(plan.settingsPatch).length > 0) {
-          const patched = await patchSettingsDocument({
-            executor: context.executor,
-            path: settingsFile,
-            patch: plan.settingsPatch,
-            expectedRevision: settingsDocument.revision,
-          });
-          written.push({ path: patched.path, revision: patched.revision });
-          applied.push(patched.path);
-        }
         for (const rewrite of plan.presetRewrites) {
           const entry = presets.find((candidate) => candidate.path === rewrite.path);
           if (!entry) continue;
@@ -284,14 +238,14 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
           });
           written.push({ path: result.path, revision: result.revision });
           if (result.removedPath) written.push({ path: result.removedPath, revision: "absent" });
-          applied.push(result.path);
         }
       } catch (error) {
         // 部分成功必须说清楚：models.json 已经改名，后续文件需要重新载入后再处理。
+        runtime.publishWrite(target, written);
         const normalized = asNekConfigError(error);
         throw new NekConfigError(
-          normalized.code,
-          `provider "${from}" was renamed to "${to}" in ${applied.join(", ")}, but a later step failed: ${normalized.message}`,
+          "io",
+          `provider "${from}" was renamed to "${to}", but updating a preset failed: ${normalized.message}`,
           normalized.fieldErrors,
         );
       }
@@ -303,15 +257,41 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       const snapshot = await readSnapshot(target);
       const models = modelsOf(requireProvider(snapshot, providerId));
       const key = options.previousId ?? model.id;
+      const existing = models.some((entry) => modelIdOf(entry) === key);
+      if (options.previousId !== undefined && !existing) {
+        throw validationError(`unknown model "${key}"`, { modelId: "unknown" });
+      }
       if (model.id !== key && models.some((entry) => modelIdOf(entry) === model.id)) {
         throw validationError(`model "${model.id}" already exists`, { id: "duplicate" });
       }
       validateModelValue(providerId, model);
       const value = modelWriteToValue(model);
-      return await save(target, snapshot, options.revision, [
+      const rename =
+        key === model.id
+          ? undefined
+          : {
+              kind: "model" as const,
+              provider: providerId,
+              from: key,
+              to: model.id,
+            };
+      const level = options.defaultThinkingLevel;
+      if (level != null && !NEK_THINKING_LEVELS.includes(level)) {
+        throw validationError(`invalid default thinking level "${level}"`, {
+          defaultThinkingLevel: "invalid",
+        });
+      }
+      const globalSettings =
+        rename || level !== undefined
+          ? {
+              patch: (settings: NekSettingsDocument) =>
+                modelThinkingPatch(settings.values, providerId, key, model.id, level),
+            }
+          : undefined;
+      return await save(target, snapshot, { ...options, rename, globalSettings }, [
         {
           pointer: ["providers", providerId, "models"],
-          value: models.some((entry) => modelIdOf(entry) === key)
+          value: existing
             ? models.map((entry) => (modelIdOf(entry) === key ? value : entry))
             : [...models, value],
         },
@@ -328,7 +308,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
         ids.add(model.id);
         validateModelValue(providerId, model);
       }
-      return await save(target, snapshot, options.revision, [
+      return await save(target, snapshot, options, [
         {
           pointer: ["providers", providerId, "models"],
           value: [...models, ...added.map((model) => modelWriteToValue(model))],
@@ -342,7 +322,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       if (!models.some((entry) => modelIdOf(entry) === modelId)) {
         throw validationError(`unknown model "${modelId}"`, { modelId: "unknown" });
       }
-      return await save(target, snapshot, options.revision, [
+      return await save(target, snapshot, options, [
         {
           pointer: ["providers", providerId, "models"],
           value: models.filter((entry) => modelIdOf(entry) !== modelId),
@@ -367,7 +347,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
         const id = modelIdOf(entry);
         if (byId.has(id)) ordered.push(entry);
       }
-      return await save(target, snapshot, options.revision, [
+      return await save(target, snapshot, options, [
         { pointer: ["providers", providerId, "models"], value: ordered },
       ]);
     },

@@ -8,6 +8,7 @@ import type {
   NekSettingsView,
   NekYamlView,
 } from "@zcode/shared/nek-protocol";
+import { buildRemoteEnvironmentKey } from "@zcode/shared";
 import { mockFile, type MockMachine } from "./mockMachine.js";
 
 export const MOCK_REMOTE_CONNECTED = "conn-dev-box";
@@ -360,6 +361,12 @@ export function createRemoteMachines(): MockMachine[] {
     true,
     "dev@10.0.0.5:22",
   );
+  devBox.info.remoteEnvironmentKey = buildRemoteEnvironmentKey({
+    kind: "ssh",
+    host: "10.0.0.5",
+    port: 22,
+    username: "dev",
+  });
   devBox.models.value = [
     {
       id: "openrouter",

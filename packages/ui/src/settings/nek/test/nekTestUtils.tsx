@@ -22,7 +22,11 @@ export interface NekTestEnv {
 }
 
 export function createNekTestEnv(
-  options: { projectCwd?: string | null; latencyMs?: number } = {},
+  options: {
+    projectCwd?: string | null;
+    projectEnvironmentKey?: string | null;
+    latencyMs?: number;
+  } = {},
 ): NekTestEnv {
   const config = new MockNekConfigApi({
     latencyMs: options.latencyMs ?? 0,
@@ -37,7 +41,11 @@ export function createNekTestEnv(
   const wrapper = ({ children }: { children: ReactNode }) => (
     <ZCodeIntlProvider initialLocale="zh-CN">
       <TooltipProvider>
-        <NekSettingsProvider apis={apis} projectCwd={projectCwd}>
+        <NekSettingsProvider
+          apis={apis}
+          projectCwd={projectCwd}
+          projectEnvironmentKey={options.projectEnvironmentKey}
+        >
           {children}
         </NekSettingsProvider>
       </TooltipProvider>

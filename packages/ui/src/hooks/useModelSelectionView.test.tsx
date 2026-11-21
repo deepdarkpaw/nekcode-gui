@@ -4,7 +4,11 @@ import type { IModelSelectionService, ModelSelectionView } from "@zcode/services
 import { describe, expect, it, vi } from "vitest";
 import { useModelSelectionServiceView } from "./useModelSelectionView.js";
 
-const VIEW: ModelSelectionView = { revision: 1, providers: [] };
+const VIEW: ModelSelectionView = {
+  revision: 1,
+  providers: [],
+  scope: { patterns: [], models: [], diagnostics: [] },
+};
 function deferred() {
   let resolve!: (view: ModelSelectionView) => void;
   let reject!: (error: Error) => void;

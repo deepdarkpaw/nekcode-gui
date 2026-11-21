@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { buildRemoteEnvironmentKey } from "@zcode/shared";
 import type { INekConfigApi, INekSettingsHostApi, NekRemoteHost } from "@zcode/shared/nek-protocol";
 import {
   createLocalNekConfigTargetHost,
@@ -20,6 +21,7 @@ function targetInfoOf(host: NekRemoteHost) {
     connectionId: host.connectionId,
     label: host.alias,
     hostname: host.alias,
+    remoteEnvironmentKey: buildRemoteEnvironmentKey(host.target),
     connected: host.state === "connected",
     nek: host.nek,
   };

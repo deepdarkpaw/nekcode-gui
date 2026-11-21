@@ -1,15 +1,16 @@
 /**
  * 服务商 / 模型引用的扫描与改写。
  *
- * 引用的唯一形状是 `provider/modelId`（可带 `:thinking` 后缀）；裸 id 与带 `*` 的 glob 不改写，
- * 因为它们不指向某个具体 provider。改名时要一起改的位置：
- * `defaultProvider`、`defaultModel`、`enabledModels`、`compaction.model`、
+ * 可定位的引用以 `provider/` 开头。范围数组统一由 `modelScopeReferences` 改写；本模块扫描影响，
+ * 并处理服务商改名时其它原有引用：`defaultProvider`、`defaultModel`、`compaction.model`、
  * `compaction.modelOverrides`（键）、`modelThinkingLevels`（键），以及子代理预设的 `model`。
  */
 import type {
   NekAgentPresetEntry,
   NekConfigScope,
   NekProviderReferences,
+  NekSettingsView,
+  NekThinkingLevel,
 } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 
@@ -56,7 +57,7 @@ export function scanProviderReferences(args: ReferenceScanArgs): NekProviderRefe
     defaultModel:
       settings.defaultProvider === providerId || (defaultModel?.startsWith(prefix) ?? false),
     enabledModels: (stringArray(settings.enabledModels) ?? []).filter((ref) =>
-      ref.startsWith(prefix),
+      ref.trim().toLowerCase().startsWith(prefix.toLowerCase()),
     ),
     compactionModel: (stringField(compaction, "model") ?? "").startsWith(prefix),
     modelThinkingLevels: Object.keys(thinkingLevels ?? {}).filter((ref) => ref.startsWith(prefix)),
@@ -95,11 +96,6 @@ export function planReferenceRewrites(
     const rewritten = rewriteModelReference(defaultModel, from, to);
     if (rewritten) patch.defaultModel = rewritten;
   }
-  const enabledModels = stringArray(settings.enabledModels);
-  if (enabledModels) {
-    const next = enabledModels.map((entry) => rewriteModelReference(entry, from, to) ?? entry);
-    if (next.some((entry, index) => entry !== enabledModels[index])) patch.enabledModels = next;
-  }
   const compaction = recordField(settings, "compaction");
   const compactionModel = stringField(compaction, "model");
   const rewrittenCompaction = compactionModel
@@ -137,6 +133,24 @@ export function planReferenceRewrites(
     presetRewrites,
     references: scanProviderReferences({ providerId: from, settings, presets }),
   };
+}
+
+/** 和范围写入合并，避免保存模型后再拿已失效的 settings revision 更新该模型的档位。 */
+export function modelThinkingPatch(
+  values: NekSettingsView,
+  provider: string,
+  previousId: string,
+  modelId: string,
+  level?: NekThinkingLevel | null,
+): Record<string, unknown> {
+  const previous = `${provider}/${previousId}`;
+  const next = `${provider}/${modelId}`;
+  const levels = values.modelThinkingLevels ?? {};
+  const patch: Record<string, NekThinkingLevel | null> = {};
+  if (previous !== next && levels[previous] !== undefined) patch[previous] = null;
+  const desired = level === undefined ? levels[previous] : level;
+  if (desired !== undefined && (desired ?? undefined) !== levels[next]) patch[next] = desired;
+  return Object.keys(patch).length ? { modelThinkingLevels: patch } : {};
 }
 
 /** 键需要改名的对象：新键带上原值，旧键写 `null`（删除）。 */

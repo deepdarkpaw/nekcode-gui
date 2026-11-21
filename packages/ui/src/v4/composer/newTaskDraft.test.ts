@@ -8,6 +8,7 @@ import { initializeNewTaskDraft } from "./newTaskDraft.js";
 
 const VIEW: ModelSelectionView = {
   revision: 1,
+  scope: { patterns: [], models: [], diagnostics: [] },
   providers: [
     {
       providerId: "mock",

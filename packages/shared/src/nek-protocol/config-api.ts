@@ -43,10 +43,12 @@ import type {
   NekConfigDiagnostic,
   NekFetchModelsResult,
   NekMcpTestResult,
+  NekModelScopeResult,
   NekProjectTrust,
   NekProviderDraft,
   NekTestProviderResult,
   NekTestWebSearchResult,
+  NekThinkingLevel,
 } from "./gui-rpc.js";
 import type {
   NekMcpExposure,
@@ -68,12 +70,12 @@ export interface INekConfigApi {
   saveProvider(
     target: NekConfigTarget,
     provider: NekProviderWrite,
-    options: { revision: string; isNew: boolean },
+    options: { revision: string; isNew: boolean; cwd?: string },
   ): Promise<NekConfigRevision>;
   deleteProvider(
     target: NekConfigTarget,
     providerId: string,
-    options: { revision: string },
+    options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   getProviderReferences(
     target: NekConfigTarget,
@@ -96,19 +98,24 @@ export interface INekConfigApi {
     target: NekConfigTarget,
     providerId: string,
     model: NekModelConfig,
-    options: { revision: string; previousId?: string },
+    options: {
+      revision: string;
+      previousId?: string;
+      cwd?: string;
+      defaultThinkingLevel?: NekThinkingLevel | null;
+    },
   ): Promise<NekConfigRevision>;
   addModels(
     target: NekConfigTarget,
     providerId: string,
     models: NekModelConfig[],
-    options: { revision: string },
+    options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   deleteModel(
     target: NekConfigTarget,
     providerId: string,
     modelId: string,
-    options: { revision: string },
+    options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   reorderModels(
     target: NekConfigTarget,
@@ -128,6 +135,14 @@ export interface INekConfigApi {
   getModelCatalog(target: NekConfigTarget, ids?: string[]): Promise<NekCatalogModel[]>;
   /** 当前目标上可用的模型（`provider/id`），用于默认模型、压缩模型、子代理模型选择。 */
   listAvailableModels(target: NekConfigTarget): Promise<NekCatalogModel[]>;
+  /** 由目标 nek 解析的工作区 CLI 模型范围；无 cwd 时只读全局范围。 */
+  getModelScope(target: NekConfigTarget, cwd?: string): Promise<NekModelScopeResult>;
+  /** 比对用户读到的范围，只在定义该范围的 settings.json 保存。 */
+  saveModelScope(
+    target: NekConfigTarget,
+    patterns: string[],
+    options: { cwd?: string; expectedPatterns: readonly string[] },
+  ): Promise<NekConfigRevision>;
   /** nek 的内置工具清单（`list_builtin_tools`）：工具名、描述与默认启用状态。 */
   listBuiltinTools(target: NekConfigTarget): Promise<NekBuiltinTool[]>;
 

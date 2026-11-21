@@ -21,7 +21,11 @@ export function withModelReadAdmission(
     close: () => client.close(),
     call: ((command: NekRpcCommand, context?: NekModelReadContext) => {
       const call = () => client.call(command, context);
-      if (command.type === "get_available_models" || command.type === "get_model_catalog")
+      if (
+        command.type === "get_available_models" ||
+        command.type === "get_model_catalog" ||
+        command.type === "get_model_scope"
+      )
         return reads.run(
           command,
           (shared) =>
@@ -51,7 +55,11 @@ export function withModelReadAdmission(
         reads.invalidate();
         return lease.reload(context);
       }
-      if (command.type === "auth_login" || command.type === "auth_logout") {
+      if (
+        command.type === "auth_login" ||
+        command.type === "auth_logout" ||
+        command.type === "set_project_trust"
+      ) {
         reads.invalidate();
         return call().finally(() => reads.invalidate());
       }
@@ -63,7 +71,8 @@ export function withModelReadAdmission(
 const MAX_READ_FLIGHTS = 16;
 type ModelReadCommand =
   | { type: "get_available_models" }
-  | { type: "get_model_catalog"; provider?: string; ids?: string[] };
+  | { type: "get_model_catalog"; provider?: string; ids?: string[] }
+  | { type: "get_model_scope"; cwd?: string };
 
 /** Coalesce identical readonly model RPCs, never selections/inputs or settled results. */
 export class NekControlModelReads {

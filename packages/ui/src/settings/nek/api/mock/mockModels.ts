@@ -24,6 +24,7 @@ import {
   type MockMachine,
 } from "./mockMachine.js";
 import { MOCK_CATALOG } from "./mockSeed.js";
+import { mockModelScope, updateMockModelScope } from "./mockModelScope.js";
 
 export type Touch = (file: MockFile<unknown>) => string;
 
@@ -47,7 +48,7 @@ export function findProvider(machine: MockMachine, id: string): NekProviderConfi
 export function saveProvider(
   machine: MockMachine,
   write: NekProviderWrite,
-  options: { revision: string; isNew: boolean },
+  options: { revision: string; isNew: boolean; cwd?: string },
   touch: Touch,
 ): string {
   assertRevision(machine.models, options.revision);
@@ -77,6 +78,8 @@ export function saveProvider(
     api: rest.api ?? "",
     ...(resolvedKey ? { apiKey: resolvedKey } : {}),
   };
+  const scope = mockModelScope(machine, availableModels(machine), options.cwd);
+  updateMockModelScope(machine, existing, next, options.cwd, touch, scope.models);
   machine.models.value = existing
     ? machine.models.value.map((item) => (item.id === write.id ? next : item))
     : [...machine.models.value, next];
@@ -89,10 +92,23 @@ export function updateModels(
   revision: string,
   update: (models: NekModelConfig[]) => NekModelConfig[],
   touch: Touch,
+  cwd?: string,
+  previousId?: string,
 ): string {
   assertRevision(machine.models, revision);
   const provider = findProvider(machine, providerId);
-  provider.models = update(provider.models);
+  const next = update(provider.models);
+  const scope = mockModelScope(machine, availableModels(machine), cwd);
+  updateMockModelScope(
+    machine,
+    provider,
+    { ...provider, models: next },
+    cwd,
+    touch,
+    scope.models,
+    previousId,
+  );
+  provider.models = next;
   return touch(machine.models);
 }
 
@@ -291,17 +307,19 @@ export function renameProvider(
   to: string,
   revision: string,
   touch: Touch,
+  cwd?: string,
 ): string {
   assertRevision(machine.models, revision);
   if (machine.models.value.some((provider) => provider.id === to)) {
     throw mockError("validation", `Provider ${to} already exists`, { id: "duplicate" });
   }
-  findProvider(machine, from).id = to;
+  const provider = findProvider(machine, from);
+  updateMockModelScope(machine, provider, { ...provider, id: to }, cwd, touch);
+  provider.id = to;
   const settings = machine.settings.value;
   if (settings.defaultProvider === from) {
     settings.defaultProvider = to;
   }
-  settings.enabledModels = settings.enabledModels?.map((ref) => renameRef(ref, from, to) ?? ref);
   if (settings.compaction?.model) {
     settings.compaction.model = renameRef(settings.compaction.model, from, to);
   }

@@ -43,16 +43,22 @@ const PAGES: Readonly<Record<NekSettingsSectionId, (env: NekSettingsSectionEnv) 
 export function NekSettingsSection({
   sectionId,
   projectCwd,
+  projectEnvironmentKey,
   isWindowsDesktop = false,
 }: {
   sectionId: NekSettingsSectionId;
   projectCwd?: string | null;
+  projectEnvironmentKey?: string | null;
   isWindowsDesktop?: boolean;
 }) {
   const apis = useMemo(() => resolveNekSettingsApis(), []);
   const render = PAGES[sectionId];
   return (
-    <NekSettingsProvider apis={apis} projectCwd={projectCwd ?? undefined}>
+    <NekSettingsProvider
+      apis={apis}
+      projectCwd={projectCwd ?? undefined}
+      projectEnvironmentKey={projectEnvironmentKey}
+    >
       {render({ isWindowsDesktop })}
     </NekSettingsProvider>
   );

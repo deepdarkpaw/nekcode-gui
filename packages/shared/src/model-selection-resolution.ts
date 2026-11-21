@@ -1,3 +1,4 @@
+import type { NekModelScopeResult } from "./nek-protocol/index.js";
 import type { ModelSelection } from "./model-selection.js";
 import type { EffectiveModelSelectionResult } from "./model-selection.js";
 
@@ -73,9 +74,11 @@ export interface ModelSelectionViewInput {
 export type ModelSelectionPreferredIssue = "configured-default-unavailable";
 
 export interface ModelSelectionView extends Partial<EffectiveModelSelectionResult> {
-  /** Catalog identity only: excludes workspace defaults. Not a readiness/recovery token. */
+  /** Catalog identity only: excludes workspace defaults and scope. Not a readiness/recovery token. */
   readonly revision: number;
+  /** 完整可用目录。范围只影响候选菜单，不影响已有选择的校验。 */
   readonly providers: readonly ModelSelectionProviderView[];
+  readonly scope: NekModelScopeResult;
   readonly preferredSelection?: ModelSelection;
   /** 配置里的显式默认模型不可用，调用方必须让用户重新选择。 */
   readonly preferredSelectionIssue?: ModelSelectionPreferredIssue;

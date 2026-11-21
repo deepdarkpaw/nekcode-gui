@@ -20,6 +20,7 @@ import {
   TID_SETTINGS_BACK_BUTTON,
   TID_SETTINGS_PAGE,
   TID_SETTINGS_SECTION_NAV,
+  buildRemoteEnvironmentKey,
   testId,
 } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
@@ -176,6 +177,19 @@ export function SettingsPage({
   const activeWorkspaceIdentity = useTabStore(
     (state) => state.activeWorkspaceIdentity ?? undefined,
   );
+  const activeRemoteTab = activeWorkspaceIdentity
+    ? workspaceTabs.find((tab) => tab.workspaceIdentity === activeWorkspaceIdentity)
+    : workspaceTabs.find(
+        (tab) =>
+          tab.workspacePath === (activeWorkspacePath ?? captionWorkspacePath) &&
+          (tab.remoteSessionId || tab.remoteTarget),
+      );
+  const activeRemoteTarget = activeRemoteTab?.remoteTarget;
+  const projectEnvironmentKey = activeRemoteTarget
+    ? buildRemoteEnvironmentKey(activeRemoteTarget)
+    : activeWorkspaceIdentity || activeRemoteTab
+      ? null
+      : undefined;
   const selectDirectory = useSelectDirectory();
   const services = useServices();
   const onboardingRecordService = services.onboardingRecordService;
@@ -781,6 +795,7 @@ export function SettingsPage({
                           <NekSettingsSection
                             sectionId={activeSection}
                             projectCwd={activeWorkspacePath ?? captionWorkspacePath}
+                            projectEnvironmentKey={projectEnvironmentKey}
                             isWindowsDesktop={Boolean(isWindowsDesktop)}
                           />
                         ) : activeSection === "general" ? (

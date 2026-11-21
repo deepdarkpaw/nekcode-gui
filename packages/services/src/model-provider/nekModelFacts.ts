@@ -5,6 +5,7 @@
  * - `listAvailableModels`（nek `get_available_models`）决定可用性：OAuth 已登录的内建服务商与
  *   models.json 的自定义服务商都由 nek 自己判定；
  * - `getModelCatalog`（nek `get_model_catalog`）提供模型详情与 nek 自己的思考等级；
+ * - `getModelScope`（nek `get_model_scope`）提供工作区的 CLI 模型范围和匹配诊断；
  * - `readModelsConfig` 提供 models.json 里的服务商显示名（与设置页同一字段）；
  * - `getAuthStatus`（nek `auth_status`）只给没有 models.json 条目的内建服务商补显示名；
  * - `readSettings` 提供默认模型/思考等级；有 workspace 时读 `project` 作用域的 `effective`，
@@ -21,6 +22,7 @@ import type {
   INekConfigApi,
   NekConfigTarget,
   NekModelsConfigView,
+  NekModelScopeResult,
   NekSessionReloadOutcome,
   NekSettingsReadResult,
 } from "@zcode/shared/nek-protocol";
@@ -28,10 +30,7 @@ import { clampNekThinkingLevel } from "./nekThinkingLevel.js";
 import { NekModelReadBudget, waitForModelRead, assertModelRead } from "../nek-config-api/index.js";
 
 /** 事实读取只需要 `INekConfigApi` 的这些方法；生产环境注入真实实现。 */
-export interface NekModelFactsApi extends Pick<
-  INekConfigApi,
-  "listAvailableModels" | "getModelCatalog" | "getAuthStatus" | "readSettings" | "watch"
-> {
+export interface NekModelFactsApi extends Pick<INekConfigApi, "readSettings" | "watch"> {
   /** Content-owning API ports admit their own model RPCs; non-owning ports require explicit reload. */
   readonly ownsModelRuntimeFreshness?: boolean;
   readonly modelReadMs?: number;
@@ -48,6 +47,11 @@ export interface NekModelFactsApi extends Pick<
     ids?: string[],
     context?: NekModelReadContext,
   ): Promise<NekCatalogModel[]>;
+  getModelScope(
+    target: NekConfigTarget,
+    cwd?: string,
+    context?: NekModelReadContext,
+  ): Promise<NekModelScopeResult>;
   getAuthStatus(
     target: NekConfigTarget,
     context?: NekModelReadContext,
@@ -83,6 +87,7 @@ export interface NekModelFacts {
   readonly providers: readonly NekModelFactsProvider[];
   readonly models: readonly NekModelFactsModel[];
   readonly defaults: NekModelFactsDefaults;
+  readonly scope: NekModelScopeResult;
 }
 
 export interface NekModelFactsReadOptions extends NekModelReadContext {
@@ -258,18 +263,22 @@ export function createNekModelFactsSource(
           assertHealthy(cwd);
         }
         context?.stage?.("facts");
-        const [available, catalog, authStatus, modelsConfig, settings] = await waitForModelRead(
-          Promise.all([
-            readStage("get_available_models", () => api.listAvailableModels(target, context)),
-            readStage("get_model_catalog", () => api.getModelCatalog(target, undefined, context)),
-            readStage("auth_status", () => api.getAuthStatus(target, context)),
-            readStage("models-config", () => api.readModelsConfig(target)),
-            readStage("settings", () =>
-              cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
-            ),
-          ]),
-          context,
-        );
+        const [available, catalog, scope, authStatus, modelsConfig, settings] =
+          await waitForModelRead(
+            Promise.all([
+              readStage("get_available_models", () => api.listAvailableModels(target, context)),
+              readStage("get_model_catalog", () => api.getModelCatalog(target, undefined, context)),
+              readStage("get_model_scope", () =>
+                api.getModelScope(target, cwd || undefined, context),
+              ),
+              readStage("auth_status", () => api.getAuthStatus(target, context)),
+              readStage("models-config", () => api.readModelsConfig(target)),
+              readStage("settings", () =>
+                cwd ? api.readSettings(target, "project", cwd) : api.readSettings(target, "global"),
+              ),
+            ]),
+            context,
+          );
         assertModelRead(context);
         assertHealthy(cwd);
         if (settings.diagnostics.length > 0)
@@ -277,7 +286,7 @@ export function createNekModelFactsSource(
             "settings",
             new Error(settings.diagnostics.map((item) => item.message).join("; ")),
           );
-        return composeFacts({ available, catalog, authStatus, modelsConfig, settings });
+        return composeFacts({ available, catalog, scope, authStatus, modelsConfig, settings });
       } finally {
         const timings = budget.finish();
         budget.abort();
@@ -304,7 +313,7 @@ export function createNekModelFactsSource(
               const observation = change.revision.startsWith("watch-");
               if (
                 !observation &&
-                !["models.json", "settings.json", "auth.json"].includes(name ?? "")
+                !["models.json", "settings.json", "auth.json", "trust.json"].includes(name ?? "")
               )
                 return;
               if (change.scope === "project" && !observation && name !== "settings.json") return;
@@ -319,7 +328,10 @@ export function createNekModelFactsSource(
                 else globalErrors.delete(change.file);
                 // Only models.json has content-fenced RPC admission. Auth/settings changes
                 // still need the existing reload path (including external OAuth login/logout).
-                if (!api.ownsModelRuntimeFreshness || name !== "models.json") {
+                if (
+                  name !== "trust.json" &&
+                  (!api.ownsModelRuntimeFreshness || name !== "models.json")
+                ) {
                   if (!dirty) epoch += 1;
                   dirty = true;
                 }
@@ -378,6 +390,7 @@ export function createNekModelFactsSource(
 function composeFacts(input: {
   readonly available: readonly NekCatalogModel[];
   readonly catalog: readonly NekCatalogModel[];
+  readonly scope: NekModelScopeResult;
   readonly authStatus: readonly NekAuthProviderStatus[];
   readonly modelsConfig: Pick<NekModelsConfigView, "providers">;
   readonly settings: Pick<NekSettingsReadResult, "effective" | "defaults">;
@@ -426,9 +439,17 @@ function composeFacts(input: {
       supportsImage: model.input.includes("image"),
     });
   }
+  const modelKeys = new Set(models.map((model) => availableKey(model.providerId, model.modelId)));
+  if (input.scope.models.some((model) => !modelKeys.has(availableKey(model.provider, model.id)))) {
+    throw new NekModelFactsReadError(
+      "get_model_scope",
+      new Error("Model scope and available catalog changed during the read; retry the read"),
+    );
+  }
   return {
     providers,
     models,
+    scope: input.scope,
     defaults: {
       ...(effective.defaultProvider !== undefined ? { providerId: effective.defaultProvider } : {}),
       ...(effective.defaultModel !== undefined ? { modelId: effective.defaultModel } : {}),

@@ -80,6 +80,7 @@ export interface ModelSelectFooterAction {
   key: string;
   label: string;
   selected?: boolean;
+  keepOpen?: boolean;
   onSelect?: () => void;
 }
 
@@ -544,7 +545,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           className={cn(
             shouldShowProviderLevel
               ? "w-max min-w-48 max-w-[calc(100vw-2rem)]"
-              : "w-48 max-h-72 overflow-y-auto",
+              : "max-h-72 w-max min-w-48 max-w-[calc(100vw-2rem)] overflow-y-auto",
           )}
           align={contentAlign}
           side={contentSide}
@@ -645,8 +646,9 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
                   className="min-h-8 gap-2 px-2"
                   data-model-footer-action={action.key}
                   data-model-footer-action-selected={action.selected ? "true" : undefined}
-                  onSelect={() => {
-                    handlePopoverOpenChange(false);
+                  onSelect={(event) => {
+                    if (action.keepOpen) event.preventDefault();
+                    else handlePopoverOpenChange(false);
                     action.onSelect?.();
                   }}
                 >

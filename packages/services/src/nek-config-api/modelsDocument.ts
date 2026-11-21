@@ -20,10 +20,8 @@ import {
   EMPTY_MODELS_TEXT,
   parseJsoncMapping,
   readTextDocument,
-  writeTextDocument,
 } from "./documents.js";
-import { conflict, fieldErrorsOf, validationError } from "./errors.js";
-import { sameRevision } from "./revision.js";
+import { fieldErrorsOf, validationError } from "./errors.js";
 import { validateModelEndpoints } from "./modelsValidation.js";
 
 /** nek 内置服务商的 ID（models.json 里出现同名条目即为"覆盖内置服务商"）。 */
@@ -294,21 +292,12 @@ export async function readModelsSnapshot(
   return { path, text, revision: document.revision, data, providers: readProviders(path, data) };
 }
 
-/**
- * 逐条编辑后一次性原子写；返回新 revision。
- *
- * 写入前重新读一次原文并比对 revision：`models.json` 没有锁（nek 只读它），
- * 靠"写前再确认"把被外部改写的窗口压到最小。
- */
-export async function editModelsSnapshot(
-  executor: NekConfigHostExecutor,
+/** 先验证完整候选，避免无效的模型定义改动 settings.json 的范围。 */
+export function prepareModelsEdit(
   snapshot: NekModelsSnapshot,
-  expectedRevision: string,
   edits: readonly NekJsoncEdit[],
-): Promise<string> {
-  const current = await readTextDocument(executor, snapshot.path);
-  if (!sameRevision(current.revision, expectedRevision)) throw conflict(snapshot.path);
-  let text = current.content ?? EMPTY_MODELS_TEXT;
+): { text: string; providers: NekModelsSnapshot["providers"] } {
+  let text = snapshot.text;
   for (const edit of edits) text = applyJsoncEdit(snapshot.path, text, edit.pointer, edit.value);
   const candidates = readProviders(snapshot.path, parseJsoncMapping(snapshot.path, text));
   for (const [id, provider] of Object.entries(candidates)) {
@@ -317,5 +306,5 @@ export async function editModelsSnapshot(
     validateProviderValue(id, provider);
     validateModelEndpoints(id, provider, previous, BUILTIN_PROVIDER_IDS.has(id));
   }
-  return await writeTextDocument(executor, snapshot.path, text);
+  return { text, providers: candidates };
 }

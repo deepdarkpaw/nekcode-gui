@@ -66,6 +66,24 @@ describe("MockNekConfigApi", () => {
     );
   });
 
+  it("does not append models to an unresolved scope before saving", async () => {
+    const api = new MockNekConfigApi();
+    const settings = await api.readSettings(LOCAL, "global");
+    const patterns = ["deepseek/not-yet-added"];
+    await api.patchSettings(LOCAL, "global", { enabledModels: patterns }, settings);
+    expect((await api.getModelScope(LOCAL)).models).toEqual([]);
+    await api.addModels(
+      LOCAL,
+      "deepseek",
+      [{ id: "not-yet-added" }, { id: "outside" }],
+      await api.readModelsConfig(LOCAL),
+    );
+    expect(await api.getModelScope(LOCAL)).toMatchObject({
+      patterns,
+      models: [{ provider: "deepseek", id: "not-yet-added" }],
+    });
+  });
+
   it("previews renames with every reference and applies them", async () => {
     const api = new MockNekConfigApi();
     const preview = await api.previewProviderRename(LOCAL, "anthropic-proxy", "claude");

@@ -26,6 +26,7 @@ import { toast } from "@/components/ui/toast.js";
 import { useFocusRestore } from "@/hooks/useFocusRestore.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { LOCAL_TARGET, useNekConfigApi } from "../../api/NekSettingsContext.js";
+import { useModelScopeCwd } from "../../api/useModelScopeCwd.js";
 import { toNekConfigApiError } from "../../api/nekErrors.js";
 import { Segmented } from "../../components/inputs.js";
 import { CopyResults } from "./CopyResults.js";
@@ -113,6 +114,7 @@ export function CopyToHostDialog({
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const api = useNekConfigApi();
+  const targetCwd = useModelScopeCwd(target);
   const focusRestore = useFocusRestore(open);
   const { sources, error } = useLocalSources(open);
   const [selection, setSelection] = useState<NekCopySelection>({
@@ -127,7 +129,7 @@ export function CopyToHostDialog({
   const [result, setResult] = useState<NekCopyResult | null>(null);
 
   const runCopy = async (full: NekCopyResolution) => {
-    const outcome = await api.copy(LOCAL_TARGET, target, selection, full);
+    const outcome = await api.copy(LOCAL_TARGET, target, { ...selection, targetCwd }, full);
     setResult(outcome);
     const failed = outcome.items.filter((item) => item.status === "failed").length;
     const copied = outcome.items.filter((item) => item.status === "copied").length;

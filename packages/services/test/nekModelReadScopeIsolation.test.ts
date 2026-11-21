@@ -20,7 +20,12 @@ function deferred() {
 }
 
 test("model reads in other workspaces must not exhaust a stable workspace read", async () => {
-  const facts: NekModelFacts = { providers: [], models: [], defaults: {} };
+  const facts: NekModelFacts = {
+    providers: [],
+    models: [],
+    defaults: {},
+    scope: { patterns: [], models: [], diagnostics: [] },
+  };
   const gates = [deferred(), deferred()];
   let readingCount = 0;
   let settled = false;

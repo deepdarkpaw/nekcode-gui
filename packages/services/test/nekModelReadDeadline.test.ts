@@ -40,6 +40,7 @@ function client(close = () => undefined): NekControlClient {
     call: (async (command: NekRpcCommand) => {
       if (command.type === "reload") return { deferred: false, diagnostics: [] };
       if (command.type === "auth_status") return { providers: [] };
+      if (command.type === "get_model_scope") return { patterns: [], models: [], diagnostics: [] };
       return { models: [] };
     }) as NekControlClient["call"],
     onAuthEvent: () => () => undefined,
@@ -271,6 +272,7 @@ test("ML4/ML5: a timed-out facts RPC detaches every pending waiter and retry reu
   const h = createProcess((command) => {
     if (command.type === "auth_status") return { providers: [] };
     if (slow) return blocked.promise;
+    if (command.type === "get_model_scope") return { patterns: [], models: [], diagnostics: [] };
     return { models: [] };
   });
   let starts = 0;
@@ -454,6 +456,7 @@ test("ML6: available/catalog/auth/settings failures retain distinct stages and o
   for (const [method, stage] of [
     ["listAvailableModels", "get_available_models"],
     ["getModelCatalog", "get_model_catalog"],
+    ["getModelScope", "get_model_scope"],
     ["getAuthStatus", "auth_status"],
     ["readSettings", "settings"],
   ] as const) {

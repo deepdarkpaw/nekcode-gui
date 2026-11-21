@@ -70,6 +70,37 @@ describe("desktop nek IPC client", () => {
     expect(requests[0]?.operation).toBe("invoke");
   });
 
+  it("sends scope reads and edits to the config IPC with the remote cwd", async () => {
+    const requests: Request[] = [];
+    const scope = {
+      patterns: ["provider/model"],
+      models: [{ provider: "provider", id: "model" }],
+      diagnostics: [],
+    };
+    const bridge = createBridge((request) => {
+      requests.push(request);
+      return Promise.resolve({
+        ok: true,
+        value: request.method === "getModelScope" ? scope : { revision: "r2" },
+      });
+    });
+    globalWithBridge.zcode = { nekIpc: bridge };
+    const { config } = createDesktopNekSettingsApis()!;
+    const target = { kind: "remote", connectionId: "r1" } as const;
+    await expect(config.getModelScope(target, "/repo")).resolves.toEqual(scope);
+    await expect(
+      config.saveModelScope(target, [], { cwd: "/repo", expectedPatterns: scope.patterns }),
+    ).resolves.toEqual({ revision: "r2" });
+    expect(requests).toMatchObject([
+      { operation: "invoke", method: "getModelScope", args: [target, "/repo"] },
+      {
+        operation: "invoke",
+        method: "saveModelScope",
+        args: [target, [], { cwd: "/repo", expectedPatterns: scope.patterns }],
+      },
+    ]);
+  });
+
   it("subscribes, forwards events, and cancels the host subscription", async () => {
     const requests: Request[] = [];
     const eventListeners = new Set<(payload: unknown) => void>();

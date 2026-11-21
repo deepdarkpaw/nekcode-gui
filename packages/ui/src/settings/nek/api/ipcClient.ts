@@ -200,6 +200,7 @@ export function createDesktopNekSettingsApis(): NekSettingsApis | null {
   if (!bridge) return null;
   const client = new NekIpcClient(bridge);
   return {
+    // getModelScope / saveModelScope 沿用普通 invoke；不另开订阅或目标路由。
     config: client.createApi<INekConfigApi>("config"),
     host: client.createApi<INekSettingsHostApi>("settings-host"),
     isMock: false,

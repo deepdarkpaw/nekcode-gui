@@ -22,6 +22,7 @@ import { createMcpGroup } from "./mcpApi.js";
 import type { NekMcpGroup } from "./mcpApi.js";
 import { createModelsGroup } from "./modelsApi.js";
 import type { NekModelsGroup } from "./modelsApi.js";
+import { createSaveModelScope } from "./modelScopeSettings.js";
 import { NekConfigRuntime } from "./runtime.js";
 import type { NekConfigApiOptions } from "./runtime.js";
 import { createSettingsGroup } from "./settingsApi.js";
@@ -39,6 +40,7 @@ export class NekConfigApi implements INekConfigApi {
   private readonly agent: NekAgentGroup;
   private readonly control: NekControlGroup;
   private readonly copyGroup: NekCopyGroup;
+  readonly saveModelScope: INekConfigApi["saveModelScope"];
 
   constructor(options: NekConfigApiOptions) {
     this.options = options;
@@ -50,6 +52,7 @@ export class NekConfigApi implements INekConfigApi {
     this.agent = createAgentGroup(this.runtime);
     this.control = createControlGroup(this.runtime);
     this.copyGroup = createCopyGroup(this.runtime);
+    this.saveModelScope = createSaveModelScope(this.runtime);
   }
 
   /** Host-only production wiring: binds live CLI writers to this config owner. */
@@ -93,6 +96,8 @@ export class NekConfigApi implements INekConfigApi {
     this.control.getModelCatalog(...args);
   listAvailableModels: NekControlGroup["listAvailableModels"] = (...args) =>
     this.control.listAvailableModels(...args);
+  getModelScope: NekControlGroup["getModelScope"] = (...args) =>
+    this.control.getModelScope(...args);
   listBuiltinTools: INekConfigApi["listBuiltinTools"] = (...args) =>
     this.control.listBuiltinTools(...args);
 

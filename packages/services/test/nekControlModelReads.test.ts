@@ -115,6 +115,33 @@ test("identical concurrent reads share failures; changed params and targets neve
   }
 });
 
+test("scope reads coalesce only within the same cwd and models fingerprint", async () => {
+  const h = runtimeHarness();
+  const reads = new NekControlModelReads(h.executor);
+  const waiting = gate<string>();
+  const entered = gate<void>();
+  const scope = { type: "get_model_scope" as const, cwd: "/work/a" };
+  try {
+    const first = reads.run(scope, async () => {
+      entered.resolve();
+      return await waiting.promise;
+    });
+    await entered.promise;
+    const duplicate = reads.run(scope, async () => "not coalesced");
+    assert.equal(
+      await reads.run({ ...scope, cwd: "/work/b" }, async () => "other cwd"),
+      "other cwd",
+    );
+    h.executor.setFile(modelsPath, modelsText("new"));
+    assert.equal(await reads.run(scope, async () => "new fingerprint"), "new fingerprint");
+    waiting.resolve("original");
+    assert.deepEqual(await Promise.all([first, duplicate]), ["original", "original"]);
+  } finally {
+    reads.dispose();
+    await h.dispose();
+  }
+});
+
 test("unique in-flight work is bounded and dispose rejects late completion", async () => {
   const h = runtimeHarness(),
     reads = new NekControlModelReads(h.executor);

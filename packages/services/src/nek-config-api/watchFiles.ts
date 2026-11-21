@@ -10,6 +10,7 @@ export const CONFIG_FILE_NAMES: readonly string[] = [
   "models.json",
   "auth.json",
   "settings.json",
+  "trust.json",
   "mcp.json",
   "nek.yaml",
   "AGENTS.md",

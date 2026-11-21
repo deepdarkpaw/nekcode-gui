@@ -11,8 +11,13 @@ import type { IModelSelectionService, ModelSelectionView } from "@zcode/services
 import { describe, expect, it, vi } from "vitest";
 import { useDraftModelReadinessGate } from "./useDraftModelReadinessGate.js";
 
-const EMPTY_VIEW: ModelSelectionView = { revision: 1, providers: [] };
+const EMPTY_VIEW: ModelSelectionView = {
+  revision: 1,
+  providers: [],
+  scope: { patterns: [], models: [], diagnostics: [] },
+};
 const READY_VIEW: ModelSelectionView = {
+  ...EMPTY_VIEW,
   revision: 2,
   providers: [
     {
