@@ -17,9 +17,8 @@ import {
 import type { IRemoteBackend } from "./backend.js";
 import { wrapStdioStream } from "./stdio-socket.js";
 import { performHandshake } from "./handshake.js";
-import { deployServer } from "./deploy.js";
-import type { DeployOptions } from "./deploy.js";
-import { REMOTE_BASE } from "./deployShared.js";
+import { deployServer, type DeployOptions } from "./deploy.js";
+import { REMOTE_NODE_PATH, REMOTE_SERVER_PATH } from "./remoteAssetDeployDecision.js";
 import { assertSupportedRemoteEnvironment } from "@zcode/server/remote/remotePlatformSupport.js";
 import { quotePosixShellArg } from "./posixShell.js";
 import { formatWslProxyForLog } from "./wslProxy.js";
@@ -105,7 +104,7 @@ function throwIfRemoteConnectAborted(signal: AbortSignal | undefined): void {
  *
  * Steps:
  * 1. detect() → { platform, arch }
- * 2. Deploy if needed (upload node + server bundle + node-pty)
+ * 2. Deploy if needed (verified SSH download or bundled upload)
  * 3. exec server command
  * 4. Handshake (read hello, send ack)
  * 5. Wrap stdio → ISocket → SocketProtocol → ChannelClient → RemoteServiceAccess
@@ -396,5 +395,5 @@ function buildRemoteServerCommand(
       );
     }
   }
-  return `${envParts.join(" ")} ${REMOTE_BASE}/node ${REMOTE_BASE}/zcode-server.cjs`;
+  return `${envParts.join(" ")} ${REMOTE_NODE_PATH} ${REMOTE_SERVER_PATH}`;
 }

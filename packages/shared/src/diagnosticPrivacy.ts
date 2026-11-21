@@ -8,6 +8,7 @@ import {
   diagnosticPrefixes,
   diagnosticModules,
 } from "./diagnosticLogCatalog.js";
+import { remoteAssetTransferProgressSchema } from "./remoteAssetTransferProgress.js";
 
 const messages = new Set(diagnosticMessages);
 const numericKeys = new Set<string>(DiagnosticMetricSchema.options);
@@ -106,6 +107,16 @@ function safeValue(value: unknown): unknown {
   if (typeof value === "string") return safeString(value);
   if (!value || typeof value !== "object") return "[omitted]";
   const entries = Object.getOwnPropertyDescriptors(value);
+  if (entries.remoteAssetTransfer && "value" in entries.remoteAssetTransfer) {
+    // 仅解析 own data，不能借进度记录调用 getter 或转发任意业务字符串。
+    const data = Object.fromEntries(
+      Object.entries(entries)
+        .filter(([, descriptor]) => "value" in descriptor)
+        .map(([key, descriptor]) => [key, descriptor.value]),
+    );
+    const progress = remoteAssetTransferProgressSchema.safeParse(data);
+    if (progress.success) return progress.data;
+  }
   const parsed = parseDiagnosticRecord(value);
   if (parsed) return parsed;
   const result: Record<string, unknown> = {};

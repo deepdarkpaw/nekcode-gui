@@ -29,9 +29,13 @@ export interface RemoteUploadProgress {
 export interface RemoteUploadOptions {
   onProgress?: (progress: RemoteUploadProgress) => void;
   signal?: AbortSignal;
+  /** 部署 staging 已在持锁状态创建，传输适配器不再探测或重建该目录。 */
+  parentAlreadyExists?: boolean;
 }
 
 export interface IRemoteBackend extends IDisposable {
+  /** 只有 SSH 才让目标自行下载发行资产；本地子系统和容器继续复制。 */
+  readonly kind?: "ssh" | "wsl" | "docker";
   /** WSL 可选的运行时网络解析；其它远端类型保持未注入。 */
   resolveRuntimeProxy?(proxyUrl: string): Promise<string>;
   /** 等待当前 backend 自己创建的底层进程/连接完成回收；不允许扩大到共享运行时。 */

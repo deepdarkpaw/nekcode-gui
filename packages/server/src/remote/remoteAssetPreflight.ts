@@ -1,111 +1,80 @@
-import type { IRemoteBackend, StdioStream } from "@zcode/server/remote/backend.js";
-import { waitForClose } from "@zcode/server/remote/deployShared.js";
+import type { IRemoteBackend } from "./backend.js";
+import { runRemoteAssetCommand } from "./remoteAssetCommand.js";
+import type { RemoteInstallAsset } from "./remoteAssetDeployDecision.js";
+import { quotePosixPathArg, quotePosixShellArg } from "./posixShell.js";
+import { buildServerBundleDeployCheck } from "./serverBundleDeployCheck.js";
 
-export type RemoteSha256Tool = "sha256sum" | "shasum" | "openssl";
+type Sha256Tool = "sha256sum" | "shasum" | "openssl";
 
-export interface RemoteAssetTools {
-  tar: "tar";
-  sha256: RemoteSha256Tool;
-}
+const MAX_MARKER_BYTES = 384;
 
-interface RemoteAssetPreflightLoggers {
-  log: (...args: unknown[]) => void;
-}
-
-export async function detectRemoteAssetTools(
+/** 一条 exec 读取版本、能力、所有标记及文件存在性；待安装时再解释工具探测结果。 */
+export async function probeRemoteAssets(
   backend: IRemoteBackend,
-  loggers: RemoteAssetPreflightLoggers,
-): Promise<RemoteAssetTools> {
-  loggers.log("[remote-assets] preflight: checking remote verification tools");
-
-  const stream = await backend.exec(buildPreflightCommand());
-  const stdoutPromise = collectStdout(stream);
-  await waitForClose(stream);
-  const stdout = await stdoutPromise;
-
-  const values = parseToolLines(stdout);
-  const tar = values.tar === "tar" ? "tar" : null;
-  const sha256 = parseSha256Tool(values.sha256);
-
-  if (!tar) {
-    throw new Error("远端服务器缺少 tar，无法解压 ZCode 远程资源。请安装 tar。");
+  appVersion: string,
+  assets: readonly RemoteInstallAsset[],
+  signal?: AbortSignal,
+): Promise<ReadonlyMap<string, string>> {
+  const script = [
+    "set -eu",
+    `probe_asset() {
+      [ -f "$2" ] || return 0
+      printf '%s-present\\t1\\n' "$1"
+      if [ -f "$3" ] && [ -r "$3" ]; then
+        printf '%s-marker\\t' "$1"
+        head -c ${MAX_MARKER_BYTES + 1} < "$3" | base64 | tr -d '\\r\\n'
+        printf '\\n'
+      fi
+    }`,
+    ...assets.map(
+      ({ component, remotePath, marker }) =>
+        `probe_asset ${quotePosixShellArg(component.id)} ${quotePosixPathArg(remotePath)} ${quotePosixPathArg(marker.path)}`,
+    ),
+    buildServerBundleDeployCheck(appVersion),
+    'for tool in sha256sum shasum openssl; do if command -v "$tool" >/dev/null 2>&1; then printf \'sha256\\t%s\\n\' "$tool"; break; fi; done',
+    ...(backend.kind === "ssh"
+      ? [
+          "if command -v tar >/dev/null 2>&1; then printf 'tar\\t1\\n'; fi",
+          `if command -v curl >/dev/null 2>&1; then
+        printf 'downloader\\tcurl\\n'
+      elif command -v wget >/dev/null 2>&1; then
+        if command -v timeout >/dev/null 2>&1; then printf 'downloader\\twget\\n';
+        else printf 'downloader\\twget-no-timeout\\n'; fi
+      fi`,
+        ]
+      : []),
+    "printf 'nek-deploy-probe-complete\\t1\\n'",
+  ].join("\n");
+  const { code, stdout, stderr } = await runRemoteAssetCommand(backend, script, signal);
+  // 不把 SSH 断线/截断当成冷安装；probe 的完成帧必须存在。
+  if (code !== 0 || !stdout.trimEnd().endsWith("nek-deploy-probe-complete\t1")) {
+    throw new Error(`[deploy] remote asset probe failed (code=${code}): ${stderr.trim()}`);
   }
-  if (!sha256) {
-    throw new Error(
-      "远端服务器缺少 sha256sum、shasum 或 openssl，无法校验 ZCode 远程资源。请安装其中一个校验工具。",
-    );
-  }
-
-  loggers.log(`[remote-assets] preflight: selected tools tar=${tar} sha256=${sha256}`);
-
-  return { tar, sha256 };
-}
-
-function buildPreflightCommand(): string {
-  return [
-    "tar_tool=",
-    "if command -v tar >/dev/null 2>&1; then tar_tool=tar; fi",
-    "sha_tool=",
-    "if command -v sha256sum >/dev/null 2>&1; then sha_tool=sha256sum; elif command -v shasum >/dev/null 2>&1; then sha_tool=shasum; elif command -v openssl >/dev/null 2>&1; then sha_tool=openssl; fi",
-    'printf \'tar=%s\nsha256=%s\n\' "$tar_tool" "$sha_tool"',
-  ].join("; ");
-}
-
-function parseToolLines(stdout: string): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const line of stdout.split("\n")) {
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
+  const snapshot = new Map<string, string>();
+  for (const line of stdout.split(/\r?\n/u)) {
+    const split = line.indexOf("\t");
+    if (split < 0) continue;
+    const key = line.slice(0, split);
+    const value = line.slice(split + 1);
+    if (key.endsWith("-marker")) {
+      const data = Buffer.from(value, "base64");
+      if (data.length <= MAX_MARKER_BYTES) snapshot.set(key.slice(0, -7), data.toString());
+    } else {
+      snapshot.set(key, value);
     }
-    values[line.slice(0, separatorIndex)] = line.slice(separatorIndex + 1).trim();
   }
-  return values;
+  return snapshot;
 }
 
-function parseSha256Tool(value?: string): RemoteSha256Tool | null {
-  return value === "sha256sum" || value === "shasum" || value === "openssl" ? value : null;
+export function requireRemoteSha256Tool(snapshot: ReadonlyMap<string, string>): Sha256Tool {
+  const tool = snapshot.get("sha256");
+  if (tool === "sha256sum" || tool === "shasum" || tool === "openssl") return tool;
+  throw new Error("远端缺少 SHA256 校验工具，请安装 sha256sum、shasum 或 openssl 后重试。");
 }
 
-async function collectStdout(stream: StdioStream): Promise<string> {
-  return new Promise((resolve) => {
-    let stdout = "";
-    let settled = false;
-    let closeFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-    const clearCloseFallback = () => {
-      if (!closeFallbackTimer) {
-        return;
-      }
-      clearTimeout(closeFallbackTimer);
-      closeFallbackTimer = null;
-    };
-    const settle = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearCloseFallback();
-      resolve(stdout);
-    };
-    const scheduleCloseFallback = () => {
-      if (settled) {
-        return;
-      }
-      clearCloseFallback();
-      closeFallbackTimer = setTimeout(settle, 50);
-    };
-
-    stream.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
-      if (closeFallbackTimer) {
-        scheduleCloseFallback();
-      }
-    });
-    stream.stdout.on("end", settle);
-    stream.stdout.on("close", settle);
-    stream.stdout.on("error", settle);
-    // ssh2 的 exit/onClose 可能早于 stdout data；不能在 onClose 立刻结束收集。
-    // 这里给 stdout 一个短暂排空窗口，同时仍兜底处理 stdout 不触发 end/close 的后端实现，避免 preflight 卡住。
-    stream.onClose(scheduleCloseFallback);
-  });
+/** 从 stdin 读，避免文件名转义或路径空格改变摘要格式。 */
+export function buildRemoteChecksumCommand(tool: Sha256Tool, file: string): string {
+  if (tool === "sha256sum") return `sha256sum < ${file} | awk '{print $1}'`;
+  if (tool === "shasum") return `shasum -a 256 < ${file} | awk '{print $1}'`;
+  return `openssl dgst -sha256 < ${file} | awk '{print $NF}'`;
 }

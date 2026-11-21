@@ -17,7 +17,7 @@ export async function extractTarGzBuffer(bytes: Uint8Array, targetDir: string): 
   const targetRoot = resolve(targetDir);
   await mkdir(targetRoot, { recursive: true });
 
-  const archiveBuffer = await gunzipAsync(bytes);
+  const archiveBuffer = await gunzipAsync(bytes, { maxOutputLength: 256 * 1024 ** 2 });
   let offset = 0;
   let nextEntryName: string | null = null;
 

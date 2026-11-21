@@ -43,6 +43,7 @@ function buildDockerExecArgs(containerName: string, commandArgs: string[]): stri
 }
 
 export class DockerBackend implements IRemoteBackend {
+  readonly kind = "docker" as const;
   private readonly dockerCommand = resolveDockerCommand();
   private readonly options: DockerConnectOptions;
   private resolvedInfoPromise: Promise<ResolvedDockerInfo> | null = null;
@@ -89,7 +90,9 @@ export class DockerBackend implements IRemoteBackend {
     // 上传流不会帮我们创建父目录。
     // 如果直接写入 `~/.zcodium/server/...` 这类首次连接路径，上传会因为目录不存在而失败。
     // 先显式 `mkdir -p`，再由容器当前用户写入目标文件，和 SSH/WSL 保持一致。
-    await this.execSimple(`mkdir -p ${quotePosixShellArg(parentDir)}`);
+    if (!options?.parentAlreadyExists) {
+      await this.execSimple(`mkdir -p ${quotePosixShellArg(parentDir)}`);
+    }
 
     // `docker cp` 复制到容器后的文件可能保留宿主 UID/GID，
     // 非 root 容器用户随后无法 chmod。统一由容器当前用户通过 stdin 写入，

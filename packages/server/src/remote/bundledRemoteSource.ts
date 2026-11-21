@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import {
@@ -11,6 +12,8 @@ import {
 import { extractTarGzBuffer } from "@zcode/server/remote/localTarGz.js";
 
 type Component = BundledRemoteManifest["components"][number];
+const MAX_ARCHIVE_BYTES = 128 * 1024 ** 2;
+const MAX_MANIFEST_BYTES = 64 * 1024;
 
 async function containedFile(directory: string, path: string): Promise<string> {
   const root = await realpath(directory);
@@ -29,7 +32,9 @@ async function containedFile(directory: string, path: string): Promise<string> {
 
 /** One deployment owns the manifest snapshot and its temporary, verified extraction. */
 export class BundledRemoteSource {
-  private manifestPromise: Promise<BundledRemoteManifest> | undefined;
+  private manifestPromise:
+    | Promise<{ manifest: BundledRemoteManifest; archiveSizes: ReadonlyMap<string, number> }>
+    | undefined;
   private directoryPromise: Promise<string> | undefined;
   private disposed = false;
 
@@ -46,7 +51,7 @@ export class BundledRemoteSource {
       throw new Error(`Unsupported bundled remote platform: ${options.platformArch}`);
     }
     if (!options.directory)
-      throw new Error("Bundled remote assets are missing; rebuild or reinstall ZCodium");
+      throw new Error("Bundled remote assets are missing; rebuild or reinstall nekcode");
   }
 
   private assertActive(): void {
@@ -54,36 +59,54 @@ export class BundledRemoteSource {
     this.options.signal?.throwIfAborted();
   }
 
-  getManifest(): Promise<BundledRemoteManifest> {
-    try {
-      this.assertActive();
-      this.manifestPromise ??= this.readManifest();
-      return this.manifestPromise;
-    } catch (error) {
-      return Promise.reject(error);
-    }
+  async getManifest(): Promise<BundledRemoteManifest> {
+    return (await this.getSnapshot()).manifest;
   }
 
-  private async readArchive(component: Component): Promise<Buffer> {
+  async getSnapshot() {
+    this.assertActive();
+    this.manifestPromise ??= this.readManifest();
+    return this.manifestPromise;
+  }
+
+  private async verifyArchive(component: Component, chunks?: Buffer[]): Promise<number> {
     this.assertActive();
     const path = await containedFile(this.options.directory, component.artifactPath);
-    const bytes = await readFile(path, { signal: this.options.signal });
-    if (createHash("sha256").update(bytes).digest("hex") !== component.sha256) {
+    const hash = createHash("sha256");
+    let size = 0;
+    for await (const chunk of createReadStream(path, { signal: this.options.signal })) {
+      size += chunk.length;
+      if (size > MAX_ARCHIVE_BYTES)
+        throw new Error(`Bundled remote archive too large: ${component.id}`);
+      hash.update(chunk);
+      chunks?.push(chunk);
+    }
+    if (size === 0 || hash.digest("hex") !== component.sha256) {
       throw new Error(`Bundled remote SHA256 mismatch: ${component.id}`);
     }
-    return bytes;
+    return size;
   }
 
-  private async readManifest(): Promise<BundledRemoteManifest> {
+  private async readManifest() {
     const path = await containedFile(this.options.directory, BUNDLED_REMOTE_MANIFEST);
-    const manifest = parseBundledRemoteManifest(
-      JSON.parse(await readFile(path, "utf8")),
-      this.options.appVersion,
-    );
-    // 版本匹配也先检查完整安装包，缺件时绝不通过旧 CDN cache 补齐。
-    for (const component of manifest.components) await this.readArchive(component);
+    // 多读一个字节以识别截断，不把过大的文件前缀当成完整 JSON。
+    let contents = "";
+    const stream = createReadStream(path, {
+      end: MAX_MANIFEST_BYTES,
+      encoding: "utf8",
+      signal: this.options.signal,
+    });
+    for await (const chunk of stream) contents += chunk;
+    if (Buffer.byteLength(contents, "utf8") > MAX_MANIFEST_BYTES)
+      throw new Error("Bundled remote manifest too large");
+    const manifest = parseBundledRemoteManifest(JSON.parse(contents), this.options.appVersion);
+    // 即使远端已就绪也检查完整安装包；流式哈希同时取得下载的可信大小。
+    const archiveSizes = new Map<string, number>();
+    for (const component of manifest.components) {
+      archiveSizes.set(component.id, await this.verifyArchive(component));
+    }
     this.assertActive();
-    return manifest;
+    return { manifest, archiveSizes };
   }
 
   resolveReleaseDir(): Promise<string> {
@@ -105,16 +128,16 @@ export class BundledRemoteSource {
     try {
       for (const component of manifest.components) {
         // 校验与解包使用同一份字节，避免 manifest 固定后文件变化绕过校验。
-        const bytes = await this.readArchive(component);
+        const chunks: Buffer[] = [];
+        const size = await this.verifyArchive(component, chunks);
         const destination = join(directory, component.mount);
         await mkdir(destination, { recursive: true });
-        await extractTarGzBuffer(bytes, destination);
+        await extractTarGzBuffer(Buffer.concat(chunks, size), destination);
         for (const requiredPath of component.requiredPaths) {
           await containedFile(destination, requiredPath);
         }
         this.assertActive();
       }
-      await writeFile(join(directory, BUNDLED_REMOTE_MANIFEST), JSON.stringify(manifest));
       this.assertActive();
       return directory;
     } catch (error) {

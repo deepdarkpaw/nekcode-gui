@@ -1,5 +1,5 @@
-import type { IRemoteBackend, StdioStream } from "@zcode/server/remote/backend.js";
-import { quotePosixPathArg, quotePosixShellArg } from "@zcode/server/remote/posixShell.js";
+import { REMOTE_NODE_PATH, REMOTE_SERVER_PATH } from "./remoteAssetDeployDecision.js";
+import { quotePosixPathArg, quotePosixShellArg } from "./posixShell.js";
 
 const REQUIRED_SERVER_BUNDLE_MARKERS = [
   "skill-sync",
@@ -10,56 +10,36 @@ const REQUIRED_SERVER_BUNDLE_MARKERS = [
   "importMarketplaceSourceArchive",
 ];
 
-export type ServerBundleDeployDecision =
-  | { shouldDeploy: false }
-  | { shouldDeploy: true; reason: string };
-
-export async function checkServerBundleRequiredMarkers(
-  backend: IRemoteBackend,
-  nodePath: string,
-  serverPath: string,
-): Promise<ServerBundleDeployDecision> {
+/** 在同一远端探测脚本中验证启动版本和能力标记，不在 JS host 读取远端 bundle。 */
+export function buildServerBundleDeployCheck(appVersion: string): string {
+  const node = quotePosixPathArg(REMOTE_NODE_PATH);
+  const server = quotePosixPathArg(REMOTE_SERVER_PATH);
   const script = `
-const fs = require("fs");
-const content = fs.readFileSync(process.argv[1], "utf8");
-const missing = ${JSON.stringify(REQUIRED_SERVER_BUNDLE_MARKERS)}.filter((marker) => !content.includes(marker));
-if (missing.length > 0) {
-  console.error("missing required server bundle markers: " + missing.join(","));
-  process.exit(2);
-}
-`;
-  const stream = await backend.exec(
-    `${quotePosixPathArg(nodePath)} -e ${quotePosixShellArg(script)} ${quotePosixPathArg(serverPath)}`,
-  );
-  try {
-    await waitForDeployCheckClose(stream);
-    return { shouldDeploy: false };
-  } catch (error) {
-    // 开发态远端 server 可能版本号相同但 bundle 内容仍是旧包，旧包没有
-    // skill/plugin sync channel，renderer 侧会表现为 “Channel name 'skill-sync' timed out”。
-    // 这里用远端已部署 bundle 的能力标记做精确探测，只在缺少必要 channel 时刷新主 server。
-    return {
-      shouldDeploy: true,
-      reason: `remote server bundle missing required markers: ${String(error)}`,
-    };
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const [path, version] = process.argv.slice(1);
+const result = spawnSync(process.execPath, [path, "--version"], {
+  encoding: "utf8", maxBuffer: 256, timeout: 5000, killSignal: "SIGKILL",
+});
+if (result.status !== 0 || result.stdout.trim() !== version) process.exit(1);
+const markers = ${JSON.stringify(REQUIRED_SERVER_BUNDLE_MARKERS)};
+(async () => {
+  let tail = "";
+  const missing = new Set(markers);
+  for await (const chunk of fs.createReadStream(path, { encoding: "utf8" })) {
+    const content = tail + chunk;
+    for (const marker of missing) if (content.includes(marker)) missing.delete(marker);
+    if (!missing.size) return;
+    tail = content.slice(-64);
   }
-}
-
-function waitForDeployCheckClose(stream: StdioStream): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let stderrText = "";
-    stream.stderr.on("data", (chunk: Buffer | string) => {
-      if (stderrText.length >= 2048) {
-        return;
-      }
-      stderrText += chunk.toString();
-    });
-    stream.onClose((code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(stderrText.trim() || `remote deploy check exited with code ${code}`));
-    });
-  });
+  process.exitCode = 2;
+})().catch(() => { process.exitCode = 2; });
+`;
+  return [
+    `if [ -f ${node} ] && [ -f ${server} ]; then`,
+    "  code=0",
+    `  ${node} -e ${quotePosixShellArg(script)} ${server} ${quotePosixShellArg(appVersion)} >/dev/null 2>&1 || code=$?`,
+    "  printf 'server-check\\t%s\\n' \"$code\"",
+    "fi",
+  ].join("\n");
 }

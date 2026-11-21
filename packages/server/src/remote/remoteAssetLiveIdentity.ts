@@ -1,123 +1,54 @@
-import type { IRemoteBackend } from "@zcode/server/remote/backend.js";
-import { REMOTE_BASE, waitForClose } from "@zcode/server/remote/deployShared.js";
-import {
-  buildWriteLiteralFileCommand,
-  quotePosixPathArg,
-} from "@zcode/server/remote/posixShell.js";
-const REMOTE_ASSET_COMPONENT_META_DIR = `${REMOTE_BASE}/.asset-components`;
+import type { BundledRemoteManifest } from "@zcode/shared/bundled-remote-assets";
+import { REMOTE_BASE } from "./deployShared.js";
 
-export interface RemoteAssetComponentIdentity {
-  sha256: string;
+export interface RemoteAssetMarker {
+  path: string;
+  contents: string;
 }
 
-export interface RemoteAssetComponentMeta {
-  id: string;
-  version?: string;
-  sha256?: string;
-  platformArch: string;
-}
+type Component = BundledRemoteManifest["components"][number];
 
-export type RemoteAssetComponentIdentityDecision =
-  | { shouldDeploy: false }
-  | { shouldDeploy: true; reason: string };
-
-export async function checkRemoteAssetComponentIdentity(
-  backend: IRemoteBackend,
-  options: {
-    componentId: string;
-    platformArch: string;
-    expectedIdentity: RemoteAssetComponentIdentity;
-  },
-): Promise<RemoteAssetComponentIdentityDecision> {
-  const remoteMeta = await readRemoteAssetComponentMeta(backend, options.componentId);
-  if (!remoteMeta) {
-    return {
-      shouldDeploy: true,
-      reason: `remote component meta missing expected=${formatIdentity(options.expectedIdentity)}`,
-    };
-  }
-  if (remoteMeta.id !== options.componentId) {
-    return {
-      shouldDeploy: true,
-      reason: `remote component id mismatch remote=${remoteMeta.id} expected=${options.componentId}`,
-    };
-  }
-  if (remoteMeta.platformArch !== options.platformArch) {
-    return {
-      shouldDeploy: true,
-      reason: `remote platform mismatch remote=${remoteMeta.platformArch} expected=${options.platformArch}`,
-    };
-  }
-  if (!remoteMeta.sha256) {
-    // 旧 live marker 只记录 version，无法证明运行目录来自当前 manifest 制品。
-    // 首次读取旧 marker 时必须重新部署并写入 SHA，不能继续按语义版本跳过。
-    return {
-      shouldDeploy: true,
-      reason: `remote component SHA missing expected=${options.expectedIdentity.sha256}`,
-    };
-  }
-  if (
-    remoteMeta.sha256.trim().toLowerCase() !== options.expectedIdentity.sha256.trim().toLowerCase()
-  ) {
-    return {
-      shouldDeploy: true,
-      reason: `remote SHA mismatch remote=${remoteMeta.sha256} expected=${options.expectedIdentity.sha256}`,
-    };
-  }
-
-  return { shouldDeploy: false };
-}
-
-export async function readRemoteAssetComponentMeta(
-  backend: IRemoteBackend,
-  componentId: string,
-): Promise<RemoteAssetComponentMeta | null> {
-  try {
-    const content = await backend.readFile(buildRemoteAssetComponentMetaPath(componentId));
-    const parsed = JSON.parse(content) as Partial<RemoteAssetComponentMeta>;
-    if (
-      typeof parsed.id !== "string" ||
-      typeof parsed.platformArch !== "string" ||
-      (parsed.version !== undefined && typeof parsed.version !== "string") ||
-      (parsed.sha256 !== undefined && typeof parsed.sha256 !== "string")
-    ) {
-      return null;
+/** 两种传输模式沿用同一份身份：服务端取完整 SHA，其他组件保留内容寻址版本。 */
+export function remoteAssetMarker(component: Component, platformArch: string): RemoteAssetMarker {
+  switch (component.id) {
+    case "server-bundle":
+    case "node-runtime":
+    case "node-pty": {
+      const identity =
+        component.id === "server-bundle"
+          ? { sha256: component.sha256 }
+          : { version: component.version };
+      return {
+        path: `${REMOTE_BASE}/.asset-components/${component.id}.json`,
+        contents: `${JSON.stringify({ id: component.id, ...identity, platformArch })}\n`,
+      };
     }
-    return {
-      id: parsed.id,
-      ...(parsed.version ? { version: parsed.version } : {}),
-      ...(parsed.sha256 ? { sha256: parsed.sha256 } : {}),
-      platformArch: parsed.platformArch,
-    };
+    default:
+      return {
+        path: `${REMOTE_BASE}/tools/${component.id}/.version`,
+        contents: component.version,
+      };
+  }
+}
+
+export function matchesRemoteAssetMarker(
+  remote: string,
+  component: Component,
+  platformArch: string,
+): boolean {
+  if (!remote) return false;
+  if (!remoteAssetMarker(component, platformArch).path.endsWith(".json")) {
+    return remote.trim() === component.version;
+  }
+  try {
+    const meta = JSON.parse(remote);
+    if (!meta || meta.id !== component.id || meta.platformArch !== platformArch) return false;
+    if (meta.version !== undefined && typeof meta.version !== "string") return false;
+    if (meta.sha256 !== undefined && typeof meta.sha256 !== "string") return false;
+    return component.id === "server-bundle"
+      ? meta.sha256?.trim().toLowerCase() === component.sha256
+      : meta.version === component.version;
   } catch {
-    return null;
+    return false;
   }
-}
-
-export async function writeRemoteAssetComponentMeta(
-  backend: IRemoteBackend,
-  meta: RemoteAssetComponentMeta,
-): Promise<void> {
-  // 其它资源包保持既有语义：无法解析版本时不写一个会永久失配的 unknown marker。
-  if (meta.version === "unknown" && !meta.sha256) {
-    return;
-  }
-  const stream = await backend.exec(
-    [
-      `mkdir -p ${quotePosixPathArg(REMOTE_ASSET_COMPONENT_META_DIR)}`,
-      buildWriteLiteralFileCommand(
-        buildRemoteAssetComponentMetaPath(meta.id),
-        `${JSON.stringify(meta)}\n`,
-      ),
-    ].join(" && "),
-  );
-  await waitForClose(stream);
-}
-
-function buildRemoteAssetComponentMetaPath(componentId: string): string {
-  return `${REMOTE_ASSET_COMPONENT_META_DIR}/${componentId}.json`;
-}
-
-function formatIdentity(identity: RemoteAssetComponentIdentity): string {
-  return identity.sha256;
 }
