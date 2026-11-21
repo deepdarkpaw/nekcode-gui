@@ -34,10 +34,7 @@ export async function readModelScopeDocuments(
   return { global, project: await readSettingsDocument(executor, path) };
 }
 
-function effectiveScopeDocument({
-  global,
-  project,
-}: ModelScopeDocuments): NekSettingsDocument {
+function effectiveScopeDocument({ global, project }: ModelScopeDocuments): NekSettingsDocument {
   return project?.raw.enabledModels === undefined ? global : project;
 }
 
