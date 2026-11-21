@@ -16,7 +16,10 @@ export async function readNekPlanState(client: NekRpcClient) {
   return result;
 }
 
-/** 同一进程最后一次校验必须与可见卡片的路径、修订完全匹配。 */
+/**
+ * 同一进程最后一次校验必须与可见卡片的路径、修订完全匹配；`--revision` 让 nek 在执行前
+ * 再按当前分支的修订原子拒绝，覆盖本地校验与命令执行之间计划又被修订的窗口。
+ */
 export function buildNekPlanCommand(
   state: Awaited<ReturnType<typeof readNekPlanState>>,
   input: NekPlanExecution,
@@ -25,14 +28,15 @@ export function buildNekPlanCommand(
   if (active?.path !== input.path || active.revision !== input.revision)
     throw new Error("此修订已不是当前可执行的计划，请打开最新计划");
   const id = planId(active.path);
-  // CLI 按第一个 filename id 匹配，不能在目录设置变化导致重名时提交另一份计划。
+  // CLI 按第一个 filename id 匹配，不能在目录设置变化导致重名时提交另一份计划；
+  // 以 `-` 开头的 id 会被 nek 当作选项拒绝。
   if (
     !id ||
-    /\s|^--fresh$/u.test(id) ||
+    /\s|^-/u.test(id) ||
     state.plans.find((plan) => planId(plan.path) === id)?.path !== active.path
   )
     throw new Error("nek 计划 ID 无法唯一定位当前计划");
-  return `/nek-build ${id}${input.fresh ? " --fresh" : ""}`;
+  return `/nek-build ${id} --revision ${active.revision}${input.fresh ? " --fresh" : ""}`;
 }
 
 /** fresh 的 prompt ACK 在整个子会话首轮之后才回；接纳边界是子会话首条持久用户输入。 */

@@ -196,7 +196,7 @@ test("an earlier revision is rejected after reopening; the current ready revisio
           result: { ...readyState, mode, plans: [{ ...plan, status: draft ? "draft" : "ready" }] },
         };
       }
-      if (request.type === "prompt" && request.message === "/nek-build feature") {
+      if (request.type === "prompt" && request.message === "/nek-build feature --revision 2") {
         mode = "agent";
         return { disposition: "handled" };
       }
@@ -232,7 +232,8 @@ test("an earlier revision is rejected after reopening; the current ready revisio
     assert.equal((await execute(2)).status, "accepted");
     assert.ok(
       h.sessions[1]!.commands.some(
-        (request) => request.type === "prompt" && request.message === "/nek-build feature",
+        (request) =>
+          request.type === "prompt" && request.message === "/nek-build feature --revision 2",
       ),
     );
   } finally {
@@ -270,7 +271,10 @@ test("native fresh execution returns once the child input is durable, without re
         return { result: readyState };
       if (request.type === "read_history_page" && switched)
         return fixtureHistory([seed, implementation], request, childSummary);
-      if (request.type === "prompt" && request.message === "/nek-build feature --fresh") {
+      if (
+        request.type === "prompt" &&
+        request.message === "/nek-build feature --revision 2 --fresh"
+      ) {
         const session = h.sessions[0]!;
         switched = true;
         session.replaceSession(child);
