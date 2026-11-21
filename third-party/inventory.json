@@ -224,7 +224,7 @@
     ".agents/skills/react-best-practices/rules/server-parallel-nested-fetching.md": "4d9c44e579e1286013acf5cb5f65b04297d2b68909f44f8163804656514a78ff",
     ".agents/skills/react-best-practices/rules/server-serialization.md": "4d025c42043c56e6355196a2e885d168cdb15248d0797146c9db838a57b34946",
     ".agents/skills/react-best-practices/SKILL.md": "b7d246acb440bee224ab33614979a5b8debe5fdb13d0304967aa19358eb69d9f",
-    "package.json": "fc851e66e398df97a40d8817321e9ad6b64172aff3f3b10411aec8c3f3a62b32",
+    "package.json": "3251d59a4ee45b76d56174e9885400a005631b21b774740b432ba68efd8b532b",
     "packages/client/package.json": "e76f441549130dc3e5e68072a36b6cb9044e19a6625f1e813f19a4def2b1b689",
     "packages/desktop/package.json": "a9cbf9ab4b5832ee595f59559cf479aac3adb7e9dc9cf30433a29e7e0ddc1132",
     "packages/desktop/src/renderer/public/material-icons/3d.svg": "9527b849f0fba57ca7640e2717b3a19cb5f5e046712cbbd8b75d73af338c68fb",
@@ -1500,7 +1500,7 @@
     "packages/ui/src/components/ui/undo-toast.ts": "ecc5dd82a027ca14566d127e3b99be7afbd6c64fdf801050944eb94c7cf4bab6",
     "packages/ui/src/components/ui/usePdfZoomOverlay.ts": "c8c91b003ce2fded32c7a2369dc6eac43aa4b9dc9c830a0f5ceccb21d366b610",
     "packages/ui/src/components/ui/ZCodeAboutLogo.tsx": "eec214b0887d125b4af10d807db9fb2c57139fb0fa04d5c2233233cb4e6135d0",
-    "packages/ui/src/styles.css": "551b6fb5e391cbe5e6987e467cf46d110bb65ae468f322ffd4c34aee31cce077",
+    "packages/ui/src/styles.css": "79d44de68d359d7f1e8ae7128c87563e84b226bd1fdc9b67182be472a7506a64",
     "packages/zcode-server-cli/package.json": "6e294c4409cb90863d85b2e3d60f92766b156ccee577ebfeaffcb85e94194004",
     "pnpm-lock.yaml": "f0e8df22bae49fcb430f2d8bddc1009988556d09881309119b10b6ed46a4bd64",
     "pnpm-workspace.yaml": "fab4e5ab85b0823a5c6616f7977ca5c7be4f9aa9cbd00ea56bd7d184d5c00735",
@@ -14017,7 +14017,7 @@
         },
         {
           "file": "packages/ui/src/styles.css",
-          "sha256": "551b6fb5e391cbe5e6987e467cf46d110bb65ae468f322ffd4c34aee31cce077"
+          "sha256": "79d44de68d359d7f1e8ae7128c87563e84b226bd1fdc9b67182be472a7506a64"
         }
       ]
     },
