@@ -241,6 +241,7 @@ export interface NekInteractionRequestEvent {
 export interface NekInteractionCancelEvent {
   scope: NekInteractionScope;
   id: string;
+  reason?: "superseded";
 }
 
 /** 交互通道的一帧：新请求，或撤销某个还在等的请求。 */

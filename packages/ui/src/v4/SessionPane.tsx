@@ -173,6 +173,7 @@ import type {
 } from "@/v4/legacyChatViewTypes.js";
 import type { SessionLease } from "@/v4/sessionDataLayer.js";
 import { V4InteractionDialogs } from "@/v4/V4InteractionDialogs.js";
+import { useNekPlanExecution } from "@/nek/interactions/useNekPlanExecution.js";
 import {
   createNekPaneStatusCallbacks,
   NekSessionStatusSlot,
@@ -1830,6 +1831,14 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
+  const nekPlanExecution = useNekPlanExecution({
+    sessionId,
+    scopeKey: workspaceKey,
+    snapshot,
+    readOnly: readOnly || sessionLocked,
+    dispatch: dispatchCommand,
+    onOpenSession: onSessionCreated,
+  });
   const rowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       workspacePath,
@@ -1854,6 +1863,7 @@ export function SessionPane({
       onOpenFileLink,
       onOpenSubagentSession: onOpenSubagentSession ? handleOpenSubagentSession : undefined,
       onOpenPlanDetail: onOpenPlanDetail ? handleOpenPlanDetail : undefined,
+      nekPlanExecution,
       onCancelBackgroundWork: readOnly ? undefined : handleCancelBackgroundWork,
       fetchFileChanges: handleFetchFileChanges,
       previewFileRewind: workspaceFileRewindEnabled ? handlePreviewFileRewind : undefined,
@@ -1886,6 +1896,7 @@ export function SessionPane({
       handleOpenSubagentSession,
       onOpenPlanDetail,
       handleOpenPlanDetail,
+      nekPlanExecution,
       readOnly,
       handleCancelBackgroundWork,
       workspaceFileRewindEnabled,

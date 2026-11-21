@@ -183,6 +183,7 @@ export interface ToolCallBlockRenderContext {
   authoritativeAgentType?: string;
   /** ExitPlanMode 计划卡片：由会话宿主绑定 parent/session scope 后打开 Side Pane。 */
   onOpenPlanDetail?: (request: Omit<OpenPlanDetailSideTabRequest, "parentSessionId">) => void;
+  onExecuteNekPlan?: (fresh: boolean) => Promise<void>;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBrowserUrl?: (url: string) => void;

@@ -54,6 +54,13 @@ export async function loadNekHistoryStream(
   }
 }
 
+type FreshSessionReset = Extract<NekHistoryStreamEvent, { type: "history_stream_reset" }>;
+
+type ExpectedPlanSession = {
+  replace: (frame: FreshSessionReset) => void;
+  started: () => void;
+};
+
 /** Process lease owns transport order only; accepted rows and source watermarks live in the projector. */
 export class NekHistoryStreamSession {
   private readonly decoder: NekHistoryStreamDecoder;
@@ -69,6 +76,10 @@ export class NekHistoryStreamSession {
   private readonly seen = new Set<string>();
   private reads = new AbortController();
   private readonly detachDisconnect: () => void;
+  private expectedPlanSession?: ExpectedPlanSession & {
+    adopted: boolean;
+    timer?: ReturnType<typeof setTimeout>;
+  };
   constructor(
     private readonly record: NekSessionRecord,
     private readonly process: NekRpcProcess,
@@ -78,6 +89,7 @@ export class NekHistoryStreamSession {
       event: (event) => this.enqueue(event),
       preview: (preview) => record.projector?.applyHistoryPreview(preview),
       error: (error) => {
+        this.clearExpectedPlanSession();
         this.generation += 1;
         this.reads.abort(error);
         this.clearQueue();
@@ -163,9 +175,33 @@ export class NekHistoryStreamSession {
     this.record.projector?.applyHistoryPreview(null);
     this.pump();
   }
+  expectPlanSession(expected: ExpectedPlanSession, deadlineMs?: number): () => void {
+    if (!this.active || this.expectedPlanSession)
+      throw new Error("nek history is not ready for a new plan session");
+    const owner: ExpectedPlanSession & { adopted: boolean; timer?: ReturnType<typeof setTimeout> } =
+      { ...expected, adopted: false };
+    this.expectedPlanSession = owner;
+    const release = () => {
+      if (this.expectedPlanSession === owner) this.clearExpectedPlanSession();
+    };
+    if (deadlineMs !== undefined) {
+      owner.timer = setTimeout(release, deadlineMs);
+      owner.timer.unref();
+    }
+    return release;
+  }
+  private clearExpectedPlanSession(): void {
+    clearTimeout(this.expectedPlanSession?.timer);
+    this.expectedPlanSession = undefined;
+  }
   accept(event: NekRpcEvent): void {
     if (event.type.startsWith("history_")) {
-      this.decoder.accept(event as NekHistoryStreamEvent);
+      const frame = event as NekHistoryStreamEvent;
+      const replace =
+        frame.type === "history_stream_reset" &&
+        frame.sessionId !== this.record.sessionId &&
+        this.expectedPlanSession?.adopted === false;
+      this.decoder.accept(frame, replace);
       return;
     }
     if (["extension_ui_request", "extension_ui_cancel", "auth_event"].includes(event.type)) {
@@ -183,6 +219,7 @@ export class NekHistoryStreamSession {
   }
   dispose(): void {
     this.disposed = true;
+    this.clearExpectedPlanSession();
     this.generation += 1;
     this.reads.abort(new Error("history process retired"));
     this.decoder.dispose();
@@ -256,7 +293,17 @@ export class NekHistoryStreamSession {
       this.generation += 1;
       this.clearQueue();
       this.record.historyGeneration = (this.record.historyGeneration ?? 0) + 1;
-      this.record.projector?.resetHistoryStreamSeeds();
+      if (
+        this.active &&
+        this.expectedPlanSession?.adopted === false &&
+        event.sessionId !== this.record.sessionId
+      ) {
+        this.reads.abort(new Error("nek rebound to the approved plan session"));
+        this.reads = new AbortController();
+        this.seen.clear();
+        this.expectedPlanSession.replace(event);
+        this.expectedPlanSession.adopted = true;
+      } else this.record.projector?.resetHistoryStreamSeeds();
       return;
     }
     if (
@@ -313,7 +360,6 @@ export class NekHistoryStreamSession {
           event.ref.aroundEntryId !== event.entryId
         )
           throw new NekHistoryStreamError("LOCATOR", "foreign or malformed persisted locator");
-        if (this.seen.has(event.entryId)) continue;
         const page = historyResult(
           await this.process.client.call(
             {
@@ -333,6 +379,14 @@ export class NekHistoryStreamSession {
             "CLI must return a target page for this session; update nek",
           );
         this.record.projector!.applyHistoryTarget(page, event.entryId);
+        const expected = this.expectedPlanSession;
+        if (
+          expected?.adopted &&
+          page.entries.some((entry) => entry.id === event.entryId && entry.role === "user")
+        ) {
+          this.clearExpectedPlanSession();
+          expected.started();
+        }
         this.seen.add(event.entryId);
         if (this.seen.size > 4096) this.seen.delete(this.seen.values().next().value!);
         this.boundaryDirty = true;

@@ -131,7 +131,7 @@ function createNekAgentFeed(
       return;
     }
     // 请求 id 全局唯一；按 id 找会话可以覆盖"发出请求的会话随后被回收"的撤销帧。
-    store.getState().cancelById(frame.id);
+    store.getState().cancelById(frame.id, frame.reason);
   };
   feed = {
     respond: async ({ requestId, response }) => {

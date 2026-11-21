@@ -184,10 +184,21 @@ export class NekProcessPool<H extends NekPooledProcess = NekPooledProcess> {
       busyCount: 0,
       lastUsedAt: this.now(),
     };
-    entry.detachExit = handle.onExit?.(() => this.handleSessionExit(sessionKey, entry));
+    entry.detachExit = handle.onExit?.(() => this.handleSessionExit(entry.sessionKey, entry));
     this.sessions.set(sessionKey, entry);
     this.emit({ type: "session_created", sessionKey, activeSessions: this.sessions.size });
     return handle;
+  }
+
+  /** nek 原生新会话接管同一进程，保留在途租约但不继承源会话的回合计数。 */
+  moveSession(from: string, to: string, handle: H): void {
+    const entry = this.sessions.get(from);
+    if (entry?.handle !== handle || this.sessions.has(to))
+      throw new Error("cannot move an unowned nek session process");
+    this.sessions.delete(from);
+    entry.sessionKey = to;
+    entry.busyCount = 0;
+    this.sessions.set(to, entry);
   }
 
   /** 已存在的会话进程（不创建）。 */

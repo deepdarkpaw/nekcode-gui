@@ -1,22 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { assertNekHistoryInputReady } from "./nekHistoryStreamSession.js";
-import type {
-  NekExtensionUiResponse,
-  NekInteractionFrame,
-  NekImageContent,
-  NekSessionSummary,
-} from "@zcode/shared/nek-protocol";
+import type { NekImageContent, NekSessionSummary } from "@zcode/shared/nek-protocol";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import type { NekAgentServiceCommandMethods as Methods } from "./nekAgentServiceCommandMethods.js";
 import * as commands from "./nekAgentServiceCommands.js";
 import type { NekAgentCommandContext, NekAgentCommandTarget } from "./nekAgentServiceCommands.js";
-import { NekAgentSessionResumeBase } from "./nekAgentSessionResume.js";
+import { NekPlanSessionBase } from "./nekPlanSession.js";
 import { deleteUnusedCreatedSessions } from "./nekUnusedSessionCleanup.js";
 import { NekPendingInputCancelledError } from "./nekPendingInputQueue.js";
 import { bumpStateEpoch } from "./nekSessionSnapshotLoader.js";
 import { findNekUserImage, parseNekUserImageRef } from "../projection/nekUserImages.js";
 import { resolveNekSessionAttachment } from "./nekSessionAttachments.js";
-
 /** 用户图片缓存上限（base64 字符数，约 24 MB 原始字节）。 */
 const USER_IMAGE_CACHE_MAX_CHARS = 32 * 1024 * 1024;
 
@@ -37,34 +31,9 @@ import {
  * （无状态的 RPC 调用），进程与投影器接线落在 `NekAgentServiceRuntimeBase`。
  * 每个命令都通过 `withSession` 持有一次进程引用，命令结束即归还，空闲进程因此可以被进程池回收。
  */
-export class NekAgentService extends NekAgentSessionResumeBase implements Methods {
+export class NekAgentService extends NekPlanSessionBase implements Methods {
   constructor(options: NekAgentServiceOptions) {
     super(options);
-  }
-  /**
-   * 渲染层订阅交互帧（nek 的 dialog / structured / notify 都从这里出去）。
-   *
-   * 返回 detach；最后一个订阅者离开后，nek 侧的 dialog 请求会立刻按取消收口，
-   * 不再等一个永远不会来的回答。
-   */
-  onInteractionEvent(listener: (frame: NekInteractionFrame) => void): () => void {
-    return this.interactions.onFrame(listener);
-  }
-
-  /** 渲染层回答交互请求；未知 id（已取消或已结算）返回 `false`。 */
-  /** 当前工作区仍待处理的审批，供交互订阅重放。 */
-  pendingInteractions(workspacePath: string): NekInteractionFrame[] {
-    return this.interactions.pendingFrames(workspacePath);
-  }
-
-  respondInteraction(response: NekExtensionUiResponse): boolean {
-    this.assertAlive();
-    return this.interactions.respond(response);
-  }
-
-  /** renderer workspace 订阅全部释放时，立即取消该 workspace 的阻塞请求。 */
-  cancelWorkspaceInteractions(workspacePath: string): void {
-    this.interactions.cancelWorkspace(workspacePath);
   }
 
   /** 一次命令 = 一次会话租约：按 `input.sessionKey` 持进程引用，结束即归还给进程池。 */
@@ -128,8 +97,14 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     input: Parameters<Methods["sendPrompt"]>[0],
   ): Promise<{ disposition: string }> {
     return await this.withSession(input.sessionKey, async () => {
-      assertNekHistoryInputReady(this.requireRecord(input.sessionKey));
-      return await commands.sendPrompt(this.commandContext(), input);
+      const record = this.requireRecord(input.sessionKey);
+      assertNekHistoryInputReady(record);
+      return await commands.sendPrompt(this.commandContext(), input, () =>
+        this.interactions.supersedePlanReview({
+          workspacePath: record.cwd,
+          sessionKey: record.key,
+        }),
+      );
     });
   }
   readonly abort: Methods["abort"] = async (sessionKey) => {
@@ -312,7 +287,6 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
         sessionKey: key,
         cwd: input.cwd,
         approve: approval,
-        extensionUi: this.extensionUiFor({ workspacePath: input.cwd, sessionKey: key }),
       });
       if (input.model || input.thinking || input.mode) {
         await this.withLease(record, async () => {
@@ -492,8 +466,14 @@ export class NekAgentService extends NekAgentSessionResumeBase implements Method
     this.listeners.clear();
   }
 
-  private commandTarget(sessionKey: string, writable: boolean): NekAgentCommandTarget {
+  protected commandTarget(
+    sessionKey: string,
+    writable: boolean,
+    forPlanBuild = false,
+  ): NekAgentCommandTarget {
     const record = writable ? this.requireWritable(sessionKey) : this.requireRecord(sessionKey);
+    if (writable && record.planBuild && !forPlanBuild)
+      throw new Error("计划执行请求正在提交，请稍后重试");
     const process = this.requireProcess(record);
     if (writable && this.modelFreshness && !record.modelRuntime)
       throw new Error("nek model runtime is initializing; retry the operation");

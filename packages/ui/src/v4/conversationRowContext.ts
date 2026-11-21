@@ -15,6 +15,7 @@ import type {
   CommandAck,
   ConversationRow,
   ConversationRowTarget,
+  NekPlanRevision,
   TurnHeaderRow,
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
@@ -73,6 +74,9 @@ export interface ConversationRowRenderContext {
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
+  nekPlanExecution?: NekPlanRevision & {
+    run: (revision: NekPlanRevision, fresh: boolean) => Promise<void>;
+  };
   /**
    * 取消一项后台工作（`cancelBackgroundWork{workId}`），由宿主绑定 dispatchCommand + sessionId。
    *

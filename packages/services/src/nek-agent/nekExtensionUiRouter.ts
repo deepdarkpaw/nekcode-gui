@@ -63,6 +63,7 @@ export class NekExtensionUiRouter {
 
   /** 处理一条 `extension_ui_request`；异步完成，不阻塞事件分发。 */
   handle(request: NekExtensionUiRequest): void {
+    if (this.inFlight.has(request.id)) return;
     const controller = new AbortController();
     this.inFlight.set(request.id, { controller, request });
     void this.route(request, controller)

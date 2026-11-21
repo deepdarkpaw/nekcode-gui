@@ -211,6 +211,11 @@ export class NekConversationProjector {
     this.emitSnapshotToAll();
   }
 
+  beginFreshHistory(): void {
+    this.history.beginFresh();
+    this.live.historyPages = true;
+  }
+
   get observedHistoryEntries(): number | undefined {
     return this.history.observedEntries;
   }

@@ -249,6 +249,17 @@ export class NekProjectorHistory {
     this.source?.aliases.clear();
   }
 
+  /** 新会话在首条持久 locator 前还没有可发布的历史目录。 */
+  beginFresh(): void {
+    this.source = {
+      nextPosition: 0,
+      baseEntries: 0,
+      leafId: null,
+      selection: {},
+      aliases: new Map(),
+    };
+  }
+
   /** Legacy synthetic entry tests share the same incremental canonical owner. */
   apply(event: NekRpcEvent, ctx: NekLiveContext): "changed" | "duplicate" | undefined {
     if (!this.metadata) return;

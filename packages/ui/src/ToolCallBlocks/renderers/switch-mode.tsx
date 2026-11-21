@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent, type MouseEvent } from "react";
 import { MessageResponse } from "@/components/ai-elements/message.js";
 import { ToolOutput } from "@/components/ai-elements/tool.js";
 import { Button } from "@/components/ui/button.js";
+import { NekPlanExecutionButtons } from "@/nek/interactions/NekPlanExecutionButtons.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getToolCallErrorText } from "@/lib/toolError.js";
 import { extractPlanToolCallContent, getPlanFileLabel } from "@/lib/planToolCall.js";
@@ -127,7 +128,7 @@ export function SwitchModeToolCallBlock(context: ToolCallBlockRenderContext) {
             </div>
             <Button
               type="button"
-              variant="default"
+              variant={context.onExecuteNekPlan ? "outline" : "default"}
               size="lg"
               className="absolute bottom-6 left-1/2 h-10 -translate-x-1/2 rounded-full !pr-4.5 pl-6 shadow-xs"
               onClick={(event) => {
@@ -139,6 +140,9 @@ export function SwitchModeToolCallBlock(context: ToolCallBlockRenderContext) {
               <ArrowRightIcon data-icon="inline-end" className="size-4" />
             </Button>
           </div>
+          {context.onExecuteNekPlan ? (
+            <NekPlanExecutionButtons execute={context.onExecuteNekPlan} />
+          ) : null}
         </section>
         {snapshotNotice}
       </>

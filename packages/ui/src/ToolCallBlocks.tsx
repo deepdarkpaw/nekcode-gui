@@ -79,6 +79,7 @@ function ToolCallBlockComponent({
   onOpenFileLink,
   onOpenBrowserUrl,
   onOpenPlanDetail,
+  onExecuteNekPlan,
   onLoadFullToolCallFields,
   suppressSourceLabel = false,
   showTodoToolCalls = true,
@@ -101,6 +102,7 @@ function ToolCallBlockComponent({
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBrowserUrl?: (url: string) => void;
   onOpenPlanDetail?: ToolCallBlockRenderContext["onOpenPlanDetail"];
+  onExecuteNekPlan?: ToolCallBlockRenderContext["onExecuteNekPlan"];
   onLoadFullToolCallFields?: (toolId: string) => Promise<boolean | void> | boolean | void;
   suppressSourceLabel?: boolean;
   showTodoToolCalls?: boolean;
@@ -274,6 +276,7 @@ function ToolCallBlockComponent({
       onOpenFileLink,
       onOpenBrowserUrl,
       onOpenPlanDetail,
+      onExecuteNekPlan,
       onLoadFullToolCallFields,
     }),
     [
@@ -290,6 +293,7 @@ function ToolCallBlockComponent({
       onLoadFullToolCallFields,
       onOpenBrowserUrl,
       onOpenPlanDetail,
+      onExecuteNekPlan,
       onOpenFileLink,
       rawFileSummaries,
       showIcon,
