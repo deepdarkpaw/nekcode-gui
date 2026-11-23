@@ -6,6 +6,7 @@ export * from "./config-api.js";
 export * from "./agent-preset-name.js";
 export * from "./agent-preset-core.js";
 export * from "./config-names.js";
+export * from "./mcp-config-rules.js";
 export * from "./remote-api.js";
 export * from "./mentions.js";
 export * from "./rpc.js";

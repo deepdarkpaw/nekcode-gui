@@ -188,7 +188,7 @@ export type NekMcpFile = z.infer<typeof nekMcpFileSchema>;
 export type NekMcpServer = z.infer<typeof nekMcpServerSchema>;
 export const NEK_MCP_OVERRIDE_KEYS = ["enabled", "exposure", "toolExposure"] as const;
 
-export const NEK_MCP_SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]+$/u;
+export { NEK_MCP_SERVER_NAME_PATTERN } from "@zcode/shared/nek-protocol";
 
 // ============================================================================
 // nek.yaml（nek extensions/nek/config.ts）

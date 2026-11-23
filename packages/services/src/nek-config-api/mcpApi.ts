@@ -18,9 +18,9 @@ import type {
   NekMcpServerStatus,
   NekMcpTestResult,
 } from "@zcode/shared/nek-protocol";
+import { isNekMcpServerName } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
 import {
-  NEK_MCP_SERVER_NAME_PATTERN,
   nekMcpHttpServerSchema,
   nekMcpOverrideSchema,
   nekMcpStdioServerSchema,
@@ -89,7 +89,15 @@ export interface NekMcpGroup {
   ) => Promise<NekMcpServerStatus>;
 }
 
-const NAME_FIELD = { name: "letters, digits, underscore and dash" } as const;
+const NAME_REASON = 'use letters, digits, "_" and "-"';
+
+function requireMcpName(name: string): void {
+  if (!isNekMcpServerName(name)) {
+    throw validationError(`invalid MCP server name ${JSON.stringify(name)} (${NAME_REASON})`, {
+      name: NAME_REASON,
+    });
+  }
+}
 
 /** 按 transport 选 schema 并校验；失败抛字段级错误。 */
 function validateServerConfig(name: string, config: Record<string, unknown>): NekMcpServerConfig {
@@ -194,9 +202,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
     },
 
     saveMcpServer: async (target, scope, entry, options) => {
-      if (!NEK_MCP_SERVER_NAME_PATTERN.test(entry.name)) {
-        throw validationError(`invalid MCP server name "${entry.name}"`, { name: NAME_FIELD.name });
-      }
+      requireMcpName(entry.name);
       const config = entry.config as unknown as Record<string, unknown>;
       if (scope === "project") {
         const extra = overrideKeysOf(config);
@@ -230,6 +236,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
     },
 
     setMcpServerOverride: async (target, name, override, options) => {
+      requireMcpName(name);
       const { context, path } = paths(target, options.scope, options.cwd);
       const current = await readMcpServerFile(context.executor, path);
       if (current.revision !== options.revision) throw conflict(path);
@@ -305,13 +312,10 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
           preview.errors.push(`${name}: not an object`);
           continue;
         }
-        if (!NEK_MCP_SERVER_NAME_PATTERN.test(name)) {
-          preview.errors.push(`${name}: invalid server name`);
-          continue;
-        }
         const normalized: Record<string, unknown> = { ...raw };
         if (normalized.url !== undefined && normalized.type === undefined) normalized.type = "http";
         try {
+          requireMcpName(name);
           preview.servers.push({
             name,
             config: validateServerConfig(name, normalized),
