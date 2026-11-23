@@ -71,21 +71,24 @@ function showMessageBoxWithOptionalParent(
     : dialog.showMessageBox(options);
 }
 async function clearAllDataAndRelaunch(options: {
+  locale: Locale;
   credentialsDir: string;
   logger: {
     info: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
 }) {
+  const isZh = options.locale === "zh-CN";
   const { response } = await dialog.showMessageBox({
     type: "warning",
-    buttons: ["Cancel", "Clear All"],
+    buttons: isZh ? ["取消", "清除所有数据"] : ["Cancel", "Clear all data"],
     defaultId: 0,
     cancelId: 0,
-    title: "Clear All Data",
-    message: "确定要清除所有数据吗？",
-    detail:
-      "将删除 ~/.nek/gui/v2（配置、凭据、日志）和浏览器缓存（localStorage）。操作不可恢复，清除后应用将自动重启。",
+    title: isZh ? "清除所有数据" : "Clear all data",
+    message: isZh ? "确定要清除所有数据吗？" : "Are you sure you want to clear all data?",
+    detail: isZh
+      ? "将删除 ~/.nek/gui/v2 中的配置、凭据、日志，以及应用的浏览器存储（含 localStorage）。此操作无法撤销，清除后应用会自动重启。"
+      : "This deletes settings, credentials, and logs in ~/.nek/gui/v2, as well as the app's browser storage (including localStorage). This cannot be undone. The app will restart automatically.",
   });
   if (response !== 1) {
     return;
@@ -476,6 +479,7 @@ export async function executeDesktopCommand(options: {
       return;
     case DesktopCommandIds.ClearAllData:
       await clearAllDataAndRelaunch({
+        locale: options.currentApplicationLocale,
         credentialsDir: options.credentialsDir,
         logger: options.logger,
       });
