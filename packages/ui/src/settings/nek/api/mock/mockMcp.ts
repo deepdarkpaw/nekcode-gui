@@ -1,14 +1,18 @@
 /**
  * mock：mcp.json（全局 + 项目覆盖）、导入预览、测试、运行状态与 OAuth。
  */
-import type {
-  NekConfigScope,
-  NekMcpConfigView,
-  NekMcpImportPreview,
-  NekMcpServerConfig,
-  NekMcpServerEntry,
-  NekMcpServerStatus,
-  NekMcpTestResult,
+import {
+  normalizeNekMcpExposure,
+  validateNekMcpOverride,
+  validateNekMcpServer,
+  type NekConfigScope,
+  type NekMcpConfigView,
+  type NekMcpImportPreview,
+  type NekMcpServerConfig,
+  type NekMcpServerEntry,
+  type NekMcpServerOverride,
+  type NekMcpServerStatus,
+  type NekMcpTestResult,
 } from "@zcode/shared/nek-protocol";
 import {
   assertRevision,
@@ -68,6 +72,7 @@ export function readMcp(
       path: file.path,
       config: clone(merged),
       isOverride: !isFullConfig(config),
+      ...(!isFullConfig(config) ? { override: clone(config) } : {}),
     };
   });
   return { path: file.path, revision: file.revision, scope, servers, diagnostics: [] };
@@ -83,23 +88,38 @@ function fileFor(
   >;
 }
 
+function checkedWrite(machine: MockMachine, scope: NekConfigScope, name: string, raw: unknown) {
+  const checked =
+    scope === "project" ? validateNekMcpOverride(name, raw) : validateNekMcpServer(name, raw);
+  if (!checked.ok) {
+    throw mockError("validation", checked.issues.map(({ message }) => message).join("; "));
+  }
+  if (scope === "project" && !Object.hasOwn(machine.mcp.value, name)) {
+    throw mockError(
+      "validation",
+      `server ${JSON.stringify(name)} needs a global server to override`,
+    );
+  }
+  return checked.config;
+}
+
 export function saveServer(
   machine: MockMachine,
   scope: NekConfigScope,
-  entry: { name: string; config: NekMcpServerConfig; previousName?: string },
+  entry: { name: string; config: NekMcpServerConfig | NekMcpServerOverride; previousName?: string },
   options: { revision: string; cwd?: string },
   touch: Touch,
 ): string {
   const file = fileFor(machine, scope, options.cwd);
   assertRevision(file, options.revision);
-  if (entry.name !== entry.previousName && entry.name in file.value) {
+  const config = checkedWrite(machine, scope, entry.name, entry.config);
+  if (entry.name !== entry.previousName && Object.hasOwn(file.value, entry.name)) {
     throw mockError("validation", `MCP server ${entry.name} already exists`, { name: "duplicate" });
   }
-  const next = { ...file.value };
+  const next = { ...file.value, [entry.name]: clone(config) };
   if (entry.previousName && entry.previousName !== entry.name) {
     delete next[entry.previousName];
   }
-  next[entry.name] = clone(entry.config);
   file.value = next;
   return touch(file);
 }
@@ -107,14 +127,20 @@ export function saveServer(
 export function setOverride(
   machine: MockMachine,
   name: string,
-  override: Partial<NekMcpServerConfig>,
+  override: NekMcpServerOverride,
   options: { revision: string; scope: NekConfigScope; cwd?: string },
   touch: Touch,
 ): string {
   const file = fileFor(machine, options.scope, options.cwd);
   assertRevision(file, options.revision);
-  const current = (file.value[name] ?? {}) as Partial<NekMcpServerConfig>;
-  file.value = { ...file.value, [name]: { ...current, ...clone(override) } };
+  const patch = validateNekMcpOverride(name, override);
+  if (!patch.ok)
+    throw mockError("validation", patch.issues.map(({ message }) => message).join("; "));
+  const current = Object.hasOwn(file.value, name)
+    ? (file.value[name] as Partial<NekMcpServerConfig>)
+    : {};
+  const value = checkedWrite(machine, options.scope, name, { ...current, ...patch.config });
+  file.value = { ...file.value, [name]: clone(value) };
   return touch(file);
 }
 
@@ -133,37 +159,20 @@ export function deleteServer(
   return touch(file);
 }
 
-function normalizeImported(raw: unknown): NekMcpServerConfig | string {
-  if (typeof raw !== "object" || raw === null) {
-    return "not an object";
-  }
-  const value = raw as Record<string, unknown>;
-  if (typeof value.url === "string") {
-    const headers = value.headers as Record<string, string> | undefined;
-    return { type: "http", url: value.url, ...(headers ? { headers } : {}) };
-  }
-  if (typeof value.command === "string") {
-    return {
-      command: value.command,
-      ...(Array.isArray(value.args) ? { args: value.args.map(String) } : {}),
-      ...(typeof value.env === "object" && value.env
-        ? { env: value.env as Record<string, string> }
-        : {}),
-      ...(typeof value.cwd === "string" ? { cwd: value.cwd } : {}),
-    };
-  }
-  return "missing command or url";
-}
-
 /** 兼容 Claude Desktop / Cursor 的 `{ mcpServers: {...} }`、裸对象 `{ name: config }` 与单个服务器。 */
-export function previewImport(machine: MockMachine, json: string): NekMcpImportPreview {
+export function previewImport(
+  machine: MockMachine,
+  scope: NekConfigScope,
+  json: string,
+  cwd?: string,
+): NekMcpImportPreview {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch (error) {
     return { servers: [], errors: [error instanceof Error ? error.message : String(error)] };
   }
-  if (typeof parsed !== "object" || parsed === null) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     return { servers: [], errors: ["Expected a JSON object"] };
   }
   const root = parsed as Record<string, unknown>;
@@ -171,13 +180,15 @@ export function previewImport(machine: MockMachine, json: string): NekMcpImportP
   const entries =
     "command" in root || "url" in root ? [["server", root] as const] : Object.entries(map);
   const preview: NekMcpImportPreview = { servers: [], errors: [] };
+  const file = fileFor(machine, scope, cwd);
   for (const [name, raw] of entries) {
-    const config = normalizeImported(raw);
-    if (typeof config === "string") {
-      preview.errors.push(`${name}: ${config}`);
-      continue;
+    try {
+      const config = checkedWrite(machine, scope, name, raw);
+      preview.servers.push({ name, config, conflict: Object.hasOwn(file.value, name) });
+    } catch (error) {
+      const message = (error as { message?: string }).message ?? String(error);
+      preview.errors.push(`server ${JSON.stringify(name)}: ${message}`);
     }
-    preview.servers.push({ name, config, conflict: name in machine.mcp.value });
   }
   return preview;
 }
@@ -219,7 +230,7 @@ export function statusOf(
   const needsAuth = transport === "http" && "oauth" in config && config.oauth !== undefined;
   const loggedIn = machine.mcpAuth.get(name) === true;
   const enabled = config.enabled !== false;
-  const exposure = config.exposure ?? "deferred";
+  const exposure = normalizeNekMcpExposure(config.exposure) ?? "deferred";
   const base = { name, scope: "global" as const, transport, enabled, exposure } as const;
   if (!enabled) {
     return { ...base, state: "disabled", tools: [] };
@@ -235,7 +246,7 @@ export function statusOf(
     state: "connected",
     tools: toolsOf(name).map((tool) => ({
       name: tool,
-      exposure: config.toolExposure?.[tool] ?? exposure,
+      exposure: normalizeNekMcpExposure(config.toolExposure?.[tool]) ?? exposure,
     })),
     auth: needsAuth ? { required: true, loggedIn } : undefined,
   };

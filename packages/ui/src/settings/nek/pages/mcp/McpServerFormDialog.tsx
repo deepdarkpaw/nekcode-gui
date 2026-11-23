@@ -17,16 +17,17 @@ import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
 import {
   emptyMcpDraft,
-  mcpConfigFromDraft,
   mcpDraftFromConfig,
+  mcpTransportOf,
   MCP_EXPOSURES,
-  validateMcpDraft,
+  resolveMcpDraft,
   type McpFormDraft,
   type McpTransport,
 } from "../../lib/mcpForm.js";
 import { Field, invalidProps } from "../../components/Field.js";
 import { KeyValueEditor, Segmented } from "../../components/inputs.js";
 import { NekFormDialog } from "../../components/NekFormDialog.js";
+import { McpOAuthFields } from "./McpOAuthFields.js";
 
 function draftKey(draft: McpFormDraft) {
   return JSON.stringify({
@@ -75,8 +76,19 @@ export function McpServerFormDialog({
     () => new Set([...existingNames].filter((name) => name !== initial?.name)),
     [existingNames, initial],
   );
-  const errors = validateMcpDraft(draft, others, t);
-  const valid = Object.keys(errors).length === 0;
+  const { errors, config } = resolveMcpDraft(
+    draft,
+    others,
+    t,
+    initial ? { config: initial.config, draft: start } : undefined,
+  );
+  const transport = draft.transport || (initial ? mcpTransportOf(initial.config) : "stdio");
+  const advancedErrors = Boolean(
+    errors.timeout ||
+    errors.exposure ||
+    errors.toolExposure ||
+    Object.keys(errors).some((field) => field.startsWith("oauth")),
+  );
   const update = (patch: Partial<McpFormDraft>) =>
     setDraft((current) => ({ ...current, ...patch }));
   const id = (name: string) => `${baseId}-${name}`;
@@ -87,9 +99,9 @@ export function McpServerFormDialog({
       onOpenChange={onOpenChange}
       title={t(initial ? "settings.nek.mcp.form.editTitle" : "settings.nek.mcp.form.addTitle")}
       dirty={draftKey(draft) !== draftKey(start)}
-      valid={valid}
+      valid={Boolean(config)}
       saveLabel={t(initial ? "settings.nek.mcp.form.save" : "settings.nek.mcp.form.add")}
-      onSave={() => onSave(draft.name, mcpConfigFromDraft(draft))}
+      onSave={() => onSave(draft.name, config!)}
       documents={documents}
       onReset={resetDraft}
       footerStart={
@@ -97,11 +109,12 @@ export function McpServerFormDialog({
           <AsyncButton
             variant="outline"
             icon={<PlugIcon />}
-            disabled={!valid}
-            disabledReason={t("settings.nek.mcp.form.testDisabled")}
+            disabled={!config}
+            disabledReason={Object.values(errors)[0] ?? t("settings.nek.mcp.form.testDisabled")}
             onClick={async () => {
+              if (!config) return;
               setTestResult(null);
-              const result = await api.testMcpServer(target, { config: mcpConfigFromDraft(draft) });
+              const result = await api.testMcpServer(target, { config });
               if (!result.ok) throw new Error(result.message);
               setTestResult(
                 t("settings.nek.mcp.testOk", { ms: result.latencyMs, count: result.tools.length }),
@@ -119,14 +132,15 @@ export function McpServerFormDialog({
       }
     >
       {({ attempted }) => {
-        const show = (field: keyof typeof errors) => (attempted ? errors[field] : undefined);
+        const show = (field: keyof typeof errors, value?: string) =>
+          attempted || initial || value ? errors[field] : undefined;
         return (
           <>
             <Field
               label={t("settings.nek.mcp.form.name")}
               htmlFor={id("name")}
               required
-              error={show("name") ?? (draft.name ? errors.name : undefined)}
+              error={show("name", draft.name)}
             >
               <Input
                 {...TECHNICAL_INPUT_ATTRIBUTES}
@@ -134,15 +148,12 @@ export function McpServerFormDialog({
                 required
                 value={draft.name}
                 className="font-mono"
-                {...invalidProps(
-                  id("name"),
-                  show("name") ?? (draft.name ? errors.name : undefined),
-                )}
+                {...invalidProps(id("name"), show("name", draft.name))}
                 onChange={(event) => update({ name: event.target.value })}
               />
             </Field>
-            <Field label={t("settings.nek.mcp.form.transport")}>
-              <Segmented<McpTransport>
+            <Field label={t("settings.nek.mcp.form.transport")} error={errors.type}>
+              <Segmented<McpTransport | "">
                 ariaLabel={t("settings.nek.mcp.form.transport")}
                 value={draft.transport}
                 options={[
@@ -152,7 +163,7 @@ export function McpServerFormDialog({
                 onChange={(transport) => update({ transport })}
               />
             </Field>
-            {draft.transport === "stdio" ? (
+            {transport === "stdio" ? (
               <>
                 <Field
                   label={t("settings.nek.mcp.form.command")}
@@ -164,7 +175,7 @@ export function McpServerFormDialog({
                     {...TECHNICAL_INPUT_ATTRIBUTES}
                     id={id("command")}
                     required
-                    value={draft.command}
+                    value={draft.command ?? ""}
                     placeholder="npx"
                     className="font-mono"
                     {...invalidProps(id("command"), show("command"))}
@@ -175,6 +186,7 @@ export function McpServerFormDialog({
                   label={t("settings.nek.mcp.form.args")}
                   htmlFor={id("args")}
                   hint={t("settings.nek.mcp.form.argsHint")}
+                  error={errors.args}
                 >
                   <Textarea
                     {...TECHNICAL_INPUT_ATTRIBUTES}
@@ -182,10 +194,11 @@ export function McpServerFormDialog({
                     value={draft.args}
                     placeholder={"-y\n@modelcontextprotocol/server-filesystem"}
                     className="min-h-16 font-mono"
+                    {...invalidProps(id("args"), errors.args)}
                     onChange={(event) => update({ args: event.target.value })}
                   />
                 </Field>
-                <Field label={t("settings.nek.mcp.form.env")}>
+                <Field label={t("settings.nek.mcp.form.env")} error={errors.env}>
                   <KeyValueEditor
                     rows={draft.env}
                     secretValues
@@ -195,12 +208,17 @@ export function McpServerFormDialog({
                     onChange={(env) => update({ env })}
                   />
                 </Field>
-                <Field label={t("settings.nek.mcp.form.cwd")} htmlFor={id("cwd")}>
+                <Field
+                  label={t("settings.nek.mcp.form.cwd")}
+                  htmlFor={id("cwd")}
+                  error={errors.cwd}
+                >
                   <Input
                     {...TECHNICAL_INPUT_ATTRIBUTES}
                     id={id("cwd")}
                     value={draft.cwd}
                     className="font-mono"
+                    {...invalidProps(id("cwd"), errors.cwd)}
                     onChange={(event) => update({ cwd: event.target.value })}
                   />
                 </Field>
@@ -211,7 +229,7 @@ export function McpServerFormDialog({
                   label={t("settings.nek.mcp.form.url")}
                   htmlFor={id("url")}
                   required
-                  error={show("url")}
+                  error={show("url", draft.url)}
                 >
                   <Input
                     {...TECHNICAL_INPUT_ATTRIBUTES}
@@ -220,11 +238,16 @@ export function McpServerFormDialog({
                     value={draft.url}
                     placeholder="https://mcp.example.com/mcp"
                     className="font-mono"
-                    {...invalidProps(id("url"), show("url"))}
+                    {...invalidProps(id("url"), show("url", draft.url))}
                     onChange={(event) => update({ url: event.target.value })}
                   />
                 </Field>
-                <Field label={t("settings.nek.mcp.form.headers")}>
+                <Field label={t("settings.nek.mcp.form.headers")} error={errors.headers}>
+                  {errors.auth ? (
+                    <p role="alert" className="text-ui-sm text-destructive">
+                      {errors.auth}
+                    </p>
+                  ) : null}
                   <KeyValueEditor
                     rows={draft.headers}
                     keyPlaceholder={t("settings.nek.kv.headerName")}
@@ -235,18 +258,29 @@ export function McpServerFormDialog({
                 </Field>
               </>
             )}
-            <Field label={t("settings.nek.mcp.form.description")} htmlFor={id("description")}>
+            <Field
+              label={t("settings.nek.mcp.form.description")}
+              htmlFor={id("description")}
+              error={errors.description}
+            >
               <Input
                 id={id("description")}
                 value={draft.description}
+                {...invalidProps(id("description"), errors.description)}
                 onChange={(event) => update({ description: event.target.value })}
               />
             </Field>
-            <SettingAdvancedGroup>
+            {errors.enabled ? (
+              <p role="alert" className="text-ui-sm text-destructive">
+                {errors.enabled}
+              </p>
+            ) : null}
+            <SettingAdvancedGroup defaultOpen={advancedErrors}>
               <div className="flex flex-col gap-4 pt-1">
                 <Field
                   label={t("settings.nek.mcp.exposure")}
                   hint={t("settings.nek.mcp.exposureHint")}
+                  error={errors.exposure}
                 >
                   <Segmented
                     ariaLabel={t("settings.nek.mcp.exposure")}
@@ -258,15 +292,20 @@ export function McpServerFormDialog({
                     onChange={(exposure) => update({ exposure })}
                   />
                 </Field>
+                {errors.toolExposure ? (
+                  <p role="alert" className="text-ui-sm text-destructive">
+                    {errors.toolExposure}
+                  </p>
+                ) : null}
                 <Field
                   label={t("settings.nek.mcp.timeout")}
                   htmlFor={id("timeout")}
-                  error={show("timeout") ?? errors.timeout}
+                  error={errors.timeout}
                   hint={t("settings.nek.mcp.timeoutHint")}
                 >
                   <Input
                     id={id("timeout")}
-                    inputMode="numeric"
+                    inputMode="decimal"
                     value={draft.timeout}
                     placeholder="60"
                     className="w-32 font-mono"
@@ -274,58 +313,13 @@ export function McpServerFormDialog({
                     onChange={(event) => update({ timeout: event.target.value })}
                   />
                 </Field>
-                {draft.transport === "http" ? (
-                  <fieldset className="flex flex-col gap-2">
-                    <legend className="mb-1 text-ui-sm font-medium">
-                      {t("settings.nek.mcp.form.oauth")}
-                    </legend>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        aria-label="clientId"
-                        placeholder="clientId"
-                        value={draft.oauth.clientId}
-                        className="font-mono"
-                        onChange={(event) =>
-                          update({ oauth: { ...draft.oauth, clientId: event.target.value } })
-                        }
-                      />
-                      <Input
-                        aria-label="clientSecret"
-                        type="password"
-                        placeholder="clientSecret"
-                        value={draft.oauth.clientSecret}
-                        className="font-mono"
-                        onChange={(event) =>
-                          update({ oauth: { ...draft.oauth, clientSecret: event.target.value } })
-                        }
-                      />
-                      <Input
-                        aria-label="callbackPort"
-                        placeholder="callbackPort"
-                        inputMode="numeric"
-                        value={draft.oauth.callbackPort}
-                        className="font-mono"
-                        {...invalidProps(id("port"), errors.callbackPort)}
-                        onChange={(event) =>
-                          update({ oauth: { ...draft.oauth, callbackPort: event.target.value } })
-                        }
-                      />
-                      <Input
-                        aria-label="scope"
-                        placeholder="scope"
-                        value={draft.oauth.scope}
-                        className="font-mono"
-                        onChange={(event) =>
-                          update({ oauth: { ...draft.oauth, scope: event.target.value } })
-                        }
-                      />
-                    </div>
-                    {errors.callbackPort ? (
-                      <p role="alert" className="text-ui-sm text-destructive">
-                        {errors.callbackPort}
-                      </p>
-                    ) : null}
-                  </fieldset>
+                {transport === "http" ? (
+                  <McpOAuthFields
+                    id={id("oauth")}
+                    draft={draft.oauth}
+                    errors={errors}
+                    onChange={(oauth) => update({ oauth })}
+                  />
                 ) : null}
               </div>
             </SettingAdvancedGroup>

@@ -5,12 +5,7 @@
  * - 写入校验 revision，不一致抛 `conflict`；每次写入后异步触发 watch 事件；
  * - 状态、事件与写盘包装在 `mockNekConfigApiBase.ts`；这里只实现 `INekConfigApi` 的方法。
  */
-import type {
-  INekConfigApi,
-  NekConfigTarget,
-  NekMcpServerConfig,
-  NekSettingsPatch,
-} from "@zcode/shared/nek-protocol";
+import type { INekConfigApi, NekConfigTarget, NekSettingsPatch } from "@zcode/shared/nek-protocol";
 import { MockEventHub } from "./mockEvents.js";
 import {
   keyOf,
@@ -255,7 +250,7 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
 
   setMcpServerOverride: INekConfigApi["setMcpServerOverride"] = (target, name, override, options) =>
     this.write(target, "setMcpServerOverride", (machine, touch) =>
-      mcp.setOverride(machine, name, override as Partial<NekMcpServerConfig>, options, touch),
+      mcp.setOverride(machine, name, override, options, touch),
     );
 
   deleteMcpServer: INekConfigApi["deleteMcpServer"] = (target, scope, name, options) =>
@@ -263,8 +258,10 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
       mcp.deleteServer(machine, scope, name, options, touch),
     );
 
-  previewMcpImport: INekConfigApi["previewMcpImport"] = (target, _scope, json) =>
-    this.call("previewMcpImport", () => mcp.previewImport(this.machineOf(target), json));
+  previewMcpImport: INekConfigApi["previewMcpImport"] = (target, scope, json, cwd) =>
+    this.call("previewMcpImport", () =>
+      mcp.previewImport(this.machineOf(target), scope, json, cwd),
+    );
 
   testMcpServer: INekConfigApi["testMcpServer"] = (target, source) =>
     this.call("testMcpServer", () => {

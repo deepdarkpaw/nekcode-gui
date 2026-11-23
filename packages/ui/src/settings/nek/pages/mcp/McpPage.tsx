@@ -38,10 +38,11 @@ function useRowActions(
     entry: NekMcpServerEntry,
     openEdit: (entry: NekMcpServerEntry) => void,
   ): McpRowActions => {
-    const full = !entry.isOverride;
+    const full = doc.scope === "global";
     const save = (patch: Partial<NekMcpServerEntry["config"]>) =>
       doc.saveServer({
         name: entry.name,
+        previousName: entry.name,
         config: { ...entry.config, ...patch } as NekMcpServerEntry["config"],
       });
     return {
@@ -64,7 +65,7 @@ function useRowActions(
               message: intl.formatMessage({ id: "settings.nek.mcp.deleted" }, { name: entry.name }),
               onUndo: () => {
                 void doc
-                  .saveServer({ name: entry.name, config: entry.config })
+                  .saveServer({ name: entry.name, config: entry.override ?? entry.config })
                   .catch((error: unknown) => toast(getErrorMessage(error), { variant: "warning" }));
               },
             }),
@@ -199,9 +200,7 @@ export function McpPage() {
         documents={[global]}
         open={form.open}
         onOpenChange={(open) => !open && setForm({ open: false })}
-        initial={
-          form.open && form.entry ? { name: form.entry.name, config: form.entry.config } : undefined
-        }
+        initial={form.open ? form.entry : undefined}
         existingNames={names}
         onSave={(name, config) =>
           global.saveServer({

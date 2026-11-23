@@ -17,10 +17,9 @@ import { applySettingsPatch, diffSettingsValues, rawDiffToSettingsPatch } from "
 import { validateRawSettings } from "./rawSettingsSchema.js";
 import {
   emptyMcpDraft,
-  mcpConfigFromDraft,
   mcpDraftFromConfig,
+  resolveMcpDraft,
   suggestUniqueName,
-  validateMcpDraft,
 } from "./mcpForm.js";
 import { checkCompaction } from "./compactionChecks.js";
 import { recordActionBinding } from "./actionRecording.js";
@@ -347,25 +346,86 @@ describe("rawSettingsSchema", () => {
 describe("mcpForm", () => {
   const t = (id: string) => id;
 
-  it("validates required fields per transport", () => {
-    const errors = validateMcpDraft({ ...emptyMcpDraft(), name: "has space" }, new Set(), t);
-    expect(errors).toMatchObject({
-      name: "settings.nek.mcp.form.error.nameFormat",
-      command: expect.any(String),
+  it("NM-6 validates the same draft that is saved: HTTP(S), positive fractional timeout and valid OAuth", () => {
+    const draft = {
+      ...emptyMcpDraft(),
+      name: "x",
+      transport: "http" as const,
+      url: "http:example.test/mcp",
+      timeout: "0.25",
+    };
+    expect(resolveMcpDraft(draft, new Set(), t).config).toEqual({
+      type: "http",
+      url: draft.url,
+      timeout: 0.25,
     });
-    const http = validateMcpDraft(
-      { ...emptyMcpDraft(), name: "x", transport: "http", url: "nope" },
+    const invalid = resolveMcpDraft(
+      {
+        ...draft,
+        name: "x.ai",
+        url: "ftp://example.test/mcp",
+        timeout: "0",
+        oauth: {
+          ...draft.oauth,
+          callbackPort: "65536",
+          authServerMetadataUrl: "http://example.test/meta",
+        },
+      },
       new Set(),
       t,
     );
-    expect(http.url).toBeDefined();
+    expect(invalid.config).toBeUndefined();
+    expect(invalid.errors).toEqual({
+      name: "settings.nek.mcp.form.error.nameFormat",
+      url: "settings.nek.mcp.form.error.url",
+      timeout: "settings.nek.mcp.form.error.timeout",
+      "oauth.callbackPort": "settings.nek.mcp.form.error.port",
+      "oauth.authServerMetadataUrl": "settings.nek.mcp.form.error.metadataUrl",
+    });
+    expect(
+      resolveMcpDraft({ ...emptyMcpDraft(), name: "x" }, new Set(), t).errors.command,
+    ).toBeDefined();
   });
 
-  it("round-trips configs and omits empty optionals", () => {
-    const config = { command: "npx", args: ["-y", "pkg"], env: { A: "1" }, timeout: 30 };
-    expect(mcpConfigFromDraft(mcpDraftFromConfig("fs", config))).toEqual(config);
-    const http = { type: "http" as const, url: "https://x/mcp", oauth: { scope: "repo" } };
-    expect(mcpConfigFromDraft(mcpDraftFromConfig("gh", http))).toEqual(http);
+  it("NM-6 preserves untouched transport, args, credentials, explicit defaults and unknown fields", () => {
+    const stdio = {
+      type: "stdio" as const,
+      command: "npx",
+      args: ["-y", " pkg ", ""],
+      env: { A: "1" },
+      timeout: 60,
+    };
+    const http = {
+      type: "streamable-http" as const,
+      url: "https://x.test/mcp",
+      enabled: true,
+      exposure: "codemode" as const,
+      toolExposure: { lookup: "codemode-deferred" as const },
+      oauth: {
+        clientSecret: "secret ",
+        clientName: "client",
+        callbackUrl: "http://localhost:5432/callback",
+        callbackPort: 5432,
+        future: { keep: true },
+      },
+      future: true,
+    };
+    for (const config of [stdio, http]) {
+      const draft = mcpDraftFromConfig("fs", config);
+      expect(
+        resolveMcpDraft({ ...draft, description: "new" }, new Set(), t, { config, draft }).config,
+      ).toEqual({ ...config, description: "new" });
+    }
+    const draft = mcpDraftFromConfig("fs", http);
+    expect(draft.exposure).toBe("deferred");
+    expect(
+      resolveMcpDraft(
+        { ...draft, oauth: { ...draft.oauth, clientName: "changed" }, exposure: "direct" },
+        new Set(),
+        t,
+        { config: http, draft },
+      ).config,
+    ).toEqual({ ...http, exposure: "direct", oauth: { ...http.oauth, clientName: "changed" } });
   });
 
   it("suggests unique names for conflicts", () => {

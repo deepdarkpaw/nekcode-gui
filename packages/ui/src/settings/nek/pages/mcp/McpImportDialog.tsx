@@ -152,6 +152,8 @@ export function McpImportDialog({
             {...TECHNICAL_INPUT_ATTRIBUTES}
             autoFocus
             aria-label={t("settings.nek.mcp.import.jsonLabel")}
+            aria-invalid={errors.length > 0 || undefined}
+            aria-describedby={errors.length > 0 ? "mcp-import-json-errors" : undefined}
             value={json}
             placeholder={
               '{\n  "mcpServers": {\n    "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"] }\n  }\n}'
@@ -160,10 +162,15 @@ export function McpImportDialog({
             onChange={(event) => {
               setJson(event.target.value);
               setRows(null);
+              setErrors([]);
             }}
           />
           {errors.length > 0 ? (
-            <ul role="alert" className="flex flex-col gap-0.5 text-ui-sm text-destructive">
+            <ul
+              id="mcp-import-json-errors"
+              role="alert"
+              className="flex flex-col gap-0.5 text-ui-sm text-destructive"
+            >
               {errors.map((error) => (
                 <li key={error}>{error}</li>
               ))}

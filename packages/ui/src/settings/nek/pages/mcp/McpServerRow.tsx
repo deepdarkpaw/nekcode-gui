@@ -11,10 +11,12 @@ import {
   RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react";
-import type {
-  NekMcpExposure,
-  NekMcpServerEntry,
-  NekMcpServerStatus,
+import {
+  isNekMcpTimeout,
+  normalizeNekMcpExposure,
+  type NekMcpExposure,
+  type NekMcpServerEntry,
+  type NekMcpServerStatus,
 } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Fold, FoldContent, FoldTrigger, useFoldState } from "@/components/ui/fold.js";
@@ -134,7 +136,9 @@ function ToolList({
               <span className="truncate font-mono text-ui-sm">{tool.name}</span>
               <ToolExposureSelect
                 tool={tool.name}
-                value={entry.config.toolExposure?.[tool.name] ?? tool.exposure}
+                value={
+                  normalizeNekMcpExposure(entry.config.toolExposure?.[tool.name]) ?? tool.exposure
+                }
                 onCommit={(exposure) => actions.setToolExposure(tool.name, exposure)}
               />
             </li>
@@ -229,7 +233,7 @@ export function McpServerRow({
           <SettingSelectField
             label={t("settings.nek.mcp.exposure")}
             description={t("settings.nek.mcp.exposureHint")}
-            value={entry.config.exposure ?? "deferred"}
+            value={normalizeNekMcpExposure(entry.config.exposure) ?? "deferred"}
             options={MCP_EXPOSURES.map((value) => ({
               value,
               label: t(`settings.nek.mcp.exposure.${value}`),
@@ -240,8 +244,9 @@ export function McpServerRow({
             <SettingNumberField
               label={t("settings.nek.mcp.timeout")}
               unit="s"
-              integer
-              min={1}
+              validate={(value) =>
+                isNekMcpTimeout(value) ? null : t("settings.nek.mcp.form.error.timeout")
+              }
               value={entry.config.timeout ?? MCP_DEFAULT_TIMEOUT_SECONDS}
               defaultValue={MCP_DEFAULT_TIMEOUT_SECONDS}
               onCommit={(value) =>

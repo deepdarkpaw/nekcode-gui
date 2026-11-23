@@ -3210,14 +3210,48 @@ const enUS: Record<string, string> = {
   "settings.nek.mcp.form.headers": "Headers",
   "settings.nek.mcp.form.description": "Description",
   "settings.nek.mcp.form.oauth": "OAuth",
-  "settings.nek.mcp.form.testDisabled": "Fill in the required fields first",
+  "settings.nek.mcp.form.oauth.clientId": "Client ID",
+  "settings.nek.mcp.form.oauth.clientSecret": "Client secret",
+  "settings.nek.mcp.form.oauth.callbackPort": "Callback port",
+  "settings.nek.mcp.form.oauth.callbackUrl": "Callback URL",
+  "settings.nek.mcp.form.oauth.scope": "Scope",
+  "settings.nek.mcp.form.oauth.clientName": "Client name",
+  "settings.nek.mcp.form.oauth.authServerMetadataUrl": "Authorization server metadata URL",
+  "settings.nek.mcp.form.testDisabled": "Fix the configuration errors first",
   "settings.nek.mcp.form.error.nameRequired": "Enter a name",
   "settings.nek.mcp.form.error.nameFormat": "Use only A–Z, a–z, digits, underscores, and hyphens.",
   "settings.nek.mcp.form.error.nameDuplicate": "A server with this name already exists",
-  "settings.nek.mcp.form.error.commandRequired": "Enter a command",
-  "settings.nek.mcp.form.error.url": "Enter a URL starting with http:// or https://",
-  "settings.nek.mcp.form.error.timeout": "Enter a positive number of seconds",
-  "settings.nek.mcp.form.error.port": "Enter a positive port number",
+  "settings.nek.mcp.form.error.commandRequired": "Enter a command for a stdio server.",
+  "settings.nek.mcp.form.error.url": "Enter a valid HTTP or HTTPS URL.",
+  "settings.nek.mcp.form.error.timeout":
+    "Enter a timeout greater than zero seconds; decimals are allowed.",
+  "settings.nek.mcp.form.error.port": "The callback port must be an integer from 1 to 65535.",
+  "settings.nek.mcp.form.error.callbackUrl":
+    "Use an HTTP callback URL on localhost, 127.0.0.1, or [::1], without a query or fragment.",
+  "settings.nek.mcp.form.error.callbackPortMismatch":
+    "The port in the callback URL must match the callback port.",
+  "settings.nek.mcp.form.error.clientName": "The client name must not be blank.",
+  "settings.nek.mcp.form.error.metadataUrl":
+    "Use HTTPS for the metadata URL; HTTP is only allowed on localhost, 127.0.0.1, or [::1].",
+  "settings.nek.mcp.form.error.serverObject": "The server configuration must be an object.",
+  "settings.nek.mcp.form.error.oauthObject": "oauth must be an object.",
+  "settings.nek.mcp.form.error.clientRegistration":
+    "nek does not support oauth.clientRegistration. Remove it from mcp.json.",
+  "settings.nek.mcp.form.error.auth":
+    "nek does not support auth.provider. Remove auth from mcp.json and use OAuth or an Authorization header.",
+  "settings.nek.mcp.form.error.sse":
+    "nek does not support legacy SSE transport. Use a Streamable HTTP URL.",
+  "settings.nek.mcp.form.error.transport":
+    "Select stdio and enter a command, or select Streamable HTTP and enter a URL.",
+  "settings.nek.mcp.form.error.stringType": "{field} must be a string.",
+  "settings.nek.mcp.form.error.stringRecord": "{field} must map names to strings.",
+  "settings.nek.mcp.form.error.args": "args must be an array of strings.",
+  "settings.nek.mcp.form.error.enabled": "enabled must be true or false.",
+  "settings.nek.mcp.form.error.exposure": "exposure must be deferred, direct, or hidden.",
+  "settings.nek.mcp.form.error.toolExposureObject":
+    "toolExposure must map tool names to exposure modes.",
+  "settings.nek.mcp.form.error.toolExposureValue":
+    "The exposure for {tool} must be deferred, direct, or hidden.",
   "settings.nek.mcp.import.title": "Import from JSON",
   "settings.nek.mcp.import.description":
     "Accepts the mcpServers format of Claude Desktop and Cursor. Preview before importing.",
