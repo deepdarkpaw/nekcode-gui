@@ -26,7 +26,6 @@ import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowAc
 import { TaskListItemContextMenu } from "@/TaskListItemContextMenu.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
-import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { useV4SplitPaneEntry } from "@/v4/splitPaneEntryContext.js";
 import { buildWorkbenchSessionKey, useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
@@ -863,14 +862,6 @@ export function TaskListItemContextMenuContent({
       }}
       onCopySessionId={() => {
         void handleCopyText(intl.formatMessage({ id: "appHeader.copySessionId" }), task.taskId);
-      }}
-      onViewModelTrajectory={() => {
-        // 通过单例 store 把“打开轨迹”请求交给所属 workspace 的侧边栏控制器（useAppPanels）。
-        useModelTrajectoryStore.getState().requestOpen({
-          taskId: task.taskId,
-          workspaceKey: task.workspaceIdentity?.trim() || workspacePath,
-          title: taskTitle,
-        });
       }}
     />
   );

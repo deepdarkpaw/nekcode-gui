@@ -21,17 +21,6 @@ export interface CodeViewerSidePaneTab {
   sourceKey: string | null;
 }
 
-export interface ModelTrajectorySidePaneTab {
-  id: string;
-  type: "model-trajectory";
-  ownerTaskId?: string | null;
-  workspaceKey?: string | null;
-  openedAt?: number;
-  /** 目标 task/session id；model-io 按该 id 匹配。 */
-  taskId: string;
-  title?: string | null;
-}
-
 export interface DeveloperToolsSidePaneTab {
   id: "developer-tools";
   type: "developer-tools";
@@ -161,7 +150,6 @@ export type WorkspaceSidePaneTab =
   | BackgroundBashSidePaneTab
   | GitSidePaneTab
   | CodeViewerSidePaneTab
-  | ModelTrajectorySidePaneTab
   | DeveloperToolsSidePaneTab
   | TerminalSidePaneTab
   | SubagentSessionSidePaneTab
@@ -188,7 +176,6 @@ const SUPPORTED_SIDE_PANE_TAB_TYPES = new Set<string>(
     "bash-output": true,
     git: true,
     "code-viewer": true,
-    "model-trajectory": true,
     "developer-tools": true,
     terminal: true,
     "subagent-session": true,
@@ -257,20 +244,6 @@ export function normalizeWorkspaceSidePaneState(
 
 function createGitSidePaneTab(): GitSidePaneTab {
   return { id: "git", type: "git", openedAt: Date.now() };
-}
-
-function createModelTrajectorySidePaneTab(options: {
-  taskId: string;
-  title?: string | null;
-}): ModelTrajectorySidePaneTab {
-  return {
-    // 同一个 task 复用同一个 tab，避免重复打开多份相同轨迹。
-    id: `model-trajectory:${options.taskId}`,
-    type: "model-trajectory",
-    openedAt: Date.now(),
-    taskId: options.taskId,
-    title: options.title ?? null,
-  };
 }
 
 function createDeveloperToolsSidePaneTab(): DeveloperToolsSidePaneTab {
@@ -632,16 +605,6 @@ export function activateGitSidePane(
   current: WorkspaceSidePaneState | null,
 ): WorkspaceSidePaneState {
   return activateSidePaneTab(current, createGitSidePaneTab());
-}
-
-export function openModelTrajectorySidePane(
-  current: WorkspaceSidePaneState | null,
-  options: {
-    taskId: string;
-    title?: string | null;
-  },
-): WorkspaceSidePaneState {
-  return activateSidePaneTab(current, createModelTrajectorySidePaneTab(options));
 }
 
 export function activateDeveloperToolsSidePane(

@@ -22,7 +22,6 @@ import { WorkspaceSidePaneToggleButton } from "@/WorkspaceSidePaneToggleButton.j
 import { DesktopWindowControls } from "@/DesktopWindowControls.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 import { GitPane } from "@/GitPane.js";
-import { ModelTrajectoryPane } from "@/ModelTrajectoryPane.js";
 import { DeveloperToolsPane } from "@/DeveloperToolsPane.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
@@ -754,9 +753,6 @@ export function AnimatedSidePanePanel({
         relativeTime: (timestamp) => formatTaskRelativeTime(timestamp, intl),
         reviewTitle: intl.formatMessage({ id: "sidePane.review" }),
         codeViewerTitle: intl.formatMessage({ id: "codeViewer.title" }),
-        modelTrajectoryTitle: intl.formatMessage({
-          id: "modelTrajectory.title",
-        }),
         developerToolsTitle: intl.formatMessage({
           id: "developerTools.title",
         }),
@@ -999,14 +995,6 @@ export function AnimatedSidePanePanel({
                             onClose={onCloseGit}
                             onRefresh={onRefreshGit}
                             onRevealFileInTree={onRevealGitFileInTree}
-                          />
-                        ) : tab.type === "model-trajectory" ? (
-                          <ModelTrajectoryPane
-                            taskId={tab.taskId}
-                            title={tab.title}
-                            workspacePath={workspaceAbsPath}
-                            workspaceIdentity={workspaceIdentity}
-                            onClose={() => onCloseTab(tab.id)}
                           />
                         ) : tab.type === "developer-tools" ? (
                           <ServiceProvider services={services}>

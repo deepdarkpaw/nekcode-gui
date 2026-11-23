@@ -10,7 +10,6 @@ import {
   MessageSquareTextIcon,
   NotepadTextIcon,
   SquareTerminalIcon,
-  WaypointsIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
@@ -272,10 +271,6 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <FileDiffIcon className="size-3.5" />;
   }
 
-  if (tab.type === "model-trajectory") {
-    return <WaypointsIcon className="size-3.5" />;
-  }
-
   if (tab.type === "developer-tools") {
     return <BugIcon className="size-3.5" />;
   }
@@ -430,10 +425,6 @@ export function getSidePaneTabTitle(
 
   if (tab.type === "git") {
     return formatMessage({ id: "sidePane.review" });
-  }
-
-  if (tab.type === "model-trajectory") {
-    return tab.title?.trim() || formatMessage({ id: "modelTrajectory.title" });
   }
 
   if (tab.type === "developer-tools") {

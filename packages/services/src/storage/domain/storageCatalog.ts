@@ -27,7 +27,6 @@ const CLEANABILITY: Record<StorageCategoryId, StorageCleanability> = {
   // 只有 subagent 的 transcript.jsonl 可删；其余工具输出与临时缓存暂不可删。
   subagentTranscripts: "safe",
   toolOutputs: "none",
-  modelTrajectory: "safe",
   devTraces: "safe",
   logs: "safe",
   backups: "confirm",
@@ -86,7 +85,6 @@ const PREFIX_RULES: Record<Exclude<StorageCategoryId, "other">, string[]> = {
     "tmp",
     "cache",
   ],
-  modelTrajectory: ["cli/debug", "cli/rollout"],
   devTraces: ["v2/dev", "v2/acp-traffic-proxy", "v2/acp-stream-diagnostics"],
   logs: ["v2/logs", "cli/log", "logs", "v2/crash", "v2/perf", "feedback/logs"],
   backups: ["backup", "v2/backup", "v2/migrations", "cli/db/backup", "cli/db/backups"],

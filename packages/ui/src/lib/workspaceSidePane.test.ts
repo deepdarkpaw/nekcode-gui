@@ -41,7 +41,6 @@ const SUPPORTED_TABS: WorkspaceSidePaneState["tabs"] = [
   { id: "git", type: "git" },
   { id: "developer-tools", type: "developer-tools" },
   { id: "terminal", type: "terminal", title: "Shell" },
-  { id: "trajectory", type: "model-trajectory", taskId: "root" },
   {
     id: "code",
     type: "code-viewer",
@@ -78,6 +77,15 @@ describe("side-pane restore validation", () => {
       });
     },
   );
+
+  it("ZR-5 ignores a retired trajectory tab when restoring the side pane", () => {
+    const retired = { id: "old-trajectory", type: "model-trajectory", taskId: "root" };
+    const state = restoredState([...SUPPORTED_TABS, retired], retired.id);
+    expect(normalizeWorkspaceSidePaneState(state)).toEqual({
+      tabs: SUPPORTED_TABS,
+      activeTabId: "plan",
+    });
+  });
 
   it("drops a directory-only cached state without leaving an active pane", () => {
     const key = "directory-only-restore";

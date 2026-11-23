@@ -370,10 +370,6 @@
       "count": 1
     },
     {
-      "key": "knip\u0000exports\u0000packages/desktop/src/main/desktopCommandHandlers.ts\u0000openChangelog",
-      "count": 1
-    },
-    {
       "key": "knip\u0000exports\u0000packages/desktop/src/main/desktopMainIpcNekRouter.ts\u0000NekIpcHostRouter",
       "count": 1
     },
@@ -819,18 +815,6 @@
     },
     {
       "key": "knip\u0000exports\u0000packages/ui/src/ModelConfigSelect.tsx\u0000MODEL_CONFIG_SELECT_BADGE_CLASS_NAME",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/ModelTrajectoryPane.tsx\u0000resolveTrajectoryInputMessages",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/ModelTrajectoryPane.tsx\u0000resolveTrajectoryTimelineItems",
-      "count": 1
-    },
-    {
-      "key": "knip\u0000exports\u0000packages/ui/src/ModelTrajectoryTimeline.tsx\u0000resolveTrajectoryInputMessages",
       "count": 1
     },
     {

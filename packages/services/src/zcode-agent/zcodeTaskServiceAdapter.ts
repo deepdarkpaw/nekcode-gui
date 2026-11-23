@@ -134,7 +134,6 @@ import type {
   ZCodeTaskIndexTerminalEvent,
 } from "./zcodeTaskIndexSyncer.js";
 import { createWorkspaceSessionImporter } from "./workspaceSessionImporter.js";
-import { readModelTrajectory } from "./modelTrajectory.js";
 import { errorAttributionSchema, type CommandPayloadMap } from "@zcode/shared/zcode-protocol-v4";
 import {
   assertV4CommandAckOk,
@@ -2734,16 +2733,6 @@ export function createZCodeTaskServiceAdapter(
       const path = resolveZCodeAgentCurrentLogFilePath();
       // 返回 ZCode Agent 的结构化日志 JSONL；日志行中的 sessionId 用于按当前任务排查。
       return { provider: GLM_PROVIDER, path, exists: existsSync(path) };
-    },
-
-    async getModelTrajectory(params) {
-      // ZCode Agent 把 taskId 当作 sessionId 落盘 model-io（见本文件其它 sessionId: params.taskId 用法），
-      // 这里按 sessionId 还原该 task 的模型调用轨迹，供 UI 侧边栏可视化。
-      const trajectory = await readModelTrajectory(params.taskId, params.limit);
-      logger.info(
-        `[ZCodeTaskService] getModelTrajectory taskId=${params.taskId} records=${trajectory.records.length} files=${trajectory.sourceFiles.length} truncated=${trajectory.truncated}`,
-      );
-      return trajectory;
     },
 
     async getTaskTokenUsage(params): Promise<ZCodeTaskTokenUsageResult> {
