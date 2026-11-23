@@ -1,4 +1,4 @@
-/** GUI stores each preset as `<name>.md`; its name need not be an ASCII identifier. */
+/** Only operations that derive a new `<name>.md` need a portable filename stem. */
 export function isAgentPresetFileName(name: string): boolean {
   return (
     name.trim().length > 0 &&

@@ -17,6 +17,12 @@ import type {
   NekYamlPatch,
   NekYamlReadResult,
 } from "@zcode/shared/nek-protocol";
+import {
+  annotateAgentPresetOverrides,
+  builtinAgentPresetEntries,
+  effectiveAgentPresetTools,
+  isAgentPresetFileName,
+} from "@zcode/shared/nek-protocol";
 import { mergeDeep } from "../../lib/settingsPatch.js";
 import {
   assertRevision,
@@ -129,26 +135,41 @@ export function patchYaml(
 
 /** 预设列表 + 诊断 + 目录级组合 revision（与 nek 侧的 `NekAgentPresetsView` 同形）。 */
 export function listPresets(machine: MockMachine, cwd?: string): NekAgentPresetsView {
-  const entries = machine.presets
-    .filter((entry) => entry.source !== "project" || (cwd && entry.path?.startsWith(cwd)))
-    .map((entry) =>
-      clone({
-        source: entry.source,
-        path: entry.path,
-        revision: entry.revision,
-        preset: entry.preset,
-      }),
-    );
+  const projectDir = cwd ? `${cwd}/.nek/agents/` : undefined;
+  const projectTrusted = Boolean(
+    cwd && (machine.trust.get(cwd) ?? machine.settings.value.defaultProjectTrust === "always"),
+  );
+  const entries = annotateAgentPresetOverrides([
+    ...builtinAgentPresetEntries(),
+    ...machine.presets
+      .filter((entry) => entry.source === "user")
+      .map((entry) => ({
+        ...clone(entry),
+        effectiveTools: effectiveAgentPresetTools(entry.preset),
+      })),
+    ...machine.presets
+      .filter(
+        (entry) => projectDir && entry.source === "project" && entry.path.startsWith(projectDir),
+      )
+      .map((entry) => ({
+        ...clone(entry),
+        effectiveTools: effectiveAgentPresetTools(entry.preset),
+        untrusted: !projectTrusted,
+      })),
+  ]);
   const diagnostics = machine.brokenPresets.filter(
-    (item) => cwd !== undefined || !item.file.includes("/.nek/agents/"),
+    (item) =>
+      item.file.startsWith(`${machine.agentDir}/agents/`) ||
+      Boolean(projectDir && item.file.startsWith(projectDir)),
   );
   return {
     entries,
     diagnostics: clone(diagnostics),
-    revision: entries
-      .map((entry) => `${entry.path ?? entry.preset.name}:${entry.revision}`)
-      .sort()
-      .join("|"),
+    revision: JSON.stringify([
+      projectTrusted,
+      entries.map(({ path, revision }) => [path, revision]),
+      diagnostics,
+    ]),
   };
 }
 
@@ -160,51 +181,60 @@ export function savePreset(
   machine: MockMachine,
   scope: NekConfigScope,
   preset: NekAgentPreset,
-  options: { revision: string; previousName?: string; cwd?: string },
+  options: { revision: string; cwd?: string },
   touch: Touch,
 ): string {
   const source = presetSource(scope);
-  const key = options.previousName ?? preset.name;
-  const existing = machine.presets.find(
-    (entry) => entry.source === source && entry.preset.name === key,
-  );
-  if (existing && existing.revision !== options.revision) {
-    throw mockError("conflict", `${existing.path} was modified externally`);
-  }
-  const clash = machine.presets.find(
-    (entry) => entry.source === source && entry.preset.name === preset.name,
-  );
-  if (clash && clash !== existing) {
-    throw mockError("validation", `Preset ${preset.name} already exists`, { name: "duplicate" });
-  }
   const dir =
     scope === "project" ? `${options.cwd ?? ""}/.nek/agents` : `${machine.agentDir}/agents`;
-  const file = {
-    path: `${dir}/${preset.name}.md`,
-    revision: existing?.revision ?? "absent",
-    value: null,
-  };
-  const revision = touch(file);
-  const entry = { source, path: file.path, revision, preset: clone(preset) } as const;
-  machine.presets = existing
-    ? machine.presets.map((item) => (item === existing ? { ...entry } : item))
-    : [...machine.presets, { ...entry }];
+  const existing = machine.presets.find(
+    (entry) =>
+      entry.source === source &&
+      entry.path.startsWith(`${dir}/`) &&
+      entry.revision === options.revision,
+  );
+  if (!existing && options.revision !== "absent") {
+    throw mockError("conflict", "Preset file was modified externally");
+  }
+  const name = preset.name.trim();
+  const renamed =
+    existing &&
+    name !== existing.preset.name &&
+    existing.path === `${dir}/${existing.preset.name}.md`;
+  if ((!existing || renamed) && !isAgentPresetFileName(name))
+    throw mockError("validation", `Invalid preset filename: ${name}`);
+  const path = !existing || renamed ? `${dir}/${name}.md` : existing.path;
+  if (
+    path !== existing?.path &&
+    (machine.presets.some((entry) => entry.path === path) ||
+      machine.brokenPresets.some((entry) => entry.file === path))
+  )
+    throw mockError("validation", `Preset file already exists: ${path}`);
+  const revision = touch({ path, revision: existing?.revision ?? "absent", value: null });
+  const entry = { source, path, revision, preset: clone({ ...preset, name }) };
+  machine.presets =
+    existing && !renamed
+      ? machine.presets.map((item) => (item === existing ? entry : item))
+      : [...machine.presets.filter((item) => item !== existing), entry];
+  if (renamed) touch({ path: existing.path, revision: existing.revision, value: null });
   return revision;
 }
 
 export function deletePreset(
   machine: MockMachine,
   scope: NekConfigScope,
-  name: string,
-  options: { revision: string },
+  path: string,
+  options: { revision: string; cwd?: string },
   touch: Touch,
 ): string {
   const source = presetSource(scope);
+  const dir =
+    scope === "project" ? `${options.cwd ?? ""}/.nek/agents` : `${machine.agentDir}/agents`;
   const existing = machine.presets.find(
-    (entry) => entry.source === source && entry.preset.name === name,
+    (entry) => entry.source === source && entry.path === path && path.startsWith(`${dir}/`),
   );
-  if (!existing?.path) {
-    throw mockError("validation", `Preset ${name} not found`);
+  if (!existing) {
+    throw mockError("validation", `Preset file not found: ${path}`);
   }
   if (existing.revision !== options.revision) {
     throw mockError("conflict", `${existing.path} was modified externally`);

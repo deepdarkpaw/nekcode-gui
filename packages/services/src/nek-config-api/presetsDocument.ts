@@ -1,303 +1,196 @@
-/**
- * 子代理预设（`agents/*.md`）：frontmatter + 正文。
- *
- * 三种来源（`builtin` / `user` / `project`）与 nek 的 `discoverAgentTypes` 对齐：
- * 内置预设来自 nek 代码（只读、无文件），用户与项目预设是 `<agentDir>/agents/*.md`
- * 与 `<cwd>/.nek/agents/*.md`。保存时保留未知 frontmatter 键与正文原文。
- */
+/** nek v0.5.1: extensions/nek/services/agent-types.ts (scanAgentDir, discoverAgentTypes). */
 import { createHash } from "node:crypto";
-import { join } from "node:path";
-import type {
-  NekAgentPreset,
-  NekAgentPresetEntry,
-  NekAgentPresetsView,
-  NekConfigDiagnostic,
-  NekConfigScope,
+import {
+  annotateAgentPresetOverrides,
+  builtinAgentPresetEntries,
+  effectiveAgentPresetTools,
+  type NekAgentPreset,
+  type NekAgentPresetEntry,
+  type NekAgentPresetsView,
+  type NekConfigDiagnostic,
+  type NekConfigScope,
 } from "@zcode/shared/nek-protocol";
 import {
-  parseFrontmatterDocument,
-  serializeFrontmatterDocument,
-} from "../nek-agent/config/nekConfigDocuments.js";
-import type { NekConfigHostExecutor } from "./hostExecutor.js";
-import { readTextDocument, writeTextDocument } from "./documents.js";
+  parseAgentMarkdown,
+  serializeAgentMarkdown,
+} from "../nek-agent/config/agentPresetFrontmatter.js";
+import { writeTextDocument } from "./documents.js";
 import { conflict, validationError } from "./errors.js";
-import { ABSENT_REVISION, sameRevision } from "./revision.js";
-import { agentsDir, agentPresetPath } from "./paths.js";
+import type { NekConfigHostExecutor } from "./hostExecutor.js";
+import { agentPresetFileName, agentsDir, newAgentPresetPath, targetPaths } from "./paths.js";
+import { ABSENT_REVISION, encodeRevision, sameRevision } from "./revision.js";
 
-/** nek `BUILTIN_AGENT_TYPES` 的只读镜像（正文与工具列表以 nek 为准，这里不重复抄提示词）。 */
-export const BUILTIN_PRESETS: readonly NekAgentPreset[] = [
-  {
-    name: "generalPurpose",
-    description:
-      "handles substantial, clearly bounded general work that has already been determined suitable for delegation. It can edit files and run commands.",
-    readonly: false,
-    isBackground: false,
-    autonomous: false,
-    tools: [
-      "read",
-      "bash",
-      "edit",
-      "write",
-      "grep",
-      "find",
-      "ls",
-      "ast_grep",
-      "todo_write",
-      "web_search",
-    ],
-    disallowedTools: [],
-    instructions: "",
-  },
-  {
-    name: "explorer",
-    description:
-      "handles clearly bounded, substantial codebase exploration. It can find files by patterns, search keywords, or map code structure.",
-    readonly: true,
-    isBackground: false,
-    autonomous: true,
-    tools: ["read", "grep", "find", "ls", "ast_grep", "web_search"],
-    disallowedTools: [],
-    instructions: "",
-  },
-];
+const MAX_PRESET_FILES = 512;
+const MAX_PRESET_BYTES = 1024 * 1024;
+const MAX_SCAN_BYTES = 8 * 1024 * 1024;
 
-/** 内置预设的 revision 令牌：不是文件，但契约要求每个条目都带 revision。 */
-export const BUILTIN_PRESET_REVISION = "builtin";
-
-export interface NekAgentPresetFile {
-  path: string;
-  revision: string;
-  /** frontmatter 原始对象（含 GUI 不认识的键）。 */
-  frontmatter: Record<string, unknown>;
-  body: string;
-  preset: NekAgentPreset;
+/** Existing edits (including provider reference rewrites) carry a path-bound revision. */
+export function presetFileRevision(path: string, revision: string): string {
+  return `${path}\0${revision}`;
 }
 
-export function presetToFrontmatter(preset: NekAgentPreset): Record<string, unknown> {
-  const frontmatter: Record<string, unknown> = {
-    name: preset.name,
-    description: preset.description,
-  };
-  if (preset.model !== undefined) frontmatter.model = preset.model;
-  if (preset.thinking !== undefined) frontmatter.thinking = preset.thinking;
-  if (preset.contextWindow !== undefined) frontmatter.context_window = preset.contextWindow;
-  if (preset.readonly !== undefined) frontmatter.readonly = preset.readonly;
-  if (preset.tools !== undefined) frontmatter.tools = [...preset.tools];
-  if (preset.disallowedTools !== undefined)
-    frontmatter.disallowed_tools = [...preset.disallowedTools];
-  if (preset.isBackground !== undefined) frontmatter.is_background = preset.isBackground;
-  if (preset.autonomous !== undefined) frontmatter.autonomous = preset.autonomous;
-  return frontmatter;
+function presetFileRef(expectedRevision: string): { path: string; revision: string } {
+  const parts = expectedRevision.split("\0", 3);
+  const [path, revision] = parts;
+  if (parts.length !== 2 || !path || !revision || revision === ABSENT_REVISION)
+    throw validationError("Expected the revision of an existing preset file");
+  return { path, revision };
 }
 
-function readStringList(value: unknown): string[] | undefined {
-  if (Array.isArray(value))
-    return value.filter((entry): entry is string => typeof entry === "string");
-  if (typeof value === "string") {
-    const list = value
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry !== "");
-    return list.length > 0 ? list : undefined;
-  }
-  return undefined;
+async function readPresetText(executor: NekConfigHostExecutor, path: string) {
+  const info = await executor.stat(path);
+  if (!info) return null;
+  if (info.isDirectory) throw new Error("EISDIR: cannot read a directory as a preset file");
+  const content = await executor.readResourceFile(path, MAX_PRESET_BYTES);
+  return { content, revision: encodeRevision(info, content) };
 }
 
-/** frontmatter + 正文 → 契约里的预设形状。 */
-export function frontmatterToPreset(
-  path: string,
-  frontmatter: Record<string, unknown>,
-  body: string,
-): NekAgentPreset {
-  const name = typeof frontmatter.name === "string" ? frontmatter.name : "";
-  const description = typeof frontmatter.description === "string" ? frontmatter.description : "";
-  if (name === "" || description === "") {
-    throw validationError(`${path}: frontmatter needs both "name" and "description"`, {
-      [path]: "missing name or description",
-    });
-  }
-  const preset: NekAgentPreset = { name, description, instructions: body };
-  if (typeof frontmatter.model === "string") preset.model = frontmatter.model;
-  if (typeof frontmatter.thinking === "string")
-    preset.thinking = frontmatter.thinking as NekAgentPreset["thinking"];
-  if (typeof frontmatter.context_window === "number")
-    preset.contextWindow = frontmatter.context_window;
-  if (typeof frontmatter.readonly === "boolean") preset.readonly = frontmatter.readonly;
-  const tools = readStringList(frontmatter.tools);
-  if (tools) preset.tools = tools;
-  const disallowedTools = readStringList(frontmatter.disallowed_tools);
-  if (disallowedTools) preset.disallowedTools = disallowedTools;
-  if (typeof frontmatter.is_background === "boolean")
-    preset.isBackground = frontmatter.is_background;
-  if (typeof frontmatter.autonomous === "boolean") preset.autonomous = frontmatter.autonomous;
-  return preset;
-}
-
-export async function readAgentPresetFile(
-  executor: NekConfigHostExecutor,
-  path: string,
-): Promise<NekAgentPresetFile | null> {
-  const document = await readTextDocument(executor, path);
-  if (document.content === null) return null;
-  const parsed = parseFrontmatterDocument(path, document.content);
-  return {
-    path,
-    revision: document.revision,
-    frontmatter: parsed.frontmatter,
-    body: parsed.body,
-    preset: frontmatterToPreset(path, parsed.frontmatter, parsed.body),
-  };
-}
-
-/** 列出一个目录下的 `*.md`（目录不存在时为空）。 */
-async function listPresetFiles(executor: NekConfigHostExecutor, dir: string): Promise<string[]> {
-  const entries = await executor.listDir(dir);
-  return entries
-    .filter((entry) => !entry.isDirectory && entry.name.endsWith(".md"))
-    .map((entry) => join(dir, entry.name));
-}
-
-export interface ListAgentPresetsArgs {
+interface PresetsLocation {
   executor: NekConfigHostExecutor;
   agentDir: string;
   cwd?: string;
-  logger?: { warn: (...args: unknown[]) => void };
 }
 
-/**
- * 列出全部预设：内置 → 用户 → 项目（同名时后者覆盖前者，与 nek 的覆盖顺序一致）。
- *
- * 坏文件不打断列表，但必须进入 diagnostics；revision 覆盖扫描到的整个目录。
- */
-export async function listAgentPresets(args: ListAgentPresetsArgs): Promise<NekAgentPresetsView> {
-  const { executor, agentDir, cwd, logger } = args;
-  const entries: NekAgentPresetEntry[] = BUILTIN_PRESETS.map((preset) => ({
-    revision: BUILTIN_PRESET_REVISION,
-    source: "builtin",
-    preset: { ...preset, tools: preset.tools ? [...preset.tools] : undefined },
-  }));
+/** Scan direct `.md` entries in readdir order, including failures; never dedupe before annotating. */
+export async function listAgentPresets({
+  executor,
+  agentDir,
+  cwd,
+  projectTrusted = true,
+  logger,
+}: PresetsLocation & {
+  projectTrusted?: boolean;
+  logger?: { warn: (...args: unknown[]) => void };
+}): Promise<NekAgentPresetsView> {
+  const entries = builtinAgentPresetEntries();
   const diagnostics: NekConfigDiagnostic[] = [];
-  const revisions: Array<{ path: string; revision: string }> = [];
-  const scans: Array<{ dir: string; source: "user" | "project" }> = [
-    { dir: agentsDir({ agentDir }, "global"), source: "user" },
-  ];
-  if (cwd) scans.push({ dir: agentsDir({ agentDir }, "project", cwd), source: "project" });
-  const byKey = new Map<string, number>();
-  for (const [index, entry] of entries.entries()) byKey.set(entry.preset.name, index);
-  for (const scan of scans) {
-    for (const path of await listPresetFiles(executor, scan.dir)) {
-      const document = await readTextDocument(executor, path);
-      if (document.content === null) continue;
-      revisions.push({ path, revision: document.revision });
-      let file: NekAgentPresetFile;
+  const revision = createHash("sha256").update(String(projectTrusted));
+  const scopes = cwd ? (["global", "project"] as const) : (["global"] as const);
+  let bytes = 0;
+  const report = (path: string, error: unknown) => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = detail.startsWith(`${path}:`) ? detail : `${path}: ${detail}`;
+    diagnostics.push({ file: path, severity: "error", message });
+    revision.update(JSON.stringify([path, message]));
+    logger?.warn("skipping unreadable agent preset", path, error);
+  };
+  for (const scope of scopes) {
+    const dir = agentsDir({ agentDir }, scope, cwd);
+    let names: string[];
+    try {
+      names = (await executor.listDir(dir))
+        .map((entry) => entry.name)
+        .filter((name) => name.endsWith(".md"));
+    } catch (error) {
+      report(dir, error);
+      continue;
+    }
+    if (names.length > MAX_PRESET_FILES)
+      throw validationError(`Too many preset files in ${dir} (limit: ${MAX_PRESET_FILES})`);
+    for (const name of names) {
+      const path = targetPaths(dir).join(dir, name);
       try {
-        const parsed = parseFrontmatterDocument(path, document.content);
-        file = {
+        const document = await readPresetText(executor, path);
+        if (!document) throw new Error("ENOENT: preset file does not exist");
+        bytes += Buffer.byteLength(document.content);
+        revision.update(JSON.stringify([path, document.revision]));
+        const { preset } = parseAgentMarkdown(path, document.content);
+        entries.push({
+          revision: presetFileRevision(path, document.revision),
+          source: scope === "project" ? "project" : "user",
           path,
-          revision: document.revision,
-          frontmatter: parsed.frontmatter,
-          body: parsed.body,
-          preset: frontmatterToPreset(path, parsed.frontmatter, parsed.body),
-        };
+          preset,
+          effectiveTools: effectiveAgentPresetTools(preset),
+          ...(scope === "project" && !projectTrusted ? { untrusted: true } : {}),
+        });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        diagnostics.push({ file: path, severity: "error", message });
-        logger?.warn("skipping unreadable agent preset", path, error);
-        continue;
+        report(path, error);
       }
-      const entry: NekAgentPresetEntry = {
-        revision: file.revision,
-        source: scan.source,
-        path: file.path,
-        preset: file.preset,
-      };
-      const existing = byKey.get(file.preset.name);
-      if (existing === undefined) {
-        byKey.set(file.preset.name, entries.length);
-        entries.push(entry);
-      } else {
-        entries[existing] = entry;
-      }
+      if (bytes > MAX_SCAN_BYTES)
+        throw validationError(`Preset scan exceeds ${MAX_SCAN_BYTES / (1024 * 1024)} MB: ${dir}`);
     }
   }
-  const revision = createHash("sha256")
-    .update(JSON.stringify(revisions.sort((left, right) => left.path.localeCompare(right.path))))
-    .digest("hex");
-  return { entries, diagnostics, revision };
+  return {
+    entries: annotateAgentPresetOverrides(entries),
+    diagnostics,
+    revision: revision.digest("hex"),
+  };
 }
 
-export interface WriteAgentPresetArgs {
-  executor: NekConfigHostExecutor;
-  agentDir: string;
+function filenameConflict(path: string) {
+  return validationError(`preset file already exists: ${path}`, { name: "duplicate filename" });
+}
+
+/** Create exclusively, even if a file (including invalid YAML or a link) appears after the check. */
+async function createPresetFile(executor: NekConfigHostExecutor, path: string, content: string) {
+  if ((await executor.resourceEntryKind(path)) !== null) throw filenameConflict(path);
+  try {
+    await executor.writeResourceFile(path, content, true);
+  } catch (error) {
+    if ((await executor.resourceEntryKind(path)) !== null) throw filenameConflict(path);
+    throw error;
+  }
+  const info = await executor.stat(path);
+  if (!info) throw conflict(path);
+  return encodeRevision(info, content);
+}
+
+/** Rename the file only if its stem matched the old logical name. */
+export async function writeAgentPreset({
+  executor,
+  agentDir,
+  scope,
+  preset,
+  expectedRevision,
+  cwd,
+}: PresetsLocation & {
   scope: NekConfigScope;
   preset: NekAgentPreset;
   expectedRevision: string;
-  previousName?: string;
-  cwd?: string;
-}
-
-export interface WriteAgentPresetResult {
-  path: string;
-  revision: string;
-  /** 改名时被删除的旧路径（供 watch 通知）。 */
-  removedPath?: string;
-}
-
-/**
- * 写预设：`<scope>/agents/<name>.md`。改名（`previousName`）时写完新文件再删旧文件，
- * 中途失败最多留下两份，不会丢配置。
- */
-export async function writeAgentPreset(
-  args: WriteAgentPresetArgs,
-): Promise<WriteAgentPresetResult> {
-  const { executor, agentDir, scope, preset, expectedRevision, previousName, cwd } = args;
-  if (preset.description.trim() === "") {
-    throw validationError("preset description must not be empty", { description: "required" });
+}): Promise<{ path: string; revision: string; removedPath?: string }> {
+  const dir = agentsDir({ agentDir }, scope, cwd);
+  const name = preset.name.trim();
+  if (expectedRevision === ABSENT_REVISION) {
+    const path = newAgentPresetPath(dir, name);
+    const content = serializeAgentMarkdown(path, { ...preset, name });
+    return { path, revision: await createPresetFile(executor, path, content) };
   }
-  const layout = { agentDir };
-  const key = previousName ?? preset.name;
-  const existingPath = agentPresetPath(layout, scope, key, cwd);
-  const existing = await readAgentPresetFile(executor, existingPath);
-  const previousRevision = existing?.revision ?? ABSENT_REVISION;
-  if (!sameRevision(previousRevision, expectedRevision)) throw conflict(existingPath);
-  const targetPath = agentPresetPath(layout, scope, preset.name, cwd);
-  if (targetPath !== existingPath) {
-    const target = await readAgentPresetFile(executor, targetPath);
-    if (target)
-      throw validationError(`preset "${preset.name}" already exists`, { name: "duplicate" });
-  }
-  // 未知 frontmatter 键原样保留：nek 会持续加字段，GUI 不认识不等于可以删。
-  const preserved = existing
-    ? Object.fromEntries(
-        Object.entries(existing.frontmatter).filter(
-          ([field]) => !(field in presetToFrontmatter(preset)),
-        ),
-      )
-    : {};
-  const frontmatter = { ...preserved, ...presetToFrontmatter(preset) };
-  const content = serializeFrontmatterDocument(frontmatter, preset.instructions);
-  const revision = await writeTextDocument(executor, targetPath, content);
-  const removedPath = existingPath !== targetPath ? existingPath : undefined;
-  if (removedPath) await executor.remove(removedPath);
-  return { path: targetPath, revision, ...(removedPath ? { removedPath } : {}) };
+  const source = presetFileRef(expectedRevision);
+  const filename = agentPresetFileName(dir, source.path);
+  const document = await readPresetText(executor, source.path);
+  if (!document || !sameRevision(document.revision, source.revision)) throw conflict(source.path);
+  const existing = parseAgentMarkdown(source.path, document.content);
+  const renameFile =
+    filename.slice(0, -3) === existing.preset.name && name !== existing.preset.name;
+  const path = renameFile ? newAgentPresetPath(dir, name) : source.path;
+  const content = serializeAgentMarkdown(path, { ...preset, name }, existing);
+  if (Buffer.byteLength(content) > MAX_PRESET_BYTES)
+    throw validationError(`Preset file exceeds ${MAX_PRESET_BYTES / 1024} KB: ${path}`);
+  if (!renameFile) return { path, revision: await writeTextDocument(executor, path, content) };
+  const revision = await createPresetFile(executor, path, content);
+  // Publish the new file before removing the source; a failed removal never loses the preset.
+  await executor.remove(source.path);
+  return { path, revision, removedPath: source.path };
 }
 
-export interface DeleteAgentPresetArgs {
-  executor: NekConfigHostExecutor;
-  agentDir: string;
+export async function deleteAgentPreset({
+  executor,
+  agentDir,
+  scope,
+  path,
+  expectedRevision,
+  cwd,
+}: PresetsLocation & {
   scope: NekConfigScope;
-  name: string;
+  path: string;
   expectedRevision: string;
-  cwd?: string;
-}
-
-export async function deleteAgentPreset(
-  args: DeleteAgentPresetArgs,
-): Promise<{ path: string; revision: string }> {
-  const path = agentPresetPath({ agentDir: args.agentDir }, args.scope, args.name, args.cwd);
-  const existing = await readAgentPresetFile(args.executor, path);
-  if (!existing) throw validationError(`preset "${args.name}" not found`, { name: "not found" });
-  if (!sameRevision(existing.revision, args.expectedRevision)) throw conflict(path);
-  await args.executor.remove(path);
-  return { path, revision: "absent" };
+}): Promise<{ path: string; revision: string }> {
+  agentPresetFileName(agentsDir({ agentDir }, scope, cwd), path);
+  const document = await readPresetText(executor, path);
+  if (!document) throw validationError(`preset file not found: ${path}`);
+  const expected = presetFileRef(expectedRevision);
+  if (path !== expected.path || !sameRevision(document.revision, expected.revision))
+    throw conflict(path);
+  await executor.remove(path);
+  return { path, revision: ABSENT_REVISION };
 }

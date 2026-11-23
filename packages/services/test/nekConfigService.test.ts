@@ -247,8 +247,13 @@ test("nek.yaml patches merge top-level sections", async () => {
   assert.match(fs.files.get(join(agentDir, "nek.yaml")) ?? "", /widgetMaxLines: 8/u);
 });
 
-test("agent presets round-trip frontmatter and body", async () => {
-  const { service } = createService();
+test("AC-8 legacy preset reads and writes resolve the frontmatter name, not the filename", async () => {
+  const file = join(agentDir, "agents", "team-review.md");
+  const { service, fs } = createService({
+    files: { [file]: "---\nname: reviewer\ndescription: Before\n---\n" },
+  });
+  assert.equal((await service.readAgentPreset("reviewer"))?.path, file);
+  assert.equal(await service.readAgentPreset("team-review"), null);
   const written = await service.writeAgentPreset({
     name: "reviewer",
     frontmatter: {
@@ -259,6 +264,8 @@ test("agent presets round-trip frontmatter and body", async () => {
     },
     body: "You review code.",
   });
+  assert.equal(written.path, file);
+  assert.equal(fs.files.has(join(agentDir, "agents", "reviewer.md")), false);
   assert.equal(written.frontmatter.model, "acme/foo");
   assert.equal(written.body.trim(), "You review code.");
   const list = await service.listAgentPresets();
@@ -267,6 +274,7 @@ test("agent presets round-trip frontmatter and body", async () => {
     ["global:reviewer"],
   );
   assert.equal(await service.deleteAgentPreset("reviewer"), true);
+  assert.equal(fs.files.has(file), false);
   assert.deepEqual(await service.listAgentPresets(), []);
 });
 

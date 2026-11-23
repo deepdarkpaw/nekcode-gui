@@ -7,8 +7,8 @@ import { AgentPresetDialog } from "./AgentPresetDialog.js";
 beforeEach(() => installDomPolyfills());
 afterEach(() => cleanup());
 
-it.each(["gpt-6.1-sol-worker", "代码审查 GPT-6.1"])(
-  "edits %s without renaming it",
+it.each(["gpt-6.1-sol-worker", "代码审查 GPT-6.1", "team/reviewer"])(
+  "AC-1 edits %s without deriving a filename",
   async (name) => {
     const initial = { name, description: "Before", instructions: "" };
     const onSave = vi.fn(async () => undefined);
@@ -19,7 +19,6 @@ it.each(["gpt-6.1-sol-worker", "代码审查 GPT-6.1"])(
         initial={initial}
         onOpenChange={() => undefined}
         allowProjectScope={false}
-        takenNames={() => new Set()}
         models={[]}
         onSave={onSave}
       />,

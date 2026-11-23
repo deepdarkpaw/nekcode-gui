@@ -281,27 +281,6 @@ export const nekYamlSchema = loose({
 export type NekYamlConfig = z.infer<typeof nekYamlSchema>;
 
 // ============================================================================
-// agents/*.md frontmatter（nek extensions/nek/services/agent-types.ts）
-// ============================================================================
-
-export const nekAgentFrontmatterSchema = loose({
-  name: z.string().min(1),
-  description: z.string().min(1),
-  readonly: z.boolean().optional(),
-  is_background: z.boolean().optional(),
-  autonomous: z.boolean().optional(),
-  /** `provider/id` 或裸 id。 */
-  model: z.string().optional(),
-  thinking: nekThinkingLevelSchema.optional(),
-  context_window: z.number().int().positive().optional(),
-  /** 允许 `a, b` 与 `[a, b]` 两种写法（与 nek 的 readToolList 一致）。 */
-  tools: z.union([z.string(), z.array(z.string())]).optional(),
-  disallowed_tools: z.union([z.string(), z.array(z.string())]).optional(),
-});
-
-export type NekAgentFrontmatter = z.infer<typeof nekAgentFrontmatterSchema>;
-
-// ============================================================================
 // 校验入口
 // ============================================================================
 

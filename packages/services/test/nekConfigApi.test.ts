@@ -1003,7 +1003,7 @@ test("mcp: project entries only override and renames delete the old key", async 
   assert.equal(afterDelete.mcpServers["docs-v2"], undefined);
 });
 
-test("agent presets round-trip frontmatter, body and unknown keys", async () => {
+test("AC-2 canonical filenames are renamed and preserve frontmatter, body and unknown keys", async () => {
   const harness = createHarness({
     localFiles: {
       [PRESET_PATH]: `---
@@ -1042,7 +1042,7 @@ Review the changes.
   assert.deepEqual(user.preset.disallowedTools, ["bash"]);
   assert.equal(user.preset.isBackground, true);
   assert.equal(user.preset.autonomous, true);
-  assert.match(user.preset.instructions, /Review the changes/);
+  assert.match(user.preset.instructions ?? "", /Review the changes/);
 
   await harness.api.saveAgentPreset(
     LOCAL,
@@ -1064,7 +1064,7 @@ Review the changes.
     LOCAL,
     "global",
     { ...user.preset, name: "代码审查 GPT-6.1" },
-    { revision: reviewerRevision, previousName: "reviewer" },
+    { revision: reviewerRevision },
   );
   assert.ok(renamed.revision.length > 0);
   assert.equal(harness.local.files.has(PRESET_PATH), false, "old preset file is removed");
@@ -1084,13 +1084,18 @@ Review the changes.
 
   await expectNekError(
     async () =>
-      await harness.api.deleteAgentPreset(LOCAL, "global", "missing", { revision: "absent" }),
+      await harness.api.deleteAgentPreset(
+        LOCAL,
+        "global",
+        join(AGENT_DIR, "agents", "missing.md"),
+        { revision: "absent" },
+      ),
     "validation",
   );
   const current = await harness.api.listAgentPresets(LOCAL);
   const target = current.entries.find((entry) => entry.preset.name === "代码审查 GPT-6.1");
-  assert.ok(target);
-  await harness.api.deleteAgentPreset(LOCAL, "global", "代码审查 GPT-6.1", {
+  assert.ok(target?.path);
+  await harness.api.deleteAgentPreset(LOCAL, "global", target.path, {
     revision: target.revision,
   });
   assert.equal(harness.local.files.has(join(AGENT_DIR, "agents", "代码审查 GPT-6.1.md")), false);
@@ -1387,7 +1392,7 @@ test("provider api keys: {remove:true} deletes, an empty string is a validation 
   assert.equal((await harness.api.readModelsConfig(LOCAL)).providers[0]?.apiKey.kind, "none");
 });
 
-test("agent presets report broken files as diagnostics with a directory revision", async () => {
+test("AC-3 broken YAML is diagnosed without interrupting discovery", async () => {
   const brokenPath = join(AGENT_DIR, "agents", "broken.md");
   const harness = createHarness({
     localFiles: {

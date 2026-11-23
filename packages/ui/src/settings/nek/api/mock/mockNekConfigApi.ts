@@ -305,9 +305,9 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
       settings.savePreset(machine, scope, preset, options, touch),
     );
 
-  deleteAgentPreset: INekConfigApi["deleteAgentPreset"] = (target, scope, name, options) =>
+  deleteAgentPreset: INekConfigApi["deleteAgentPreset"] = (target, scope, path, options) =>
     this.write(target, "deleteAgentPreset", (machine, touch) =>
-      settings.deletePreset(machine, scope, name, options, touch),
+      settings.deletePreset(machine, scope, path, options, touch),
     );
 
   readInstructions: INekConfigApi["readInstructions"] = (target, scope, cwd) =>

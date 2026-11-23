@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   parseWithSchema,
-  nekAgentFrontmatterSchema,
   nekMcpFileSchema,
   nekMcpOverrideSchema,
   nekMcpServerSchema,
@@ -13,19 +12,13 @@ import {
   NEK_MCP_OVERRIDE_KEYS,
   NEK_MCP_SERVER_NAME_PATTERN,
 } from "./schemas.js";
-import type {
-  NekAgentFrontmatter,
-  NekMcpFile,
-  NekMcpServer,
-  NekSettingsFile,
-  NekYamlConfig,
-} from "./schemas.js";
+import type { NekMcpFile, NekMcpServer, NekSettingsFile, NekYamlConfig } from "./schemas.js";
 import type { NekConfigFs, NekConfigRevision } from "./nekConfigFs.js";
+import { decodeAgentFrontmatter, parseAgentMarkdown } from "./agentPresetFrontmatter.js";
 import {
   formatIssue,
   isPlainObject,
   mergeSettingsPatch,
-  parseFrontmatterDocument,
   parseJsonObject,
   serializeFrontmatterDocument,
   stripBom,
@@ -71,9 +64,9 @@ export interface NekAgentPresetDocument {
   name: string;
   scope: NekConfigScope;
   path: string;
-  frontmatter: NekAgentFrontmatter;
+  frontmatter: Record<string, unknown> & { name: string; description: string; model?: string };
   body: string;
-  revision: NekConfigRevision | null;
+  revision: NekConfigRevision & { path: string };
 }
 
 export interface NekConfigServiceOptions {
@@ -132,13 +125,8 @@ export class NekConfigService {
       : join(this.paths.projectDir, "nek.yaml");
   }
 
-  agentPresetPath(name: string, scope: NekConfigScope = "global"): string {
-    const dir =
-      scope === "global"
-        ? join(this.paths.agentDir, "agents")
-        : join(this.paths.projectDir, "agents");
-    if (!isAgentPresetFileName(name)) throw new Error(`invalid agent preset name "${name}"`);
-    return join(dir, `${name}.md`);
+  private agentPresetDirectory(scope: NekConfigScope): string {
+    return join(scope === "global" ? this.paths.agentDir : this.paths.projectDir, "agents");
   }
 
   globalAgentsMdPath(): string {
@@ -317,62 +305,79 @@ export class NekConfigService {
   // agents/*.md
   // --------------------------------------------------------------------------
 
-  /** 列出预置（全局 + 项目）。同名时项目覆盖全局，两者都返回，由调用方标注 scope。 */
+  /** Legacy provider-reference enumeration also uses the YAML name, never the file stem. */
   async listAgentPresets(): Promise<NekAgentPresetDocument[]> {
+    return [
+      ...(await this.listPresetsInScope("global")),
+      ...(await this.listPresetsInScope("project")),
+    ];
+  }
+
+  private async listPresetsInScope(scope: NekConfigScope): Promise<NekAgentPresetDocument[]> {
+    const dir = this.agentPresetDirectory(scope);
+    const names = (await this.fs.listDir(dir)).filter((name) => name.endsWith(".md"));
     const presets: NekAgentPresetDocument[] = [];
-    for (const scope of ["global", "project"] as const) {
-      const dir =
-        scope === "global"
-          ? join(this.paths.agentDir, "agents")
-          : join(this.paths.projectDir, "agents");
-      const names = (await this.fs.listDir(dir)).filter((name) => name.endsWith(".md"));
-      for (const file of names.sort()) {
-        const preset = await this.readAgentPreset(file.slice(0, -3), scope);
+    for (const filename of names) {
+      const path = join(dir, filename);
+      try {
+        const preset = await this.readAgentPresetFile(path, scope);
         if (preset) presets.push(preset);
+      } catch (error) {
+        this.options.logger?.warn("skipping unreadable agent preset", path, error);
       }
     }
     return presets;
+  }
+
+  private async readAgentPresetFile(
+    path: string,
+    scope: NekConfigScope,
+  ): Promise<NekAgentPresetDocument | null> {
+    const snapshot = await readSnapshot(this.fs, path);
+    if (!snapshot) return null;
+    const { frontmatter, bodySuffix, preset } = parseAgentMarkdown(path, snapshot.content);
+    const { name, description, model } = preset;
+    return {
+      name,
+      scope,
+      path,
+      frontmatter: { ...frontmatter, name, description, model },
+      body: bodySuffix.replace(/^\r?\n/u, ""),
+      revision: { ...revisionOf(snapshot), path },
+    };
   }
 
   async readAgentPreset(
     name: string,
     scope: NekConfigScope = "global",
   ): Promise<NekAgentPresetDocument | null> {
-    const path = this.agentPresetPath(name, scope);
-    const snapshot = await readSnapshot(this.fs, path);
-    if (!snapshot) return null;
-    const { frontmatter, body } = parseFrontmatterDocument(path, snapshot.content);
-    const validated = parseWithSchema(nekAgentFrontmatterSchema, frontmatter);
-    if (!validated.ok)
-      throw new NekConfigParseError(path, validated.issues.map(formatIssue).join("; "));
-    return {
-      name,
-      scope,
-      path,
-      frontmatter: validated.data,
-      body,
-      revision: revisionOf(snapshot),
-    };
+    const matches = (await this.listPresetsInScope(scope)).filter((preset) => preset.name === name);
+    if (matches.length > 1)
+      throw new Error(
+        `Multiple preset files define ${name}: ${matches.map((preset) => preset.path).join(", ")}`,
+      );
+    return matches[0] ?? null;
   }
 
-  /** 写预置：frontmatter + 正文，`.tmp` 原子替换。 */
+  /** Write back a resolved preset at its original path; only a new preset derives a filename. */
   async writeAgentPreset(
-    preset: { name: string; frontmatter: NekAgentFrontmatter; body?: string },
+    preset: { name: string; frontmatter: Record<string, unknown>; body?: string },
     options: { scope?: NekConfigScope; expectedRevision?: NekConfigRevision | null } = {},
   ): Promise<NekAgentPresetDocument> {
     const scope = options.scope ?? "global";
-    const validated = parseWithSchema(nekAgentFrontmatterSchema, preset.frontmatter);
-    if (!validated.ok) {
-      throw new Error(
-        `invalid agent preset "${preset.name}": ${validated.issues.map(formatIssue).join("; ")}`,
-      );
-    }
-    const path = this.agentPresetPath(preset.name, scope);
-    await assertRevision(this.fs, path, options.expectedRevision);
-    const body = preset.body ?? "";
-    const content = serializeFrontmatterDocument(validated.data as Record<string, unknown>, body);
-    await atomicWrite(this.fs, path, content);
-    const written = await this.readAgentPreset(preset.name, scope);
+    const dir = this.agentPresetDirectory(scope);
+    const { name } = decodeAgentFrontmatter(dir, preset.frontmatter);
+    const existing = await this.readAgentPreset(preset.name, scope);
+    if (!existing && !isAgentPresetFileName(name))
+      throw new Error(`invalid agent preset name "${name}"`);
+    const path = existing?.path ?? join(dir, `${name}.md`);
+    await assertRevision(this.fs, path, options.expectedRevision ?? existing?.revision ?? null);
+    await atomicWrite(
+      this.fs,
+      path,
+      serializeFrontmatterDocument(preset.frontmatter, preset.body ?? ""),
+    );
+    const written = await this.readAgentPresetFile(path, scope);
     if (!written) throw new NekConfigParseError(path, "file disappeared right after writing");
     return written;
   }
@@ -381,14 +386,10 @@ export class NekConfigService {
     name: string,
     options: { scope?: NekConfigScope; expectedRevision?: NekConfigRevision | null } = {},
   ): Promise<boolean> {
-    const scope = options.scope ?? "global";
-    const path = this.agentPresetPath(name, scope);
-    const snapshot = await readSnapshot(this.fs, path);
-    if (!snapshot) return false;
-    if (options.expectedRevision !== undefined) {
-      this.assertExpected(revisionOf(snapshot), options.expectedRevision);
-    }
-    await this.fs.remove(path);
+    const existing = await this.readAgentPreset(name, options.scope);
+    if (!existing) return false;
+    await assertRevision(this.fs, existing.path, options.expectedRevision ?? existing.revision);
+    await this.fs.remove(existing.path);
     return true;
   }
 

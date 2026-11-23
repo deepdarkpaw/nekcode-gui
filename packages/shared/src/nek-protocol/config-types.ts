@@ -286,20 +286,23 @@ export interface NekAgentPreset {
   thinking?: NekThinkingLevel;
   contextWindow?: number;
   readonly?: boolean;
+  /** 显式配置的工具；缺省值与只读覆盖不写回 frontmatter。 */
   tools?: string[];
   disallowedTools?: string[];
   isBackground?: boolean;
   autonomous?: boolean;
   /** frontmatter 之后的正文。 */
-  instructions: string;
+  instructions?: string;
 }
 
-export interface NekAgentPresetEntry extends NekConfigRevision {
-  source: "builtin" | "user" | "project";
-  /** 内置预设没有文件路径，只读。 */
-  path?: string;
+export type NekAgentPresetEntry = NekConfigRevision & {
   preset: NekAgentPreset;
-}
+  effectiveTools: string[];
+  /** 最终生效的同名条目，而非中途覆盖它的文件。 */
+  overriddenBy?: string;
+  /** 文件可编辑，但当前项目信任决定不让 nek 加载项目预设。 */
+  untrusted?: boolean;
+} & ({ source: "builtin"; path?: never } | { source: "user" | "project"; path: string });
 
 export interface NekAgentPresetsView extends NekConfigRevision {
   entries: NekAgentPresetEntry[];

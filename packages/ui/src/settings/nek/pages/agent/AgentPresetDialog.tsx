@@ -7,13 +7,16 @@ import { useDialogDraft } from "../../components/useDialogDraft.js";
  */
 import { useId, useMemo } from "react";
 import type { NekAgentPreset, NekCatalogModel, NekConfigScope } from "@zcode/shared/nek-protocol";
-import { isAgentPresetFileName, NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import {
+  effectiveAgentPresetTools,
+  isAgentPresetFileName,
+  NEK_THINKING_LEVELS,
+} from "@zcode/shared/nek-protocol";
 import { Input } from "@/components/ui/input.js";
 import { Switch } from "@/components/ui/switch.js";
 import { Textarea } from "@/components/ui/textarea.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
-import { findCatalogModel, supportedThinkingLevels } from "../../lib/modelRef.js";
 import { Field, invalidProps } from "../../components/Field.js";
 import { Segmented, TokenCountInput } from "../../components/inputs.js";
 import { ModelSelect, ThinkingLevelSelect } from "../../components/modelControls.js";
@@ -27,24 +30,25 @@ interface PresetDraft {
   contextValid: boolean;
 }
 
-function splitList(text: string): string[] | undefined {
+function toolList(text: string, original: string[] | undefined): string[] | undefined {
+  if (text === (original?.join(", ") ?? "")) return original;
   const items = text
-    .split(/[,\s]+/)
+    .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
   return items.length > 0 ? items : undefined;
 }
 
-export function presetFromDraft(draft: PresetDraft): NekAgentPreset {
+function presetFromDraft(draft: PresetDraft): NekAgentPreset {
   const preset: NekAgentPreset = {
     ...draft.preset,
     name: draft.preset.name.trim(),
     description: draft.preset.description.trim(),
-    tools: splitList(draft.tools),
-    disallowedTools: splitList(draft.disallowed),
+    tools: toolList(draft.tools, draft.preset.tools),
+    disallowedTools: toolList(draft.disallowed, draft.preset.disallowedTools),
   };
   return Object.fromEntries(
-    Object.entries(preset).filter(([, value]) => value !== undefined && value !== false),
+    Object.entries(preset).filter(([, value]) => value !== undefined),
   ) as NekAgentPreset;
 }
 
@@ -54,7 +58,6 @@ export function AgentPresetDialog({
   initial,
   scope,
   allowProjectScope,
-  takenNames,
   models,
   onSave,
   editing,
@@ -72,7 +75,6 @@ export function AgentPresetDialog({
   /** 编辑时固定作用域；新建 / 复制时可选。 */
   scope?: NekConfigScope;
   allowProjectScope: boolean;
-  takenNames: (scope: NekConfigScope) => ReadonlySet<string>;
   models: readonly NekCatalogModel[];
   onSave: (scope: NekConfigScope, preset: NekAgentPreset) => Promise<void>;
 }) {
@@ -98,19 +100,16 @@ export function AgentPresetDialog({
   const nameError =
     name === ""
       ? t("settings.nek.agent.preset.error.nameRequired")
-      : !isAgentPresetFileName(name)
+      : !editing && !isAgentPresetFileName(name)
         ? t("settings.nek.agent.preset.error.nameFormat")
-        : takenNames(draft.scope).has(name)
-          ? t("settings.nek.agent.preset.error.nameDuplicate")
-          : undefined;
+        : undefined;
   const descriptionError =
     preset.description.trim() === ""
       ? t("settings.nek.agent.preset.error.descriptionRequired")
       : undefined;
   const valid = !nameError && !descriptionError && draft.contextValid;
-  const levels = preset.model
-    ? supportedThinkingLevels(findCatalogModel(models, preset.model))
-    : [...NEK_THINKING_LEVELS];
+  const savedPreset = presetFromDraft(draft);
+  const effectiveTools = effectiveAgentPresetTools(savedPreset);
   const id = (field: string) => `${baseId}-${field}`;
 
   return (
@@ -124,7 +123,7 @@ export function AgentPresetDialog({
       dirty={JSON.stringify(draft) !== JSON.stringify(start)}
       valid={valid}
       saveLabel={t(editing ? "settings.nek.agent.preset.save" : "settings.nek.agent.preset.create")}
-      onSave={() => onSave(draft.scope, presetFromDraft(draft))}
+      onSave={() => onSave(draft.scope, savedPreset)}
       documents={documents}
       onReset={resetDraft}
     >
@@ -186,7 +185,7 @@ export function AgentPresetDialog({
             <ThinkingLevelSelect
               ariaLabel={t("settings.nek.agent.preset.thinking")}
               value={preset.thinking}
-              levels={levels}
+              levels={NEK_THINKING_LEVELS}
               unsetLabel={t("settings.nek.agent.preset.inherit")}
               onChange={(thinking) => update({ thinking })}
             />
@@ -236,6 +235,11 @@ export function AgentPresetDialog({
               }
             />
           </Field>
+          <p className="break-all text-ui-sm text-foreground-subtle">
+            {t("settings.nek.agent.preset.effectiveTools", {
+              tools: effectiveTools.join(", ") || t("settings.nek.agent.preset.noTools"),
+            })}
+          </p>
           {(["readonly", "isBackground", "autonomous"] as const).map((flag) => (
             <label key={flag} className="flex items-center justify-between gap-4">
               <span className="flex flex-col">
@@ -255,7 +259,7 @@ export function AgentPresetDialog({
           <Field label={t("settings.nek.agent.preset.instructions")} htmlFor={id("instructions")}>
             <Textarea
               id={id("instructions")}
-              value={preset.instructions}
+              value={preset.instructions ?? ""}
               className="min-h-40 font-mono"
               onChange={(event) => update({ instructions: event.target.value })}
             />

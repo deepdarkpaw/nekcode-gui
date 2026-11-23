@@ -1,8 +1,6 @@
 /** Agent 预设、指令文件与约定的扩展目录。技能、模板只由 nek RPC 发现。 */
 import type {
   INekConfigApi,
-  NekAgentPreset,
-  NekAgentPresetsView,
   NekConfigRevision,
   NekConfigScope,
   NekConfigTarget,
@@ -11,23 +9,18 @@ import { readTextDocument, writeTextDocument } from "./documents.js";
 import { conflict } from "./errors.js";
 import { instructionsPath } from "./paths.js";
 import { resourcePaths } from "./resourceFiles.js";
-import { deleteAgentPreset, listAgentPresets, writeAgentPreset } from "./presetsDocument.js";
+import {
+  deleteAgentPreset,
+  listAgentPresets,
+  presetFileRevision,
+  writeAgentPreset,
+} from "./presetsDocument.js";
 import type { NekConfigRuntime } from "./runtime.js";
 
 export interface NekAgentGroup {
-  listAgentPresets: (target: NekConfigTarget, cwd?: string) => Promise<NekAgentPresetsView>;
-  saveAgentPreset: (
-    target: NekConfigTarget,
-    scope: NekConfigScope,
-    preset: NekAgentPreset,
-    options: { revision: string; previousName?: string; cwd?: string },
-  ) => Promise<NekConfigRevision>;
-  deleteAgentPreset: (
-    target: NekConfigTarget,
-    scope: NekConfigScope,
-    name: string,
-    options: { revision: string; cwd?: string },
-  ) => Promise<NekConfigRevision>;
+  listAgentPresets: INekConfigApi["listAgentPresets"];
+  saveAgentPreset: INekConfigApi["saveAgentPreset"];
+  deleteAgentPreset: INekConfigApi["deleteAgentPreset"];
   readInstructions: (
     target: NekConfigTarget,
     scope: NekConfigScope,
@@ -50,10 +43,20 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
   return {
     listAgentPresets: async (target, cwd) => {
       const context = runtime.target(target);
+      let projectTrusted = true;
+      if (cwd) {
+        const control = await runtime.control(target);
+        const trust = await control.call({ type: "get_project_trust", cwd });
+        // v0.5.1: trust-manager.ts does not count `agents` as a trust-requiring resource,
+        // although the RPC exposes it. An undecided project without gated resources is trusted.
+        const needsTrust = trust.resources.some(({ kind }) => kind !== "agents");
+        projectTrusted = trust.trusted ?? (!needsTrust || trust.defaultProjectTrust === "always");
+      }
       return await listAgentPresets({
         executor: context.executor,
         agentDir: context.layout.agentDir,
         cwd,
+        projectTrusted,
         logger: runtime.logger,
       });
     },
@@ -66,26 +69,27 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
         scope,
         preset,
         expectedRevision: options.revision,
-        previousName: options.previousName,
         cwd: options.cwd,
       });
       const written = [{ path: result.path, revision: result.revision }];
       if (result.removedPath) written.push({ path: result.removedPath, revision: "absent" });
-      runtime.publishWrite(target, written);
-      return { revision: result.revision };
+      runtime.publishWrite(target, written, { cwd: scope === "project" ? options.cwd : undefined });
+      return { revision: presetFileRevision(result.path, result.revision) };
     },
 
-    deleteAgentPreset: async (target, scope, name, options) => {
+    deleteAgentPreset: async (target, scope, path, options) => {
       const context = runtime.target(target);
       const result = await deleteAgentPreset({
         executor: context.executor,
         agentDir: context.layout.agentDir,
         scope,
-        name,
+        path,
         expectedRevision: options.revision,
         cwd: options.cwd,
       });
-      runtime.publishWrite(target, [result]);
+      runtime.publishWrite(target, [result], {
+        cwd: scope === "project" ? options.cwd : undefined,
+      });
       return { revision: result.revision };
     },
 

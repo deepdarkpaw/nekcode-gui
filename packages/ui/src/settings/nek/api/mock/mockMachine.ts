@@ -21,8 +21,8 @@ export interface MockFile<T> {
 }
 
 export interface MockPreset {
-  source: "builtin" | "user" | "project";
-  path?: string;
+  source: "user" | "project";
+  path: string;
   revision: string;
   preset: NekAgentPreset;
 }

@@ -222,28 +222,7 @@ function baseMachine(
     yaml: mockFile(`${agentDir}/nek.yaml`, {}, false),
     projectYaml: new Map(),
     brokenPresets: [],
-    presets: [
-      {
-        source: "builtin",
-        revision: "builtin",
-        preset: {
-          name: "explore",
-          description: "Read-only codebase exploration",
-          readonly: true,
-          tools: ["read", "grep", "find", "ls", "ast_grep"],
-          instructions: "Explore the codebase and report findings. Never modify files.",
-        },
-      },
-      {
-        source: "builtin",
-        revision: "builtin",
-        preset: {
-          name: "general",
-          description: "General-purpose subagent",
-          instructions: "Complete the delegated task end to end.",
-        },
-      },
-    ],
+    presets: [],
     instructions: mockFile(`${agentDir}/AGENTS.md`, ""),
     projectInstructions: new Map(),
     auth: new Map([

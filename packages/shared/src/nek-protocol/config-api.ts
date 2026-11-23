@@ -235,12 +235,13 @@ export interface INekConfigApi extends INekResourceConfigApi {
     target: NekConfigTarget,
     scope: NekConfigScope,
     preset: NekAgentPreset,
-    options: { revision: string; previousName?: string; cwd?: string },
+    /** The revision binds an edit to its original file. Use `absent` only to create. */
+    options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   deleteAgentPreset(
     target: NekConfigTarget,
     scope: NekConfigScope,
-    name: string,
+    path: string,
     options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   readInstructions(

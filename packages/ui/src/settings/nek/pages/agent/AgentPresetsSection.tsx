@@ -9,22 +9,24 @@ import type {
   NekCatalogModel,
   NekConfigScope,
 } from "@zcode/shared/nek-protocol";
+import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import { IconButton } from "@/components/ui/icon-button.js";
 import { SettingSection } from "@/components/ui/setting-fields.js";
-import { toast } from "@/components/ui/toast.js";
 import { useUndoToast } from "@/components/ui/undo-toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { getErrorMessage } from "@/lib/errorMessage.js";
 import type { NekAgentPresetsDocument } from "../../api/mcpDocs.js";
-import { DiagnosticsList, DocumentGate } from "../../components/DocumentStatus.js";
+import { DocumentGate } from "../../components/DocumentStatus.js";
 import { handleRowArrowNavigation } from "../../components/SortableList.js";
+import { AgentFileOpenButton } from "./AgentFileOpenButton.js";
 import { AgentPresetDialog } from "./AgentPresetDialog.js";
+
+type FilePreset = Extract<NekAgentPresetEntry, { path: string }>;
 
 type Dialog =
   | { kind: "none" }
   | { kind: "new" }
-  | { kind: "edit"; entry: NekAgentPresetEntry }
+  | { kind: "edit"; entry: FilePreset }
   | { kind: "copy"; entry: NekAgentPresetEntry };
 
 function scopeOf(entry: NekAgentPresetEntry): NekConfigScope {
@@ -50,29 +52,20 @@ export function AgentPresetsSection({
   const showUndo = useUndoToast();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const entries = (doc.data?.entries ?? []).filter((entry) => sources.includes(entry.source));
-  const takenNames = (scope: NekConfigScope) =>
-    new Set(
-      (doc.data?.entries ?? [])
-        .filter((entry) => scopeOf(entry) === scope && entry.source !== "builtin")
-        .filter((entry) => dialog.kind !== "edit" || entry !== dialog.entry)
-        .map((entry) => entry.preset.name),
-    );
+  const diagnostics = doc.data?.diagnostics ?? [];
+  const edited =
+    dialog.kind === "edit" &&
+    (entries.find((entry) => entry.path === dialog.entry.path) ?? dialog.entry);
 
-  const remove = (entry: NekAgentPresetEntry) => {
-    void doc
-      .deletePreset(scopeOf(entry), entry.preset.name)
-      .then(() =>
-        showUndo({
-          message: t("settings.nek.agent.preset.deleted", { name: entry.preset.name }),
-          onUndo: () => {
-            void doc
-              .savePreset(scopeOf(entry), entry.preset)
-              .catch((error: unknown) => toast(getErrorMessage(error), { variant: "warning" }));
-          },
-        }),
-      )
-      .catch((error: unknown) => toast(getErrorMessage(error), { variant: "warning" }));
-  };
+  // Delay the real deletion during the existing undo window. Undo never recreates or rewrites a file.
+  const remove = (entry: FilePreset) =>
+    new Promise<void>((resolve, reject) => {
+      showUndo({
+        message: t("settings.nek.agent.preset.pendingDelete", { name: entry.preset.name }),
+        onUndo: resolve,
+        onExpire: () => void doc.deletePreset(scopeOf(entry), entry).then(resolve, reject),
+      });
+    });
 
   return (
     <SettingSection title={title} description={t("settings.nek.agent.presetsHint")}>
@@ -85,7 +78,31 @@ export function AgentPresetsSection({
       <DocumentGate documents={[doc]}>
         {() => (
           <>
-            <DiagnosticsList diagnostics={doc.data?.diagnostics} />
+            {diagnostics.length ? (
+              <div className="flex flex-col gap-2" role="status">
+                <p className="text-ui-sm font-medium text-destructive">
+                  {t("settings.nek.agent.preset.diagnostics")}
+                </p>
+                <ul className="flex flex-col divide-y divide-border rounded-xl border border-card-border bg-card">
+                  {diagnostics.map(({ file, message }, index) => (
+                    <li
+                      key={`${file}:${index}`}
+                      className="flex items-start justify-between gap-3 px-3 py-2"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <p className="break-all font-mono text-ui-sm">{file}</p>
+                        <p className="break-words text-ui-sm text-foreground-subtle">
+                          {message.startsWith(`${file}: `)
+                            ? message.slice(file.length + 2)
+                            : message}
+                        </p>
+                      </div>
+                      <AgentFileOpenButton path={file} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {entries.length === 0 ? (
               <p className="text-ui-sm text-foreground-subtle">
                 {t("settings.nek.agent.preset.empty")}
@@ -97,15 +114,15 @@ export function AgentPresetsSection({
               >
                 {entries.map((entry) => (
                   <div
-                    key={`${entry.source}:${entry.preset.name}`}
+                    key={entry.path ?? `builtin:${entry.preset.name}`}
                     data-nek-row=""
                     tabIndex={0}
                     onKeyDown={handleRowArrowNavigation}
                     className="flex items-center gap-3 border-b border-border px-3 py-2 outline-none last:border-b-0 focus-visible:bg-hover"
                   >
                     <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-ui-base text-foreground">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="break-all font-mono text-ui-base text-foreground">
                           {entry.preset.name}
                         </span>
                         <span className="rounded-sm bg-tag px-1 text-ui-xs text-foreground-subtle">
@@ -117,8 +134,37 @@ export function AgentPresetsSection({
                           </span>
                         ) : null}
                       </span>
-                      <span className="truncate text-ui-sm text-foreground-subtle">
+                      <span className="text-ui-sm text-foreground-subtle">
                         {entry.preset.description}
+                      </span>
+                      {entry.path ? (
+                        <span className="break-all font-mono text-ui-sm text-foreground-subtlest">
+                          {entry.path}
+                        </span>
+                      ) : null}
+                      {entry.overriddenBy ? (
+                        <span className="break-words text-ui-sm text-foreground-subtle">
+                          {intl.formatMessage(
+                            { id: "settings.nek.agent.preset.overridden" },
+                            {
+                              path: (
+                                <code className="break-all font-mono">{entry.overriddenBy}</code>
+                              ),
+                            },
+                          )}
+                        </span>
+                      ) : null}
+                      {entry.untrusted ? (
+                        <span className="text-ui-sm text-foreground-subtle">
+                          {t("settings.nek.agent.preset.untrusted")}
+                        </span>
+                      ) : null}
+                      <span className="break-words text-ui-sm text-foreground-subtle">
+                        {t("settings.nek.agent.preset.effectiveTools", {
+                          tools:
+                            entry.effectiveTools.join(", ") ||
+                            t("settings.nek.agent.preset.noTools"),
+                        })}
                       </span>
                     </div>
                     {entry.source !== "builtin" ? (
@@ -138,13 +184,14 @@ export function AgentPresetsSection({
                       <CopyPlusIcon />
                     </IconButton>
                     {entry.source !== "builtin" ? (
-                      <IconButton
+                      <AsyncButton
                         size="icon-sm"
+                        variant="ghost"
                         label={t("settings.nek.agent.preset.delete")}
+                        icon={<Trash2Icon />}
+                        successFeedback="none"
                         onClick={() => remove(entry)}
-                      >
-                        <Trash2Icon />
-                      </IconButton>
+                      />
                     ) : null}
                   </div>
                 ))}
@@ -160,7 +207,7 @@ export function AgentPresetsSection({
         onOpenChange={(open) => !open && setDialog({ kind: "none" })}
         initial={
           dialog.kind === "edit"
-            ? dialog.entry.preset
+            ? (edited || dialog.entry).preset
             : dialog.kind === "copy"
               ? { ...dialog.entry.preset, name: `${dialog.entry.preset.name}-copy` }
               : undefined
@@ -173,14 +220,9 @@ export function AgentPresetsSection({
               : undefined
         }
         allowProjectScope={allowProjectScope}
-        takenNames={takenNames}
         models={models}
         onSave={(scope, preset) =>
-          doc.savePreset(
-            scope,
-            preset,
-            dialog.kind === "edit" ? dialog.entry.preset.name : undefined,
-          )
+          doc.savePreset(scope, preset, dialog.kind === "edit" ? dialog.entry.path : undefined)
         }
       />
     </SettingSection>

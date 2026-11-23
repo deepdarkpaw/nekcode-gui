@@ -3288,7 +3288,13 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.edit": "Edit preset",
   "settings.nek.agent.preset.duplicate": "Duplicate preset",
   "settings.nek.agent.preset.delete": "Delete preset",
-  "settings.nek.agent.preset.deleted": "Deleted preset {name}",
+  "settings.nek.agent.preset.pendingDelete": "Preset {name} will be deleted",
+  "settings.nek.agent.preset.diagnostics": "Preset files that could not be loaded",
+  "settings.nek.agent.preset.overridden": "Overridden by {path}",
+  "settings.nek.agent.preset.untrusted":
+    "nek won't load this preset because the project is not trusted.",
+  "settings.nek.agent.preset.effectiveTools": "Effective tools: {tools}",
+  "settings.nek.agent.preset.noTools": "None",
   "settings.nek.agent.preset.addTitle": "New subagent preset",
   "settings.nek.agent.preset.editTitle": "Edit subagent preset",
   "settings.nek.agent.preset.create": "Create preset",
@@ -3301,7 +3307,8 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.inherit": "Inherit from parent",
   "settings.nek.agent.preset.contextWindow": "Context window (context_window)",
   "settings.nek.agent.preset.tools": "Tools (tools)",
-  "settings.nek.agent.preset.toolsHint": "Comma or space separated; empty means default tools.",
+  "settings.nek.agent.preset.toolsHint":
+    "Separate with commas. Leave empty for default tools; read-only presets always use read-only tools.",
   "settings.nek.agent.preset.disallowedTools": "Disallowed tools (disallowed_tools)",
   "settings.nek.agent.preset.readonly": "Read-only (readonly)",
   "settings.nek.agent.preset.readonlyHint": "Cannot modify files.",
@@ -3314,7 +3321,6 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.error.nameRequired": "Enter a name",
   "settings.nek.agent.preset.error.nameFormat":
     "This name cannot be used as a preset filename. Avoid path separators, invalid filename characters and reserved device names.",
-  "settings.nek.agent.preset.error.nameDuplicate": "A preset with this name already exists",
   "settings.nek.agent.preset.error.descriptionRequired": "Enter a description",
   "settings.nek.agent.instructions": "Global AGENTS.md",
   "settings.nek.agent.extensions": "Global extensions folder",

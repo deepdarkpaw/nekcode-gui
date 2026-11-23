@@ -4,8 +4,7 @@
 import { useCallback, useMemo } from "react";
 import type {
   NekAgentPreset,
-  NekAgentPresetEntry,
-  NekConfigDiagnostic,
+  NekAgentPresetsView,
   NekConfigScope,
   NekMcpConfigView,
   NekMcpExposure,
@@ -13,6 +12,7 @@ import type {
   NekMcpServerEntry,
 } from "@zcode/shared/nek-protocol";
 import { useNekSettingsContext } from "./NekSettingsContext.js";
+import { NekConfigApiError } from "./nekErrors.js";
 import { normalizeConfigPath, useNekDocument, type NekDocument } from "./useNekDocument.js";
 
 export interface McpOverride {
@@ -115,86 +115,37 @@ export function useNekMcpDoc(scope: NekConfigScope = "global", cwd?: string): Ne
 // 子代理预设
 // ---------------------------------------------------------------------------
 
-export interface AgentPresetsData {
-  /** 组合 revision（nek 扫描到的目录级 revision），仅用于识别变化。 */
-  revision: string;
-  entries: NekAgentPresetEntry[];
-  /** 坏掉的预设文件：不打断列表，但要让用户看见。 */
-  diagnostics: NekConfigDiagnostic[];
-}
-
-export interface NekAgentPresetsDocument extends NekDocument<AgentPresetsData> {
-  savePreset: (
-    scope: NekConfigScope,
-    preset: NekAgentPreset,
-    previousName?: string,
-  ) => Promise<void>;
-  deletePreset: (scope: NekConfigScope, name: string) => Promise<void>;
-}
-
-function sourceOf(scope: NekConfigScope): NekAgentPresetEntry["source"] {
-  return scope === "project" ? "project" : "user";
-}
-
-function findEntry(data: AgentPresetsData, scope: NekConfigScope, name: string) {
-  return data.entries.find(
-    (entry) => entry.source === sourceOf(scope) && entry.preset.name === name,
-  );
-}
-
-/** 预设文件位于 `agents/` 目录（全局或项目 `.nek/agents/`）。 */
-function isAgentsFile(file: string): boolean {
-  return /\/agents\/[^/]+\.md$/.test(normalizeConfigPath(file));
-}
-
-/**
- * 预设是**多文件**文档：全局 `agents/*.md` 与项目 `.nek/agents/*.md` 文件名可以相同，
- * 所以按"作用域 + 文件名"匹配；没有 cwd 时项目级事件不属于本文档。
- */
-function presetChangeMatches(
-  file: string,
-  scope: NekConfigScope,
-  cwd: string | undefined,
-): boolean {
-  if (!isAgentsFile(file)) return false;
-  return scope === "global" || Boolean(cwd);
+export interface NekAgentPresetsDocument extends NekDocument<NekAgentPresetsView> {
+  savePreset: (scope: NekConfigScope, preset: NekAgentPreset, path?: string) => Promise<void>;
+  deletePreset: (scope: NekConfigScope, file: { path: string; revision: string }) => Promise<void>;
 }
 
 export function useNekAgentPresetsDoc(cwd?: string): NekAgentPresetsDocument {
   const { config, target } = useNekSettingsContext();
-  const doc = useNekDocument<AgentPresetsData>({
-    load: async (api, current) => {
-      const view = await api.listAgentPresets(current, cwd);
-      return { revision: view.revision, entries: view.entries, diagnostics: view.diagnostics };
-    },
+  const doc = useNekDocument<NekAgentPresetsView>({
+    load: (api, current) => api.listAgentPresets(current, cwd),
     deps: [cwd],
-    matchesFile: (file, _data, scope) => presetChangeMatches(file, scope, cwd),
+    matchesFile: (file, _data, scope) => {
+      if (scope === "project" && !cwd) return false;
+      const normalized = normalizeConfigPath(file);
+      return (
+        /\/agents\/[^/]+\.md$/u.test(normalized) ||
+        (Boolean(cwd) && /\/(?:trust|settings)\.json$/u.test(normalized))
+      );
+    },
   });
   const { mutate } = doc;
 
   const savePreset = useCallback(
-    (scope: NekConfigScope, preset: NekAgentPreset, previousName?: string) =>
+    (scope: NekConfigScope, preset: NekAgentPreset, path?: string) =>
       mutate({
-        optimistic: (data) => {
-          const previous = findEntry(data, scope, previousName ?? preset.name);
-          const entry: NekAgentPresetEntry = {
-            source: sourceOf(scope),
-            path: previous?.path,
-            revision: previous?.revision ?? "absent",
-            preset,
-          };
-          return {
-            ...data,
-            entries: previous
-              ? data.entries.map((item) => (item === previous ? entry : item))
-              : [...data.entries, entry],
-          };
-        },
+        // The host owns the winner, tools and path of the saved row. Do not guess them optimistically.
         write: async (data) => {
-          const previous = findEntry(data, scope, previousName ?? preset.name);
+          const previous = path ? data.entries.find((entry) => entry.path === path) : undefined;
+          if (path && !previous)
+            throw new NekConfigApiError("validation", `Preset file no longer listed: ${path}`);
           const result = await config.saveAgentPreset(target, scope, preset, {
             revision: previous?.revision ?? "absent",
-            previousName,
             cwd,
           });
           return { fileRevision: result.revision };
@@ -204,19 +155,13 @@ export function useNekAgentPresetsDoc(cwd?: string): NekAgentPresetsDocument {
   );
 
   const deletePreset = useCallback(
-    (scope: NekConfigScope, name: string) =>
+    (scope: NekConfigScope, file: { path: string; revision: string }) =>
       mutate({
-        optimistic: (data) => ({
-          ...data,
-          entries: data.entries.filter((entry) => entry !== findEntry(data, scope, name)),
-        }),
-        write: async (data) => {
-          const entry = findEntry(data, scope, name);
-          const result = await config.deleteAgentPreset(target, scope, name, {
-            revision: entry?.revision ?? "absent",
+        write: async () => {
+          await config.deleteAgentPreset(target, scope, file.path, {
+            revision: file.revision,
             cwd,
           });
-          return { fileRevision: result.revision };
         },
       }),
     [config, target, cwd, mutate],
