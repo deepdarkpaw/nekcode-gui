@@ -2679,7 +2679,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.provider.field.name": "名称",
   "settings.nek.provider.field.id": "ID",
   "settings.nek.provider.field.idHint":
-    "由名称生成，只能包含小写字母、数字和 -；创建后不可直接修改。",
+    "从名称生成建议 ID，可自行填写。创建后须通过「修改 ID」更改。",
   "settings.nek.provider.field.idReadonly":
     "ID 被默认模型、循环范围等引用；需要时用“修改 ID”同步改写引用。",
   "settings.nek.provider.field.api": "端点类型",
@@ -2711,8 +2711,9 @@ const zhCN: Record<string, string> = {
   "settings.nek.provider.applyFix": "改为 {url}",
   "settings.nek.provider.error.nameRequired": "请填写名称",
   "settings.nek.provider.error.id.required": "请填写 ID",
-  "settings.nek.provider.error.id.format": "ID 只能包含小写字母、数字和 -，且以字母或数字开头",
-  "settings.nek.provider.error.id.duplicate": "已存在同名服务商",
+  "settings.nek.provider.error.id.slash": "不能包含 /，它用于分隔服务商 ID 和模型 ID。",
+  "settings.nek.provider.error.id.edgeWhitespace": "首尾不能有空白，nek 解析模型引用时会去掉它们。",
+  "settings.nek.provider.error.id.duplicate": "此 ID 已被使用，模型引用不区分大小写。",
   "settings.nek.provider.error.baseUrlRequired": "请填写 Base URL",
   "settings.nek.provider.error.baseUrlInvalid": "请输入以 http:// 或 https:// 开头的地址",
   "settings.nek.provider.error.envName": "环境变量名只能包含字母、数字和下划线，且不以数字开头",

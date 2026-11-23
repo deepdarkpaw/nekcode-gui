@@ -83,13 +83,25 @@ describe("tokenCount", () => {
 });
 
 describe("providerId", () => {
-  it("slugifies names and validates", () => {
+  it("NM-1 suggests a slug but accepts the case, punctuation and Unicode nek can reference", () => {
     expect(slugifyProviderId("My Proxy (EU)")).toBe("my-proxy-eu");
     expect(slugifyProviderId("深度求索")).toBe("");
+    for (const id of ["CPA", "My_Proxy", "vendor.ai", "中转", "My Proxy", "team:AI"]) {
+      expect(validateProviderId(id, new Set())).toBeNull();
+    }
     expect(validateProviderId("", new Set())).toBe("required");
-    expect(validateProviderId("Bad_ID", new Set())).toBe("format");
-    expect(validateProviderId("deepseek", new Set(["deepseek"]))).toBe("duplicate");
-    expect(validateProviderId("ok-1", new Set())).toBeNull();
+    expect(validateProviderId("\t ", new Set())).toBe("required");
+    expect(validateProviderId("team/ai", new Set())).toBe("slash");
+    expect(validateProviderId(" CPA", new Set())).toBe("edgeWhitespace");
+    expect(validateProviderId("CPA\u00a0", new Set())).toBe("edgeWhitespace");
+  });
+
+  it("NM-2 compares model prefixes without case, excluding the exact source of a rename", () => {
+    const existing = new Set(["CPA", "Other"]);
+    expect(validateProviderId("cpa", existing)).toBe("duplicate");
+    expect(validateProviderId("cpa", existing, "Other")).toBe("duplicate");
+    expect(validateProviderId("cpa", existing, "CPA")).toBeNull();
+    expect(validateProviderId("cpa", new Set(["CPA", "Cpa"]), "CPA")).toBe("duplicate");
   });
 });
 

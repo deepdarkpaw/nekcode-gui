@@ -31,14 +31,24 @@ import {
   planReferenceRewrites,
   scanProviderReferences,
 } from "./modelsReferences.js";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import {
+  NEK_THINKING_LEVELS,
+  validateNekProviderId,
+  type NekProviderIdError,
+} from "@zcode/shared/nek-protocol";
 import { modelsPath, settingsPath } from "./paths.js";
 import { listAgentPresets, writeAgentPreset } from "./presetsDocument.js";
 import type { NekConfigRuntime } from "./runtime.js";
 import { readSettingsDocument, type NekSettingsDocument } from "./settingsDocument.js";
 import { sameRevision } from "./revision.js";
 
-const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
+const PROVIDER_ID_ERRORS: Record<NekProviderIdError, string> = {
+  required: "enter a non-empty ID",
+  slash: '"/" separates the provider from the model in a provider/model reference',
+  edgeWhitespace:
+    "nek trims the provider prefix in a model reference, so an ID cannot start or end with whitespace",
+  duplicate: "an ID already exists with that spelling; model references ignore case",
+};
 
 type RawModel = Record<string, unknown>;
 
@@ -57,10 +67,10 @@ export type NekModelsGroup = Pick<
 >;
 
 function requireProvider(snapshot: NekModelsSnapshot, providerId: string): Record<string, unknown> {
-  const provider = snapshot.providers[providerId];
-  if (!provider)
+  if (!Object.hasOwn(snapshot.providers, providerId)) {
     throw validationError(`unknown provider "${providerId}"`, { providerId: "unknown" });
-  return provider;
+  }
+  return snapshot.providers[providerId]!;
 }
 
 function modelsOf(provider: Record<string, unknown>): RawModel[] {
@@ -71,10 +81,21 @@ function modelIdOf(model: RawModel): string {
   return typeof model.id === "string" ? model.id : "";
 }
 
-function requireProviderId(id: string, field: string): void {
-  if (!PROVIDER_ID_PATTERN.test(id)) {
-    throw validationError(`invalid provider id "${id}"`, {
-      [field]: "use lowercase letters, digits and dashes",
+function requireNewProviderId(
+  snapshot: NekModelsSnapshot,
+  id: string,
+  field: "id" | "to",
+  previousId?: string,
+): void {
+  if (previousId !== undefined && id === previousId) {
+    throw validationError("provider id did not change", { [field]: "unchanged" });
+  }
+  const providers = snapshot.data.providers;
+  const ids = isPlainObject(providers) ? Object.keys(providers) : [];
+  const issue = validateNekProviderId(id, ids, previousId);
+  if (issue) {
+    throw validationError(`provider ${JSON.stringify(id)}: ${PROVIDER_ID_ERRORS[issue]}`, {
+      [field]: issue,
     });
   }
 }
@@ -154,7 +175,6 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
     },
 
     saveProvider: async (target, provider, options) => {
-      if (options.isNew) requireProviderId(provider.id, "id");
       if (provider.apiKey === "") {
         throw validationError("apiKey must be omitted, kept, replaced, or removed explicitly", {
           apiKey: "empty string is not a valid deletion instruction",
@@ -162,11 +182,8 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       }
       const snapshot = await readSnapshot(target);
       if (!sameRevision(snapshot.revision, options.revision)) throw conflict(snapshot.path);
-      const existing = snapshot.providers[provider.id];
-      if (!options.isNew && !existing) requireProvider(snapshot, provider.id);
-      if (options.isNew && existing) {
-        throw validationError(`provider "${provider.id}" already exists`, { id: "duplicate" });
-      }
+      if (options.isNew) requireNewProviderId(snapshot, provider.id, "id");
+      const existing = options.isNew ? undefined : requireProvider(snapshot, provider.id);
       const value = providerWriteToValue(provider, existing);
       validateProviderValue(provider.id, value);
       return await save(target, snapshot, options, providerEdits(provider.id, existing, value));
@@ -185,22 +202,15 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
     previewProviderRename: async (target, from, to, cwd) => {
       const snapshot = await readSnapshot(target);
       requireProvider(snapshot, from);
-      requireProviderId(to, "to");
-      if (snapshot.providers[to]) {
-        throw validationError(`provider "${to}" already exists`, { to: "duplicate" });
-      }
+      requireNewProviderId(snapshot, to, "to", from);
       return { from, to, references: await referencesOf(target, from, cwd) };
     },
 
     renameProvider: async (target, from, to, options) => {
-      if (from === to) throw validationError("provider id did not change", { to: "unchanged" });
-      requireProviderId(to, "to");
       const context = runtime.target(target);
       const snapshot = await readSnapshot(target);
       const provider = requireProvider(snapshot, from);
-      if (snapshot.providers[to]) {
-        throw validationError(`provider "${to}" already exists`, { to: "duplicate" });
-      }
+      requireNewProviderId(snapshot, to, "to", from);
       const settingsFile = settingsPath(context.layout, "global");
       const settingsDocument = await readSettingsDocument(context.executor, settingsFile);
       const presets = await presetsOf(target, options.cwd);

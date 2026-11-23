@@ -2830,7 +2830,7 @@ const enUS: Record<string, string> = {
   "settings.nek.provider.field.name": "Name",
   "settings.nek.provider.field.id": "ID",
   "settings.nek.provider.field.idHint":
-    "Generated from the name; lowercase letters, digits and - only. Cannot be edited after creation.",
+    "The name suggests an ID; you can enter your own. Use Change ID to rename it later.",
   "settings.nek.provider.field.idReadonly":
     "The ID is referenced by the default model, scoped models and more. Use Change ID to rewrite references.",
   "settings.nek.provider.field.api": "Endpoint type",
@@ -2864,9 +2864,12 @@ const enUS: Record<string, string> = {
   "settings.nek.provider.applyFix": "Change to {url}",
   "settings.nek.provider.error.nameRequired": "Enter a name",
   "settings.nek.provider.error.id.required": "Enter an ID",
-  "settings.nek.provider.error.id.format":
-    "Use lowercase letters, digits and -, starting with a letter or digit",
-  "settings.nek.provider.error.id.duplicate": "A provider with this ID already exists",
+  "settings.nek.provider.error.id.slash":
+    "Do not use /; it separates the provider ID from the model ID.",
+  "settings.nek.provider.error.id.edgeWhitespace":
+    "Remove leading or trailing whitespace; nek trims it when resolving model references.",
+  "settings.nek.provider.error.id.duplicate":
+    "This ID is already in use. Model references ignore case.",
   "settings.nek.provider.error.baseUrlRequired": "Enter a Base URL",
   "settings.nek.provider.error.baseUrlInvalid":
     "Enter an address starting with http:// or https://",

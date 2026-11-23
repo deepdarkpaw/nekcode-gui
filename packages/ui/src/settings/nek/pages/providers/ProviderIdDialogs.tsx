@@ -162,7 +162,8 @@ export function RenameProviderDialog({
   const inputId = useId();
   const [next, setNext, resetNext] = useDialogDraft(open, provider.id);
   const { references } = useReferences(open, provider.id);
-  const idError = next === provider.id ? "unchanged" : validateProviderId(next, existingIds);
+  const idError =
+    next === provider.id ? "unchanged" : validateProviderId(next, existingIds, provider.id);
   const errorText =
     idError === null || idError === "unchanged"
       ? undefined
