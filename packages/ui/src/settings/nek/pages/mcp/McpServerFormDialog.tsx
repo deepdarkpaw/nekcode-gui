@@ -89,7 +89,7 @@ export function McpServerFormDialog({
       dirty={draftKey(draft) !== draftKey(start)}
       valid={valid}
       saveLabel={t(initial ? "settings.nek.mcp.form.save" : "settings.nek.mcp.form.add")}
-      onSave={() => onSave(draft.name.trim(), mcpConfigFromDraft(draft))}
+      onSave={() => onSave(draft.name, mcpConfigFromDraft(draft))}
       documents={documents}
       onReset={resetDraft}
       footerStart={

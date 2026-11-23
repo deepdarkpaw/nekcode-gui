@@ -3212,7 +3212,7 @@ const enUS: Record<string, string> = {
   "settings.nek.mcp.form.oauth": "OAuth",
   "settings.nek.mcp.form.testDisabled": "Fill in the required fields first",
   "settings.nek.mcp.form.error.nameRequired": "Enter a name",
-  "settings.nek.mcp.form.error.nameFormat": "Use letters, digits, . _ - only",
+  "settings.nek.mcp.form.error.nameFormat": "Use only A–Z, a–z, digits, underscores, and hyphens.",
   "settings.nek.mcp.form.error.nameDuplicate": "A server with this name already exists",
   "settings.nek.mcp.form.error.commandRequired": "Enter a command",
   "settings.nek.mcp.form.error.url": "Enter a URL starting with http:// or https://",

@@ -1,10 +1,12 @@
 /**
  * MCP 服务器表单：编辑态 ↔ mcp.json 配置，以及字段校验。
  */
-import type { NekMcpExposure, NekMcpServerConfig } from "@zcode/shared/nek-protocol";
+import {
+  isNekMcpServerName,
+  type NekMcpExposure,
+  type NekMcpServerConfig,
+} from "@zcode/shared/nek-protocol";
 import { createKeyValueRow, recordFromRows, rowsFromRecord, type KeyValueRow } from "./keyValue.js";
-
-export const MCP_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 export const MCP_EXPOSURES: readonly NekMcpExposure[] = ["deferred", "direct", "hidden"];
 export const MCP_DEFAULT_TIMEOUT_SECONDS = 60;
 
@@ -109,10 +111,10 @@ export function validateMcpDraft(
   t: Translate,
 ): McpFormErrors {
   const errors: McpFormErrors = {};
-  const name = draft.name.trim();
+  const name = draft.name;
   if (name === "") {
     errors.name = t("settings.nek.mcp.form.error.nameRequired");
-  } else if (!MCP_NAME_PATTERN.test(name)) {
+  } else if (!isNekMcpServerName(name)) {
     errors.name = t("settings.nek.mcp.form.error.nameFormat");
   } else if (existingNames.has(name)) {
     errors.name = t("settings.nek.mcp.form.error.nameDuplicate");

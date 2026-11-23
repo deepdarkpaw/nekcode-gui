@@ -3,7 +3,11 @@
  * 先预览（勾选要导入的项），重名项逐个选择 覆盖 / 跳过 / 重命名。
  */
 import { useEffect, useState } from "react";
-import type { NekMcpImportPreview, NekMcpServerConfig } from "@zcode/shared/nek-protocol";
+import {
+  isNekMcpServerName,
+  type NekMcpImportPreview,
+  type NekMcpServerConfig,
+} from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
@@ -21,7 +25,8 @@ import { useFocusRestore } from "@/hooks/useFocusRestore.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
-import { MCP_NAME_PATTERN, mcpTransportOf, suggestUniqueName } from "../../lib/mcpForm.js";
+import { mcpTransportOf, suggestUniqueName } from "../../lib/mcpForm.js";
+import { Field, invalidProps } from "../../components/Field.js";
 import { Segmented } from "../../components/inputs.js";
 
 type Resolution = "overwrite" | "skip" | "rename";
@@ -41,27 +46,29 @@ export interface McpImportItem {
   overwrite: boolean;
 }
 
-/** 预览行 → 实际导入项；重命名不合法或仍重名时返回 null（主按钮禁用）。 */
-export function resolveImport(
-  rows: readonly ImportRow[],
-  existing: ReadonlySet<string>,
-): McpImportItem[] | null {
-  const items: McpImportItem[] = [];
+/** 预留现有名和本批不改名的条目；校验改名与导入顺序无关。 */
+function resolveImport(rows: readonly ImportRow[], existing: ReadonlySet<string>) {
+  const selected = rows.filter(
+    (row) => row.selected && (!row.conflict || row.resolution !== "skip"),
+  );
+  const renamed = (row: ImportRow) => row.conflict && row.resolution === "rename";
   const taken = new Set(existing);
-  for (const row of rows) {
-    if (!row.selected || (row.conflict && row.resolution === "skip")) continue;
-    const name = row.conflict && row.resolution === "rename" ? row.rename.trim() : row.name;
-    if (!MCP_NAME_PATTERN.test(name) || (row.resolution === "rename" && taken.has(name))) {
-      return null;
-    }
-    taken.add(name);
-    items.push({
-      name,
-      config: row.config,
-      overwrite: row.conflict && row.resolution === "overwrite",
-    });
+  const renameCounts = new Map<string, number>();
+  for (const row of selected) {
+    if (renamed(row)) renameCounts.set(row.rename, (renameCounts.get(row.rename) ?? 0) + 1);
+    else taken.add(row.name);
   }
-  return items;
+  const errors = new Map<string, "nameRequired" | "nameFormat" | "nameDuplicate">();
+  const items = selected.map((row): McpImportItem => {
+    const name = renamed(row) ? row.rename : row.name;
+    if (!isNekMcpServerName(name))
+      errors.set(row.name, name === "" ? "nameRequired" : "nameFormat");
+    else if (renamed(row) && (taken.has(name) || (renameCounts.get(name) ?? 0) > 1)) {
+      errors.set(row.name, "nameDuplicate");
+    }
+    return { name, config: row.config, overwrite: row.conflict && row.resolution === "overwrite" };
+  });
+  return { errors, items: errors.size === 0 ? items : null };
 }
 
 export function McpImportDialog({
@@ -104,11 +111,30 @@ export function McpImportDialog({
       })),
     );
   };
-  const items = rows ? resolveImport(rows, existingNames) : null;
   const updateRow = (name: string, patch: Partial<ImportRow>) =>
     setRows(
       (current) => current?.map((row) => (row.name === name ? { ...row, ...patch } : row)) ?? null,
     );
+  const plan = rows ? resolveImport(rows, existingNames) : null;
+  const items = plan?.items ?? null;
+  const firstNameError = plan?.errors.values().next().value;
+  const renameField = (row: ImportRow) => {
+    const id = `mcp-import-name-${row.name}`;
+    const error = plan?.errors.get(row.name);
+    const message = error ? t(`settings.nek.mcp.form.error.${error}`) : undefined;
+    return (
+      <Field label={t("settings.nek.mcp.import.newName")} htmlFor={id} error={message}>
+        <Input
+          {...TECHNICAL_INPUT_ATTRIBUTES}
+          id={id}
+          value={row.rename}
+          className="w-48 font-mono"
+          {...invalidProps(id, message)}
+          onChange={(event) => updateRow(row.name, { rename: event.target.value })}
+        />
+      </Field>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -179,20 +205,7 @@ export function McpImportDialog({
                         ]}
                         onChange={(resolution) => updateRow(row.name, { resolution })}
                       />
-                      {row.resolution === "rename" ? (
-                        <Input
-                          {...TECHNICAL_INPUT_ATTRIBUTES}
-                          aria-label={t("settings.nek.mcp.import.newName")}
-                          value={row.rename}
-                          className="w-48 font-mono"
-                          aria-invalid={
-                            !MCP_NAME_PATTERN.test(row.rename.trim()) ||
-                            existingNames.has(row.rename.trim()) ||
-                            undefined
-                          }
-                          onChange={(event) => updateRow(row.name, { rename: event.target.value })}
-                        />
-                      ) : null}
+                      {row.resolution === "rename" ? renameField(row) : null}
                     </div>
                   ) : null}
                 </li>
@@ -216,7 +229,11 @@ export function McpImportDialog({
           ) : (
             <AsyncButton
               disabled={!items || items.length === 0}
-              disabledReason={t("settings.nek.mcp.import.nothing")}
+              disabledReason={t(
+                firstNameError
+                  ? `settings.nek.mcp.form.error.${firstNameError}`
+                  : "settings.nek.mcp.import.nothing",
+              )}
               successFeedback="none"
               onClick={async () => {
                 if (items) {

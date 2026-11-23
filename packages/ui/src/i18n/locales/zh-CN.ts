@@ -3023,7 +3023,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.mcp.form.oauth": "OAuth",
   "settings.nek.mcp.form.testDisabled": "先填写必填项",
   "settings.nek.mcp.form.error.nameRequired": "请填写名称",
-  "settings.nek.mcp.form.error.nameFormat": "名称只能包含字母、数字、. _ -",
+  "settings.nek.mcp.form.error.nameFormat": "名称只能包含英文字母、数字、下划线和连字符。",
   "settings.nek.mcp.form.error.nameDuplicate": "已存在同名服务器",
   "settings.nek.mcp.form.error.commandRequired": "请填写命令",
   "settings.nek.mcp.form.error.url": "请输入以 http:// 或 https:// 开头的 URL",
