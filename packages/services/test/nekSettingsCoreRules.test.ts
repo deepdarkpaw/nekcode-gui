@@ -17,8 +17,9 @@ const PROJECT_SETTINGS = join(PROJECT_DIR, "settings.json");
 
 for (const scope of ["global", "project"] as const) {
   test(`SR-1 rejects invalid compaction.content before writing ${scope} settings`, async (t) => {
-    const { api, local } = createHarness();
+    const { api, control, local } = createHarness();
     t.after(() => api.dispose());
+    control.projectTrusted = true;
     const cwd = scope === "project" ? PROJECT : undefined;
     const { revision, path } = await api.readSettings(LOCAL, scope, cwd);
     const cases = [
@@ -76,13 +77,14 @@ test("SR-1 accepts all exact content minima and safe integer maxima", async (t) 
 test("SR-2 reports invalid values at the owning file and supports one-field resets", async (t) => {
   const global = { compaction: { content: { toolArgumentMaxChars: 0, pruneToolResults: null } } };
   const project = { compaction: { content: [] } };
-  const { api, local } = createHarness({
+  const { api, control, local } = createHarness({
     localFiles: {
       [SETTINGS]: JSON.stringify(global),
       [PROJECT_SETTINGS]: JSON.stringify(project),
     },
   });
   t.after(() => api.dispose());
+  control.projectTrusted = true;
   const read = await api.readSettings(LOCAL, "project", PROJECT);
   assert.deepEqual(read.diagnostics, [
     {
@@ -242,13 +244,14 @@ test("SR-6 keeps provider settings nested and leaves unspecified SDK options uns
 test("SR-6 applies legacy maxDelayMs only to the loaded projection, per file before merging", async (t) => {
   const global = { retry: { maxDelayMs: 100, provider: { maxRetries: 0, maxRetryDelayMs: 200 } } };
   const project = { retry: { maxDelayMs: 300 } };
-  const { api, local } = createHarness({
+  const { api, control, local } = createHarness({
     localFiles: {
       [SETTINGS]: JSON.stringify(global),
       [PROJECT_SETTINGS]: JSON.stringify(project),
     },
   });
   t.after(() => api.dispose());
+  control.projectTrusted = true;
   assert.equal(
     (await api.readSettings(LOCAL, "global")).effective.retry?.provider?.maxRetryDelayMs,
     200,
