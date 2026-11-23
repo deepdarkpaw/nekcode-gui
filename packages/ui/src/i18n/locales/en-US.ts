@@ -3312,7 +3312,7 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.autonomousHint": "Runs continuously without parent confirmation.",
   "settings.nek.agent.preset.instructions": "Instructions (body)",
   "settings.nek.agent.preset.error.nameRequired": "Enter a name",
-  "settings.nek.agent.preset.error.nameFormat": "Use lowercase letters, digits, _ and - only",
+  "settings.nek.agent.preset.error.nameFormat": "This name cannot be used as a preset filename. Avoid path separators, invalid filename characters and reserved device names.",
   "settings.nek.agent.preset.error.nameDuplicate": "A preset with this name already exists",
   "settings.nek.agent.preset.error.descriptionRequired": "Enter a description",
   "settings.nek.agent.instructions": "Global AGENTS.md",

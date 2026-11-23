@@ -2,6 +2,7 @@ export * from "./gui-rpc.js";
 export * from "./history.js";
 export * from "./history-stream.js";
 export * from "./config-api.js";
+export * from "./agent-preset-name.js";
 export * from "./remote-api.js";
 export * from "./mentions.js";
 export * from "./rpc.js";

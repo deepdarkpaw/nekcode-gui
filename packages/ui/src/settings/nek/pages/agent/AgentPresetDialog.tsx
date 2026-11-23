@@ -7,7 +7,7 @@ import { useDialogDraft } from "../../components/useDialogDraft.js";
  */
 import { useId, useMemo } from "react";
 import type { NekAgentPreset, NekCatalogModel, NekConfigScope } from "@zcode/shared/nek-protocol";
-import { NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
+import { isAgentPresetFileName, NEK_THINKING_LEVELS } from "@zcode/shared/nek-protocol";
 import { Input } from "@/components/ui/input.js";
 import { Switch } from "@/components/ui/switch.js";
 import { Textarea } from "@/components/ui/textarea.js";
@@ -18,8 +18,6 @@ import { Field, invalidProps } from "../../components/Field.js";
 import { Segmented, TokenCountInput } from "../../components/inputs.js";
 import { ModelSelect, ThinkingLevelSelect } from "../../components/modelControls.js";
 import { NekFormDialog } from "../../components/NekFormDialog.js";
-
-const NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
 interface PresetDraft {
   scope: NekConfigScope;
@@ -100,7 +98,7 @@ export function AgentPresetDialog({
   const nameError =
     name === ""
       ? t("settings.nek.agent.preset.error.nameRequired")
-      : !NAME_PATTERN.test(name)
+      : !isAgentPresetFileName(name)
         ? t("settings.nek.agent.preset.error.nameFormat")
         : takenNames(draft.scope).has(name)
           ? t("settings.nek.agent.preset.error.nameDuplicate")

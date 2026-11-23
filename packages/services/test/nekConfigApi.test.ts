@@ -1063,12 +1063,12 @@ Review the changes.
   const renamed = await harness.api.saveAgentPreset(
     LOCAL,
     "global",
-    { ...user.preset, name: "diff-reviewer" },
+    { ...user.preset, name: "代码审查 GPT-6.1" },
     { revision: reviewerRevision, previousName: "reviewer" },
   );
   assert.ok(renamed.revision.length > 0);
   assert.equal(harness.local.files.has(PRESET_PATH), false, "old preset file is removed");
-  assert.equal(harness.local.files.has(join(AGENT_DIR, "agents", "diff-reviewer.md")), true);
+  assert.equal(harness.local.files.has(join(AGENT_DIR, "agents", "代码审查 GPT-6.1.md")), true);
 
   // 非法预设名是校验错误
   await expectNekError(
@@ -1088,12 +1088,12 @@ Review the changes.
     "validation",
   );
   const current = await harness.api.listAgentPresets(LOCAL);
-  const target = current.entries.find((entry) => entry.preset.name === "diff-reviewer");
+  const target = current.entries.find((entry) => entry.preset.name === "代码审查 GPT-6.1");
   assert.ok(target);
-  await harness.api.deleteAgentPreset(LOCAL, "global", "diff-reviewer", {
+  await harness.api.deleteAgentPreset(LOCAL, "global", "代码审查 GPT-6.1", {
     revision: target.revision,
   });
-  assert.equal(harness.local.files.has(join(AGENT_DIR, "agents", "diff-reviewer.md")), false);
+  assert.equal(harness.local.files.has(join(AGENT_DIR, "agents", "代码审查 GPT-6.1.md")), false);
 });
 
 test("nek.yaml patches merge sections and reject unknown keys", async () => {

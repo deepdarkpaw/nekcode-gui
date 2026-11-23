@@ -1,3 +1,4 @@
+import { isAgentPresetFileName } from "@zcode/shared/nek-protocol";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -136,6 +137,7 @@ export class NekConfigService {
       scope === "global"
         ? join(this.paths.agentDir, "agents")
         : join(this.paths.projectDir, "agents");
+    if (!isAgentPresetFileName(name)) throw new Error(`invalid agent preset name "${name}"`);
     return join(dir, `${name}.md`);
   }
 
@@ -359,8 +361,6 @@ export class NekConfigService {
     options: { scope?: NekConfigScope; expectedRevision?: NekConfigRevision | null } = {},
   ): Promise<NekAgentPresetDocument> {
     const scope = options.scope ?? "global";
-    if (!/^[A-Za-z0-9._-]+$/u.test(preset.name))
-      throw new Error(`invalid agent preset name "${preset.name}"`);
     const validated = parseWithSchema(nekAgentFrontmatterSchema, preset.frontmatter);
     if (!validated.ok) {
       throw new Error(

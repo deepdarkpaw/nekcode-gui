@@ -64,9 +64,6 @@ export const BUILTIN_PRESETS: readonly NekAgentPreset[] = [
 /** 内置预设的 revision 令牌：不是文件，但契约要求每个条目都带 revision。 */
 export const BUILTIN_PRESET_REVISION = "builtin";
 
-/** 预设文件名：与 nek 的 `*.md` 扫描一致，只允许安全字符。 */
-const PRESET_NAME_PATTERN = /^[A-Za-z0-9._-]+$/u;
-
 export interface NekAgentPresetFile {
   path: string;
   revision: string;
@@ -254,11 +251,6 @@ export async function writeAgentPreset(
   args: WriteAgentPresetArgs,
 ): Promise<WriteAgentPresetResult> {
   const { executor, agentDir, scope, preset, expectedRevision, previousName, cwd } = args;
-  if (!PRESET_NAME_PATTERN.test(preset.name)) {
-    throw validationError(`invalid preset name "${preset.name}"`, {
-      name: "letters, digits, dot, dash, underscore",
-    });
-  }
   if (preset.description.trim() === "") {
     throw validationError("preset description must not be empty", { description: "required" });
   }

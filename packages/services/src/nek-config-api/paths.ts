@@ -5,7 +5,8 @@
  * 只有 `AGENTS.md` 在项目根目录。
  */
 import { join } from "node:path";
-import type { NekConfigScope } from "@zcode/shared/nek-protocol";
+import { isAgentPresetFileName, type NekConfigScope } from "@zcode/shared/nek-protocol";
+import { validationError } from "./errors.js";
 
 export interface NekConfigLayout {
   /** `~/.nek/agent`（可被 `NEK_CODING_AGENT_DIR` 覆盖）。 */
@@ -63,6 +64,9 @@ export function agentPresetPath(
   name: string,
   cwd?: string,
 ): string {
+  if (!isAgentPresetFileName(name)) {
+    throw validationError(`invalid preset filename: ${name}`, { name: "invalid filename" });
+  }
   return join(agentsDir(layout, scope, cwd), `${name}.md`);
 }
 
