@@ -214,8 +214,8 @@ const PRESENTATION_CASES: PresentationCase[] = [
       prompt: "你是审查者，逐个检查 nek 工具卡的渲染结果。",
       subagent_type: "general-purpose",
     },
-    runningLabel: "子智能体",
-    completedLabel: "子智能体",
+    runningLabel: "子代理",
+    completedLabel: "子代理",
     primaryText: "审查渲染器",
     rawParameterFragment: "你是审查者",
   },
@@ -358,7 +358,7 @@ describe("synthetic tool group nodes", () => {
   it("derives the subagent source badge from parentToolUseId, never from nesting depth", () => {
     // 分组容器的子工具仍在主会话里执行：缩进层级是布局事实，不是子智能体身份。
     const nested = show(toolCall("bash", { input: { command: "ls -a .nek" } }), { depth: 1 });
-    expect(nested.queryByText("子智能体")).toBeNull();
+    expect(nested.queryByText("子代理")).toBeNull();
     cleanup();
 
     // 协议给出 parentToolUseId 时才真的是子智能体发起的工具调用。
@@ -366,7 +366,7 @@ describe("synthetic tool group nodes", () => {
       toolCall("bash", { input: { command: "ls -a .nek" }, parentToolUseId: "agent-1" }),
       { depth: 1 },
     );
-    expect(fromSubAgent.getByText("子智能体")).toBeTruthy();
+    expect(fromSubAgent.getByText("子代理")).toBeTruthy();
   });
 });
 

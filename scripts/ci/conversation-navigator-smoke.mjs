@@ -64,6 +64,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const rail = page.locator('[data-testid="v4-turn-navigator"]');
   await rail.waitFor({ state: "visible" });
+  assert.equal(await rail.getAttribute("aria-label"), "Task query map", "TT-1: task terminology");
   const itemFor = (rowId) =>
     page.locator(`[data-testid^="v4-turn-navigator-item-"][data-query-row-id="${rowId}"]`);
   const visibleTooltip = () =>
@@ -144,6 +145,11 @@ try {
   );
   const itemBeforeLocale = await itemFor(3007).getAttribute("data-testid");
   await page.getByTestId("locale").click();
+  await expectDom(
+    () =>
+      document.querySelector('[data-testid="v4-turn-navigator"]')?.getAttribute("aria-label") ===
+      "任务问题导航",
+  );
   await itemFor(3007).hover();
   await waitTooltip();
   await expectDom(

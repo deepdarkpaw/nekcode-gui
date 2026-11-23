@@ -10,7 +10,7 @@ beforeAll(installDomPolyfills);
 afterEach(cleanup);
 
 it.each([
-  { policy: "ask", cwd: MOCK_PROJECT_CWD, label: "将会询问（启动新会话时）" },
+  { policy: "ask", cwd: MOCK_PROJECT_CWD, label: "将会询问（启动新任务时）" },
   { policy: "always", cwd: MOCK_PROJECT_CWD, label: "已信任（默认策略：总是信任）" },
   { policy: "never", cwd: MOCK_PROJECT_CWD, label: "不信任（默认策略：从不信任）" },
   { policy: "never", cwd: "/fixtures/empty-project", label: "无需决定（没有需要信任的项目配置）" },

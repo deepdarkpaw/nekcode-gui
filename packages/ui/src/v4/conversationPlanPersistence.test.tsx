@@ -110,7 +110,7 @@ it("only executes the authoritative ready revision and still opens the older rev
     parentSessionId: sessionId,
   });
   expect(screen.getAllByRole("button", { name: "执行计划" })).toHaveLength(1);
-  fireEvent.click(screen.getByRole("button", { name: "在新会话中执行" }));
+  fireEvent.click(screen.getByRole("button", { name: "在新任务中执行" }));
   await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith("new-plan-session"));
   expect(dispatch).toHaveBeenCalledWith(
     "executeNekPlan",

@@ -53,7 +53,7 @@ it("HL1: the top of turns 40-60 offers one button that loads the earlier whole t
   const value = controls(40, true);
   const onLoadOlder = vi.fn(async () => {});
   render(<ConversationHistoryHeader controls={value} onLoadOlder={onLoadOlder} />, { wrapper });
-  const button = screen.getByRole("button", { name: "加载更早的对话（还有 40 轮）" });
+  const button = screen.getByRole("button", { name: "加载更早的记录（还有 40 轮）" });
   expect(screen.getAllByRole("button")).toHaveLength(1);
   fireEvent.click(button);
   await waitFor(() => expect(onLoadOlder).toHaveBeenCalledTimes(1));
