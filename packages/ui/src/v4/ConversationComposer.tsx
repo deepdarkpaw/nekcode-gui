@@ -1,5 +1,6 @@
 import { recordChatError } from "@/lib/diagnostics/chatErrors.js";
 import type { LocalTtftContext } from "@zcode/shared";
+import { parseNekBuiltinSlashCommand } from "@zcode/shared/nek-protocol";
 /* oxlint-disable eslint(max-lines) -- composer 集中收口输入区 wiring（附件/草稿/历史/mention），拆分会打散收口粒度。 */
 import { getLocalTtftObserver } from "@/v4/diagnostics/localTtftObserver.js";
 /**
@@ -1103,13 +1104,15 @@ function ConversationComposerImpl({
   // 压缩中提交的输入由 GUI 暂存：发送 Promise 会一直等到压缩收口，界面必须说明为什么还在转圈。
   const awaitingCompactionSend = pending && isCompactingInputRouting(snapshot?.inputRouting);
   const attachmentsReady = !attachmentsApi.hasUnreadyAttachments;
+  // Local commands don't need a complete model selection to be submitted.
+  const canSubmitSelection = submissionReady || parseNekBuiltinSlashCommand(text) !== null;
   const canSend =
     !disabled &&
     !pending &&
     hasDraftToSubmit &&
     routingAllowsSend &&
     attachmentsReady &&
-    submissionReady;
+    canSubmitSelection;
   // 旧 UI 状态机：streaming + 空草稿 → Stop；有草稿 → 发送键（入队）。
   const showStopControl = canStop && !hasDraftToSubmit;
 
@@ -1126,6 +1129,7 @@ function ConversationComposerImpl({
     ) => {
       const expandedText = expandLargePasteBlocks(textRef.current, pasteBlocksRef.current);
       const trimmed = expandedText.trim();
+      const isBuiltinCommand = parseNekBuiltinSlashCommand(trimmed) !== null;
       const submittedQueueItemIds =
         snapshotRef.current?.queue.items.map((item) => item.queueItemId) ?? [];
       const hasPendingAttachments = attachmentsApi.attachments.length > 0;
@@ -1149,8 +1153,8 @@ function ConversationComposerImpl({
           !submittedShareContext) ||
         pendingRef.current ||
         snapshotRef.current?.control.readOnly ||
-        !submissionReady ||
-        (createSubmissionFromComposer !== undefined && submission === null) ||
+        (!isBuiltinCommand &&
+          (!submissionReady || (createSubmissionFromComposer !== undefined && submission === null))) ||
         attachmentsApi.hasUnreadyAttachments
       ) {
         return;
@@ -2101,7 +2105,7 @@ function ConversationComposerImpl({
           }
           disabled={disabled || mode === "reject"}
           submitting={pending}
-          submitDisabled={pending || !routingAllowsSend || !attachmentsReady || !submissionReady}
+          submitDisabled={pending || !routingAllowsSend || !attachmentsReady || !canSubmitSelection}
           allowSubmitWhenEmpty={
             // 发送按钮已把代码评论视为可发送上下文，但这里曾漏掉同一状态，
             // 导致空文本仅附代码评论时 Enter 被编辑器判为空，必须改点发送按钮。

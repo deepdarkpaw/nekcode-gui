@@ -1,18 +1,22 @@
-export type V4VisibleSlashCommand =
-  | {
-      kind: "compact";
-      displayText: string;
-    }
-  | {
-      kind: "planShortcut";
-      task: string;
-      displayText: string;
-    }
-  | {
-      kind: "unsupportedPlanShortcut";
-      task: string;
-      displayText: string;
-    };
+import {
+  parseNekBuiltinSlashCommand,
+  type NekBuiltinSlashInvocation,
+} from "@zcode/shared/nek-protocol";
+
+interface V4PlanShortcut {
+  kind: "planShortcut" | "unsupportedPlanShortcut";
+  task: string;
+}
+
+/** Only non-builtins reach the continuation; a blocked action is not a prompt fallback. */
+export function routeNekSlashSubmission<BuiltinResult, PromptResult>(
+  text: string,
+  runBuiltin: (command: NekBuiltinSlashInvocation) => BuiltinResult,
+  submitPrompt: () => PromptResult,
+): BuiltinResult | PromptResult {
+  const command = parseNekBuiltinSlashCommand(text);
+  return command ? runBuiltin(command) : submitPrompt();
+}
 
 interface V4VisibleSlashCommandParseOptions {
   contextAttachmentCount?: number;
@@ -34,32 +38,14 @@ export function parseV4VisibleSlashCommand(
   content: string,
   attachments: readonly unknown[] = [],
   options: V4VisibleSlashCommandParseOptions = {},
-): V4VisibleSlashCommand | null {
-  const displayText = content.trim();
-  if (!displayText.startsWith("/")) return null;
-  const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(displayText);
+): V4PlanShortcut | null {
+  const match = /^\/plan(?:\s+([\s\S]*))?$/iu.exec(content.trim());
   if (!match) return null;
-  const commandName = match[1]?.toLowerCase() ?? "";
-  const args = match[2]?.trim() ?? "";
-
-  if (commandName === "plan") {
-    const hasUnsupportedPayload =
-      attachments.length > 0 || (options.contextAttachmentCount ?? 0) > 0;
-    return {
-      kind: hasUnsupportedPayload ? "unsupportedPlanShortcut" : "planShortcut",
-      task: args,
-      displayText,
-    };
-  }
-
-  if (attachments.length > 0 || (options.contextAttachmentCount ?? 0) > 0) {
-    return null;
-  }
-
-  if (commandName === "compact" || commandName === "compress") {
-    return { kind: "compact", displayText };
-  }
-  return null;
+  const hasUnsupportedPayload = attachments.length > 0 || (options.contextAttachmentCount ?? 0) > 0;
+  return {
+    kind: hasUnsupportedPayload ? "unsupportedPlanShortcut" : "planShortcut",
+    task: match[1]?.trim() ?? "",
+  };
 }
 
 /**

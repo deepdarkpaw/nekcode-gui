@@ -40,3 +40,17 @@ export type NekBuiltinSlashCommandName = (typeof NEK_BUILTIN_SLASH_COMMANDS)[num
 export function isNekBuiltinSlashCommandName(name: string): name is NekBuiltinSlashCommandName {
   return NEK_BUILTIN_SLASH_COMMANDS.some((command) => command.name === name);
 }
+
+export interface NekBuiltinSlashInvocation {
+  name: NekBuiltinSlashCommandName;
+  args: string;
+}
+
+/** Read the first slash token only. Keep internal whitespace in the argument string. */
+export function parseNekBuiltinSlashCommand(text: string): NekBuiltinSlashInvocation | null {
+  const input = text.trim();
+  if (!input.startsWith("/")) return null;
+  const name = input.slice(1).split(/\s/u, 1)[0];
+  if (!name || !isNekBuiltinSlashCommandName(name)) return null;
+  return { name, args: input.slice(name.length + 1).trim() };
+}

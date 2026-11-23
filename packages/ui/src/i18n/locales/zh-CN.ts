@@ -2160,6 +2160,8 @@ const zhCN: Record<string, string> = {
   "chat.slash.title": "命令与能力",
   "chat.slash.searchHint": "输入内容以搜索命令、技能或子智能体",
   "chat.slash.app.side.description": "新建并打开一个辅助对话",
+  "chat.slash.planned": "/{name}：GUI 暂不支持，计划中。现在可在 nek 终端使用。",
+  "chat.slash.attachmentsBlocked": "斜杠命令不接收附件或引用。移除它们后重试。",
   "chat.slash.commands.title": "命令",
   "chat.slash.skills.title": "技能",
   "chat.slash.skills.empty": "没有匹配的技能",

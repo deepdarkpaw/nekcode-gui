@@ -10,6 +10,7 @@ import { forkUserMessage } from "./nekForkUserMessage.js";
 import {
   acceptedCommand,
   asRecord,
+  assertNotNekBuiltinPrompt,
   readString,
   unsupportedCommand,
   workspaceKey,
@@ -72,6 +73,7 @@ export async function sendConversationCommand(
   const payload = asRecord(envelope.payload) ?? {};
   if (envelope.type === "createSession")
     return await createFromCommand(context, input.target, envelope, payload);
+  if (envelope.type === "sendText") assertNotNekBuiltinPrompt(readString(payload, "text"));
   if (!envelope.sessionId) return unsupportedCommand(envelope, "sessionId is required");
   const binding = await context.ensureBinding(input.target, envelope.sessionId);
   const revision = context.service.conversationSnapshot(binding.sessionKey).revision;
@@ -134,6 +136,7 @@ async function createFromCommand(
   payload: Record<string, unknown>,
 ): Promise<CommandAck> {
   const firstInput = asRecord(payload.firstInput);
+  if (firstInput) assertNotNekBuiltinPrompt(readString(firstInput, "text"));
   const config = asRecord(payload.config);
   const model = asRecord(firstInput?.modelSelection ?? config?.modelSelection);
   const thinking = selectionThinking(model, config);

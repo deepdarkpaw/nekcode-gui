@@ -2292,6 +2292,10 @@ const enUS: Record<string, string> = {
   "chat.slash.title": "Commands and capabilities",
   "chat.slash.searchHint": "Type to search commands, skills, or agents",
   "chat.slash.app.side.description": "Open a new side conversation",
+  "chat.slash.planned":
+    "/{name} is planned but not yet available in the GUI. Use it in the nek terminal for now.",
+  "chat.slash.attachmentsBlocked":
+    "Slash commands do not accept attachments or references. Remove them and try again.",
   "chat.slash.commands.title": "Commands",
   "chat.slash.skills.title": "Skills",
   "chat.slash.skills.empty": "No matching skills",

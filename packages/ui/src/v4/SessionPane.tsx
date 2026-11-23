@@ -181,6 +181,7 @@ import {
 import {
   parseV4VisibleSlashCommand,
   parseSelectionSideSlashCommand,
+  routeNekSlashSubmission,
 } from "@/v4/slashCommands.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
@@ -2134,10 +2135,6 @@ export function SessionPane({
         logger.warn("[v4-pane] Submission 缺少完整模型或模式配置");
         return "blocked" as const;
       }
-      if (sessionId && slashCommand?.kind === "compact") {
-        await dispatchCompact(sessionId);
-        return;
-      }
       if (snapshotRef.current?.inputRouting.mode === "choice" && !heldQueueDisposition) {
         return "confirmationRequired" as const;
       }
@@ -2287,7 +2284,6 @@ export function SessionPane({
     },
     [
       dispatchCommand,
-      dispatchCompact,
       ensureDraftModelReadyForSend,
       availableSelectionSideSlashCommandNames,
       appSlashCommands,
@@ -2361,7 +2357,22 @@ export function SessionPane({
         heldQueueDisposition: options?.heldQueueDisposition,
       });
       try {
-        const sendResult = await dispatchSendText(text, options);
+        const sendResult = await routeNekSlashSubmission(
+          text,
+          async ({ name }) => {
+            if (options?.attachments?.length || options?.contextAttachmentCount) {
+              toast(intl.formatMessage({ id: "chat.slash.attachmentsBlocked" }));
+              return "blocked" as const;
+            }
+            if (name === "compact" && sessionId) {
+              await dispatchCompact(sessionId);
+              return "sent" as const;
+            }
+            toast(intl.formatMessage({ id: "chat.slash.planned" }, { name }));
+            return "blocked" as const;
+          },
+          () => dispatchSendText(text, options),
+        );
         if (sendResult === "blocked" || sendResult === "confirmationRequired") {
           return sendResult;
         }
@@ -2394,7 +2405,7 @@ export function SessionPane({
         throw error;
       }
     },
-    [dispatchSendText, focusTimelineToLatest, intl, sessionId],
+    [dispatchCompact, dispatchSendText, focusTimelineToLatest, intl, sessionId],
   );
 
   const handleComposerDraftStateChange = useCallback(

@@ -402,6 +402,52 @@ test("maps a nek session to v4 and requires the target nek attachment capability
   assert.ok(session.commands.some((command) => command.type === "read_history_page"));
 });
 
+test("SC-2 rejects a built-in before either first input or existing-session prompt reaches nek", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const envelope = { commandId: "builtin", clientId: "test", issuedAt: Date.now() };
+    await assert.rejects(
+      adapter.sendNekConversationCommandV4({
+        target,
+        envelope: {
+          ...envelope,
+          sessionId: null,
+          type: "createSession",
+          payload: {
+            workspaceId: target.workspacePath,
+            firstInput: { text: "/model\tprovider/id" },
+          },
+        },
+      }),
+      /GUI command, not a prompt/u,
+    );
+    await assert.rejects(
+      adapter.sendNekConversationCommandV4({
+        target,
+        envelope: {
+          ...envelope,
+          sessionId: "unopened",
+          type: "sendText",
+          payload: { text: "/tree" },
+        },
+      }),
+      /GUI command, not a prompt/u,
+    );
+    assert.deepEqual(session.commands, []);
+    assert.deepEqual(control.commands, []);
+  } finally {
+    await adapter.dispose();
+  }
+});
+
 const IZCODE_METHODS = [
   "prepareStorage",
   "getStorageStartupState",

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { parseNekBuiltinSlashCommand } from "@zcode/shared/nek-protocol";
+
 import type {
   CommandAck,
   ConversationTopicFrame,
@@ -62,6 +64,13 @@ export function acceptedCommand(
 
 export function unsupportedCommand(envelope: NekSessionCommandEnvelope, message: string): never {
   throw new Error(`nek command ${envelope.type} is unavailable: ${message}`);
+}
+
+/** RPC `prompt` does not execute interactive built-ins. Never forward them as model text. */
+export function assertNotNekBuiltinPrompt(text: string | undefined): void {
+  const command = text === undefined ? null : parseNekBuiltinSlashCommand(text);
+  if (command)
+    throw new Error(`/${command.name} is a GUI command, not a prompt; use the GUI action`);
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | undefined {

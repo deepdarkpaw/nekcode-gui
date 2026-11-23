@@ -31,7 +31,7 @@ import {
   unsupported,
 } from "./nekAgentServiceAdapterLegacySupport.js";
 import { readTrustedZCodeAgentV4Connection } from "../../zcode-agent/zcodeAgentConnectionScope.js";
-import { workspaceKey } from "./frameHelpers.js";
+import { assertNotNekBuiltinPrompt, workspaceKey } from "./frameHelpers.js";
 import { createNekAgentRuntimeLifecycle } from "./nekAgentRuntimeLifecycle.js";
 import { isListedNekSession } from "./nekSessionListing.js";
 import { createNekUserImageAttachmentMethods } from "./nekUserImageAttachments.js";
@@ -227,6 +227,7 @@ export function createNekLegacyMethods(
     collectLocalRuntimeChildProcesses: () => unsupported("collectLocalRuntimeChildProcesses"),
     generateWorkspaceText: () => unsupported("generateWorkspaceText"),
     async sendPrompt(input) {
+      assertNotNekBuiltinPrompt(input.content);
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       // 压缩进行中整段挂起：配置预提交与附件解析都等压缩收口后再做。
       await target.service.deferInput(sessionKey, async () => {
