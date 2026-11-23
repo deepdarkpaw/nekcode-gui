@@ -11,7 +11,7 @@ import type {
   NekThinkingLevel,
 } from "./gui-rpc.js";
 import type { RemoteTarget } from "../remoteTarget.js";
-import type { NekMcpServerConfig } from "./gui-extension-api.js";
+import type { NekMcpServerConfig, NekMcpServerOverride } from "./gui-extension-api.js";
 
 // ============================================================================
 // 目标与通用
@@ -240,6 +240,8 @@ export interface NekMcpServerEntry {
   config: NekMcpServerConfig;
   /** 项目级条目只覆盖 enabled/exposure/toolExposure 时为 true。 */
   isOverride: boolean;
+  /** Original project keys, without inherited values. */
+  override?: NekMcpServerOverride;
 }
 
 export interface NekMcpConfigView extends NekConfigRevision {
@@ -251,7 +253,11 @@ export interface NekMcpConfigView extends NekConfigRevision {
 
 /** 解析粘贴的 JSON（`{ mcpServers: {...} }` 或单个服务器），返回待导入项与冲突。 */
 export interface NekMcpImportPreview {
-  servers: Array<{ name: string; config: NekMcpServerConfig; conflict: boolean }>;
+  servers: Array<{
+    name: string;
+    config: NekMcpServerConfig | NekMcpServerOverride;
+    conflict: boolean;
+  }>;
   errors: string[];
 }
 

@@ -7,6 +7,7 @@ import {
   isNekMcpServerName,
   type NekMcpImportPreview,
   type NekMcpServerConfig,
+  type NekMcpServerOverride,
 } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
@@ -33,7 +34,7 @@ type Resolution = "overwrite" | "skip" | "rename";
 
 interface ImportRow {
   name: string;
-  config: NekMcpServerConfig;
+  config: NekMcpServerConfig | NekMcpServerOverride;
   conflict: boolean;
   selected: boolean;
   resolution: Resolution;
@@ -42,7 +43,7 @@ interface ImportRow {
 
 export interface McpImportItem {
   name: string;
-  config: NekMcpServerConfig;
+  config: NekMcpServerConfig | NekMcpServerOverride;
   overwrite: boolean;
 }
 

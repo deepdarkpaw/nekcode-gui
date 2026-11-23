@@ -7,29 +7,25 @@ import type {
   NekAgentPresetsView,
   NekConfigScope,
   NekMcpConfigView,
-  NekMcpExposure,
   NekMcpServerConfig,
   NekMcpServerEntry,
+  NekMcpServerOverride,
 } from "@zcode/shared/nek-protocol";
 import { useNekSettingsContext } from "./NekSettingsContext.js";
 import { NekConfigApiError } from "./nekErrors.js";
 import { normalizeConfigPath, useNekDocument, type NekDocument } from "./useNekDocument.js";
 
-export interface McpOverride {
-  enabled?: boolean;
-  exposure?: NekMcpExposure;
-  toolExposure?: Record<string, NekMcpExposure>;
-}
+type McpWrite = {
+  name: string;
+  config: NekMcpServerConfig | NekMcpServerOverride;
+  previousName?: string;
+};
 
 export interface NekMcpDocument extends NekDocument<NekMcpConfigView> {
   scope: NekConfigScope;
-  saveServer: (entry: {
-    name: string;
-    config: NekMcpServerConfig;
-    previousName?: string;
-  }) => Promise<void>;
+  saveServer: (entry: McpWrite) => Promise<void>;
   deleteServer: (name: string) => Promise<void>;
-  setOverride: (name: string, override: McpOverride) => Promise<void>;
+  setOverride: (name: string, override: NekMcpServerOverride) => Promise<void>;
 }
 
 function upsertServer(
@@ -43,8 +39,15 @@ function upsertServer(
     : [...servers, entry];
 }
 
-function applyOverride(server: NekMcpServerEntry, override: McpOverride): NekMcpServerEntry {
-  return { ...server, config: { ...server.config, ...override } };
+function applyOverride(
+  server: NekMcpServerEntry,
+  override: NekMcpServerOverride,
+): NekMcpServerEntry {
+  return {
+    ...server,
+    config: { ...server.config, ...override },
+    ...(server.isOverride ? { override: { ...server.override, ...override } } : {}),
+  };
 }
 
 export function useNekMcpDoc(scope: NekConfigScope = "global", cwd?: string): NekMcpDocument {
@@ -57,16 +60,20 @@ export function useNekMcpDoc(scope: NekConfigScope = "global", cwd?: string): Ne
   const { mutate } = doc;
 
   const saveServer = useCallback(
-    (entry: { name: string; config: NekMcpServerConfig; previousName?: string }) =>
+    (entry: McpWrite) =>
       mutate({
-        optimistic: (data) => ({
-          ...data,
-          servers: upsertServer(
-            data.servers,
-            { name: entry.name, scope, path: data.path, config: entry.config, isOverride: false },
-            entry.previousName ?? entry.name,
-          ),
-        }),
+        optimistic: (data) => {
+          const { name, config: value, previousName } = entry;
+          if (scope !== "global" || !("command" in value || "url" in value)) return data;
+          return {
+            ...data,
+            servers: upsertServer(
+              data.servers,
+              { name, scope, path: data.path, config: value, isOverride: false },
+              previousName ?? name,
+            ),
+          };
+        },
         write: (data) =>
           config.saveMcpServer(target, scope, entry, { revision: data.revision, cwd }),
       }),
@@ -87,7 +94,7 @@ export function useNekMcpDoc(scope: NekConfigScope = "global", cwd?: string): Ne
   );
 
   const setOverride = useCallback(
-    (name: string, override: McpOverride) =>
+    (name: string, override: NekMcpServerOverride) =>
       mutate({
         optimistic: (data) => ({
           ...data,

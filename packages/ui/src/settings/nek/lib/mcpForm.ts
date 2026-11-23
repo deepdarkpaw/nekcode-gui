@@ -1,30 +1,35 @@
-/**
- * MCP 服务器表单：编辑态 ↔ mcp.json 配置，以及字段校验。
- */
+/** Edit projection for mcp.json: use nek's validator, and patch only changed draft fields. */
 import {
-  isNekMcpServerName,
+  normalizeNekMcpExposure,
+  validateNekMcpServer,
   type NekMcpExposure,
   type NekMcpServerConfig,
+  type NekMcpServerOverride,
 } from "@zcode/shared/nek-protocol";
-import { createKeyValueRow, recordFromRows, rowsFromRecord, type KeyValueRow } from "./keyValue.js";
-export const MCP_EXPOSURES: readonly NekMcpExposure[] = ["deferred", "direct", "hidden"];
+import { rowsFromRecord, type KeyValueRow } from "./keyValue.js";
+
+export { NEK_MCP_EXPOSURES as MCP_EXPOSURES } from "@zcode/shared/nek-protocol";
 export const MCP_DEFAULT_TIMEOUT_SECONDS = 60;
 
 export type McpTransport = "stdio" | "http";
 
-export interface McpOauthDraft {
-  clientId: string;
-  clientSecret: string;
-  callbackPort: string;
-  scope: string;
-}
+export const MCP_OAUTH_FIELDS = [
+  "clientId",
+  "clientSecret",
+  "callbackPort",
+  "callbackUrl",
+  "scope",
+  "clientName",
+  "authServerMetadataUrl",
+] as const;
+export type McpOauthDraft = Record<(typeof MCP_OAUTH_FIELDS)[number], string>;
 
 export interface McpFormDraft {
   name: string;
-  transport: McpTransport;
+  transport: McpTransport | "";
   description: string;
-  command: string;
-  /** 每行一个参数。 */
+  command?: string;
+  /** Each line represents one argument. */
   args: string;
   env: KeyValueRow[];
   cwd: string;
@@ -32,16 +37,30 @@ export interface McpFormDraft {
   headers: KeyValueRow[];
   oauth: McpOauthDraft;
   timeout: string;
-  exposure: NekMcpExposure;
-  enabled: boolean;
-  toolExposure?: Record<string, NekMcpExposure>;
+  exposure: NekMcpExposure | "";
 }
 
-export type McpFormField = "name" | "command" | "url" | "timeout" | "callbackPort";
+type McpFormField = Extract<
+  ReturnType<typeof validateNekMcpServer>,
+  { ok: false }
+>["issues"][number]["field"];
 export type McpFormErrors = Partial<Record<McpFormField, string>>;
 
-export function mcpTransportOf(config: NekMcpServerConfig): McpTransport {
-  return "url" in config ? "http" : "stdio";
+type Translate = (id: string, values?: Record<string, string | number>) => string;
+
+interface McpFormBaseline {
+  config: NekMcpServerConfig;
+  draft: McpFormDraft;
+}
+
+export function mcpTransportOf(config: NekMcpServerConfig | NekMcpServerOverride): McpTransport {
+  return "url" in config || ("type" in config && config.type !== "stdio") ? "http" : "stdio";
+}
+
+function oauthDraft(value: Record<string, unknown>): McpOauthDraft {
+  return Object.fromEntries(
+    MCP_OAUTH_FIELDS.map((key) => [key, draftText(value[key])]),
+  ) as McpOauthDraft;
 }
 
 export function emptyMcpDraft(): McpFormDraft {
@@ -49,155 +68,165 @@ export function emptyMcpDraft(): McpFormDraft {
     name: "",
     transport: "stdio",
     description: "",
-    command: "",
     args: "",
     env: [],
     cwd: "",
     url: "",
     headers: [],
-    oauth: { clientId: "", clientSecret: "", callbackPort: "", scope: "" },
+    oauth: oauthDraft({}),
     timeout: "",
     exposure: "deferred",
-    enabled: true,
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function draftText(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+}
+
+function draftRows(input: unknown): KeyValueRow[] {
+  return rowsFromRecord(
+    Object.fromEntries(
+      Object.entries(asRecord(input)).map(([key, value]) => [key, draftText(value)]),
+    ),
+  );
 }
 
 export function mcpDraftFromConfig(name: string, config: NekMcpServerConfig): McpFormDraft {
-  const base = emptyMcpDraft();
-  const common = {
-    ...base,
-    name,
-    description: config.description ?? "",
-    timeout: config.timeout === undefined ? "" : String(config.timeout),
-    exposure: config.exposure ?? "deferred",
-    enabled: config.enabled !== false,
-    toolExposure: config.toolExposure,
-  };
-  if ("url" in config) {
-    return {
-      ...common,
-      transport: "http",
-      url: config.url,
-      headers: rowsFromRecord(config.headers),
-      oauth: {
-        clientId: config.oauth?.clientId ?? "",
-        clientSecret: config.oauth?.clientSecret ?? "",
-        callbackPort:
-          config.oauth?.callbackPort === undefined ? "" : String(config.oauth.callbackPort),
-        scope: config.oauth?.scope ?? "",
-      },
-    };
-  }
+  const raw = asRecord(config);
+  const { type } = raw;
+  const transport =
+    type === "stdio"
+      ? "stdio"
+      : type === "http" || type === "streamable-http"
+        ? "http"
+        : type !== undefined
+          ? ""
+          : typeof raw.url === "string"
+            ? "http"
+            : "stdio";
   return {
-    ...common,
-    transport: "stdio",
-    command: config.command,
-    args: (config.args ?? []).join("\n"),
-    env: rowsFromRecord(config.env),
-    cwd: config.cwd ?? "",
+    name,
+    transport,
+    description: draftText(raw.description),
+    command: raw.command === undefined ? undefined : draftText(raw.command),
+    args: Array.isArray(raw.args) ? raw.args.map(draftText).join("\n") : "",
+    env: draftRows(raw.env),
+    cwd: draftText(raw.cwd),
+    url: draftText(raw.url),
+    headers: draftRows(raw.headers),
+    oauth: oauthDraft(asRecord(raw.oauth)),
+    timeout: draftText(raw.timeout),
+    exposure:
+      raw.exposure === undefined ? "deferred" : (normalizeNekMcpExposure(raw.exposure) ?? ""),
   };
 }
 
-type Translate = (id: string, values?: Record<string, string | number>) => string;
-
-function parsePositiveInt(text: string): number | null {
-  const value = Number(text.trim());
-  return Number.isInteger(value) && value > 0 ? value : null;
+function parseOptionalNumber(text: string): number | undefined {
+  return text.trim() === "" ? undefined : Number(text);
 }
 
-export function validateMcpDraft(
+function optionalText(text: string): string | undefined {
+  return text === "" ? undefined : text;
+}
+
+function setField(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (value === undefined) delete target[key];
+  else target[key] = value;
+}
+
+function rowsKey(rows: readonly KeyValueRow[]) {
+  return JSON.stringify(rows.map((row) => [row.key, row.value]));
+}
+
+function writeRows(rows: readonly KeyValueRow[], before: readonly KeyValueRow[]) {
+  const originalEmptyKey = before.find((row) => row.key === "")?.id;
+  const entries = rows.filter((row) => row.key || row.value || row.id === originalEmptyKey);
+  return entries.length
+    ? Object.fromEntries(entries.map((row) => [row.key, row.value]))
+    : undefined;
+}
+
+function editOAuth(original: unknown, draft: McpOauthDraft, before: McpOauthDraft) {
+  const changed = MCP_OAUTH_FIELDS.filter((key) => draft[key] !== before[key]);
+  if (!changed.length) return original;
+  const result = { ...asRecord(original) };
+  for (const key of changed)
+    setField(
+      result,
+      key,
+      key === "callbackPort" ? parseOptionalNumber(draft[key]) : optionalText(draft[key]),
+    );
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** A changed transport replaces its old fields; all other changes are field-local. */
+function candidateFromDraft(draft: McpFormDraft, baseline?: McpFormBaseline) {
+  const source = baseline?.config;
+  const before = baseline?.draft ?? emptyMcpDraft();
+  const config = { ...asRecord(source) };
+  if (draft.description !== before.description)
+    setField(config, "description", optionalText(draft.description));
+  if (draft.timeout !== before.timeout)
+    setField(config, "timeout", parseOptionalNumber(draft.timeout));
+  if (draft.exposure !== before.exposure)
+    setField(config, "exposure", draft.exposure === "deferred" ? undefined : draft.exposure);
+  if (!draft.transport) return config;
+
+  const switched = Boolean(baseline) && draft.transport !== before.transport;
+  if (switched || !baseline)
+    setField(config, "type", draft.transport === "http" ? "http" : undefined);
+  if (draft.transport === "http") {
+    if (switched) for (const key of ["command", "args", "env", "cwd"]) delete config[key];
+    if (draft.url !== before.url || typeof config.url !== "string") config.url = draft.url;
+    if (rowsKey(draft.headers) !== rowsKey(before.headers))
+      setField(config, "headers", writeRows(draft.headers, before.headers));
+    setField(config, "oauth", editOAuth(config.oauth, draft.oauth, before.oauth));
+  } else {
+    if (switched) for (const key of ["url", "headers", "oauth", "auth"]) delete config[key];
+    if (draft.command !== before.command) setField(config, "command", draft.command);
+    if (draft.args !== before.args)
+      setField(config, "args", draft.args === "" ? undefined : draft.args.split("\n"));
+    if (rowsKey(draft.env) !== rowsKey(before.env))
+      setField(config, "env", writeRows(draft.env, before.env));
+    if (draft.cwd !== before.cwd) setField(config, "cwd", optionalText(draft.cwd));
+  }
+  return config;
+}
+
+/** Validate the exact candidate that the form will send, not a differently normalized draft. */
+export function resolveMcpDraft(
   draft: McpFormDraft,
   existingNames: ReadonlySet<string>,
   t: Translate,
-): McpFormErrors {
+  baseline?: McpFormBaseline,
+) {
+  const checked = validateNekMcpServer(draft.name, candidateFromDraft(draft, baseline));
   const errors: McpFormErrors = {};
-  const name = draft.name;
-  if (name === "") {
-    errors.name = t("settings.nek.mcp.form.error.nameRequired");
-  } else if (!isNekMcpServerName(name)) {
-    errors.name = t("settings.nek.mcp.form.error.nameFormat");
-  } else if (existingNames.has(name)) {
+  if (!checked.ok) {
+    for (const { field, code, values } of checked.issues) {
+      errors[field] = t(`settings.nek.mcp.form.error.${code}`, values);
+    }
+  }
+  if (draft.name === "") errors.name = t("settings.nek.mcp.form.error.nameRequired");
+  else if (!errors.name && existingNames.has(draft.name))
     errors.name = t("settings.nek.mcp.form.error.nameDuplicate");
-  }
-  if (draft.transport === "stdio" && draft.command.trim() === "") {
-    errors.command = t("settings.nek.mcp.form.error.commandRequired");
-  }
-  if (draft.transport === "http" && !/^https?:\/\/\S+$/i.test(draft.url.trim())) {
-    errors.url = t("settings.nek.mcp.form.error.url");
-  }
-  if (draft.timeout.trim() !== "" && parsePositiveInt(draft.timeout) === null) {
-    errors.timeout = t("settings.nek.mcp.form.error.timeout");
-  }
-  if (
-    draft.oauth.callbackPort.trim() !== "" &&
-    parsePositiveInt(draft.oauth.callbackPort) === null
-  ) {
-    errors.callbackPort = t("settings.nek.mcp.form.error.port");
-  }
-  return errors;
-}
-
-function optional(text: string): string | undefined {
-  const trimmed = text.trim();
-  return trimmed === "" ? undefined : trimmed;
-}
-
-function oauthFromDraft(oauth: McpOauthDraft) {
-  const result = {
-    clientId: optional(oauth.clientId),
-    clientSecret: optional(oauth.clientSecret),
-    callbackPort: parsePositiveInt(oauth.callbackPort) ?? undefined,
-    scope: optional(oauth.scope),
-  };
-  return Object.values(result).some((value) => value !== undefined) ? result : undefined;
-}
-
-/** 编辑态 → 配置（需先通过校验）；未填的可选字段不写入。 */
-export function mcpConfigFromDraft(draft: McpFormDraft): NekMcpServerConfig {
-  const common = {
-    description: optional(draft.description),
-    enabled: draft.enabled ? undefined : false,
-    exposure: draft.exposure === "deferred" ? undefined : draft.exposure,
-    toolExposure: draft.toolExposure,
-    timeout: parsePositiveInt(draft.timeout) ?? undefined,
-  };
-  if (draft.transport === "http") {
-    return stripUndefined({
-      ...common,
-      type: "http" as const,
-      url: draft.url.trim(),
-      headers: recordFromRows(draft.headers),
-      oauth: oauthFromDraft(draft.oauth),
-    });
-  }
-  const args = draft.args
-    .split("\n")
-    .map((arg) => arg.trim())
-    .filter((arg) => arg !== "");
-  return stripUndefined({
-    ...common,
-    command: draft.command.trim(),
-    args: args.length > 0 ? args : undefined,
-    env: recordFromRows(draft.env),
-    cwd: optional(draft.cwd),
-  });
-}
-
-function stripUndefined<T extends object>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+  const config = checked.ok && !errors.name ? checked.config : undefined;
+  return { errors, config };
 }
 
 /** 导入重名时建议的新名称：`name-2`、`name-3`…… */
 export function suggestUniqueName(name: string, taken: ReadonlySet<string>): string {
   for (let index = 2; index < 1000; index += 1) {
     const candidate = `${name}-${index}`;
-    if (!taken.has(candidate)) {
-      return candidate;
-    }
+    if (!taken.has(candidate)) return candidate;
   }
   return `${name}-${Date.now()}`;
-}
-
-export function addKeyValueRow(rows: readonly KeyValueRow[]): KeyValueRow[] {
-  return [...rows, createKeyValueRow()];
 }

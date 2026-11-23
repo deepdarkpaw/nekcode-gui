@@ -131,64 +131,48 @@ export type NekSettingsFile = Omit<NekSettingsView, "extra"> & Record<string, un
 // mcp.json（nek extensions/mcp/config.ts）
 // ============================================================================
 
-export const NEK_MCP_EXPOSURE_VALUES = ["deferred", "direct", "hidden"] as const;
-export const nekMcpExposureSchema = z.enum(NEK_MCP_EXPOSURE_VALUES);
+import {
+  isNekMcpOverride,
+  NEK_MCP_SERVER_NAME_PATTERN,
+  validateNekMcpOverride,
+  validateNekMcpServer,
+} from "@zcode/shared/nek-protocol";
 
-const nekMcpServerBase = {
-  description: z.string().optional(),
-  enabled: z.boolean().optional(),
-  exposure: nekMcpExposureSchema.optional(),
-  toolExposure: z.record(z.string(), nekMcpExposureSchema).optional(),
-  timeout: z.number().positive().optional(),
-};
+/** Adapt the shared nek v0.5.1 validator for the document parser without normalizing values. */
+function mcpSchema(
+  rule: (raw: unknown) => ReturnType<typeof validateNekMcpServer | typeof validateNekMcpOverride>,
+) {
+  return z.unknown().transform((raw, ctx) => {
+    const checked = rule(raw);
+    if (checked.ok) return checked.config;
+    for (const { field, message } of checked.issues) {
+      ctx.addIssue({ code: "custom", path: field.split("."), message });
+    }
+    return z.NEVER;
+  });
+}
 
-export const nekMcpStdioServerSchema = loose({
-  ...nekMcpServerBase,
-  type: z.literal("stdio").optional(),
-  command: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  cwd: z.string().optional(),
-});
+export const nekMcpOverrideSchema = mcpSchema((raw) => validateNekMcpOverride("server", raw));
 
-export const nekMcpHttpServerSchema = loose({
-  ...nekMcpServerBase,
-  type: z.literal("http").optional(),
-  url: z.string().url(),
-  headers: z.record(z.string(), z.string()).optional(),
-  oauth: loose({
-    clientId: z.string().optional(),
-    clientSecret: z.string().optional(),
-    callbackPort: z.number().int().min(1).max(65535).optional(),
-    callbackUrl: z.string().optional(),
-    scope: z.string().optional(),
-    clientName: z.string().optional(),
-    authServerMetadataUrl: z.string().optional(),
-  }).optional(),
-});
-
-/** 项目级 `mcp.json` 只能写这三个键（与 nek 的 `OVERRIDE_KEYS` 一致）。 */
-export const nekMcpOverrideSchema = loose({
-  enabled: z.boolean().optional(),
-  exposure: nekMcpExposureSchema.optional(),
-  toolExposure: z.record(z.string(), nekMcpExposureSchema).optional(),
-});
-
-export const nekMcpServerSchema = z.union([
-  nekMcpStdioServerSchema,
-  nekMcpHttpServerSchema,
-  nekMcpOverrideSchema,
-]);
+export const nekMcpServerSchema = mcpSchema((raw) =>
+  typeof raw === "object" &&
+  raw !== null &&
+  !Array.isArray(raw) &&
+  isNekMcpOverride(raw as Record<string, unknown>)
+    ? validateNekMcpOverride("server", raw)
+    : validateNekMcpServer("server", raw),
+);
 
 export const nekMcpFileSchema = loose({
-  mcpServers: z.record(z.string(), nekMcpServerSchema).default({}),
+  mcpServers: z
+    .record(z.string().regex(NEK_MCP_SERVER_NAME_PATTERN), nekMcpServerSchema)
+    .default({}),
 });
 
 export type NekMcpFile = z.infer<typeof nekMcpFileSchema>;
 export type NekMcpServer = z.infer<typeof nekMcpServerSchema>;
-export const NEK_MCP_OVERRIDE_KEYS = ["enabled", "exposure", "toolExposure"] as const;
-
-export { NEK_MCP_SERVER_NAME_PATTERN } from "@zcode/shared/nek-protocol";
+export { NEK_MCP_SERVER_NAME_PATTERN };
+export { NEK_MCP_OVERRIDE_KEYS } from "@zcode/shared/nek-protocol";
 
 // ============================================================================
 // nek.yaml（nek extensions/nek/config.ts）

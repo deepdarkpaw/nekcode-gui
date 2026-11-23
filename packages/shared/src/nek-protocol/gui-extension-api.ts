@@ -95,18 +95,21 @@ export interface NekExtensionEvents {
 
 export type NekMcpExposure = "deferred" | "direct" | "hidden";
 
-/** mcp.json `mcpServers.<name>` 的形状（nek `core/mcp-servers.ts`）。 */
+/** Aliases exist in the file, not in nek's runtime status. */
+export type NekMcpConfigExposure = NekMcpExposure | "codemode" | "codemode-deferred";
+
+/** mcp.json `mcpServers.<name>` 的原始形状（nek v0.5.1，含旧写法）。 */
 export type NekMcpServerConfig = {
   description?: string;
   enabled?: boolean;
-  exposure?: NekMcpExposure;
-  toolExposure?: Record<string, NekMcpExposure>;
+  exposure?: NekMcpConfigExposure;
+  toolExposure?: Record<string, NekMcpConfigExposure>;
   /** 秒，默认 60。 */
   timeout?: number;
 } & (
   | { type?: "stdio"; command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
   | {
-      type?: "http";
+      type?: "http" | "streamable-http";
       url: string;
       headers?: Record<string, string>;
       oauth?: {
@@ -120,6 +123,12 @@ export type NekMcpServerConfig = {
       };
     }
 );
+
+/** The only fields a project may override in an existing server. */
+export type NekMcpServerOverride = Pick<
+  NekMcpServerConfig,
+  "enabled" | "exposure" | "toolExposure"
+>;
 
 export interface NekMcpServerStatus {
   name: string;

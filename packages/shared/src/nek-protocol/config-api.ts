@@ -52,8 +52,8 @@ import type {
   NekThinkingLevel,
 } from "./gui-rpc.js";
 import type {
-  NekMcpExposure,
   NekMcpServerConfig,
+  NekMcpServerOverride,
   NekMcpServerStatus,
 } from "./gui-extension-api.js";
 import type { INekResourceConfigApi } from "./resource-config.js";
@@ -181,17 +181,17 @@ export interface INekConfigApi extends INekResourceConfigApi {
   saveMcpServer(
     target: NekConfigTarget,
     scope: NekConfigScope,
-    entry: { name: string; config: NekMcpServerConfig; previousName?: string },
+    entry: {
+      name: string;
+      config: NekMcpServerConfig | NekMcpServerOverride;
+      previousName?: string;
+    },
     options: { revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   setMcpServerOverride(
     target: NekConfigTarget,
     name: string,
-    override: {
-      enabled?: boolean;
-      exposure?: NekMcpExposure;
-      toolExposure?: Record<string, NekMcpExposure>;
-    },
+    override: NekMcpServerOverride,
     options: { revision: string; scope: NekConfigScope; cwd?: string },
   ): Promise<NekConfigRevision>;
   deleteMcpServer(
