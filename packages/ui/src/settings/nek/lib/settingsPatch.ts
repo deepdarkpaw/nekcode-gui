@@ -7,7 +7,11 @@
  * 契约里的 `NekSettingsPatch` 只允许顶层 `null`；删除嵌套子键（例如 `compaction.model` 的
  * "跟随主模型"）需要嵌套 `null`，见 `nestedSettingsPatch`（已在报告中建议扩充契约）。
  */
-import type { NekSettingsPatch, NekSettingsView } from "@zcode/shared/nek-protocol";
+import {
+  NEK_SETTINGS_KNOWN_KEYS,
+  type NekSettingsPatch,
+  type NekSettingsView,
+} from "@zcode/shared/nek-protocol";
 
 type PlainObject = Record<string, unknown>;
 
@@ -95,52 +99,12 @@ export function settingsViewToJson(view: NekSettingsView): PlainObject {
   return { ...known, ...extra };
 }
 
-const KNOWN_SETTINGS_KEYS = new Set<string>([
-  "defaultProvider",
-  "defaultModel",
-  "defaultThinkingLevel",
-  "modelThinkingLevels",
-  "enabledModels",
-  "defaultTools",
-  "shellPath",
-  "shellCommandPrefix",
-  "compaction",
-  "branchSummary",
-  "retry",
-  "webSearch",
-  "httpProxy",
-  "httpIdleTimeoutMs",
-  "transport",
-  "steeringMode",
-  "followUpMode",
-  "defaultProjectTrust",
-  "hideThinkingBlock",
-  "updateChannel",
-]);
-
-/** 原始 JSON 对象 → 视图形状（未知键进 extra）。 */
-export function jsonToSettingsView(json: PlainObject): NekSettingsView {
-  const view: PlainObject = {};
-  const extra: PlainObject = {};
-  for (const [key, value] of Object.entries(json)) {
-    if (KNOWN_SETTINGS_KEYS.has(key)) {
-      view[key] = value;
-    } else {
-      extra[key] = value;
-    }
-  }
-  if (Object.keys(extra).length > 0) {
-    view.extra = extra;
-  }
-  return view as NekSettingsView;
-}
-
 /** 原始 JSON 的差异补丁转成契约补丁：未知键收进 `extra`。 */
 export function rawDiffToSettingsPatch(diff: PlainObject): NekSettingsPatch {
   const patch: PlainObject = {};
   const extra: PlainObject = {};
   for (const [key, value] of Object.entries(diff)) {
-    if (KNOWN_SETTINGS_KEYS.has(key)) {
+    if (NEK_SETTINGS_KNOWN_KEYS.has(key)) {
       patch[key] = value;
     } else {
       extra[key] = value;

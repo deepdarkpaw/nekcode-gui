@@ -243,7 +243,7 @@ describe("settingsPatch", () => {
     );
   });
 
-  it("diffs raw JSON into a minimal patch with unknown keys in extra", () => {
+  it("SR-7 diffs raw JSON into a minimal patch with unknown keys in extra", () => {
     const diff = diffSettingsValues(
       { compaction: { enabled: true, model: "a/b" }, theme: "dark", keep: 1 },
       { compaction: { enabled: false }, keep: 1, newKey: [1] },

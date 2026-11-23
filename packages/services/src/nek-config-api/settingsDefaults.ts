@@ -5,32 +5,8 @@
  * `http-dispatcher.ts`、`core/defaults.ts`）。设置页用它做"恢复默认"与占位显示，
  * 所以必须填全：缺一个默认值，界面就会把"未设置"显示成空白而不是 nek 的真实行为。
  */
-import type { NekSettingsView } from "@zcode/shared/nek-protocol";
+import { NEK_SETTINGS_KNOWN_KEYS, type NekSettingsView } from "@zcode/shared/nek-protocol";
 import { isPlainObject } from "../nek-agent/config/nekConfigDocuments.js";
-
-/** `NekSettingsView` 认识的顶层键；其余键进 `extra` 原样保留。 */
-export const SETTINGS_KNOWN_KEYS: readonly string[] = [
-  "defaultProvider",
-  "defaultModel",
-  "defaultThinkingLevel",
-  "modelThinkingLevels",
-  "enabledModels",
-  "defaultTools",
-  "shellPath",
-  "shellCommandPrefix",
-  "compaction",
-  "branchSummary",
-  "retry",
-  "webSearch",
-  "httpProxy",
-  "httpIdleTimeoutMs",
-  "transport",
-  "steeringMode",
-  "followUpMode",
-  "defaultProjectTrust",
-  "hideThinkingBlock",
-  "updateChannel",
-];
 
 /** nek 的 `DEFAULT_COMPACTION_CONTENT_SETTINGS`。 */
 export const COMPACTION_CONTENT_DEFAULTS = {
@@ -91,7 +67,7 @@ export function toSettingsView(raw: Record<string, unknown>): NekSettingsView {
   const view: Record<string, unknown> = {};
   const extra: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (SETTINGS_KNOWN_KEYS.includes(key)) view[key] = value;
+    if (NEK_SETTINGS_KNOWN_KEYS.has(key)) view[key] = value;
     else extra[key] = value;
   }
   if (Object.keys(extra).length > 0) view.extra = extra;

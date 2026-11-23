@@ -259,3 +259,31 @@ test("SR-6 applies legacy maxDelayMs only to the loaded projection, per file bef
   });
   assert.deepEqual(readJson(local, PROJECT_SETTINGS), project);
 });
+
+test("SR-7 presents editable keys at the top level and keeps raw-only settings in extra", async (t) => {
+  const raw = {
+    defaultTools: [],
+    retry: { enabled: false },
+    theme: "dark",
+    custom: { flag: true },
+  };
+  const { api, local } = createHarness({ localFiles: { [SETTINGS]: JSON.stringify(raw) } });
+  t.after(() => api.dispose());
+  const read = await api.readSettings(LOCAL, "global");
+  assert.deepEqual(read.values, {
+    defaultTools: [],
+    retry: { enabled: false },
+    extra: { theme: "dark", custom: { flag: true } },
+  });
+  await api.patchSettings(
+    LOCAL,
+    "global",
+    { extra: { theme: null }, retry: { enabled: true } },
+    read,
+  );
+  assert.deepEqual(readJson(local, SETTINGS), {
+    defaultTools: [],
+    retry: { enabled: true },
+    custom: { flag: true },
+  });
+});
