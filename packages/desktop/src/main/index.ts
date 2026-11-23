@@ -35,7 +35,7 @@ import {
   installLocalMediaPreviewProtocol,
   registerLocalMediaPreviewScheme,
 } from "./localMediaPreviewProtocol.js";
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, protocol, session } from "electron";
+import { app, BrowserWindow, ipcMain, nativeImage, protocol, session } from "electron";
 import type { UtilityProcess as ElectronUtilityProcess } from "electron";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
@@ -91,6 +91,7 @@ import {
   resolveExplicitStartupWorkspaceBootstrap,
 } from "./startupWorkspaceDeepLinkGate.js";
 import { executeDesktopCommand } from "./desktopCommandHandlers.js";
+import { confirmDesktopQuit } from "./desktopConfirmationDialogs.js";
 import { clampDesktopZoomLevel, resolveDesktopZoomLevelFromFactor } from "./desktopZoom.js";
 import {
   getDesktopMenuLabel as getDesktopMenuLabelByLocale,
@@ -802,34 +803,16 @@ function confirmAppQuit(originWindow?: BrowserWindow | null) {
     return true;
   }
 
-  const isZh = currentApplicationLocale === "zh-CN";
-  const runningAgentSessionCount = getRunningAgentSessionCount();
-  const detailLines = [
-    runningAgentSessionCount > 0
-      ? isZh
-        ? `正在进行的会话：${runningAgentSessionCount} 个，退出后会被中断。`
-        : `In-progress sessions: ${runningAgentSessionCount}. They will be interrupted after quitting.`
-      : null,
-  ].filter((line): line is string => line !== null);
-  const targetWindow =
+  const parentWindow =
     originWindow && !originWindow.isDestroyed()
       ? originWindow
       : (BrowserWindow.getFocusedWindow() ?? getApplicationWindows()[0] ?? null);
-  const dialogOptions = {
-    type: "question" as const,
-    buttons: isZh ? ["退出", "取消"] : ["Quit", "Cancel"],
-    defaultId: 1,
-    cancelId: 1,
-    title: isZh ? "退出确认" : "Confirm Quit",
-    message: isZh ? "确认退出 Z Code?" : "Quit Z Code?",
-    detail: detailLines.join("\n"),
+  return confirmDesktopQuit({
+    locale: currentApplicationLocale,
+    runningSessionCount: getRunningAgentSessionCount(),
+    parentWindow,
     icon: nativeImage.createFromPath(iconPath),
-  };
-
-  const result = targetWindow
-    ? dialog.showMessageBoxSync(targetWindow, dialogOptions)
-    : dialog.showMessageBoxSync(dialogOptions);
-  return result === 0;
+  });
 }
 
 async function executeDesktopCommandForApp(
