@@ -714,7 +714,7 @@ export function SettingsPage({
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex min-w-0 flex-wrap items-center gap-3">
                             {showActiveSectionTitle ? (
-                              <h2 className="text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
+                              <h2 className="text-ui-xl font-semibold tracking-tight text-foreground">
                                 {activeSectionLabel}
                               </h2>
                             ) : null}

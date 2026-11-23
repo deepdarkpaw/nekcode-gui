@@ -162,14 +162,13 @@ export function createFileDisplayDom(
   }
 
   const primary = document.createElement("span");
-  primary.className = options.fileNameClassName ?? "truncate text-[0.95em] leading-[1.6]";
+  primary.className = options.fileNameClassName ?? "truncate text-ui-base leading-[1.6]";
   primary.textContent = descriptor.fileName;
   container.append(primary);
 
   if (options.showFilePath && descriptor.filePath) {
     const secondary = document.createElement("span");
-    secondary.className =
-      options.filePathClassName ?? "truncate text-[0.85em] text-muted-foreground";
+    secondary.className = options.filePathClassName ?? "truncate text-ui-sm text-muted-foreground";
     secondary.textContent = descriptor.filePath;
     container.append(secondary);
   }

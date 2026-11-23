@@ -336,7 +336,6 @@ export function EditToolCallBlock(context: ToolCallBlockRenderContext) {
         title={toolCall.title}
         renderContent={renderContent}
       />
-      {/* <pre className="text-[8px]">{JSON.stringify(toolCall, null, 2)}</pre> */}
     </>
   );
 }

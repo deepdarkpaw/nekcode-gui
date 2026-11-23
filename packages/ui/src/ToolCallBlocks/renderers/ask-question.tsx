@@ -90,7 +90,6 @@ export function AskQuestionToolCallBlock(context: ToolCallBlockRenderContext) {
         title={toolCall.title ?? "AskUserQuestion"}
         renderContent={renderContent}
       />
-      {/* <pre className="text-[8px]">{JSON.stringify(toolCall, null, 2)}</pre> */}
     </>
   );
 }

@@ -48,7 +48,7 @@ export function UpdateReleaseNotesTooltip({
           <div className="max-h-72 w-full overflow-y-auto border-t border-border pt-2">
             <MessageResponse
               className={cn(
-                "prose prose-sm max-w-none text-ui-sm leading-relaxed text-foreground dark:prose-invert",
+                "prose max-w-none text-ui-sm leading-relaxed text-foreground dark:prose-invert",
                 "prose-headings:font-semibold prose-headings:tracking-tight",
                 "prose-h1:text-ui-lg prose-h2:text-ui-base prose-h3:text-ui-base",
               )}

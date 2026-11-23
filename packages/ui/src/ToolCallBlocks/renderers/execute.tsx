@@ -374,7 +374,6 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
           }
         />
       ) : null}
-      {/* <pre className="text-[8px]">{JSON.stringify(toolCall, null, 2)}</pre> */}
     </>
   );
 }

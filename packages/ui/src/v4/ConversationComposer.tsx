@@ -1736,7 +1736,7 @@ function ConversationComposerImpl({
                         data-testid={testId(TID_V4_ATTACHMENT_UPLOAD_PROGRESS, attachment.id)}
                         role={attachment.uploadStatus === "failed" ? "alert" : "status"}
                         aria-label={uploadStatusLabel}
-                        className="absolute inset-0 grid place-items-center rounded-lg bg-background/85 text-[7px] font-semibold text-foreground"
+                        className="absolute inset-0 grid place-items-center rounded-lg bg-background/85 text-ui-xs font-semibold text-foreground"
                       >
                         <svg
                           aria-hidden="true"
@@ -2194,7 +2194,7 @@ function ConversationComposerImpl({
             </Button>
           </DialogClose>
           <DialogHeader className="gap-3 pr-8">
-            <DialogTitle className="text-xl font-semibold sm:text-2xl">
+            <DialogTitle className="text-ui-xl font-semibold">
               {intl.formatMessage({ id: "chat.queue.sendConfirm.title" })}
             </DialogTitle>
             <DialogDescription className="text-ui-base sm:text-ui-lg">

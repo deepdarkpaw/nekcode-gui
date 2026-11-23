@@ -58,7 +58,7 @@ export function OccupationOnboardingVisual({
         </div>
         <h2
           className={cn(
-            "whitespace-nowrap text-[clamp(24px,7cqw,48px)] leading-[1.15] font-semibold tracking-[-0.035em]",
+            "whitespace-nowrap text-ui-xl leading-[1.15] font-semibold tracking-[-0.035em]",
             palette.heading,
           )}
         >
@@ -66,7 +66,7 @@ export function OccupationOnboardingVisual({
         </h2>
         <p
           className={cn(
-            "mt-6 w-full whitespace-pre-line text-[16px] leading-[26px]",
+            "mt-6 w-full whitespace-pre-line text-ui-lg leading-[26px]",
             palette.description,
             "dark:text-slate-200",
           )}
