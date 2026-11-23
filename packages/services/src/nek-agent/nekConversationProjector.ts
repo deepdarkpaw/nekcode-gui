@@ -191,7 +191,11 @@ export class NekConversationProjector {
       ),
       usage: projected.usage,
       plan: input.nekState ? projected.plan : this.store.state.plan,
-      control: buildControlState(input.state, this.store.state.control.phase),
+      control: buildControlState(
+        input.state,
+        this.store.state.control.phase,
+        this.store.state.control.projectTrusted,
+      ),
     });
     this.live = this.history.createLiveContext(this.store, this.now);
     // 快照本身就包含全部行，所以不再额外发增量帧。

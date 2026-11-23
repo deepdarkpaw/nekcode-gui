@@ -273,9 +273,9 @@ for (const { label, facts, trusted, reload } of [
   });
 }
 
-async function selectFrame(frames: NekInteractionFrame[]) {
-  await waitFor(() => frames.length > 0, "the trust select request");
-  const frame = frames[0];
+async function selectFrame(frames: NekInteractionFrame[], index = 0) {
+  await waitFor(() => frames.length > index, "the trust select request");
+  const frame = frames[index];
   if (frame?.kind !== "request" || frame.request.method !== "select") {
     throw new Error("expected a trust select frame");
   }
@@ -290,63 +290,79 @@ for (const { answer, saved, trusted } of [
   { answer: "deny-session", saved: undefined, trusted: false },
   { answer: undefined, saved: undefined, trusted: false },
 ] satisfies Array<{ answer?: NekProjectTrustChoice; saved?: string; trusted: boolean }>) {
-  test(`PT-2/PT-3/PT-4 selects ${answer ?? "close / Esc"} and starts with the matching flag`, async () => {
-    const decisions = new Map<string, boolean>();
-    const { control, frames, service, sessionArgs } = harness(
-      {},
-      {
-        decisions,
-        resources: [...DEFAULT_TRUST.resources, AGENTS],
-      },
-    );
-    try {
-      const pending = service.createSession({ cwd: CWD });
-      const request = await selectFrame(frames);
-      assert.deepEqual(frames[0]?.scope, { workspacePath: CWD });
-      assert.deepEqual(request.options, [
-        "trust",
-        "trust-parent",
-        "trust-session",
-        "deny",
-        "deny-session",
-      ]);
-      assert.deepEqual(request.projectTrust, {
-        cwd: CWD,
-        parentPath: "/",
-        resourcePaths: [`${CWD}/.nek/settings.json`],
-      });
-      assert.deepEqual(sessionArgs, [], "do not start nek before choosing");
-      assert.equal(
-        service.respondInteraction({
-          type: "extension_ui_response",
-          id: request.id,
-          ...(answer ? { value: answer } : { cancelled: true }),
-        }),
-        true,
+  test(
+    `PT-2/PT-3/PT-4 selects ${answer ?? "close / Esc"} and starts with the matching flag`,
+    { timeout: 5_000 },
+    async () => {
+      const decisions = new Map<string, boolean>();
+      const { control, frames, service, sessionArgs } = harness(
+        {},
+        {
+          decisions,
+          resources: [...DEFAULT_TRUST.resources, AGENTS],
+        },
       );
-      const session = await pending;
-      assert.equal(session.readonly, false);
-      assert.equal(session.phase, "idle");
-      assert.deepEqual(sessionArgs[0], ["--mode", "rpc", trusted ? "--approve" : "--no-approve"]);
-      assert.deepEqual([...decisions], saved ? [[saved, trusted]] : []);
-      assert.equal(
-        control.commands.filter(({ type }) => type === "set_project_trust").length,
-        saved ? 1 : 0,
-      );
-      if (saved) {
+      try {
+        const pending = service.createSession({ cwd: CWD });
+        const request = await selectFrame(frames);
+        assert.deepEqual(frames[0]?.scope, { workspacePath: CWD });
+        assert.deepEqual(request.options, [
+          "trust",
+          "trust-parent",
+          "trust-session",
+          "deny",
+          "deny-session",
+        ]);
+        assert.deepEqual(request.projectTrust, {
+          cwd: CWD,
+          parentPath: "/",
+          resourcePaths: [`${CWD}/.nek/settings.json`],
+        });
+        assert.deepEqual(sessionArgs, [], "do not start nek before choosing");
+        assert.equal(
+          service.respondInteraction({
+            type: "extension_ui_response",
+            id: request.id,
+            ...(answer ? { value: answer } : { cancelled: true }),
+          }),
+          true,
+        );
+        const session = await pending;
+        assert.equal(session.readonly, false);
+        assert.equal(session.phase, "idle");
+        assert.deepEqual(sessionArgs[0], ["--mode", "rpc", trusted ? "--approve" : "--no-approve"]);
+        assert.deepEqual([...decisions], saved ? [[saved, trusted]] : []);
+        assert.equal(
+          control.commands.filter(({ type }) => type === "set_project_trust").length,
+          saved ? 1 : 0,
+        );
         await service.closeSession(session.sessionKey);
-        await service.createSession({ cwd: CWD });
+        const next = service.createSession({ cwd: CWD });
+        if (!saved) {
+          const repeated = await selectFrame(frames, 1);
+          assert.notEqual(repeated.id, request.id);
+          service.respondInteraction({
+            type: "extension_ui_response",
+            id: repeated.id,
+            cancelled: true,
+          });
+        }
+        await next;
         assert.equal(
           frames.length,
-          1,
-          "the next session uses the persisted decision without asking",
+          saved ? 1 : 2,
+          "only saved decisions carry over to a new session",
         );
-        assert.deepEqual(sessionArgs[1], sessionArgs[0]);
+        assert.deepEqual(
+          sessionArgs[1],
+          saved ? sessionArgs[0] : ["--mode", "rpc", "--no-approve"],
+        );
+        assert.deepEqual([...decisions], saved ? [[saved, trusted]] : []);
+      } finally {
+        await service.dispose();
       }
-    } finally {
-      await service.dispose();
-    }
-  });
+    },
+  );
 }
 
 test("PT-2 root projects have no parent option; aliases use the canonical resource parent", async () => {

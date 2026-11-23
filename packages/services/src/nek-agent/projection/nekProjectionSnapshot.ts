@@ -180,6 +180,7 @@ export function buildConfigState(
 export function buildControlState(
   state: NekRpcSessionState | undefined,
   phase: SessionControl["phase"],
+  projectTrusted?: boolean,
 ): SessionControl {
   const running = state?.isStreaming === true || state?.isCompacting === true;
   return {
@@ -194,6 +195,7 @@ export function buildControlState(
       : [],
     lastError: null,
     apiRetry: null,
+    ...(projectTrusted === undefined ? {} : { projectTrusted }),
   };
 }
 

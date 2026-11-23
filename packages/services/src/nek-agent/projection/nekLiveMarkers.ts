@@ -340,7 +340,8 @@ export function applySessionState(
   state: NekRpcSessionState,
   stats?: NekSessionStats,
 ): void {
-  ctx.store.setState({ control: buildControlState(state, ctx.store.state.control.phase) });
+  const { phase, projectTrusted } = ctx.store.state.control;
+  ctx.store.setState({ control: buildControlState(state, phase, projectTrusted) });
   if (stats)
     ctx.store.setState({
       usage: {
