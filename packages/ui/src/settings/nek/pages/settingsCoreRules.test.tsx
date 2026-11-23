@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { NekSettingsView } from "@zcode/shared/nek-protocol";
 import { createNekTestEnv, installDomPolyfills } from "../test/nekTestUtils.js";
 import { CompactionPage } from "./CompactionPage.js";
+import { ToolsPage } from "./ToolsPage.js";
 
 beforeEach(installDomPolyfills);
 afterEach(cleanup);
@@ -95,4 +96,41 @@ it("SR-4 uses the main model's exact override for the compaction threshold", asy
   };
   render(<CompactionPage />, { wrapper: env.wrapper });
   expect(await screen.findByText(/128k − 11k = 117k.*5k/)).toBeDefined();
+});
+
+it("SR-5 shows explicit empty defaultTools as off and toggles web search without enabling other tools", async () => {
+  const env = createNekTestEnv();
+  const machine = env.config.machines.get("local")!;
+  machine.settings.value.defaultTools = [];
+  render(<ToolsPage />, { wrapper: env.wrapper });
+  const web = await screen.findByRole("switch", { name: "启用联网搜索" });
+  expect(web.getAttribute("aria-checked")).toBe("false");
+  expect(
+    screen
+      .getAllByRole("checkbox")
+      .every((checkbox) => checkbox.getAttribute("aria-checked") === "false"),
+  ).toBe(true);
+  await act(async () => fireEvent.click(web));
+  expect(machine.settings.value.defaultTools).toEqual(["web_search"]);
+  await act(async () => fireEvent.click(web));
+  expect(machine.settings.value.defaultTools).toEqual([]);
+});
+
+it("SR-5 diagnoses and keeps unknown entries verbatim when editing an explicit list", async () => {
+  const env = createNekTestEnv();
+  const machine = env.config.machines.get("local")!;
+  machine.settings.value.defaultTools = ["read", "  +future_tool "];
+  render(<ToolsPage />, { wrapper: env.wrapper });
+  expect(await screen.findByText(/defaultTools 中的.*future_tool.*原样保留/)).toBeDefined();
+  const read = within(screen.getByText("read").closest("label")!).getByRole("checkbox");
+  await act(async () => fireEvent.click(read));
+  expect(machine.settings.value.defaultTools).toEqual(["read", "-read", "  +future_tool "]);
+  expect(
+    screen
+      .getAllByRole("checkbox")
+      .every((checkbox) => checkbox.getAttribute("aria-checked") === "false"),
+  ).toBe(true);
+  expect(screen.getByRole("switch", { name: "启用联网搜索" }).getAttribute("aria-checked")).toBe(
+    "false",
+  );
 });

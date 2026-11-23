@@ -2954,9 +2954,11 @@ const zhCN: Record<string, string> = {
   "settings.nek.branchSummary.skipPromptHint": "切换分支时不再询问是否生成摘要。",
   "settings.nek.tools.pageDescription": "新会话默认启用的内置工具、shell 与联网搜索。",
   "settings.nek.tools.builtin": "内置工具",
-  "settings.nek.tools.builtinHint": "以 +name / -name 写入 defaultTools，不会冻结默认工具列表。",
+  "settings.nek.tools.builtinHint":
+    "保留 defaultTools 的原有写法：相对默认工具集增减，或直接列出启用的工具。空列表不启用任何内置工具。",
   "settings.nek.tools.optional": "默认关闭",
   "settings.nek.tools.unset": "未设置（使用默认）",
+  "settings.nek.tools.unknown": "defaultTools 中的 {entry} 不匹配任何内置工具；该条目会原样保留。",
   "settings.nek.tools.desc.read": "读取文件",
   "settings.nek.tools.desc.bash": "执行 shell 命令",
   "settings.nek.tools.desc.powershell": "执行 PowerShell 命令",
@@ -2978,7 +2980,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.web.title": "联网搜索",
   "settings.nek.web.description": "由目标机器上的 nek 使用 Tavily 或 Exa 搜索。",
   "settings.nek.web.enabled": "启用联网搜索",
-  "settings.nek.web.enabledHint": "关闭时写入 -web_search。",
+  "settings.nek.web.enabledHint": "控制新会话的内置联网搜索工具（web_search）。",
   "settings.nek.web.provider": "搜索服务商",
   "settings.nek.web.providerHint": "默认使用 Tavily；切换服务商前请先清空 API Key 和自定义地址。",
   "settings.nek.web.providerRequired":

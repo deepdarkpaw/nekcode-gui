@@ -3129,9 +3129,11 @@ const enUS: Record<string, string> = {
     "Built-in tools enabled for new sessions, shell, and web search.",
   "settings.nek.tools.builtin": "Built-in tools",
   "settings.nek.tools.builtinHint":
-    "Written to defaultTools as +name / -name so the default tool list is not frozen.",
+    "Keeps the existing defaultTools format: changes to the defaults or an explicit list. An empty list enables no built-in tools.",
   "settings.nek.tools.optional": "Off by default",
   "settings.nek.tools.unset": "not set (defaults)",
+  "settings.nek.tools.unknown":
+    "The defaultTools entry {entry} matches no built-in tool and will be preserved as written.",
   "settings.nek.tools.builtinEmpty": "Built-in tool list unavailable",
   "settings.nek.tools.builtinEmptyHint":
     "nek did not return a tool list, so the defaultTools checkboxes cannot be shown.",
@@ -3155,7 +3157,7 @@ const enUS: Record<string, string> = {
   "settings.nek.web.title": "Web search",
   "settings.nek.web.description": "Search with Tavily or Exa through nek on the target machine.",
   "settings.nek.web.enabled": "Enable web search",
-  "settings.nek.web.enabledHint": "Writes -web_search when off.",
+  "settings.nek.web.enabledHint": "Controls the built-in web_search tool for new sessions.",
   "settings.nek.web.provider": "Search provider",
   "settings.nek.web.providerHint":
     "Tavily is the default. Clear the API key and custom endpoint before switching providers.",

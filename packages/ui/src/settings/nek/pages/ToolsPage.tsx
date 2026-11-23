@@ -1,8 +1,8 @@
 /**
- * 工具与联网：内置工具勾选（写 `defaultTools` 的 `+name/-name`）；shell 路径与命令前缀；
- * 联网搜索开关（`-web_search`）、Tavily/Exa、API Key、自定义 endpoint（高级）、结果数、测试搜索。
+ * 工具与联网：内置工具勾选（保留 `defaultTools` 写法）；shell 路径与命令前缀；
+ * 联网搜索开关、Tavily/Exa、API Key、自定义 endpoint（高级）、结果数、测试搜索。
  *
- * 工具清单来自 `listBuiltinTools()`（host 侧的 nek 镜像），不在界面里硬编码。
+ * 工具清单与默认工具集来自 nek RPC `list_builtin_tools`。
  */
 import { useState } from "react";
 import { RefreshCwIcon, SearchIcon } from "lucide-react";
@@ -31,11 +31,11 @@ import { useNekQuery } from "../api/useNekQuery.js";
 import { useNekSettingsDoc, type NekSettingsDocument } from "../api/settingsDocs.js";
 import {
   buildDefaultToolsSetting,
-  resolveEnabledTools,
+  resolveDefaultTools,
   WEB_SEARCH_TOOL,
 } from "../lib/defaultTools.js";
 import { nestedSettingsPatch } from "../lib/settingsPatch.js";
-import { DocumentGate, NekEmptyState } from "../components/DocumentStatus.js";
+import { DiagnosticsList, DocumentGate, NekEmptyState } from "../components/DocumentStatus.js";
 import { NekPageFrame } from "../components/NekPageFrame.js";
 import { SecretSettingField } from "../components/SecretSettingField.js";
 
@@ -43,19 +43,22 @@ import { SecretSettingField } from "../components/SecretSettingField.js";
  * 默认工具集取自 host 返回的工具清单（`defaultActive`），即 nek 的 `DEFAULT_ACTIVE_TOOL_NAMES`；
  * settings 的 defaults 里没有 `defaultTools`，不能用它当基准。
  */
-function useToolsWriter(settings: NekSettingsDocument, tools: readonly NekBuiltinTool[]) {
+function toolSelection(settings: NekSettingsDocument, tools: readonly NekBuiltinTool[]) {
   const knownTools = tools.map((tool) => tool.name);
   const defaults = tools.filter((tool) => tool.defaultActive).map((tool) => tool.name);
-  const enabled = resolveEnabledTools(settings.data?.values.defaultTools, defaults);
-  const write = (next: ReadonlySet<string>) =>
-    settings.patch({ defaultTools: buildDefaultToolsSetting(next, defaults, knownTools) });
+  const saved = settings.data?.values.defaultTools;
+  const original =
+    Array.isArray(saved) && saved.every((entry) => typeof entry === "string") ? saved : undefined;
+  const { enabled, unknown } = resolveDefaultTools(original, defaults, knownTools);
   const setTool = (name: string, on: boolean) => {
     const next = new Set(enabled);
     if (on) next.add(name);
     else next.delete(name);
-    return write(next);
+    return settings.patch({
+      defaultTools: buildDefaultToolsSetting(next, defaults, knownTools, original),
+    });
   };
-  return { enabled, defaults, setTool };
+  return { enabled, unknown, setTool };
 }
 
 function BuiltinTools({
@@ -66,8 +69,16 @@ function BuiltinTools({
   tools: readonly NekBuiltinTool[];
 }) {
   const { intl } = useZCodeIntl();
-  const { enabled, setTool } = useToolsWriter(settings, tools);
+  const { enabled, setTool, unknown } = toolSelection(settings, tools);
   const save = useAsyncAction((name: string, on: boolean) => setTool(name, on));
+  const diagnostics = [...new Set(unknown)].map((entry) => ({
+    file: settings.data?.path ?? "settings.json",
+    severity: "warning" as const,
+    message: intl.formatMessage(
+      { id: "settings.nek.tools.unknown" },
+      { entry: JSON.stringify(entry) },
+    ),
+  }));
   const setting = settings.data?.values.defaultTools;
   return (
     <SettingSection
@@ -79,6 +90,7 @@ function BuiltinTools({
       }
       description={intl.formatMessage({ id: "settings.nek.tools.builtinHint" })}
     >
+      <DiagnosticsList diagnostics={diagnostics} />
       {save.state.status === "error" ? (
         <p role="alert" className="text-ui-sm text-destructive">
           {save.state.message}
@@ -167,7 +179,7 @@ function WebSearchSection({
   const { intl } = useZCodeIntl();
   const api = useNekConfigApi();
   const { target, targetInfo } = useNekTarget();
-  const { enabled, setTool } = useToolsWriter(settings, tools);
+  const { enabled, setTool } = toolSelection(settings, tools);
   const [result, setResult] = useState<string | null>(null);
   const web = settings.data?.values.webSearch ?? {};
   // 服务商的有效值来自默认值（Tavily），凭据只可能是用户写进本作用域的文件。
@@ -244,12 +256,14 @@ function WebSearchSection({
       title={intl.formatMessage({ id: "settings.nek.web.title" })}
       description={intl.formatMessage({ id: "settings.nek.web.description" })}
     >
-      <SettingSwitchField
-        label={intl.formatMessage({ id: "settings.nek.web.enabled" })}
-        description={intl.formatMessage({ id: "settings.nek.web.enabledHint" })}
-        value={on}
-        onCommit={(next) => setTool(WEB_SEARCH_TOOL, next)}
-      />
+      {tools.some(({ name }) => name === WEB_SEARCH_TOOL) ? (
+        <SettingSwitchField
+          label={intl.formatMessage({ id: "settings.nek.web.enabled" })}
+          description={intl.formatMessage({ id: "settings.nek.web.enabledHint" })}
+          value={on}
+          onCommit={(next) => setTool(WEB_SEARCH_TOOL, next)}
+        />
+      ) : null}
       <SettingSelectField
         label={intl.formatMessage({ id: "settings.nek.web.provider" })}
         description={providerDescription}

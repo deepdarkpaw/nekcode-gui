@@ -10,7 +10,6 @@ import {
   sanitizePastedApiKey,
   validateApiKeyDraft,
 } from "./apiKey.js";
-import { buildDefaultToolsSetting, resolveEnabledTools } from "./defaultTools.js";
 import { parseModelRef, supportedThinkingLevels } from "./modelRef.js";
 import { thinkingDraftFromModel, thinkingFieldsFromDraft } from "./thinkingLevels.js";
 import { classifyFetchError, mergeFetchedModels, modelConfigFromRow } from "./fetchedModels.js";
@@ -134,31 +133,6 @@ describe("apiKey", () => {
     ).toEqual({ remove: true });
     // 草稿请求里 keep / remove 都退回已保存的密钥
     expect(apiKeyForDraftRequest({ ...existing, remove: true })).toBeUndefined();
-  });
-});
-
-describe("defaultTools", () => {
-  const defaults = ["read", "bash", "web_search"];
-
-  it("resolves +/- deltas against defaults", () => {
-    expect([...resolveEnabledTools(["-web_search", "+grep"], defaults)]).toEqual([
-      "read",
-      "bash",
-      "grep",
-    ]);
-    expect([...resolveEnabledTools(undefined, defaults)]).toEqual(defaults);
-    expect([...resolveEnabledTools(["read"], defaults)]).toEqual(["read"]);
-  });
-
-  it("writes deltas and null when equal to defaults", () => {
-    const known = ["read", "bash", "grep", "web_search"];
-    expect(buildDefaultToolsSetting(new Set(["read", "bash"]), defaults, known)).toEqual([
-      "-web_search",
-    ]);
-    expect(buildDefaultToolsSetting(new Set(defaults), defaults, known)).toBeNull();
-    expect(buildDefaultToolsSetting(new Set([...defaults, "grep"]), defaults, known)).toEqual([
-      "+grep",
-    ]);
   });
 });
 

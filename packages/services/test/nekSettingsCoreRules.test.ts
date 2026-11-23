@@ -186,3 +186,29 @@ test("SR-4 addresses model overrides by exact key and does not validate unused c
     compaction: { ...compaction, modelOverrides: false },
   });
 });
+
+test("SR-5 round-trips each tool-list style and gets the catalogue from nek RPC", async (t) => {
+  const { api, control, local } = createHarness();
+  t.after(() => api.dispose());
+  control.builtinTools = [
+    { name: "read", description: "Read a file", defaultActive: true },
+    { name: "powershell", description: "Run PowerShell", defaultActive: false },
+  ];
+  assert.deepEqual(await api.listBuiltinTools(LOCAL), control.builtinTools);
+  assert.equal(control.commands[0]?.type, "list_builtin_tools");
+  let read = await api.readSettings(LOCAL, "global");
+  assert.equal(read.values.defaultTools, undefined);
+  for (const defaultTools of [
+    [],
+    [" ", "\t"],
+    ["read"],
+    ["-read", "+powershell"],
+    ["read", "  +future_tool ", "FutureTool", "-"],
+  ]) {
+    await api.patchSettings(LOCAL, "global", { defaultTools }, read);
+    read = await api.readSettings(LOCAL, "global");
+    assert.deepEqual(read.values.defaultTools, defaultTools);
+    assert.deepEqual(read.effective.defaultTools, defaultTools);
+    assert.deepEqual(readJson(local, SETTINGS), { defaultTools });
+  }
+});
