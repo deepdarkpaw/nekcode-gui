@@ -127,6 +127,40 @@ afterEach(() => {
   useComposerAttachmentUploadStore.setState({ scopes: {} });
 });
 
+it("SC-2 submits a local command without a model selection and preserves the rejected draft", async () => {
+  const onSendText = vi.fn(async () => "blocked" as const);
+  render(
+    <ConversationComposer
+      snapshot={null}
+      draftMode
+      workspacePath="/sc-2-fixture"
+      composerDraft={{ text: "/tree", updatedAt: 1 }}
+      submissionReady={false}
+      createSubmissionFromComposer={() => null}
+      updateComposerContent={vi.fn()}
+      replaceComposerDraft={vi.fn()}
+      attachmentPut={vi.fn()}
+      onSendText={onSendText}
+      onStop={vi.fn()}
+      onSelectModel={vi.fn()}
+      onSelectThought={vi.fn()}
+      onSwitchMode={vi.fn()}
+      autoFocusEnabled={false}
+    />,
+    { wrapper },
+  );
+  const editor = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Editor" });
+  await waitFor(() => expect(editor.value).toBe("/tree"));
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" })),
+  );
+  expect(onSendText).toHaveBeenCalledExactlyOnceWith(
+    "/tree",
+    expect.objectContaining({ submission: null }),
+  );
+  expect(editor.value).toBe("/tree");
+});
+
 it("restores the fork's returned text into the composer without sending it", async () => {
   const onSendText = vi.fn(async () => "sent" as const);
   render(
