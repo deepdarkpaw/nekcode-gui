@@ -211,8 +211,10 @@ export interface NekSettingsReadResult extends NekConfigRevision {
   scope: NekConfigScope;
   /** 该作用域文件里实际写了的值。 */
   values: NekSettingsView;
-  /** 合并（全局 + 项目）后的生效值；用于显示"继承自全局"。 */
+  /** 合并全局与受信任的项目层后的生效值；用于显示"继承自全局"。 */
   effective: NekSettingsView;
+  /** 有工作区时返回；为 false 表示项目层不参与 effective，并且不可写。 */
+  projectTrusted?: boolean;
   /** nek 默认值（用于"恢复默认"与占位显示）。 */
   defaults: NekSettingsView;
   diagnostics: NekConfigDiagnostic[];

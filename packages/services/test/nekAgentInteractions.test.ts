@@ -50,6 +50,7 @@ const DEFAULT_TRUST = {
 
 type TrustFixture = Partial<Omit<NekProjectTrust, "cwd" | "trusted">> & {
   decisions?: Map<string, boolean>;
+  policyAfterReload?: NekProjectTrust["defaultProjectTrust"];
 };
 
 function storedDecision(cwd: string, decisions: Map<string, boolean>): boolean | null {
@@ -61,7 +62,7 @@ function storedDecision(cwd: string, decisions: Map<string, boolean>): boolean |
 function fakeProcess(
   kind: "control" | "session",
   extensionUi?: NekExtensionUiHandler,
-  { decisions = new Map<string, boolean>(), ...facts }: TrustFixture = {},
+  { decisions = new Map<string, boolean>(), policyAfterReload, ...facts }: TrustFixture = {},
 ): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -107,6 +108,9 @@ function fakeProcess(
             cwd: command.cwd,
             trusted: storedDecision(command.cwd, decisions),
           };
+        } else if (command.type === "reload") {
+          if (policyAfterReload) facts.defaultProjectTrust = policyAfterReload;
+          data = { deferred: false, diagnostics: [] };
         } else if (command.type === "set_project_trust") {
           decisions.set(command.cwd, command.trusted);
         } else if (command.type === "list_sessions") {
@@ -206,7 +210,7 @@ async function waitFor(check: () => boolean, message: string): Promise<void> {
 
 const AGENTS = { kind: "agents", path: `${CWD}/.nek/agents` } as const;
 
-for (const { label, facts, trusted } of [
+for (const { label, facts, trusted, reload } of [
   { label: "no gated resources under ask", facts: { resources: [] }, trusted: true },
   {
     label: "agents alone even under never",
@@ -233,9 +237,25 @@ for (const { label, facts, trusted } of [
     },
     trusted: false,
   },
-  { label: "always with gated resources", facts: { defaultProjectTrust: "always" }, trusted: true },
-  { label: "never with gated resources", facts: { defaultProjectTrust: "never" }, trusted: false },
-] satisfies Array<{ label: string; facts: TrustFixture; trusted: boolean }>) {
+  {
+    label: "always with gated resources",
+    facts: { defaultProjectTrust: "always" },
+    trusted: true,
+    reload: true,
+  },
+  {
+    label: "never with gated resources",
+    facts: { defaultProjectTrust: "never" },
+    trusted: false,
+    reload: true,
+  },
+  {
+    label: "refreshes the cached policy before allowing project config",
+    facts: { defaultProjectTrust: "always", policyAfterReload: "never" },
+    trusted: false,
+    reload: true,
+  },
+] satisfies Array<{ label: string; facts: TrustFixture; trusted: boolean; reload?: boolean }>) {
   test(`PT-1 opens without asking: ${label}`, async () => {
     const { control, frames, service, sessionArgs } = harness({}, facts);
     try {
@@ -244,7 +264,7 @@ for (const { label, facts, trusted } of [
       assert.deepEqual(frames, []);
       assert.deepEqual(
         control.commands.map(({ type }) => type),
-        ["get_project_trust"],
+        reload ? ["get_project_trust", "reload", "get_project_trust"] : ["get_project_trust"],
       );
       assert.deepEqual(sessionArgs[0], ["--mode", "rpc", trusted ? "--approve" : "--no-approve"]);
     } finally {
@@ -458,7 +478,7 @@ test("P2: leaving and returning to a workspace preserves and replays pending app
     returned.dispose();
     assert.deepEqual(
       control.commands.map((command) => command.type),
-      ["get_project_trust", "set_project_trust"],
+      ["get_project_trust", "reload", "get_project_trust", "set_project_trust"],
     );
   } finally {
     channel.dispose();

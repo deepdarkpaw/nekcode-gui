@@ -10,6 +10,7 @@ import {
   type NekProjectTrustChoice,
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
+import { readNekProjectTrust } from "../projectTrust.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekTrustPrompt } from "./types.js";
 
@@ -51,7 +52,7 @@ export async function requestProjectApproval(input: {
 }): Promise<boolean> {
   const { cwd, askProjectTrust, assertCanAsk, assertAlive } = input;
   const { client } = await input.ensureControl();
-  const trust = await client.call({ type: "get_project_trust", cwd });
+  const trust = await readNekProjectTrust(client, cwd);
   const resolved = resolveNekProjectTrust(trust);
   if (resolved.kind !== "ask") return resolved.trusted;
   assertAlive();

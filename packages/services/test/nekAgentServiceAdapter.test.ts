@@ -116,6 +116,7 @@ function fakeProcess(
             resources: [{ kind: "settings", path: `${command.cwd}/.nek/settings.json` }],
             ...(options.projectTrust ?? { trusted: true, defaultProjectTrust: "always" }),
           };
+        if (command.type === "reload") data = { deferred: false, diagnostics: [] };
         if (command.type === "list_sessions") data = { sessions: [] };
         if (command.type === "get_available_models") data = { models: [] };
       } else if (command.type === "get_state") {
@@ -719,7 +720,7 @@ test("PT-2 publishes the project trust select through the adapter and stores the
     assert.equal(created.sessionId.length > 0, true);
     assert.deepEqual(
       control.commands.map((command) => command.type),
-      ["get_project_trust", "set_project_trust"],
+      ["get_project_trust", "reload", "get_project_trust", "set_project_trust"],
     );
     subscription.dispose();
   } finally {

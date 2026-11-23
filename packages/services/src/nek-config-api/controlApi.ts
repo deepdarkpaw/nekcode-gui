@@ -23,6 +23,7 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import { nekThinkingLevelsFromMap } from "@zcode/shared/nek-protocol";
 import type { NekModel } from "@zcode/shared/nek-protocol";
+import { readNekProjectTrust } from "../nek-agent/projectTrust.js";
 import type { NekConfigRuntime } from "./runtime.js";
 import { validationError } from "./errors.js";
 import { assertWebSearchProbeSupported, resolveWebSearchCapabilities } from "./settingsApi.js";
@@ -230,10 +231,8 @@ export function createControlGroup(runtime: NekConfigRuntime): NekControlGroup {
       await runtime.login.logout(target, provider);
     },
 
-    getProjectTrust: async (target, cwd) => {
-      const control = await runtime.control(target);
-      return await control.call({ type: "get_project_trust", cwd });
-    },
+    getProjectTrust: async (target, cwd) =>
+      await readNekProjectTrust(await runtime.control(target), cwd),
 
     setProjectTrust: async (target, cwd, trusted) => {
       const control = await runtime.control(target);

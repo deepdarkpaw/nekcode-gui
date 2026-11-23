@@ -28,6 +28,7 @@ import {
   toSettingsView,
 } from "./settingsDefaults.js";
 import { patchSettingsDocument, readSettingsDocument } from "./settingsDocument.js";
+import { assertSettingsProjectTrusted, settingsProjectTrusted } from "./settingsProjectTrust.js";
 
 export interface NekSettingsGroup {
   readSettings: (
@@ -253,7 +254,8 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
         }
       };
       const global = await readScope("global");
-      const project = await readScope("project");
+      const projectTrusted = cwd ? await settingsProjectTrusted(runtime, context, cwd) : undefined;
+      const project = projectTrusted ? await readScope("project") : {};
       const explicit = mergeDeep(global, project);
       // 现存的不合法组合（含旧版界面留下的空值）在读取时给出可见诊断：
       // nek 会因此拒绝启动，但界面不能替用户改文件。
@@ -269,6 +271,7 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
         scope,
         values,
         effective: toSettingsView(effective),
+        ...(projectTrusted === undefined ? {} : { projectTrusted }),
         defaults: NEK_SETTINGS_DEFAULTS,
         diagnostics,
       };
@@ -279,6 +282,7 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       if (scope === "project" && !options.cwd) {
         throw validationError("project scope requires cwd", { cwd: "required" });
       }
+      await assertSettingsProjectTrusted(runtime, context, scope, options.cwd);
       const record = settingsPatchToRecord(patch as Record<string, unknown>);
       validateSettingsPatch(record);
       const inherited =

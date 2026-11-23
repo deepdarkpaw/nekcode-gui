@@ -140,6 +140,8 @@ function fakeProcess(
             ...projectTrust,
             resources: [{ kind: "settings", path: `${command.cwd}/.nek/settings.json` }],
           };
+        } else if (command.type === "reload") {
+          data = { deferred: false, diagnostics: [] };
         } else if (command.type === "read_session_snapshot") {
           data = snapshot(snapshotLocked, lockHolder);
         } else if (command.type === "list_sessions") {
@@ -302,7 +304,7 @@ test("creates a session after project trust approval and passes --approve", asyn
   assert.deepEqual(harness.approvals, [true]);
   assert.deepEqual(
     harness.control.commands.map((command) => command.type),
-    ["get_project_trust", "set_project_trust"],
+    ["get_project_trust", "reload", "get_project_trust", "set_project_trust"],
   );
   await harness.service.dispose();
 });
@@ -1177,7 +1179,9 @@ test("lists, renames and deletes sessions through the control process", async ()
   assert.deepEqual(
     harness.control.commands
       .map((command) => command.type)
-      .filter((type) => type !== "get_project_trust" && type !== "set_project_trust"),
+      .filter(
+        (type) => type !== "reload" && type !== "get_project_trust" && type !== "set_project_trust",
+      ),
     ["list_sessions", "rename_session", "delete_session"],
   );
   assert.equal(harness.service.getSession(result.sessionKey), undefined, "删除后不再持有记录");

@@ -2,6 +2,7 @@ import type { INekConfigApi } from "@zcode/shared/nek-protocol";
 import { conflict, validationError } from "./errors.js";
 import { settingsPath } from "./paths.js";
 import type { NekConfigRuntime, NekTargetContext } from "./runtime.js";
+import { settingsProjectTrusted } from "./settingsProjectTrust.js";
 import {
   patchSettingsDocument,
   readSettingsDocument,
@@ -20,17 +21,14 @@ export async function readModelScopeDocuments(
   cwd?: string,
   knownGlobal?: NekSettingsDocument,
 ): Promise<ModelScopeDocuments> {
-  const { executor, layout, target } = context;
+  const { executor, layout } = context;
   const global =
     knownGlobal ?? (await readSettingsDocument(executor, settingsPath(layout, "global")));
-  cwd = cwd?.trim();
-  if (!cwd) return { global };
+  if (!cwd?.trim()) return { global };
   const path = settingsPath(layout, "project", cwd);
-  if (!(await executor.stat(path))) return { global };
-  const control = await runtime.control(target);
-  const { trusted } = await control.call({ type: "get_project_trust", cwd });
-  // 显式决定由 nek 提供；默认策略取刚读的全局文件，不用控制进程启动时的设置副本。
-  if (!(trusted ?? global.raw.defaultProjectTrust === "always")) return { global };
+  if (!(await executor.stat(path)) || !(await settingsProjectTrusted(runtime, context, cwd))) {
+    return { global };
+  }
   return { global, project: await readSettingsDocument(executor, path) };
 }
 

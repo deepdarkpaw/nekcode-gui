@@ -14,6 +14,7 @@ import type {
   NekConfigTargetInfo,
   NekExtensionUiResponse,
   NekModelScopeResult,
+  NekProjectTrust,
   NekRpcCommandOfType,
   NekRpcCommandType,
   NekRpcResponseDataFor,
@@ -52,6 +53,8 @@ export class FakeControlClient implements NekControlClient {
   modelScope: NekModelScopeResult = { patterns: [], models: [], diagnostics: [] };
   readModelScope = (_cwd?: string): NekModelScopeResult => this.modelScope;
   projectTrusted: boolean | null = null;
+  projectResources: NekProjectTrust["resources"] = [];
+  defaultProjectTrust: NekProjectTrust["defaultProjectTrust"] = "ask";
   private authListeners = new Set<(record: never) => void>();
   private handler: NekStructuredHandler | undefined;
   private loginResolve: ((value: { provider: string }) => void) | undefined;
@@ -177,8 +180,8 @@ export class FakeControlClient implements NekControlClient {
       return {
         cwd: PROJECT,
         trusted: this.projectTrusted,
-        defaultProjectTrust: "ask",
-        resources: [],
+        defaultProjectTrust: this.defaultProjectTrust,
+        resources: this.projectResources,
       } as NekRpcResponseDataFor<C>;
     }
     throw new Error(`unexpected control command: ${type}`);
