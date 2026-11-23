@@ -145,7 +145,6 @@ export function getCredentialsDir() {
 }
 
 export type RemoteAssetDirs = Pick<ConnectOptions, "bundledRemoteAssetsDir">;
-type LocalRuntimeEnv = Record<string, string | undefined>;
 
 export async function isDockerDaemonAvailable(): Promise<boolean> {
   const { isDockerAvailable } = await import("@zcode/server/remote");

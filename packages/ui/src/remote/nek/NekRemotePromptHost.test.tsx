@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { TooltipProvider } from "@/components/ui/tooltip.js";
 import type { IRemoteInteractionHostApi, RemotePromptEvent } from "@zcode/shared/nek-protocol";
 import { NekRemotePromptHost } from "./NekRemotePromptHost.js";
 import { useRemotePromptQueueStore } from "./remotePromptQueueStore.js";
@@ -63,7 +64,9 @@ describe("NekRemotePromptHost", () => {
     };
     const { container } = render(
       <ZCodeIntlProvider initialLocale="en-US">
-        <NekRemotePromptHost api={api} onOpenKnownHosts={vi.fn()} />
+        <TooltipProvider>
+          <NekRemotePromptHost api={api} onOpenKnownHosts={vi.fn()} />
+        </TooltipProvider>
       </ZCodeIntlProvider>,
     );
 

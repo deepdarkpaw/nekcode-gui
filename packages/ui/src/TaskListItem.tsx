@@ -804,11 +804,6 @@ export function TaskListItemContextMenuContent({
     // 因此路径探测和 provider 配置探测可以直接随打开态运行，避免每个 idle row 订阅和计算。
     loadTaskPaths: true,
   });
-  const taskTitle =
-    task.title ||
-    intl.formatMessage({
-      id: task.forkedFromTaskId ? "taskList.forkedUntitled" : "taskList.untitled",
-    });
 
   return (
     <TaskListItemContextMenu
