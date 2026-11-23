@@ -556,6 +556,7 @@ export const diagnosticMessages: readonly string[] = [
   "[v4-conversation] failed to undo rejected subscription",
   "[v4-draft-config] select model",
   "[v4-draft-config] 配置的默认模型不可用，等待用户重新选择",
+  "[v4-draft-greeting] 标题自身可用宽度变化，更新字号",
   "[v4-draft-prewarm] createSession 失败，回落无预热路径",
   "[v4-draft-prewarm] createSession 被拒，回落无预热路径",
   "[v4-draft-prewarm] draft session 预热就绪",
