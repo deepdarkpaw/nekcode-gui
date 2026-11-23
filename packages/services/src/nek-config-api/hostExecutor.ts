@@ -66,6 +66,8 @@ export interface NekConfigHostExecutor {
   rename: (from: string, to: string) => Promise<void>;
   /** spawn 一个 `nek` 进程（参数原样追加），返回可直接交给 `NekRpcClient` 的 stdio 句柄。 */
   spawnNek: (args: readonly string[]) => Promise<NekRpcProcessHandle>;
+  /** 目标机器的平台（`process.platform` 形态，例如 `win32` / `linux`）；复制配置时判断能否原样搬运。 */
+  platform: () => string;
   /** 目标机器的 home 目录（拼 `~/.nek/agent` 用）。 */
   homeDir: () => string;
   /**
@@ -161,6 +163,7 @@ export function createLocalNekConfigHostExecutor(
 
   return {
     id: "local",
+    platform: () => process.platform,
     homeDir: () => home,
     agentDir: () => options.agentDir ?? resolveAgentDir(home, env),
     async resourceEntryKind(path) {
@@ -236,6 +239,8 @@ export interface MemoryNekConfigHostExecutorOptions {
   agentDir?: string;
   files?: Record<string, string>;
   id?: string;
+  /** 目标平台；缺省 `linux`。 */
+  platform?: string;
   /** 注入的 `spawnNek`；缺省抛 `nek_unavailable`（测试里不希望意外拉起进程）。 */
   spawn?: (args: readonly string[]) => Promise<NekRpcProcessHandle>;
 }
@@ -282,6 +287,7 @@ export function createMemoryNekConfigHostExecutor(
     files,
     writes,
     setFile,
+    platform: () => options.platform ?? "linux",
     homeDir: () => options.home ?? "/home/nek",
     agentDir: () => options.agentDir ?? join(options.home ?? "/home/nek", ".nek", "agent"),
     readFile: async (path) => files.get(path) ?? null,

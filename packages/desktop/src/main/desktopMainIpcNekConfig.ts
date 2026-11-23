@@ -49,8 +49,11 @@ export class NekRemoteConfigConnectionRegistry {
     const backend = await this.createBackend(target);
     try {
       const detected = await this.detectNek(backend);
-      if (detected.status !== "ready") throw new Error(detected.error ?? detected.status);
-      const runtime = await this.detectConfigRuntime(backend);
+      if (detected.status !== "ready" || !detected.info) {
+        throw new Error(detected.error ?? detected.status);
+      }
+      // 配置脚本与控制进程都用 gui-info 报出的那份 Node，不再在远端 PATH 上另找。
+      const runtime = await this.detectConfigRuntime(backend, detected.info);
       const executor = createRemoteNekConfigHostExecutor({
         id: `remote:${connectionId}`,
         runtime,
@@ -59,7 +62,7 @@ export class NekRemoteConfigConnectionRegistry {
       this.connections.set(connectionId, {
         backend,
         executor,
-        nekVersion: detected.info?.nekVersion ?? "unknown",
+        nekVersion: detected.info.nekVersion,
       });
     } catch (error) {
       // 连接失败必须回到"未连接"状态，否则界面会以为远端配置可读。

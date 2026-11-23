@@ -230,6 +230,150 @@ test("copy returns a per-item result instead of throwing midway", async () => {
   assert.match(login.error ?? "", /consent required/);
 });
 
+test("copying defaults mirrors the source: no scope on the source clears the stale target scope", async () => {
+  const harness = createHarness({
+    localFiles: {
+      [localSettings]: JSON.stringify({
+        defaultProvider: "CPA",
+        defaultModel: "claude-opus-5-5",
+        compaction: { enabled: true },
+      }),
+    },
+    remoteFiles: {
+      [remoteSettings]: JSON.stringify({
+        defaultProvider: "CPA",
+        defaultModel: "old",
+        defaultThinkingLevel: "low",
+        enabledModels: ["CPA/a", "CPA/b"],
+        compaction: { enabled: false, keepRecentTokens: 5 },
+        lastChangelogVersion: "1.0.0",
+      }),
+    },
+  });
+  const selection = { providers: [], logins: [], mcpServers: [], defaults: true, compaction: true };
+  const result = await harness.api.copy(LOCAL, REMOTE, selection, {
+    "defaults:defaults": "overwrite",
+    "compaction:compaction": "overwrite",
+  });
+  assert.deepEqual(
+    result.items.map((item) => item.status),
+    ["copied", "copied"],
+  );
+  assert.deepEqual(readJson(harness.remote, remoteSettings), {
+    defaultProvider: "CPA",
+    defaultModel: "claude-opus-5-5",
+    compaction: { enabled: true },
+    lastChangelogVersion: "1.0.0",
+  });
+});
+
+test("copying a provider carries its models' default thinking levels and drops stale ones", async () => {
+  const provider = {
+    name: "CPA",
+    api: "openai-completions",
+    baseUrl: "http://cpa",
+    models: [{ id: "a" }, { id: "b" }],
+  };
+  const harness = createHarness({
+    localFiles: {
+      [localModels]: JSON.stringify({ providers: { CPA: provider } }),
+      [localSettings]: JSON.stringify({
+        modelThinkingLevels: { "CPA/a": "high", "other/x": "low" },
+      }),
+    },
+    remoteFiles: {
+      [remoteModels]: JSON.stringify({
+        providers: { CPA: { ...provider, models: [{ id: "b" }] } },
+      }),
+      [remoteSettings]: JSON.stringify({
+        modelThinkingLevels: { "CPA/b": "minimal", "remote/y": "medium" },
+      }),
+    },
+  });
+  const result = await harness.api.copy(
+    LOCAL,
+    REMOTE,
+    { providers: ["CPA"], logins: [], mcpServers: [], defaults: false, compaction: false },
+    { "provider:CPA": "overwrite" },
+  );
+  assert.deepEqual(result.items, [{ key: "provider:CPA", status: "copied" }]);
+  const models = readJson(harness.remote, remoteModels) as {
+    providers: Record<string, { models: Array<{ id: string }> }>;
+  };
+  assert.deepEqual(
+    models.providers.CPA?.models.map((model) => model.id),
+    ["a", "b"],
+  );
+  const settings = readJson(harness.remote, remoteSettings) as Record<string, unknown>;
+  assert.deepEqual(settings.modelThinkingLevels, { "remote/y": "medium", "CPA/a": "high" });
+});
+
+test("copy preview flags values that depend on the source machine's environment", async () => {
+  const files = {
+    [localModels]: JSON.stringify({
+      providers: {
+        envKey: {
+          api: "openai-completions",
+          baseUrl: "http://a",
+          apiKey: "${OPENAI_KEY}",
+          headers: { "x-team": "team-$TEAM_ID", "x-literal": "price $$5" },
+          models: [],
+        },
+        commandKey: {
+          api: "openai-completions",
+          baseUrl: "http://b",
+          apiKey: "!op read op://vault/key",
+          models: [],
+        },
+        literalKey: {
+          api: "openai-completions",
+          baseUrl: "http://c",
+          apiKey: "sk-literal",
+          models: [],
+        },
+      },
+    }),
+    [localMcp]: JSON.stringify({
+      mcpServers: {
+        windows: {
+          command: "C:\\Users\\me\\.nek\\agent\\mcp\\search.exe",
+          args: ["--config=C:\\Users\\me\\config.yaml"],
+          env: { GITHUB_TOKEN: "$GITHUB_TOKEN" },
+        },
+        portable: { command: "npx", args: ["-y", "fs", "https://example.com/x"] },
+      },
+    }),
+  };
+  const selection = {
+    providers: ["envKey", "commandKey", "literalKey"],
+    logins: [],
+    mcpServers: ["windows", "portable"],
+    defaults: false,
+    compaction: false,
+  };
+  const linux = await createHarness({ localFiles: files }).api.previewCopy(
+    LOCAL,
+    REMOTE,
+    selection,
+  );
+  const warningsOf = (items: typeof linux.items) =>
+    Object.fromEntries(items.map((item) => [`${item.kind}:${item.id}`, item.warnings]));
+  assert.deepEqual(warningsOf(linux.items), {
+    "provider:envKey": [{ kind: "env", names: ["OPENAI_KEY", "TEAM_ID"] }],
+    "provider:commandKey": [{ kind: "command" }],
+    "provider:literalKey": undefined,
+    "mcpServer:windows": [{ kind: "env", names: ["GITHUB_TOKEN"] }, { kind: "windowsPath" }],
+    "mcpServer:portable": undefined,
+  });
+  const windows = await createHarness({
+    localFiles: files,
+    remotePlatform: "win32",
+  }).api.previewCopy(LOCAL, REMOTE, selection);
+  assert.deepEqual(warningsOf(windows.items)["mcpServer:windows"], [
+    { kind: "env", names: ["GITHUB_TOKEN"] },
+  ]);
+});
+
 test("copy marks an empty settings source as skipped with a reason", async () => {
   const harness = createHarness({
     localFiles: { [localSettings]: JSON.stringify({ theme: "dark" }) },

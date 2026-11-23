@@ -297,6 +297,20 @@ export function CopyToHostDialog({
                   ) : (
                     <span className="text-ui-xs text-success">{t("settings.nek.copy.new")}</span>
                   )}
+                  {(item.warnings ?? []).map((warning) => (
+                    <p
+                      key={warning.kind}
+                      className="flex basis-full items-start gap-2 text-ui-sm text-foreground-subtle"
+                    >
+                      <AlertTriangleIcon
+                        className="mt-0.5 size-3.5 shrink-0 text-warning"
+                        aria-hidden="true"
+                      />
+                      {warning.kind === "env"
+                        ? t("settings.nek.copy.warning.env", { names: warning.names.join(", ") })
+                        : t(`settings.nek.copy.warning.${warning.kind}`)}
+                    </p>
+                  ))}
                 </li>
               ))}
             </ul>

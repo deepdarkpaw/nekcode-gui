@@ -7,6 +7,7 @@ import {
   buildNekInstallPowerShellCommand,
   detectRemoteNek,
   installRemoteNek,
+  REMOTE_GUI_INFO_COMMAND,
 } from "./nekRemote.js";
 
 function fakeBackend(payload: {
@@ -15,9 +16,15 @@ function fakeBackend(payload: {
   stderr?: string;
   onExec?: (stream: StdioStream) => void;
   closeDelayMs?: number;
+  /** ssh2 可能先报退出码，再派发最后一段输出。 */
+  outputAfterClose?: boolean;
+  /** 远端命令一直不结束（例如交互式 rc 在等输入）。 */
+  hang?: boolean;
+  commands?: string[];
 }) {
   return {
-    exec: async () => {
+    exec: async (command: string) => {
+      payload.commands?.push(command);
       const stdout = new PassThrough();
       const stderr = new PassThrough();
       const close = new Emitter<number>();
@@ -28,13 +35,20 @@ function fakeBackend(payload: {
         signal: () => undefined,
         onClose: close.event,
       };
-      queueMicrotask(() => {
+      const writeOutput = () => {
         if (payload.stdout) stdout.end(payload.stdout);
         else stdout.end();
         if (payload.stderr) stderr.end(payload.stderr);
         else stderr.end();
+      };
+      queueMicrotask(() => {
+        if (payload.hang) return;
+        if (!payload.outputAfterClose) writeOutput();
         payload.onExec?.(stream);
-        setTimeout(() => close.fire(payload.code), payload.closeDelayMs ?? 0);
+        setTimeout(() => {
+          close.fire(payload.code);
+          if (payload.outputAfterClose) setTimeout(writeOutput, 5);
+        }, payload.closeDelayMs ?? 0);
       });
       return stream;
     },
@@ -78,6 +92,57 @@ describe("detectRemoteNek", () => {
     const result = await detectRemoteNek(fakeBackend({ code, stdout, stderr }));
     expect(result.status).toBe(status);
     expect(result.stderrSummary).toBe(stderr);
+  });
+
+  it("runs gui-info through the user's login shell, interactive for bash and zsh", async () => {
+    const commands: string[] = [];
+    await detectRemoteNek(fakeBackend({ code: 0, stdout: readyInfo, commands }));
+    expect(commands).toEqual([REMOTE_GUI_INFO_COMMAND]);
+    expect(REMOTE_GUI_INFO_COMMAND).toContain(
+      `*/bash|*/zsh) exec "$SHELL" -ilc 'nek gui-info --json'`,
+    );
+    expect(REMOTE_GUI_INFO_COMMAND).toContain(`*) exec /bin/sh -lc 'nek gui-info --json'`);
+  });
+
+  it("reads output that arrives after the exit code", async () => {
+    const result = await detectRemoteNek(
+      fakeBackend({ code: 0, stdout: `motd from .bashrc\n${readyInfo}\n`, outputAfterClose: true }),
+    );
+    expect(result.status).toBe("ready");
+    expect(result.info?.node.path).toBe("/usr/bin/node");
+  });
+
+  it("reports the remote stderr instead of a bare exit code", async () => {
+    const result = await detectRemoteNek(
+      fakeBackend({
+        code: 9,
+        stderr: [
+          "bash: cannot set terminal process group (2893779): Inappropriate ioctl for device",
+          "bash: no job control in this shell",
+          "node: bad option: --import",
+        ].join("\n"),
+      }),
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("nek gui-info exited with 9: node: bad option: --import");
+    expect(result.stderrSummary).toBe("node: bad option: --import");
+  });
+
+  it("does not treat unrelated rc noise as a missing nek", async () => {
+    const result = await detectRemoteNek(
+      fakeBackend({
+        code: 0,
+        stdout: readyInfo,
+        stderr: "/root/.bashrc: line 9: pyenv: command not found",
+      }),
+    );
+    expect(result.status).toBe("ready");
+  });
+
+  it("fails visibly when the login shell never finishes", async () => {
+    const result = await detectRemoteNek(fakeBackend({ code: 0, hang: true }), { timeoutMs: 20 });
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(/did not finish within/u);
   });
 });
 

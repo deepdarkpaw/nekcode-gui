@@ -340,12 +340,25 @@ export interface NekCopySelection {
   compaction: boolean;
 }
 
+/**
+ * 复制预览的可移植性提示：配置原样写到目标机器，但这些值依赖源机器的环境。
+ * - `env`：API Key / 请求头 / MCP 环境变量引用了环境变量，目标机器必须设置同名变量；
+ * - `command`：值通过 `!命令` 获取，命令会在目标机器上执行；
+ * - `windowsPath`：MCP 服务器带 Windows 路径或程序，而目标机器不是 Windows。
+ */
+export type NekCopyWarning =
+  | { kind: "env"; names: string[] }
+  | { kind: "command" }
+  | { kind: "windowsPath" };
+
 export interface NekCopyPreview {
   items: Array<{
     kind: "provider" | "login" | "mcpServer" | "defaults" | "compaction";
     id: string;
     /** 目标机器已存在同名项。 */
     conflict: boolean;
+    /** 复制后在目标机器上可能用不了的值；缺省表示没有。 */
+    warnings?: NekCopyWarning[];
   }>;
 }
 

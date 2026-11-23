@@ -68,10 +68,12 @@ test("remote config registry forwards OAuth ports and closes every lease", async
   const registry = new NekRemoteConfigConnectionRegistry({
     createBackend: async () => first.backend,
     detectNek: async () => readyNek(),
-    detectConfigRuntime: async () => ({
+    detectConfigRuntime: async (_backend, nek) => ({
       home: "/home/alice",
       agentDir: "/home/alice/.nek/agent",
-      node: "/usr/bin/node",
+      node: nek.node.path,
+      launchArgs: nek.launch.args,
+      platform: nek.platform,
     }),
   });
 

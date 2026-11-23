@@ -81,10 +81,12 @@ test("saved SSH credentials use safeStorage and are restored only at connection 
       return backend;
     },
     detectNek: async () => readyNek(),
-    detectConfigRuntime: async () => ({
+    detectConfigRuntime: async (_backend, nek) => ({
       home: "/home/alice",
       agentDir: "/home/alice/.nek/agent",
-      node: "/usr/bin/node",
+      node: nek.node.path,
+      launchArgs: nek.launch.args,
+      platform: nek.platform,
     }),
   });
   const service = new NekSettingsHostService({

@@ -5,10 +5,12 @@
  * 读、`.tmp` + rename 原子写、stat、listDir、remove、rename，以及 settings 用的
  * `proper-lockfile` 同款 `<file>.lock` 目录锁（与远端 nek 进程互斥）。
  *
- * 远端运行时（home / agentDir / node）由 {@link detectRemoteConfigRuntime} 显式探测：
- * 探不到 node 就报错，不猜路径、不静默降级。
+ * 远端运行时由 {@link detectRemoteConfigRuntime} 显式给出：Node 与启动参数取自远端
+ * `nek gui-info`（运行 nek 的那份 Node，版本有保证），home / agentDir 在与 nek 进程相同的
+ * `sh -l` 环境里探测。不在 PATH 上猜 Node：系统自带的旧 Node（例如 v12）跑不了配置脚本。
  */
 import type { Readable, Writable } from "node:stream";
+import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 import type { NekRpcProcessHandle } from "../nek-agent/nekRpcClient.js";
 import type { NekConfigHostExecutor, NekHostDirEntry, NekHostLock } from "./hostExecutor.js";
 import type { NekHostStat } from "./revision.js";
@@ -32,12 +34,16 @@ export interface NekRemoteConfigConnection {
   exec(command: string): Promise<NekRemoteConfigExecStream>;
 }
 
-/** 远端配置运行环境：探测一次，`createRemoteNekConfigHostExecutor` 复用。 */
+/** 远端配置运行环境：连接时探测一次，`createRemoteNekConfigHostExecutor` 复用。 */
 interface NekRemoteConfigRuntime {
   home: string;
   agentDir: string;
-  /** 远端 node 可执行文件的绝对路径（或 PATH 上的 `node`）。 */
+  /** 远端运行 nek 的 Node（`gui-info` 的 `node.path`），也用来执行配置读写脚本。 */
   node: string;
+  /** `gui-info` 的 `launch.args`：原样放在 nek 参数之前。 */
+  launchArgs: string[];
+  /** 远端平台（`gui-info` 的 `platform`）。 */
+  platform: string;
 }
 
 interface RemoteJsonResult {
@@ -46,8 +52,9 @@ interface RemoteJsonResult {
   error?: string;
 }
 
+/** POSIX 单引号转义：`'` → `'"'"'`，可以安全地再套一层 `sh -c`。 */
 function shellQuote(value: string): string {
-  return "'" + value.replaceAll("'", "'\\\"'\\\"'") + "'";
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function appendOutput(buffer: { value: string }, chunk: unknown): void {
@@ -59,19 +66,10 @@ function appendOutput(buffer: { value: string }, chunk: unknown): void {
 }
 
 /**
- * 远端运行时探测（纯 shell，不依赖 node）。
- *
- * 输出三行：`$HOME`、`$NEK_CODING_AGENT_DIR`、node 可执行文件路径（可能在 PATH 上，
- * 也可能是 nek 官方安装脚本放进 `~/.nek/node` 的那份）。
+ * 远端目录探测（纯 shell）：输出 `$HOME` 与 `$NEK_CODING_AGENT_DIR` 两行。
+ * 与 {@link createRemoteNekConfigHostExecutor} 启动 nek 用同一个 `sh -l` 环境，两边的 agentDir 一致。
  */
-const REMOTE_PROBE_SCRIPT = [
-  'printf "%s\\n" "${HOME-}" "${NEK_CODING_AGENT_DIR-}"',
-  "if command -v node >/dev/null 2>&1; then command -v node",
-  'elif [ -x "$HOME/.nek/node/bin/node" ]; then printf "%s\\n" "$HOME/.nek/node/bin/node"',
-  'elif [ -x /usr/local/bin/node ]; then printf "%s\\n" /usr/local/bin/node',
-  'elif [ -x /usr/bin/node ]; then printf "%s\\n" /usr/bin/node',
-  "fi",
-].join("; ");
+const REMOTE_PROBE_SCRIPT = 'printf "%s\\n" "${HOME-}" "${NEK_CODING_AGENT_DIR-}"';
 
 const REMOTE_SCRIPT = String.raw`
 const fs = require("node:fs");
@@ -122,8 +120,14 @@ function release(target) {
       const target = values[0];
       const temporary = target + ".tmp";
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      try { fs.writeFileSync(temporary, Buffer.from(values[1], "base64")); fs.renameSync(temporary, target); }
-      catch (error) { try { fs.unlinkSync(temporary); } catch {} throw error; }
+      // models.json / settings.json / mcp.json 可能带密钥：新文件只给属主读写，已有文件保留原权限。
+      let mode = 0o600;
+      try { mode = fs.statSync(target).mode & 0o7777; } catch (error) { if (!ignoredMissing(error)) throw error; }
+      try {
+        fs.writeFileSync(temporary, Buffer.from(values[1], "base64"), { mode });
+        fs.chmodSync(temporary, mode);
+        fs.renameSync(temporary, target);
+      } catch (error) { try { fs.unlinkSync(temporary); } catch {} throw error; }
       write(null);
     } else if (operation === "resourceKind") {
       try {
@@ -202,30 +206,59 @@ async function runCommand(
   };
   stream.stdout.on("data", (chunk) => collect(stdout, chunk));
   stream.stderr.on("data", (chunk) => collect(stderr, chunk));
-  const code = await new Promise<number>((resolve) => stream.onClose(resolve));
+  // ssh2 可能先报退出码、后派发最后一段输出；读完两路输出再解析 JSON。
+  const [code] = await Promise.all([
+    new Promise<number>((resolve) => stream.onClose(resolve)),
+    waitForEnd(stream.stdout),
+    waitForEnd(stream.stderr),
+  ]);
   if (outputError) throw outputError;
   return { stdout: stdout.value, stderr: stderr.value, code };
 }
 
-/** 探测远端运行时；探不到 node 时明确报错（配置读写没有远端解释器可用）。 */
+function waitForEnd(stream: NodeJS.ReadableStream): Promise<void> {
+  const state = stream as NodeJS.ReadableStream & { readableEnded?: boolean; destroyed?: boolean };
+  if (state.readableEnded || state.destroyed) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      stream.off("end", done);
+      stream.off("close", done);
+      stream.off("error", done);
+      resolve();
+    };
+    stream.on("end", done);
+    stream.on("close", done);
+    stream.on("error", done);
+  });
+}
+
+/**
+ * 远端配置运行时：Node 与启动参数来自已检测通过的 `gui-info`，home / agentDir 由 shell 探测。
+ * Node 不能在 PATH 上另找——那可能是系统的旧版本，跟运行 nek 的不是同一份。
+ */
 export async function detectRemoteConfigRuntime(
   connection: NekRemoteConfigConnection,
+  nek: Pick<NekGuiInfo, "node" | "launch" | "platform">,
 ): Promise<NekRemoteConfigRuntime> {
   const result = await runCommand(connection, `sh -lc ${shellQuote(REMOTE_PROBE_SCRIPT)}`);
   if (result.code !== 0) {
     throw new Error(result.stderr || `远端环境探测失败，退出码 ${result.code}`);
   }
-  const [home = "", configuredAgentDir = "", node = ""] = result.stdout.split(/\r?\n/u);
+  const [home = "", configuredAgentDir = ""] = result.stdout.split(/\r?\n/u);
   if (!home.trim()) throw new Error("远端环境探测失败：拿不到 $HOME");
   const agentDir = configuredAgentDir.trim()
     ? configuredAgentDir.trim().replace(/^~(?=\/|$)/u, home.trim())
     : `${home.trim()}/.nek/agent`;
-  if (!node.trim()) {
-    throw new Error(
-      `远端缺少 Node 运行时（PATH、~/.nek/node/bin/node 都没有），无法读写 ${agentDir} 下的 nek 配置`,
-    );
+  if (!nek.node.path.trim()) {
+    throw new Error(`远端 nek gui-info 没有给出 Node 路径，无法读写 ${agentDir} 下的 nek 配置`);
   }
-  return { home: home.trim(), agentDir, node: node.trim() };
+  return {
+    home: home.trim(),
+    agentDir,
+    node: nek.node.path,
+    launchArgs: [...nek.launch.args],
+    platform: nek.platform,
+  };
 }
 
 async function runJson(
@@ -290,8 +323,6 @@ interface CreateRemoteNekConfigHostExecutorOptions {
   id: string;
   runtime: NekRemoteConfigRuntime;
   connection: NekRemoteConfigConnection;
-  /** 远端 nek 启动器；缺省用登录 shell 里的 `nek`。 */
-  nekCommand?: string;
 }
 
 export function createRemoteNekConfigHostExecutor(
@@ -331,8 +362,11 @@ export function createRemoteNekConfigHostExecutor(
     },
   };
 
+  // 与 gui-info 的约定一致：直接用那份 Node + launch.args 启动，不再经 PATH 上的启动器挑 Node。
   const spawnNek = async (args: readonly string[]): Promise<NekRpcProcessHandle> => {
-    const command = [options.nekCommand ?? "nek", ...args].map((value) => shellQuote(value));
+    const command = [runtime.node, ...runtime.launchArgs, ...args].map((value) =>
+      shellQuote(value),
+    );
     const stream = await connection.exec(`sh -lc ${shellQuote(`exec ${command.join(" ")}`)}`);
     const onExit = (
       listener: (info: { code: number | null; signal: NodeJS.Signals | null }) => void,
@@ -351,6 +385,7 @@ export function createRemoteNekConfigHostExecutor(
 
   return {
     id: options.id,
+    platform: () => runtime.platform,
     homeDir: () => runtime.home,
     agentDir: () => runtime.agentDir,
     readFile,

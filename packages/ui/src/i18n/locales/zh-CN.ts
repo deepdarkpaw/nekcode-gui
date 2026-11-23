@@ -3283,6 +3283,12 @@ const zhCN: Record<string, string> = {
   "settings.nek.copy.skip": "跳过",
   "settings.nek.copy.overwrite": "覆盖",
   "settings.nek.copy.new": "新增",
+  "settings.nek.copy.warning.env":
+    "引用了环境变量 {names}：目标主机上也要设置同名变量，否则取不到值。",
+  "settings.nek.copy.warning.command":
+    "值通过 !命令 获取：命令会在目标主机上执行，请确认那里也能运行。",
+  "settings.nek.copy.warning.windowsPath":
+    "包含 Windows 路径或程序，目标主机不是 Windows：复制后需要改成目标主机上的路径。",
   "settings.nek.copy.back": "返回修改",
   "settings.nek.copy.nothing": "没有要复制的项",
   "settings.nek.copy.preview": "预览 {count} 项",

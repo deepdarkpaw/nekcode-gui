@@ -3485,6 +3485,12 @@ const enUS: Record<string, string> = {
   "settings.nek.copy.skip": "Skip",
   "settings.nek.copy.overwrite": "Overwrite",
   "settings.nek.copy.new": "New",
+  "settings.nek.copy.warning.env":
+    "References environment variables {names}: set them on the target host too, or the value stays empty.",
+  "settings.nek.copy.warning.command":
+    "Gets its value from a !command: the command runs on the target host, so make sure it works there.",
+  "settings.nek.copy.warning.windowsPath":
+    "Contains Windows paths or programs and the target host is not Windows: change them to paths on the target host after copying.",
   "settings.nek.copy.back": "Back",
   "settings.nek.copy.nothing": "Nothing to copy",
   "settings.nek.copy.preview": "Preview {count} items",

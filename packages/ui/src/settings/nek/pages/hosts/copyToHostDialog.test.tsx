@@ -59,4 +59,32 @@ describe("CopyToHostDialog", () => {
         ?.models.value.some((provider) => provider.id === "deepseek"),
     ).toBe(true);
   });
+
+  it("shows portability warnings for values that depend on the local machine", async () => {
+    const preview = env.config.previewCopy;
+    vi.spyOn(env.config, "previewCopy").mockImplementation(async (...args) => {
+      const result = await preview(...args);
+      return {
+        items: result.items.map((item, index) =>
+          index === 0
+            ? {
+                ...item,
+                warnings: [
+                  { kind: "env", names: ["OPENAI_KEY", "TEAM_ID"] },
+                  { kind: "windowsPath" },
+                ],
+              }
+            : item,
+        ),
+      };
+    });
+    renderDialog();
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText(/DeepSeek/);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /预览 \d+ 项/ }));
+    });
+    expect(await within(dialog).findByText(/引用了环境变量 OPENAI_KEY, TEAM_ID/)).toBeDefined();
+    expect(within(dialog).getByText(/包含 Windows 路径或程序/)).toBeDefined();
+  });
 });

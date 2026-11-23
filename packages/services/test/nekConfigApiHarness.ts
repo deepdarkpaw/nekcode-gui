@@ -204,6 +204,8 @@ export interface HarnessOptions {
   forwardLoginPorts?: NekConfigApiOptions["forwardLoginPorts"];
   /** 目标机器上的 nek 版本；`null` 表示版本未知（不能当成最新版）。 */
   nekVersion?: string | null;
+  /** 远程目标的平台；缺省 `linux`。 */
+  remotePlatform?: string;
 }
 
 export function createHarness(options: HarnessOptions = {}): Harness {
@@ -224,6 +226,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     agentDir: REMOTE_AGENT_DIR,
     files: options.remoteFiles ?? {},
     id: "remote",
+    platform: options.remotePlatform,
   });
   const harness: Harness = {
     api: undefined as unknown as NekConfigApi,
