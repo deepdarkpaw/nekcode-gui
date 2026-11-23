@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { NekMcpServerConfig } from "@zcode/shared/nek-protocol";
+import type {
+  NekMcpServerConfig,
+  NekRpcCommandOfType,
+  NekRpcCommandType,
+  NekRpcResponseDataFor,
+} from "@zcode/shared/nek-protocol";
 import {
   AGENT_DIR,
+  FakeControlClient,
   LOCAL,
   PROJECT,
   PROJECT_DIR,
@@ -56,6 +62,50 @@ test("NM-5 validates the same raw MCP names at save, override and import", async
   const name = "Vendor_AI-2";
   await api.saveMcpServer(LOCAL, "global", { name, config }, { revision });
   assert.equal((await api.readMcpConfig(LOCAL, "global")).servers[0]?.name, name);
+});
+
+test("NM-5 allows literal MCP keys that match inherited JS property names", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  const name = "__proto__";
+  const config = { command: "node" };
+  const revision = (await api.readMcpConfig(LOCAL, "global")).revision;
+  await api.saveMcpServer(LOCAL, "global", { name, config }, { revision });
+  assert.deepEqual(JSON.parse(local.files.get(MCP_PATH)!), { mcpServers: { [name]: config } });
+  assert.equal((await api.readMcpConfig(LOCAL, "global")).servers[0]?.name, name);
+});
+
+test("NM-6 uses validate_config for stored MCP diagnostics and keeps the raw definition editable", async (t) => {
+  const diagnostic = {
+    file: MCP_PATH,
+    severity: "error" as const,
+    message: 'server "Legacy": legacy SSE transport is not supported; use the streamable HTTP URL',
+  };
+  class ConfigControl extends FakeControlClient {
+    override async call<C extends NekRpcCommandType>(
+      command: NekRpcCommandOfType<C>,
+    ): Promise<NekRpcResponseDataFor<C>> {
+      const result = await super.call(command);
+      return command.type === "validate_config"
+        ? ({
+            diagnostics: [diagnostic, { ...diagnostic, file: join(AGENT_DIR, "settings.json") }],
+          } as NekRpcResponseDataFor<C>)
+        : result;
+    }
+  }
+  const raw = { type: "sse", url: "https://example.test/mcp" };
+  const control = new ConfigControl();
+  const { api } = createHarness({
+    control,
+    localFiles: {
+      [MCP_PATH]: JSON.stringify({ mcpServers: { Legacy: raw } }),
+    },
+  });
+  t.after(() => api.dispose());
+  const view = await api.readMcpConfig(LOCAL, "global");
+  assert.deepEqual(view.diagnostics, [diagnostic]);
+  assert.deepEqual(view.servers[0]?.config, raw);
+  assert.deepEqual(control.commands, [{ type: "validate_config" }]);
 });
 
 test("NM-6 imports and writes streamable HTTP and both exposure aliases without normalizing them", async (t) => {
