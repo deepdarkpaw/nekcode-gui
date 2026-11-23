@@ -182,3 +182,17 @@ it("SR-6 shows inherited SDK options and deletes only the provider overrides on 
   expect(retries.value).toBe("");
   expect(cap.value).toBe("60000");
 });
+
+it("SR-8 advanced timeout uses the same numeric-string parsing as nek", async () => {
+  const env = createNekTestEnv();
+  const patch = vi.spyOn(env.config, "patchSettings");
+  render(<AdvancedPage />, { wrapper: env.wrapper });
+  const input = await screen.findByLabelText("空闲超时");
+  editNumber(input, "-1");
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(patch).not.toHaveBeenCalled();
+  await act(async () => editNumber(input, " disabled "));
+  expect(env.config.machines.get("local")!.settings.value.httpIdleTimeoutMs).toBe("disabled");
+  await act(async () => editNumber(input, "15.5"));
+  expect(env.config.machines.get("local")!.settings.value.httpIdleTimeoutMs).toBe(15.5);
+});

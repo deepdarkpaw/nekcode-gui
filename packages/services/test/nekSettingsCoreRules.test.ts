@@ -287,3 +287,104 @@ test("SR-7 presents editable keys at the top level and keeps raw-only settings i
     custom: { flag: true },
   });
 });
+
+test("SR-8 rejects the values that fail nek's static getters before writing", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  const read = await api.readSettings(LOCAL, "global");
+  for (const [patch, field] of [
+    [{ httpIdleTimeoutMs: -0.2 }, "httpIdleTimeoutMs"],
+    [{ httpIdleTimeoutMs: "  " }, "httpIdleTimeoutMs"],
+    [{ httpIdleTimeoutMs: "Infinity" }, "httpIdleTimeoutMs"],
+    [{ httpIdleTimeoutMs: true }, "httpIdleTimeoutMs"],
+    [{ extra: { websocketConnectTimeoutMs: "never" } }, "websocketConnectTimeoutMs"],
+    [{ httpProxy: 1 }, "httpProxy"],
+    [{ compaction: { model: "bare-model" } }, "compaction.model"],
+    [{ compaction: { model: "provider/my model" } }, "compaction.model"],
+    [{ compaction: { thinkingLevel: "turbo" } }, "compaction.thinkingLevel"],
+    [{ defaultTools: "read" }, "defaultTools"],
+    [{ defaultTools: ["read", null] }, "defaultTools.1"],
+    [{ enabledModels: ["a/b", true] }, "enabledModels.1"],
+    [{ extra: { packages: [{ source: 2 }] } }, "packages.0"],
+    [{ extra: { skills: { customDirectories: [1] } } }, "skills.customDirectories.0"],
+    [{ extra: { sessionDir: 12 } }, "sessionDir"],
+    [{ webSearch: [] }, "webSearch"],
+    [{ webSearch: { provider: "other" } }, "webSearch.provider"],
+    [{ webSearch: { provider: "exa", endpoint: "  " } }, "webSearch.endpoint"],
+    [{ webSearch: { provider: "tavily", apiKey: "" } }, "webSearch.apiKey"],
+    [{ webSearch: { numResults: 0 } }, "webSearch.numResults"],
+    [{ webSearch: { numResults: 21 } }, "webSearch.numResults"],
+    [{ webSearch: { numResults: 1.5 } }, "webSearch.numResults"],
+  ] as const) {
+    const error = await expectNekError(
+      () => api.patchSettings(LOCAL, "global", patch as unknown as NekSettingsPatch, read),
+      "validation",
+    );
+    assert.ok(error.fieldErrors?.[field], `${field}: ${error.message}`);
+    assert.equal(local.files.has(SETTINGS), false);
+  }
+});
+
+test("SR-8 accepts numeric-string and fractional timeouts, disabled, and the getter's permissive cases", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  let read = await api.readSettings(LOCAL, "global");
+  for (const [httpIdleTimeoutMs, effective] of [
+    ["  DiSaBlEd ", 0],
+    [" 250.9 ", 250],
+    [0.9, 0],
+    ["0x100", 256],
+    [0, 0],
+  ] as const) {
+    await api.patchSettings(LOCAL, "global", { httpIdleTimeoutMs }, read);
+    read = await api.readSettings(LOCAL, "global");
+    assert.equal(read.values.httpIdleTimeoutMs, httpIdleTimeoutMs);
+    assert.equal(read.effective.httpIdleTimeoutMs, effective);
+  }
+  const looseValues = {
+    transport: "future-transport",
+    steeringMode: "future-mode",
+    followUpMode: "",
+    defaultThinkingLevel: "future-level",
+    defaultTools: false,
+    branchSummary: { reserveTokens: -1.25 },
+  };
+  await api.patchSettings(
+    LOCAL,
+    "global",
+    {
+      ...looseValues,
+      extra: { websocketConnectTimeoutMs: "disabled", skills: { customDirectories: ["./skills"] } },
+      compaction: { model: "provider/org/model", thinkingLevel: "max" },
+      webSearch: { numResults: 1 },
+    } as unknown as NekSettingsPatch,
+    read,
+  );
+  assert.deepEqual(readJson(local, SETTINGS), {
+    ...looseValues,
+    httpIdleTimeoutMs: 0,
+    websocketConnectTimeoutMs: "disabled",
+    skills: { customDirectories: ["./skills"] },
+    compaction: { model: "provider/org/model", thinkingLevel: "max" },
+    webSearch: { numResults: 1 },
+  });
+  read = await api.readSettings(LOCAL, "global");
+  assert.equal(read.effective.transport, "future-transport");
+  assert.equal(read.effective.followUpMode, "one-at-a-time");
+  assert.deepEqual(read.effective.extra?.skills, ["./skills"]);
+  assert.deepEqual(read.diagnostics, []);
+});
+
+test("SR-8 projects legacy queueMode and websockets before applying defaults", async (t) => {
+  const { api, local } = createHarness({
+    localFiles: {
+      [SETTINGS]: JSON.stringify({ queueMode: "all", websockets: false }),
+    },
+  });
+  t.after(() => api.dispose());
+  const read = await api.readSettings(LOCAL, "global");
+  assert.deepEqual(read.values.extra, { queueMode: "all", websockets: false });
+  assert.equal(read.effective.steeringMode, "all");
+  assert.equal(read.effective.transport, "sse");
+  assert.deepEqual(local.writes, []);
+});

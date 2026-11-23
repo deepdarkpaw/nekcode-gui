@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NEK_WEB_SEARCH_PROVIDERS, nekSettingsIssues } from "@zcode/shared/nek-protocol";
+import { nekSettingsIssues, type NekSettingsView } from "@zcode/shared/nek-protocol";
 
 /**
  * nek 配置文件的 zod 镜像。
@@ -117,68 +117,15 @@ export type NekModelOverride = z.infer<typeof nekModelOverrideSchema>;
 // settings.json（nek core/settings-manager.ts）
 // ============================================================================
 
-/**
- * nek `getWebSearchSettings()` 要求 endpoint/apiKey 存在时 `trim()` 后非空，
- * 空串同样让会话启动失败。这里只判空、不 trim：密钥原样落盘。
- */
-const nekNonEmptyStringSchema = z
-  .string()
-  .refine((value) => value.trim().length > 0, "expected a nonempty string");
-
-export const nekWebSearchSettingsSchema = loose({
-  provider: z.enum(NEK_WEB_SEARCH_PROVIDERS).optional(),
-  endpoint: nekNonEmptyStringSchema.optional(),
-  apiKey: nekNonEmptyStringSchema.optional(),
-  numResults: z.number().int().min(1).max(20).optional(),
-});
-
-export const nekSettingsFileSchema = loose({
-  defaultProvider: z.string().optional(),
-  defaultModel: z.string().optional(),
-  defaultThinkingLevel: nekThinkingLevelSchema.optional(),
-  /** 键是 `provider/modelId`。 */
-  modelThinkingLevels: z.record(z.string(), nekThinkingLevelSchema).optional(),
-  /** 模型循环列表：`provider/id`、裸 id，可带 `:thinking` 后缀。 */
-  enabledModels: z.array(z.string()).optional(),
-  defaultTools: z.array(z.string()).optional(),
-  compaction: nekOpaqueJsonSchema.optional(),
-  // v0.5.1 retry getters do not validate the shape. See NekSettingsView: timeoutMs and
-  // maxRetryDelayMs belong to retry.provider; unrelated fields are preserved but not interpreted.
-  retry: nekOpaqueJsonSchema.optional(),
-  branchSummary: nekOpaqueJsonSchema.optional(),
-  transport: z.string().optional(),
-  steeringMode: z.enum(["all", "one-at-a-time"]).optional(),
-  followUpMode: z.enum(["all", "one-at-a-time"]).optional(),
-  theme: z.string().optional(),
-  hideThinkingBlock: z.boolean().optional(),
-  showCacheMissNotices: z.boolean().optional(),
-  shellPath: z.string().optional(),
-  shellCommandPrefix: z.string().optional(),
-  quietStartup: z.boolean().optional(),
-  defaultProjectTrust: z.enum(["ask", "always", "never"]).optional(),
-  sessionDir: z.string().optional(),
-  httpProxy: z.string().optional(),
-  httpIdleTimeoutMs: z.number().optional(),
-  cacheWarming: z.string().optional(),
-  updateChannel: z.enum(["stable", "dev"]).optional(),
-  webSearch: nekWebSearchSettingsSchema.optional(),
-  enableSkillCommands: z.boolean().optional(),
-  doubleEscapeAction: z.enum(["fork", "tree", "none"]).optional(),
-  treeFilterMode: z.enum(["default", "no-tools", "user-only", "labeled-only", "all"]).optional(),
-  images: nekOpaqueJsonSchema.optional(),
-  terminal: nekOpaqueJsonSchema.optional(),
-  packages: z.array(nekOpaqueJsonSchema).optional(),
-  extensions: z.array(z.string()).optional(),
-  skills: z.array(z.string()).optional(),
-  prompts: z.array(z.string()).optional(),
-  themes: z.array(z.string()).optional(),
-}).superRefine((settings, context) => {
+/** Runtime rules, not a schema derived from the Settings interface's TypeScript enums. */
+export const nekSettingsFileSchema = loose({}).superRefine((settings, context) => {
   for (const issue of nekSettingsIssues(settings)) {
     context.addIssue({ code: "custom", ...issue });
   }
 });
 
-export type NekSettingsFile = z.infer<typeof nekSettingsFileSchema>;
+/** Documented settings; provider retry options belong under `retry.provider`. */
+export type NekSettingsFile = Omit<NekSettingsView, "extra"> & Record<string, unknown>;
 
 // ============================================================================
 // mcp.json（nek extensions/mcp/config.ts）

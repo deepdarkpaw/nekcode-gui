@@ -312,8 +312,6 @@ function BranchSummarySection({ settings }: { settings: NekSettingsDocument }) {
       <SettingNumberField
         label={intl.formatMessage({ id: "settings.nek.compaction.reserve" })}
         unit="tokens"
-        integer
-        min={0}
         value={values.reserveTokens ?? defaults.reserveTokens ?? 0}
         defaultValue={defaults.reserveTokens}
         onCommit={(value) => write({ reserveTokens: numberOrNull(value, defaults.reserveTokens) })}

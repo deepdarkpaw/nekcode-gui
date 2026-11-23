@@ -3604,9 +3604,9 @@ const enUS: Record<string, string> = {
   "settings.nek.advanced.httpProxy": "HTTP proxy",
   "settings.nek.advanced.httpProxyHint":
     "Proxy used by nek for model and web requests (httpProxy).",
-  "settings.nek.advanced.httpProxyInvalid":
-    "Enter an address starting with http://, https:// or socks5://",
   "settings.nek.advanced.httpIdleTimeout": "Idle timeout",
+  "settings.nek.advanced.httpIdleTimeoutInvalid":
+    "Enter a non-negative number, or enter disabled to turn off the timeout.",
   "settings.nek.advanced.transport": "Transport",
   "settings.nek.advanced.transportHint": "Preferred streaming transport where supported.",
   "settings.nek.advanced.transport.auto": "Auto",

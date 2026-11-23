@@ -186,6 +186,7 @@ export interface NekSettingsView {
     maxRetries?: number;
     baseDelayMs?: number;
     maxAgentDelayMs?: number;
+    /** 请求层；未设置 timeoutMs/maxRetries 时不覆盖 SDK 的选项。 */
     provider?: { timeoutMs?: number; maxRetries?: number; maxRetryDelayMs?: number };
   };
   webSearch?: {
@@ -195,7 +196,8 @@ export interface NekSettingsView {
     numResults?: number;
   };
   httpProxy?: string;
-  httpIdleTimeoutMs?: number;
+  /** 文件接受数字、数字字符串及 "disabled"；合法生效值为向下取整后的数字。 */
+  httpIdleTimeoutMs?: number | string;
   transport?: string;
   steeringMode?: "all" | "one-at-a-time";
   followUpMode?: "all" | "one-at-a-time";

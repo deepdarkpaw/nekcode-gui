@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { RefreshCwIcon } from "lucide-react";
-import type { NekSettingsView } from "@zcode/shared/nek-protocol";
+import { parseNekTimeoutMs, type NekSettingsView } from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -29,7 +29,7 @@ import {
   settingsViewToJson,
   type NestedSettingsPatch,
 } from "../lib/settingsPatch.js";
-import { DocumentGate } from "../components/DocumentStatus.js";
+import { DiagnosticsList, DocumentGate } from "../components/DocumentStatus.js";
 import { NekPageFrame } from "../components/NekPageFrame.js";
 import { OpenDirectoryButton } from "./agent/AgentPage.js";
 
@@ -112,42 +112,59 @@ function NetworkSection({ settings }: { settings: NekSettingsDocument }) {
   const t = (id: string) => intl.formatMessage({ id });
   const values = settings.data?.values ?? {};
   const defaults = settings.data?.defaults ?? {};
+  const defaultTimeout = defaults.httpIdleTimeoutMs ?? 300_000;
   return (
     <SettingSection title={t("settings.nek.advanced.network")}>
+      <DiagnosticsList
+        diagnostics={settings.data?.diagnostics.filter(({ message }) =>
+          /^(?:httpIdleTimeoutMs|websocketConnectTimeoutMs|httpProxy):/.test(message),
+        )}
+      />
       <SettingTextField
         label={t("settings.nek.advanced.httpProxy")}
         description={t("settings.nek.advanced.httpProxyHint")}
         value={values.httpProxy ?? ""}
         placeholder="http://127.0.0.1:7890"
         inputClassName="w-72 font-mono"
-        validate={(value) =>
-          value === "" || /^(https?|socks5h?):\/\/\S+$/.test(value)
-            ? null
-            : t("settings.nek.advanced.httpProxyInvalid")
-        }
         onCommit={(httpProxy) => settings.patch({ httpProxy: httpProxy || null })}
       />
-      <SettingNumberField
+      <SettingTextField
         label={t("settings.nek.advanced.httpIdleTimeout")}
         unit={t("settings.nek.unit.ms")}
-        integer
-        min={0}
-        value={values.httpIdleTimeoutMs ?? defaults.httpIdleTimeoutMs ?? 0}
-        defaultValue={defaults.httpIdleTimeoutMs}
-        onCommit={(value) =>
-          settings.patch({ httpIdleTimeoutMs: value === defaults.httpIdleTimeoutMs ? null : value })
+        value={String(
+          values.httpIdleTimeoutMs === undefined ? defaultTimeout : values.httpIdleTimeoutMs,
+        )}
+        defaultValue={String(defaultTimeout)}
+        validate={(text) =>
+          parseNekTimeoutMs(text) === undefined
+            ? t("settings.nek.advanced.httpIdleTimeoutInvalid")
+            : null
+        }
+        onCommit={(text) =>
+          settings.patch({
+            httpIdleTimeoutMs:
+              text === String(defaultTimeout)
+                ? null
+                : String(Number(text)) === text
+                  ? Number(text)
+                  : text,
+          })
         }
       />
       <SettingSelectField
         label={t("settings.nek.advanced.transport")}
         description={t("settings.nek.advanced.transportHint")}
-        value={values.transport ?? defaults.transport ?? "auto"}
+        value={String(settings.data?.effective.transport ?? defaults.transport ?? "auto")}
         options={["auto", "sse", "websocket", "websocket-cached"].map((value) => ({
           value,
           label: t(`settings.nek.advanced.transport.${value}`),
         }))}
         onCommit={(transport) =>
-          settings.patch({ transport: transport === defaults.transport ? null : transport })
+          settings.patch(
+            transport === defaults.transport
+              ? { transport: null, extra: { websockets: null } }
+              : { transport },
+          )
         }
       />
     </SettingSection>
@@ -158,6 +175,7 @@ function BehaviorSection({ settings }: { settings: NekSettingsDocument }) {
   const { intl } = useZCodeIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const values = settings.data?.values ?? {};
+  const effective = settings.data?.effective ?? {};
   const queueOptions = (["one-at-a-time", "all"] as const).map((value) => ({
     value,
     label: t(`settings.nek.advanced.queue.${value}`),
@@ -167,14 +185,14 @@ function BehaviorSection({ settings }: { settings: NekSettingsDocument }) {
       <SettingSelectField
         label={t("settings.nek.advanced.steeringMode")}
         description={t("settings.nek.advanced.steeringModeHint")}
-        value={values.steeringMode ?? "one-at-a-time"}
+        value={effective.steeringMode === "all" ? "all" : "one-at-a-time"}
         options={queueOptions}
         onCommit={(steeringMode) => settings.patch({ steeringMode })}
       />
       <SettingSelectField
         label={t("settings.nek.advanced.followUpMode")}
         description={t("settings.nek.advanced.followUpModeHint")}
-        value={values.followUpMode ?? "one-at-a-time"}
+        value={effective.followUpMode === "all" ? "all" : "one-at-a-time"}
         options={queueOptions}
         onCommit={(followUpMode) => settings.patch({ followUpMode })}
       />

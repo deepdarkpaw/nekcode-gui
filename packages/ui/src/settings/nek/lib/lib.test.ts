@@ -305,13 +305,30 @@ describe("rawSettingsSchema", () => {
     }
   });
 
-  it("reports syntax and schema errors", () => {
+  it("SR-8 shares runtime rules without imposing enum restrictions the core getters do not have", () => {
     expect(validateRawSettings("{")).toMatchObject({ ok: false, kind: "syntax" });
-    expect(validateRawSettings('{"transport":"carrier-pigeon"}')).toMatchObject({
-      ok: false,
-      kind: "schema",
-    });
-    expect(validateRawSettings('{"transport":"sse","unknown":1}')).toMatchObject({ ok: true });
+    for (const text of [
+      '{"httpIdleTimeoutMs":"disabled","websocketConnectTimeoutMs":1.3}',
+      '{"transport":"carrier-pigeon","steeringMode":"other","followUpMode":""}',
+      '{"retry":{"baseDelayMs":1.25,"timeoutMs":"ignored","provider":{"maxRetries":0}}}',
+      '{"compaction":{"modelOverrides":{"a/b":{"content":{"toolResultMaxChars":0}}}}}',
+    ])
+      expect(validateRawSettings(text)).toMatchObject({ ok: true });
+    for (const [text, path] of [
+      [
+        '{"compaction":{"content":{"toolResultMaxChars":0}}}',
+        "compaction.content.toolResultMaxChars",
+      ],
+      ['{"compaction":{"content":{"typo":true}}}', "compaction.content.typo"],
+      ['{"httpIdleTimeoutMs":-1}', "httpIdleTimeoutMs"],
+      ['{"websocketConnectTimeoutMs":""}', "websocketConnectTimeoutMs"],
+      ['{"compaction":{"thinkingLevel":"other"}}', "compaction.thinkingLevel"],
+    ])
+      expect(validateRawSettings(text)).toMatchObject({
+        ok: false,
+        kind: "schema",
+        issues: [{ path }],
+      });
   });
 });
 

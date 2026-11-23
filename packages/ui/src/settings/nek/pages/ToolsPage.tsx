@@ -58,7 +58,7 @@ function toolSelection(settings: NekSettingsDocument, tools: readonly NekBuiltin
       defaultTools: buildDefaultToolsSetting(next, defaults, knownTools, original),
     });
   };
-  return { enabled, unknown, setTool };
+  return { enabled, unknown, setTool, editable: !saved || original !== undefined };
 }
 
 function BuiltinTools({
@@ -69,16 +69,23 @@ function BuiltinTools({
   tools: readonly NekBuiltinTool[];
 }) {
   const { intl } = useZCodeIntl();
-  const { enabled, setTool, unknown } = toolSelection(settings, tools);
+  const { enabled, setTool, unknown, editable } = toolSelection(settings, tools);
   const save = useAsyncAction((name: string, on: boolean) => setTool(name, on));
-  const diagnostics = [...new Set(unknown)].map((entry) => ({
-    file: settings.data?.path ?? "settings.json",
-    severity: "warning" as const,
-    message: intl.formatMessage(
-      { id: "settings.nek.tools.unknown" },
-      { entry: JSON.stringify(entry) },
-    ),
-  }));
+  const diagnostics =
+    settings.data?.diagnostics.filter(({ message }) => /^defaultTools[.:]/.test(message)) ?? [];
+  if (settings.data) {
+    const file = settings.data.path;
+    for (const entry of new Set(unknown)) {
+      diagnostics.push({
+        file,
+        severity: "warning",
+        message: intl.formatMessage(
+          { id: "settings.nek.tools.unknown" },
+          { entry: JSON.stringify(entry) },
+        ),
+      });
+    }
+  }
   const setting = settings.data?.values.defaultTools;
   return (
     <SettingSection
@@ -97,7 +104,7 @@ function BuiltinTools({
         </p>
       ) : null}
       <div className="grid gap-1 sm:grid-cols-2">
-        {tools
+        {(editable ? tools : [])
           .filter((tool) => tool.name !== WEB_SEARCH_TOOL)
           .map((tool) => (
             <label
@@ -179,7 +186,7 @@ function WebSearchSection({
   const { intl } = useZCodeIntl();
   const api = useNekConfigApi();
   const { target, targetInfo } = useNekTarget();
-  const { enabled, setTool } = toolSelection(settings, tools);
+  const { enabled, setTool, editable } = toolSelection(settings, tools);
   const [result, setResult] = useState<string | null>(null);
   const web = settings.data?.values.webSearch ?? {};
   // 服务商的有效值来自默认值（Tavily），凭据只可能是用户写进本作用域的文件。
@@ -256,7 +263,12 @@ function WebSearchSection({
       title={intl.formatMessage({ id: "settings.nek.web.title" })}
       description={intl.formatMessage({ id: "settings.nek.web.description" })}
     >
-      {tools.some(({ name }) => name === WEB_SEARCH_TOOL) ? (
+      <DiagnosticsList
+        diagnostics={settings.data?.diagnostics.filter(({ message }) =>
+          /^webSearch[.:]/.test(message),
+        )}
+      />
+      {editable && tools.some(({ name }) => name === WEB_SEARCH_TOOL) ? (
         <SettingSwitchField
           label={intl.formatMessage({ id: "settings.nek.web.enabled" })}
           description={intl.formatMessage({ id: "settings.nek.web.enabledHint" })}
@@ -295,7 +307,7 @@ function WebSearchSection({
                 ? "settings.nek.web.apiKeyHint"
                 : "settings.nek.web.apiKeyHintUnset",
         })}
-        value={web.apiKey ?? ""}
+        value={typeof web.apiKey === "string" ? web.apiKey : ""}
         placeholder={intl.formatMessage({ id: "settings.nek.web.apiKeyPlaceholder" })}
         onCommit={(apiKey) => writeWeb({ apiKey: apiKey || null })}
       />
@@ -343,15 +355,10 @@ function WebSearchSection({
         <SettingTextField
           label={intl.formatMessage({ id: "settings.nek.web.endpoint" })}
           description={intl.formatMessage({ id: "settings.nek.web.endpointHint" })}
-          value={web.endpoint ?? ""}
+          value={String(web.endpoint ?? "")}
           placeholder={endpointDefault}
           defaultValue=""
           inputClassName="w-72 font-mono"
-          validate={(value) =>
-            value === "" || /^https?:\/\//.test(value)
-              ? null
-              : intl.formatMessage({ id: "settings.nek.provider.error.baseUrlInvalid" })
-          }
           onCommit={(endpoint) =>
             writeWeb({
               endpoint: endpoint === "" || endpoint === endpointDefault ? null : endpoint,

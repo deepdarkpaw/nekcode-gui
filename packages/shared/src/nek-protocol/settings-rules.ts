@@ -1,4 +1,10 @@
-/** Static settings rules not exposed by RPC: nek v0.5.1 core/settings-manager.ts and core/compaction/content-policy.ts. */
+/**
+ * File-value checks for nek v0.5.1: core/settings-manager.ts, core/compaction/content-policy.ts,
+ * core/http-dispatcher.ts, core/package-manager.ts and modes/rpc/gui/models.ts.
+ * `validate_config` does not run these getters or accept a candidate file. Do not infer
+ * rejection rules from TypeScript enums or from the GUI's choice list.
+ */
+import { NEK_WEB_SEARCH_PROVIDERS, type NekConfigScope } from "./config-types.js";
 import { NEK_THINKING_LEVELS } from "./gui-rpc.js";
 
 export const NEK_COMPACTION_CONTENT_MINIMUMS = {
@@ -85,9 +91,105 @@ function checkCompaction(value: unknown, add: AddIssue): void {
   }
 }
 
+/** `core/http-dispatcher.ts` accepts finite non-negative numbers, numeric strings and `disabled`. */
+export function parseNekTimeoutMs(value: unknown): number | undefined {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return undefined;
+    if (text.toLowerCase() === "disabled") return 0;
+    value = Number(text);
+  }
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined;
+}
+
+function checkWebSearch(value: unknown, add: AddIssue): void {
+  if (value === undefined) return;
+  if (!isRecord(value)) {
+    add(["webSearch"], "expected an object");
+    return;
+  }
+  if (
+    value.provider !== undefined &&
+    !NEK_WEB_SEARCH_PROVIDERS.some((name) => name === value.provider)
+  ) {
+    add(["webSearch", "provider"], "expected tavily or exa");
+  }
+  for (const key of ["endpoint", "apiKey"]) {
+    const text = value[key];
+    if (text !== undefined && (typeof text !== "string" || !text.trim())) {
+      add(["webSearch", key], "expected a nonempty string");
+    }
+  }
+  const count = value.numResults;
+  if (count !== undefined && (!safeInteger(count, 1) || Number(count) > 20)) {
+    add(["webSearch", "numResults"], "expected an integer from 1 to 20");
+  }
+}
+
+/** Non-string entries fail when nek tries to use each string; no name or pattern restrictions here. */
+function checkStringArray(value: unknown, path: string[], add: AddIssue): void {
+  if (!Array.isArray(value)) {
+    add(path, "expected an array of strings");
+    return;
+  }
+  for (const [index, entry] of value.entries()) {
+    if (typeof entry !== "string") add([...path, String(index)], "expected a string");
+  }
+}
+
+function checkResources(settings: Record<string, unknown>, add: AddIssue): void {
+  for (const key of ["extensions", "skills", "prompts", "themes"]) {
+    const value = settings[key];
+    if (key === "skills" && isRecord(value)) {
+      // The legacy object is migrated to the customDirectories array or no explicit paths.
+      if (Array.isArray(value.customDirectories))
+        checkStringArray(value.customDirectories, [key, "customDirectories"], add);
+    } else if (value != null && typeof value !== "string") {
+      checkStringArray(value, [key], add);
+    }
+  }
+  const packages = settings.packages;
+  if (packages == null || typeof packages === "string") return; // Both iterable in core.
+  if (!Array.isArray(packages)) {
+    add(["packages"], "expected iterable package sources");
+    return;
+  }
+  for (const [index, pkg] of packages.entries()) {
+    if (typeof pkg !== "string" && (!isRecord(pkg) || typeof pkg.source !== "string")) {
+      add(
+        ["packages", String(index)],
+        "expected a source string or an object with a string source",
+      );
+    }
+  }
+}
+
 /** Validates file values, not patch deletion markers or runtime facts such as model and credential availability. */
-export function nekSettingsIssues(settings: Record<string, unknown>): SettingsIssue[] {
+export function nekSettingsIssues(
+  settings: Record<string, unknown>,
+  scope: NekConfigScope = "global",
+): SettingsIssue[] {
   const issues: SettingsIssue[] = [];
-  checkCompaction(settings.compaction, (path, message) => issues.push({ path, message }));
+  const add: AddIssue = (path, message) => issues.push({ path, message });
+  checkCompaction(settings.compaction, add);
+  checkWebSearch(settings.webSearch, add);
+  for (const key of ["httpIdleTimeoutMs", "websocketConnectTimeoutMs"]) {
+    const value = settings[key];
+    if (value !== undefined && parseNekTimeoutMs(value) === undefined) {
+      add([key], 'expected a finite non-negative number, a numeric string, or "disabled"');
+    }
+  }
+  if (scope === "global" && settings.httpProxy != null && typeof settings.httpProxy !== "string") {
+    add(["httpProxy"], "expected a string");
+  }
+  for (const key of ["shellPath", "sessionDir"]) {
+    if (settings[key] && typeof settings[key] !== "string") add([key], "expected a path string");
+  }
+  if (settings.defaultTools) checkStringArray(settings.defaultTools, ["defaultTools"], add);
+  if (settings.enabledModels != null)
+    checkStringArray(settings.enabledModels, ["enabledModels"], add);
+  checkResources(settings, add);
   return issues;
 }

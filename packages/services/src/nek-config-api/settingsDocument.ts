@@ -6,7 +6,7 @@
  * 锁的参数与 nek 完全一致（`proper-lockfile` 的 `lockSync(path, { realpath: false })`），
  * 所以两边能互斥。
  */
-import type { NekSettingsView } from "@zcode/shared/nek-protocol";
+import type { NekConfigScope, NekSettingsView } from "@zcode/shared/nek-protocol";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 import { parseJsonMapping, readTextDocument } from "./documents.js";
 import { conflict, ioError } from "./errors.js";
@@ -42,6 +42,8 @@ export interface PatchSettingsArgs {
   patch: Record<string, unknown>;
   /** 读取时拿到的 revision。 */
   expectedRevision: string;
+  /** Scope for settings whose getters are global-only. */
+  scope?: NekConfigScope;
   /**
    * 跨字段校验：在锁内、拿到合并结果之后执行，抛错即放弃写入。
    *
@@ -74,7 +76,7 @@ export async function patchSettingsDocument(
     if (!sameRevision(currentRevision, expectedRevision)) throw conflict(path);
     const parsed =
       current === undefined || current.trim() === "" ? {} : parseJsonMapping(path, current);
-    validateSettingsPatch(patch);
+    validateSettingsPatch(patch, args.scope);
     const merged = mergeSettingsPatch(parsed, patch);
     args.validate?.(merged, parsed);
     next = `${JSON.stringify(merged, null, 2)}\n`;
