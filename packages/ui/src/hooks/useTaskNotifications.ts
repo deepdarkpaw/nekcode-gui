@@ -182,13 +182,14 @@ export function useWorkspaceTerminalTaskNotifications({
     const payloads = collectTerminalTaskNotificationPayloads({
       previousBySessionId,
       sessions: indexState.sessions,
+      workspacePath,
       formatMessage,
     });
     for (const payload of payloads) {
       showTaskNotification(platform, payload);
     }
     previousBySessionIdRef.current = nextBySessionId;
-  }, [enabled, formatMessage, indexState, platform, signature]);
+  }, [enabled, formatMessage, indexState, platform, signature, workspacePath]);
 }
 
 /**

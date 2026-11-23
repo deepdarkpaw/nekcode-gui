@@ -1379,7 +1379,7 @@ const zhCN: Record<string, string> = {
   "notification.taskWithTitle": "任务：{title}",
   "notification.taskWaiting": "任务等待你的确认",
   "notification.completed": "任务已完成",
-  "notification.completedBody": "任务已完成",
+  "notification.completedWorkspace": "工作区：{name}",
   "notification.subagentCompleted": "子代理已完成",
   "notification.subagentCompletedBody": "子代理“{description}”已完成",
   "notification.subagentFailed": "子代理未完成",

@@ -1470,7 +1470,7 @@ const enUS: Record<string, string> = {
   "notification.taskWithTitle": "Task: {title}",
   "notification.taskWaiting": "Task waiting for your confirmation",
   "notification.completed": "Task completed",
-  "notification.completedBody": "Task completed",
+  "notification.completedWorkspace": "Workspace: {name}",
   "notification.subagentCompleted": "Subagent completed",
   "notification.subagentCompletedBody": "Subagent “{description}” completed",
   "notification.subagentFailed": "Subagent did not complete",

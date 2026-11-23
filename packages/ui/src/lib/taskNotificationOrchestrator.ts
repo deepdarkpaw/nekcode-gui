@@ -7,6 +7,7 @@ import type {
   UserInputRequestPayload,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { IntlInstance } from "@/i18n/index.js";
+import { getPathLeaf } from "@/lib/path.js";
 
 type FormatMessage = IntlInstance["formatMessage"];
 
@@ -22,43 +23,42 @@ function terminalStatusForPhase(
   return null;
 }
 
-function taskTitleBody(
-  title: string,
-  fallbackMessageId: string,
-  formatMessage: FormatMessage,
-): string {
+function taskTitleBody(title: string, formatMessage: FormatMessage): string | undefined {
   const trimmedTitle = title.trim();
-  if (trimmedTitle) {
-    return formatMessage({ id: "notification.taskWithTitle" }, { title: trimmedTitle });
-  }
-  return formatMessage({ id: fallbackMessageId });
+  return trimmedTitle
+    ? formatMessage({ id: "notification.taskWithTitle" }, { title: trimmedTitle })
+    : undefined;
 }
 
 function terminalPayloadForSession(
   session: SessionSummary,
   status: Extract<TaskNotificationPayload["status"], "completed" | "failed">,
+  workspacePath: string,
   formatMessage: FormatMessage,
 ): TaskNotificationPayload {
+  const titledBody = taskTitleBody(session.title, formatMessage);
   if (status === "completed") {
     return {
       taskId: session.sessionId,
       status,
       title: formatMessage({ id: "notification.completed" }),
-      body: taskTitleBody(session.title, "notification.completedBody", formatMessage),
+      body:
+        titledBody ??
+        formatMessage(
+          { id: "notification.completedWorkspace" },
+          { name: getPathLeaf(workspacePath) },
+        ),
     };
   }
 
-  return {
-    taskId: session.sessionId,
-    status,
-    title: formatMessage({ id: "notification.error" }),
-    body: taskTitleBody(session.title, "notification.error", formatMessage),
-  };
+  const title = formatMessage({ id: "notification.error" });
+  return { taskId: session.sessionId, status, title, body: titledBody ?? title };
 }
 
 export function collectTerminalTaskNotificationPayloads(params: {
   previousBySessionId: ReadonlyMap<string, SessionSummary>;
   sessions: readonly SessionSummary[];
+  workspacePath: string;
   formatMessage: FormatMessage;
 }): TaskNotificationPayload[] {
   const payloads: TaskNotificationPayload[] = [];
@@ -72,7 +72,9 @@ export function collectTerminalTaskNotificationPayloads(params: {
     const previousStatus = terminalStatusForPhase(previous.phase);
     if (previousStatus === status) continue;
 
-    payloads.push(terminalPayloadForSession(session, status, params.formatMessage));
+    payloads.push(
+      terminalPayloadForSession(session, status, params.workspacePath, params.formatMessage),
+    );
   }
   return payloads;
 }
@@ -126,7 +128,8 @@ function pendingInteractionPayload(params: {
     title: formatMessage({ id: "notification.inputRequired" }),
     body:
       interaction.payload.prompt.trim() ||
-      taskTitleBody(taskTitle, "notification.inputRequired", formatMessage),
+      taskTitleBody(taskTitle, formatMessage) ||
+      formatMessage({ id: "notification.inputRequired" }),
   };
 }
 
