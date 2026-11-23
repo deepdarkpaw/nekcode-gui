@@ -100,9 +100,20 @@ export async function sendConversationCommand(
     case "stop":
       await context.service.abort(binding.sessionKey);
       return acceptedCommand(envelope, revision);
-    case "compact":
-      await context.service.compact({ sessionKey: binding.sessionKey });
+    case "compact": {
+      const { instructions } = commandPayloadSchemas.compact.parse(payload);
+      await context.service.compact({ sessionKey: binding.sessionKey, instructions });
       return acceptedCommand(envelope, revision);
+    }
+    case "readLastAssistantText": {
+      const { text } = await context.service.runSessionCommand(binding.sessionKey, (command) =>
+        command.target(binding.sessionKey).client.call({ type: "get_last_assistant_text" }),
+      );
+      return acceptedCommand(envelope, revision, {
+        type: "readLastAssistantText",
+        text: text ?? null,
+      });
+    }
     case "switchModelConfig":
       await context.service.setModel({
         sessionKey: binding.sessionKey,

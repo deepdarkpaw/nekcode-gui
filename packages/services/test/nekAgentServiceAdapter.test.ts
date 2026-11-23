@@ -211,6 +211,8 @@ function fakeProcess(
         data = { models: [] };
       } else if (command.type === "get_commands") {
         data = { commands: [] };
+      } else if (command.type === "get_last_assistant_text") {
+        data = { text: "last assistant answer" };
       } else if (command.type === "prompt") {
         data = { disposition: "started" };
       }
@@ -443,6 +445,54 @@ test("SC-2 rejects a built-in before either first input or existing-session prom
     );
     assert.deepEqual(session.commands, []);
     assert.deepEqual(control.commands, []);
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("SC-3 forwards compact instructions and reads last assistant text as dedicated RPCs", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const { sessionId } = await adapter.createNekSession(target);
+    const envelope = { clientId: "test", issuedAt: Date.now(), sessionId };
+    const instructions = "Preserve  the source files.\nInclude tests.";
+    const compact = await adapter.sendNekConversationCommandV4({
+      target,
+      envelope: {
+        ...envelope,
+        commandId: "compact-1",
+        type: "compact",
+        payload: { instructions },
+      },
+    });
+    assert.equal(compact.status, "accepted");
+    assert.equal(
+      session.commands.find((command) => command.type === "compact")?.customInstructions,
+      instructions,
+    );
+    const copy = await adapter.sendNekConversationCommandV4({
+      target,
+      envelope: {
+        ...envelope,
+        commandId: "copy-1",
+        type: "readLastAssistantText",
+        payload: {},
+      },
+    });
+    assert.deepEqual(copy.result, { type: "readLastAssistantText", text: "last assistant answer" });
+    assert.equal(
+      session.commands.filter((command) => command.type === "get_last_assistant_text").length,
+      1,
+    );
+    assert(!session.commands.some((command) => command.type === "prompt"));
   } finally {
     await adapter.dispose();
   }

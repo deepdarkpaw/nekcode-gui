@@ -23,6 +23,7 @@ import {
   TID_CHAT_EMPTY,
   TID_V4_SESSION_PANE,
   TID_V4_COMPOSER_INPUT,
+  TID_V4_FORK,
   testId,
   ZCODE_AGENT_PROVIDER,
 } from "@zcode/shared";
@@ -184,7 +185,10 @@ import {
   routeNekSlashSubmission,
 } from "@/v4/slashCommands.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
-import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
+import { dispatchNekAction, useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
+import { useBuiltinSlashCommands } from "@/v4/useBuiltinSlashCommands.js";
+import { BuiltinSlashSessionDialogs } from "@/v4/BuiltinSlashSessionDialogs.js";
+import type { BuiltinSlashDialog, BuiltinSlashPicker } from "@/v4/builtinSlashActions.js";
 import { useFoldStore } from "@/lib/foldState.js";
 import { focusAtEnd } from "@/lib/typeToFocus.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
@@ -475,8 +479,13 @@ export function SessionPane({
     fileChanges,
     fileRewindPreview,
   } = useV4Conversation();
-  const { conversationShareService, modelSelectionService, zcodeSessionService, zcodeTaskService } =
-    useServices();
+  const {
+    conversationShareService,
+    modelSelectionService,
+    nekWorkspaceConfigService,
+    zcodeSessionService,
+    zcodeTaskService,
+  } = useServices();
   const { intl, locale } = useZCodeIntl();
   const subagentFeed = useNekSubagentFeed(sessionId ?? "");
   const platform = usePlatform();
@@ -2055,24 +2064,68 @@ export function SessionPane({
     }
   }, []);
 
-  const dispatchCompact = useCallback(
-    async (targetSessionId: string) => {
-      const currentRoutingMode = snapshotRef.current?.inputRouting.mode;
-      const compactExpectedToQueue =
-        currentRoutingMode !== undefined && currentRoutingMode !== "startNow";
-      const ack = await dispatchCommand("compact", {}, targetSessionId);
-      if (ack.status !== "accepted" && ack.status !== "noop") {
-        if (ack.reasonCode === "compactOperationLock") {
-          toast(intl.formatMessage({ id: "chat.compact.duplicateBlocked" }));
-        } else if (ack.reasonCode === "activeTurn") {
-          toast(intl.formatMessage({ id: "chat.compact.runningBlocked" }));
-        }
-        return;
-      }
-      if (compactExpectedToQueue) toast(intl.formatMessage({ id: "chat.compact.queued" }));
+  const slashScope = useMemo(() => ({}), [sessionId, workspaceKey, sendCommand]);
+  const slashPickerRef = useRef<((picker: BuiltinSlashPicker) => boolean) | null>(null);
+  const [slashDialog, setSlashDialog] = useState<{ scope: object; kind: BuiltinSlashDialog } | null>(null);
+  const renameFromSlash = useCallback(async (title: string) => {
+    if (!sessionId) throw new Error("No session to rename");
+    const ack = await dispatchCommand("renameSession", { title }, sessionId);
+    if (ack.status !== "accepted" && ack.status !== "duplicate") {
+      throw new Error(ack.message ?? ack.reasonCode ?? ack.status);
+    }
+  }, [dispatchCommand, sessionId]);
+  const runBuiltinSlash = useBuiltinSlashCommands(slashScope, {
+    sessionId,
+    modelView: modelSelectionView,
+    currentSelection: draftConfig.modelSelection,
+    openPicker: (picker) => slashPickerRef.current?.(picker) ?? false,
+    selectModel: handleDraftSelectModel,
+    selectThinking: handleDraftSelectThought,
+    openSettings: (section) => {
+      if (section) setPendingSettingsSectionIntent(section);
+      return dispatchNekAction("gui.settings.open");
     },
-    [dispatchCommand, intl],
-  );
+    newSession: () => dispatchNekAction("app.session.new"),
+    openDialog: (kind) => setSlashDialog({ scope: slashScope, kind }),
+    rename: renameFromSlash,
+    compact: async (instructions) => {
+      const mode = snapshotRef.current?.inputRouting.mode;
+      const ack = await dispatchCommand("compact", instructions ? { instructions } : {}, sessionId);
+      return { ack, queued: mode !== undefined && mode !== "startNow" };
+    },
+    readLastAssistantText: async () => {
+      const ack = await sendCommand(createCommandEnvelope({ type: "readLastAssistantText", payload: {}, sessionId }));
+      if (ack.status !== "accepted" || ack.result?.type !== "readLastAssistantText") {
+        throw new Error(ack.message ?? ack.reasonCode ?? ack.status);
+      }
+      return ack.result.text;
+    },
+    writeClipboard: (text) => navigator.clipboard.writeText(text),
+    reload: () => nekWorkspaceConfigService.callConfig("reloadRunningSessions"),
+    focusSessionSearch: () => dispatchNekAction("gui.commandPalette.open"),
+    focusFork: () => {
+      if (!sessionId || sessionLocked || selectionSideChat || readOnly) return false;
+      const row = snapshotRef.current?.rows.window.findLast(
+        (item) => item.kind === "userInput" && item.actions?.canFork === true,
+      );
+      if (!row) return false;
+      const focusButton = () => {
+        const button = paneRootRef.current?.querySelector<HTMLButtonElement>(
+          `[data-testid="${testId(TID_V4_FORK, String(row.rowId))}"]`,
+        );
+        if (!button || button.disabled || button.getClientRects().length === 0) return false;
+        button.focus();
+        return true;
+      };
+      if (!focusButton()) {
+        timelineScrollToBottomRef.current?.();
+        requestAnimationFrame(() => {
+          if (snapshotRef.current?.sessionId === sessionId) focusButton();
+        });
+      }
+      return true;
+    },
+  });
 
   const dispatchSendTextAfterConfig = useCallback(
     async (
@@ -2349,6 +2402,14 @@ export function SessionPane({
       text: string,
       options?: ConversationComposerSendOptions,
     ): Promise<ConversationComposerSendResult> => {
+      const localCommand = routeNekSlashSubmission(
+        text,
+        (command) => runBuiltinSlash(command, Boolean(
+          options?.attachments?.length || options?.contextAttachmentCount || options?.sharedContextRefs?.length,
+        )),
+        () => null,
+      );
+      if (localCommand) return await localCommand;
       // 发送前冻结本次 admission 预期：command ACK 回来时 projection 可能已经切到 running，
       // 不能用更新后的 enqueue mode 反推刚提交的 prompt 是否原本立即发送。
       const shouldFocusLatest = shouldFocusTimelineAfterComposerSend({
@@ -2357,22 +2418,7 @@ export function SessionPane({
         heldQueueDisposition: options?.heldQueueDisposition,
       });
       try {
-        const sendResult = await routeNekSlashSubmission(
-          text,
-          async ({ name }) => {
-            if (options?.attachments?.length || options?.contextAttachmentCount) {
-              toast(intl.formatMessage({ id: "chat.slash.attachmentsBlocked" }));
-              return "blocked" as const;
-            }
-            if (name === "compact" && sessionId) {
-              await dispatchCompact(sessionId);
-              return "sent" as const;
-            }
-            toast(intl.formatMessage({ id: "chat.slash.planned" }, { name }));
-            return "blocked" as const;
-          },
-          () => dispatchSendText(text, options),
-        );
+        const sendResult = await dispatchSendText(text, options);
         if (sendResult === "blocked" || sendResult === "confirmationRequired") {
           return sendResult;
         }
@@ -2405,7 +2451,7 @@ export function SessionPane({
         throw error;
       }
     },
-    [dispatchCompact, dispatchSendText, focusTimelineToLatest, intl, sessionId],
+    [dispatchSendText, focusTimelineToLatest, intl, runBuiltinSlash, sessionId],
   );
 
   const handleComposerDraftStateChange = useCallback(
@@ -3499,6 +3545,7 @@ export function SessionPane({
       onRetryError={composerErrorRetry}
       onOpenModelSettings={handleOpenModelSettings}
       appSlashCommands={appSlashCommands}
+      slashPickerRef={slashPickerRef}
       onDropTargetControllerChange={handleDropTargetControllerChange}
     />
   );
@@ -3581,6 +3628,15 @@ export function SessionPane({
           onSendNow={handleSendQueuedNow}
           onMoveItem={handleReorderQueueItem}
           onResume={handleResumeQueue}
+        />
+      ) : null}
+      {sessionId && slashDialog?.scope === slashScope ? (
+        <BuiltinSlashSessionDialogs
+          kind={slashDialog.kind}
+          sessionId={sessionId}
+          title={snapshot?.sessionId === sessionId ? snapshot.meta.title : ""}
+          close={() => setSlashDialog((current) => current?.scope === slashScope ? null : current)}
+          rename={renameFromSlash}
         />
       ) : null}
       {/* v4 权限/问答等待态只是 runtime 的阻塞交互，必须和 composer

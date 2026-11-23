@@ -2296,6 +2296,38 @@ const enUS: Record<string, string> = {
     "/{name} is planned but not yet available in the GUI. Use it in the nek terminal for now.",
   "chat.slash.attachmentsBlocked":
     "Slash commands do not accept attachments or references. Remove them and try again.",
+  "chat.slash.actionUnavailable":
+    "This action is unavailable here. Return to the conversation and try again.",
+  "chat.slash.modelUnavailable":
+    "The model list is unavailable. Retry loading it from the model controls.",
+  "chat.slash.unknownModel":
+    "Model {model} was not found. Choose it from the model menu, or enter the full provider and model ID.",
+  "chat.slash.thinkingNoModel": "Select an available model before setting its thinking level.",
+  "chat.slash.unknownThinking":
+    "The current model does not support {level}. Supported thinking levels: {levels}.",
+  "chat.slash.needsSession": "Use this command in an existing session.",
+  "chat.slash.noAnswer": "There is no assistant answer to copy yet.",
+  "chat.slash.copied": "Copied the last assistant answer.",
+  "chat.slash.reloadConfigError":
+    "Reload found a configuration error: {reason}. Fix it in Settings and try again.",
+  "chat.slash.reloadWarning":
+    "Reloaded {reloaded} sessions; {deferred} will reload after their current turn. Note: {reason}",
+  "chat.slash.forkHint":
+    "Choose ‘Fork from this message’ below the user message you want to branch from.",
+  "chat.slash.forkUnavailable":
+    "There is no user message to fork here. Look for the fork action under a user message in an existing session.",
+  "chat.slash.quitHint": "Close the window to quit.",
+  "chat.slash.failed": "/{name} failed: {reason}. Try again.",
+  "chat.slash.renameDescription": "Change the name of this session.",
+  "chat.slash.nameRequired": "Enter a session name.",
+  "chat.slash.session.title": "Session information",
+  "chat.slash.session.description": "Storage location and cumulative usage for this session.",
+  "chat.slash.session.name": "Name",
+  "chat.slash.session.id": "Session ID",
+  "chat.slash.session.file": "Session file",
+  "chat.slash.session.untitled": "Untitled",
+  "chat.slash.session.noFile": "No path available",
+  "chat.slash.session.statsUnavailable": "Usage data has not arrived yet.",
   "chat.slash.commands.title": "Commands",
   "chat.slash.skills.title": "Skills",
   "chat.slash.skills.empty": "No matching skills",

@@ -22,12 +22,14 @@ import {
   memo,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { cn } from "@/components/lib/utils.js";
 import {
@@ -89,6 +91,7 @@ import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragSta
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { advanceComposerDraftRevision } from "@/v4/composer/composerDraftRevision.js";
 import type { AppSlashCommand } from "@/slashCommandHelpers.js";
+import type { BuiltinSlashPicker } from "@/v4/builtinSlashActions.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 
@@ -438,6 +441,8 @@ interface ConversationComposerProps {
   onComposerRestoreApplied?: (requestId: number) => void;
   /** App 层本地斜杠命令（如 `/side`），由 SessionPane 按门禁组装后透传。 */
   appSlashCommands?: readonly AppSlashCommand[];
+  /** `/model` 与 `/thinking` use the same pane-local picker as the toolbar. */
+  slashPickerRef?: Ref<(picker: BuiltinSlashPicker) => boolean>;
   /** 把 composer 的 drop 路由暴露给整个对话 pane / 桌面草稿标题栏。 */
   onDropTargetControllerChange?: (controller: ConversationDropTargetController | null) => void;
 }
@@ -496,6 +501,7 @@ function ConversationComposerImpl({
   composerRestoreRequest = null,
   onComposerRestoreApplied,
   appSlashCommands,
+  slashPickerRef,
   onDropTargetControllerChange,
 }: ConversationComposerProps) {
   const { intl, locale } = useZCodeIntl();
@@ -541,6 +547,11 @@ function ConversationComposerImpl({
     },
     [configPickerScopeKey],
   );
+  useImperativeHandle(slashPickerRef, () => (picker) => {
+    if (disabled || blockingRequestId || modelSelectionState.status !== "ready") return false;
+    handleConfigPickerOpenChange(picker, true);
+    return true;
+  }, [blockingRequestId, disabled, handleConfigPickerOpenChange, modelSelectionState.status]);
   const [heldQueueConfirmation, setHeldQueueConfirmation] = useState<{
     queueItemIds: readonly string[];
     localTtft?: LocalTtftContext;

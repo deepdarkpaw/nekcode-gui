@@ -110,7 +110,9 @@ export const commandPayloadSchemas = {
   }),
   // compact 是输入型维护命令：idle 时立即执行，busy/held 时进入 FIFO。
   // 因为 admission 与当前 revision 无关，不走 CAS；sourceCommandId 提供幂等边界。
-  compact: z.object({}),
+  compact: z.object({ instructions: z.string().optional() }),
+  // nek returns the last assistant's complete text, independent of the current history window.
+  readLastAssistantText: z.object({}).strict(),
   // nek forks before a persisted user message and returns its text to the editor.
   forkUserMessage: z.object({ target: conversationRowTargetSchema }),
   executeNekPlan: nekPlanRevisionSchema.extend({ fresh: z.boolean() }).strict(),
@@ -289,6 +291,7 @@ export const commandResultSchema = z.discriminatedUnion("type", [
     text: z.string(),
   }),
   z.object({ type: z.literal("executeNekPlan"), sessionId: z.string().optional() }),
+  z.object({ type: z.literal("readLastAssistantText"), text: z.string().nullable() }),
   z.object({
     type: z.enum(["createSession", "createSelectionSideSession"]),
     sessionId: z.string(),
