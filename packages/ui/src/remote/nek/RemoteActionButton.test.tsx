@@ -47,7 +47,7 @@ it("ZR-6 keyboard focus can still reveal the disabled reason", async () => {
 
 it("ZR-6 shows the effective shortcut rather than a name-only hint", async () => {
   const shortcutActionId = "gui.settings.open";
-  setActionShortcutOverrides({ [shortcutActionId]: ["Alt+Q"] });
+  setActionShortcutOverrides({ [shortcutActionId]: ["Alt+q"] });
   const button = renderAction({ shortcutActionId });
   act(() => button.focus());
 
