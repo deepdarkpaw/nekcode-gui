@@ -887,7 +887,7 @@ export const diagnosticMessages: readonly string[] = [
   "模型生成的 Git 提交消息不合规",
   "读取 task index resume hint 失败，继续不带历史配置恢复",
   "读取 task 自动归档设置失败，跳过本轮自动归档",
-  "读取自绘窗口按钮状态失败",
+  "读取自绘窗口按钮状态失败"
 ];
 export const diagnosticPrefixes: readonly string[] = [
   "Claude 原生 session 导入完成 imported=",
@@ -1143,7 +1143,7 @@ export const diagnosticPrefixes: readonly string[] = [
   "清理 task index sessions-index 订阅失败 workspace=",
   "清理 task index workspace-config 订阅失败 workspace=",
   "读取 task index meta_json 失败 taskId=",
-  "读取 task index meta_json 非法 taskId=",
+  "读取 task index meta_json 非法 taskId="
 ];
 export const diagnosticModules: readonly string[] = [
   "packages/client/src/index.ts",
@@ -1593,6 +1593,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/services/src/nek-config-api/settingsDefaults.ts",
   "packages/services/src/nek-config-api/settingsDocument.ts",
   "packages/services/src/nek-config-api/settingsProjectTrust.ts",
+  "packages/services/src/nek-config-api/settingsValidation.ts",
   "packages/services/src/nek-config-api/watch.ts",
   "packages/services/src/nek-config-api/watchDirectory.ts",
   "packages/services/src/nek-config-api/watchFiles.ts",
@@ -1781,6 +1782,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/shared/src/nek-protocol/rpc-events.ts",
   "packages/shared/src/nek-protocol/rpc-messages.ts",
   "packages/shared/src/nek-protocol/rpc.ts",
+  "packages/shared/src/nek-protocol/settings-rules.ts",
   "packages/shared/src/nek-protocol/status.ts",
   "packages/shared/src/nek-protocol/thinking-levels.ts",
   "packages/shared/src/node.ts",
@@ -2696,6 +2698,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/ui/src/settings/nek/pages/agent/AgentPresetDialog.tsx",
   "packages/ui/src/settings/nek/pages/agent/AgentPresetsSection.tsx",
   "packages/ui/src/settings/nek/pages/agent/InstructionsEditor.tsx",
+  "packages/ui/src/settings/nek/pages/compaction/ContentSettings.tsx",
   "packages/ui/src/settings/nek/pages/hosts/CopyResults.tsx",
   "packages/ui/src/settings/nek/pages/hosts/CopyToHostDialog.tsx",
   "packages/ui/src/settings/nek/pages/hosts/HostDialogs.tsx",
@@ -3040,5 +3043,5 @@ export const diagnosticModules: readonly string[] = [
   "packages/zcode-server-cli/src/server-core/serverIdentity.ts",
   "packages/zcode-server-cli/src/server-core/taskActivityTracker.ts",
   "packages/zcode-server-cli/src/supervisor/crashBudget.ts",
-  "packages/zcode-server-cli/src/supervisor/supervisor.ts",
+  "packages/zcode-server-cli/src/supervisor/supervisor.ts"
 ];

@@ -104,15 +104,18 @@ export function CompactionRepairs({ settings }: { settings: NekSettingsDocument 
   const data = settings.data;
   const [pending, setPending] = useState<Issue>();
   if (!data) return null;
+  const label = intl.formatMessage({ id: "ui.setting.resetToDefault" });
   const issues = nekSettingsIssues({ compaction: data.values.compaction });
+  const pendingKey = pending ? JSON.stringify(pending.path) : undefined;
   // Keep the action mounted across the optimistic deletion so a failed write is visible and retryable.
-  if (pending && !issues.some(({ path }) => path.join(".") === pending.path.join("."))) {
+  if (pending && !issues.some(({ path }) => JSON.stringify(path) === pendingKey)) {
     issues.push(pending);
   }
   return issues.map((issue) => {
+    const key = JSON.stringify(issue.path);
     const field = issue.path.join(".");
     return (
-      <div key={field} className="flex flex-wrap items-center gap-2">
+      <div key={key} className="flex flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
           <DiagnosticsList
             diagnostics={[
@@ -123,7 +126,8 @@ export function CompactionRepairs({ settings }: { settings: NekSettingsDocument 
         <AsyncButton
           variant="ghost"
           size="sm"
-          disabled={pending !== undefined && pending !== issue}
+          aria-label={label}
+          disabled={pendingKey !== undefined && pendingKey !== key}
           disabledReason={intl.formatMessage({ id: "ui.action.busy" })}
           onClick={async () => {
             setPending(issue);
@@ -134,7 +138,7 @@ export function CompactionRepairs({ settings }: { settings: NekSettingsDocument 
             }
           }}
         >
-          {intl.formatMessage({ id: "ui.setting.resetToDefault" })}
+          {label}
         </AsyncButton>
       </div>
     );

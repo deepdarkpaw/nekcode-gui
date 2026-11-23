@@ -323,7 +323,7 @@ describe("rawSettingsSchema", () => {
       ['{"httpIdleTimeoutMs":-1}', "httpIdleTimeoutMs"],
       ['{"websocketConnectTimeoutMs":""}', "websocketConnectTimeoutMs"],
       ['{"compaction":{"thinkingLevel":"other"}}', "compaction.thinkingLevel"],
-    ])
+    ] as const)
       expect(validateRawSettings(text)).toMatchObject({
         ok: false,
         kind: "schema",
