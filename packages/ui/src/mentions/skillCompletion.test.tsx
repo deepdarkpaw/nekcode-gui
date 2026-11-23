@@ -11,6 +11,7 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
+  COMMAND_PRIORITY_HIGH,
   KEY_ENTER_COMMAND,
   KEY_TAB_COMMAND,
   type LexicalEditor,
@@ -183,6 +184,43 @@ afterEach(() => {
 });
 
 describe("nek skill completion wiring", () => {
+  it("SC-4 displays builtin and RPC commands in the real plugin, without unsupported builtins", async () => {
+    runtime.getSkillReferenceCatalog.mockResolvedValue({
+      authority: "session",
+      skills,
+      commands: [
+        { name: "plans", description: "Extension command" },
+        { name: "model", description: "Shadowed" },
+      ],
+    });
+    mount();
+    await typeText("/");
+    expect(await screen.findByRole("option", { name: "/plans" })).toBeTruthy();
+    expect(screen.getAllByRole("option", { name: "/model" })).toHaveLength(1);
+    expect(screen.queryByRole("option", { name: "/tree" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "/goal" })).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: "/model" }));
+    await waitFor(() => expect(markdown()).toBe("/model "));
+  });
+
+  it.each(["model", "tree"])(
+    "SC-4 sends an exact /%s to the submit handler instead of replacing it",
+    async (name) => {
+      mount();
+      const submit = vi.fn(() => true);
+      const unregister = editor.registerCommand(KEY_ENTER_COMMAND, submit, COMMAND_PRIORITY_HIGH);
+      try {
+        await typeText(`/${name}`);
+        await act(async () => {
+          editor.dispatchCommand(KEY_ENTER_COMMAND, new KeyboardEvent("keydown", { key: "Enter" }));
+        });
+        expect(submit).toHaveBeenCalledOnce();
+        expect(markdown()).toBe(`/${name}`);
+      } finally {
+        unregister();
+      }
+    },
+  );
   it.each(["Enter", "Tab"])(
     "SC2/SC3/SC4: /gal accepts with %s and sends the canonical skill without dropping preceding text",
     async (key) => {

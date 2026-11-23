@@ -3,7 +3,13 @@
  */
 import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical";
 import type { Locale, ZCodeSkillReferenceCatalogEntry, ZCodeSlashCommand } from "@zcode/shared";
-import type { NekMentionTarget } from "@zcode/shared/nek-protocol";
+import {
+  isNekBuiltinSlashCommandName,
+  NEK_BUILTIN_SLASH_COMMANDS,
+  type NekBuiltinSlashCommandName,
+  type NekMentionTarget,
+} from "@zcode/shared/nek-protocol";
+import { hasBuiltinSlashAction } from "@/v4/builtinSlashActions.js";
 import { resolveSkillSourceLabel } from "@/lib/skillSourceLabel.js";
 import type { PromptInputSuggestionItem } from "./lib/promptInputTriggers.js";
 
@@ -36,7 +42,7 @@ export interface AppSlashCommand {
 
 const APP_SLASH_SUGGESTION_ID_PREFIX = "app-slash:";
 
-export function buildAppSlashCommandSuggestions(
+function buildAppSlashCommandSuggestions(
   commands: readonly AppSlashCommand[],
 ): PromptInputSuggestionItem[] {
   return commands.flatMap((command) => {
@@ -82,13 +88,32 @@ export function normalizeSlashCommandValue(name: string): string {
   return name.trim().replace(/^\/+/, "");
 }
 
-export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInputSuggestionItem[] {
-  return commands.flatMap((command) => {
+/** Keep RPC names verbatim except for the old leading-slash convention. Built-ins own exact collisions. */
+export function buildSlashCommandSuggestions(
+  commands: readonly ZCodeSlashCommand[],
+  appCommands: readonly AppSlashCommand[],
+  describeBuiltin: (name: NekBuiltinSlashCommandName) => string,
+  excludedCommandNames: readonly string[] = [],
+): PromptInputSuggestionItem[] {
+  const excluded = new Set(excludedCommandNames.map(normalizeSlashCommandValue));
+  const builtins = NEK_BUILTIN_SLASH_COMMANDS.flatMap<PromptInputSuggestionItem>(({ name }) => {
+    if (!hasBuiltinSlashAction(name) || excluded.has(name)) return [];
+    const description = describeBuiltin(name);
+    return [
+      {
+        id: `builtin-slash:${name}`,
+        trigger: "/",
+        value: name,
+        label: `/${name}`,
+        description,
+        keywords: [name, description],
+      },
+    ];
+  });
+  const cli = commands.flatMap<PromptInputSuggestionItem>((command) => {
     const value = normalizeSlashCommandValue(command.name);
-    // UI 曾同时维护内建白名单、GLM `/goal` fallback 和 v4 追加目录，
-    // CLI catalog 丢失时仍会显示部分命令，掩盖 `/init` 与自定义命令缺失。命令发现
-    // 统一以 CLI protocol catalog 为权威，UI 不再追加命令或维护内建白名单。
-    if (!value) {
+    // nek interactive dispatches built-ins first. Qualified extension aliases remain selectable.
+    if (!value || excluded.has(value) || isNekBuiltinSlashCommandName(value)) {
       return [];
     }
     return [
@@ -102,6 +127,12 @@ export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInpu
       },
     ];
   });
+  const cliNames = new Set(cli.map((item) => item.value));
+  const app = buildAppSlashCommandSuggestions(appCommands).filter(
+    ({ value }) =>
+      !isNekBuiltinSlashCommandName(value) && !cliNames.has(value) && !excluded.has(value),
+  );
+  return [...builtins, ...cli, ...app];
 }
 
 export function buildSubagentSuggestions(

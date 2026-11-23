@@ -3,7 +3,7 @@
  * SlashCommandPlugin — Lexical trigger 面板插件
  *
  * 处理 `/` 面板里的 slash commands 和 subagents：
- * 1. `/` 直接展示 ZCode Agent 广播的真实 slash commands，并补充可用 subagents
+ * 1. `/` 展示有 GUI 动作的 nek 内置命令、RPC 目录、技能与子智能体
  * 2. 面板通过 portal 渲染到输入区上方的独立挂载层，展开时直接覆盖消息区
  * 3. 支持 Esc 关闭、上下键切换、Enter / Tab 选中，以及跟随输入做模糊搜索
  */
@@ -12,6 +12,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { createPortal } from "react-dom";
 import {
   $createTextNode,
+  $getRoot,
   BLUR_COMMAND,
   COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_LOW,
@@ -21,7 +22,9 @@ import {
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
 } from "lexical";
+import { parseNekBuiltinSlashCommand } from "@zcode/shared/nek-protocol";
 import { useNekSkillReferenceCatalog } from "@/hooks/useNekSkillReferenceCatalog.js";
+import { isImeComposing } from "@/lib/imeComposition.js";
 import { buildSlashApplyMentionPayload } from "@/lib/slashApplyMentionPayload.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
 import { $createPromptMentionNode } from "./mentions/nodes/PromptMentionNode.js";
@@ -36,10 +39,9 @@ import {
 } from "./lib/promptInputTriggers.js";
 import { MentionPanel } from "./mentions/components/MentionPanel.js";
 import {
-  buildAppSlashCommandSuggestions,
   buildSkillSuggestions,
   buildSubagentSuggestions,
-  buildSlashSuggestions,
+  buildSlashCommandSuggestions,
   getTextAroundCursor,
   isAppSlashCommandSuggestion,
   normalizeSlashCommandValue,
@@ -83,18 +85,16 @@ export function SlashCommandPlugin({
   const dismissedSignatureRef = useRef<string | null>(null);
   const activeSignatureRef = useRef<string | null>(null);
   const activeTokenRef = useRef<ActivePromptInputTokenSnapshot | null>(null);
-  const commandSuggestions = useMemo(() => {
-    const excluded = new Set((excludedCommandNames ?? []).map(normalizeSlashCommandValue));
-    const cliSuggestions = buildSlashSuggestions(commands ?? []).filter(
-      (item) => !excluded.has(item.value),
-    );
-    // App 层命令追加在 CLI catalog 之后展示；CLI 已提供同名命令时以 CLI 为准，避免遮蔽。
-    const cliValues = new Set(cliSuggestions.map((item) => item.value));
-    const appSuggestions = buildAppSlashCommandSuggestions(appCommands ?? []).filter(
-      (item) => !cliValues.has(item.value) && !excluded.has(item.value),
-    );
-    return [...cliSuggestions, ...appSuggestions];
-  }, [appCommands, commands, excludedCommandNames]);
+  const commandSuggestions = useMemo(
+    () =>
+      buildSlashCommandSuggestions(
+        commands ?? [],
+        appCommands ?? [],
+        (name) => intl.formatMessage({ id: `chat.slash.builtin.${name}` }),
+        excludedCommandNames,
+      ),
+    [appCommands, commands, excludedCommandNames, intl],
+  );
   const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents ?? []), [agents]);
   const skillSuggestions = useMemo(
     () =>
@@ -320,6 +320,7 @@ export function SlashCommandPlugin({
     const unregisterDown = editor.registerCommand(
       KEY_ARROW_DOWN_COMMAND,
       (event) => {
+        if (event && isImeComposing(event)) return false;
         if (filteredSuggestions.length === 0) {
           return false;
         }
@@ -335,6 +336,7 @@ export function SlashCommandPlugin({
     const unregisterUp = editor.registerCommand(
       KEY_ARROW_UP_COMMAND,
       (event) => {
+        if (event && isImeComposing(event)) return false;
         if (filteredSuggestions.length === 0) {
           return false;
         }
@@ -350,6 +352,10 @@ export function SlashCommandPlugin({
     const unregisterEnter = editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event) => {
+        if (event && isImeComposing(event)) return false;
+        // An exact built-in is ready to submit, not a fuzzy completion to replace.
+        const command = parseNekBuiltinSlashCommand($getRoot().getTextContent());
+        if (command && command.name === activeTrigger?.query) return false;
         if (!selectSuggestion(selectedIndex)) {
           return false;
         }
@@ -364,6 +370,7 @@ export function SlashCommandPlugin({
     const unregisterTab = editor.registerCommand(
       KEY_TAB_COMMAND,
       (event) => {
+        if (event && isImeComposing(event)) return false;
         if (!selectSuggestion(selectedIndex)) {
           return false;
         }
@@ -378,6 +385,7 @@ export function SlashCommandPlugin({
     const unregisterEscape = editor.registerCommand(
       KEY_ESCAPE_COMMAND,
       (event) => {
+        if (event && isImeComposing(event)) return false;
         event?.preventDefault();
         event?.stopPropagation();
 
@@ -411,7 +419,14 @@ export function SlashCommandPlugin({
       unregisterEscape();
       unregisterBlur();
     };
-  }, [editor, filteredSuggestions.length, isOpen, selectSuggestion, selectedIndex]);
+  }, [
+    activeTrigger?.query,
+    editor,
+    filteredSuggestions.length,
+    isOpen,
+    selectSuggestion,
+    selectedIndex,
+  ]);
 
   const panelTitle = intl.formatMessage({ id: "chat.slash.title" });
   const hasActiveQuery = (activeTrigger?.query ?? "").trim().length > 0;
@@ -421,7 +436,7 @@ export function SlashCommandPlugin({
 
   const panelSections = useSlashCommandMentionPanelSections(
     intl,
-    commands?.length ?? 0,
+    commandSuggestions.length,
     filteredCommandSuggestions,
     filteredSkillSuggestions,
     skillsLoading,
