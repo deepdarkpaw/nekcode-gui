@@ -99,14 +99,6 @@ export function createQuickPickCommands({
       run: handlers.openWorkspace,
     },
     {
-      id: "suggested-settings",
-      sectionId: "suggested",
-      titleId: "quickPick.command.settings",
-      icon: "settings",
-      keywords: ["settings", "preferences", "配置", "设置"],
-      run: handlers.openSettings,
-    },
-    {
       id: "toggle-sidebar",
       sectionId: "panels",
       titleId: "quickPick.command.toggleSidebar",
