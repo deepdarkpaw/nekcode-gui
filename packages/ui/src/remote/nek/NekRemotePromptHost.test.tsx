@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from "react";
-import { act, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import type { IRemoteInteractionHostApi, RemotePromptEvent } from "@zcode/shared/nek-protocol";
 import { NekRemotePromptHost } from "./NekRemotePromptHost.js";
 import { useRemotePromptQueueStore } from "./remotePromptQueueStore.js";
@@ -49,6 +50,54 @@ describe("NekRemotePromptHost", () => {
 
     expect(screen.getByText("SHA256:full-fingerprint-value")).toBeTruthy();
     expect(screen.getByText("信任并连接")).toBeTruthy();
-    useRemotePromptQueueStore.getState().reset();
   });
+
+  it("ZR-6 localizes host-key confirmations, warnings, and the pending queue", async () => {
+    const listenerRef: { current?: (event: RemotePromptEvent) => void } = {};
+    const api = createApi(listenerRef);
+    const host = {
+      connectionId: "connection-a",
+      host: "example.test",
+      port: 2222,
+      keyType: "ssh-ed25519",
+    };
+    const { container } = render(
+      <ZCodeIntlProvider initialLocale="en-US">
+        <NekRemotePromptHost api={api} onOpenKnownHosts={vi.fn()} />
+      </ZCodeIntlProvider>,
+    );
+
+    act(() => {
+      listenerRef.current?.({
+        ...host,
+        id: "confirm",
+        kind: "host_key",
+        fingerprint: "SHA256:confirm",
+      });
+      listenerRef.current?.({
+        ...host,
+        id: "changed",
+        kind: "host_key_changed",
+        oldFingerprint: "SHA256:previous",
+        newFingerprint: "SHA256:changed",
+      });
+    });
+
+    expect(screen.getByRole("dialog", { name: "Connect to example.test:2222" })).toBeTruthy();
+    expect(screen.getByText("Type")).toBeTruthy();
+    expect(screen.getByText("Fingerprint")).toBeTruthy();
+    expect(container.querySelector('[aria-label="Pending remote requests: 1"]')).not.toBeNull();
+
+    act(() => useRemotePromptQueueStore.getState().removePrompt("confirm"));
+    expect(
+      await screen.findByRole("dialog", { name: "Host identity changed: example.test:2222" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Previous fingerprint")).toBeTruthy();
+    expect(screen.getByText("New fingerprint")).toBeTruthy();
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  useRemotePromptQueueStore.getState().reset();
 });

@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { resolveGithubReleasesUrl } from "../../scripts/desktop-product-identity.mjs";
 import { rebuildApplicationMenu } from "./desktopApplicationMenu.js";
 import { executeDesktopCommand } from "./desktopCommandHandlers.js";
+import { openResourceManager } from "./resourceManagerWindow.js";
 
 vi.mock("electron", () => ({
   app: { name: "nekcode-preview", isPackaged: true, relaunch: vi.fn(), exit: vi.fn() },
@@ -16,7 +17,7 @@ vi.mock("@zcode/services/node", () => ({ readZCodeStdioTapDevState: () => ({ vis
 vi.mock("./about.js", () => ({}));
 vi.mock("./autoUpdater.js", () => ({ setAutoUpdaterMenuLocale: vi.fn() }));
 vi.mock("./exportLogs.js", () => ({}));
-vi.mock("./resourceManagerWindow.js", () => ({}));
+vi.mock("./resourceManagerWindow.js", () => ({ openResourceManager: vi.fn() }));
 
 function createCommandOptions(command: DesktopCommandId, locale: Locale) {
   return {
@@ -111,3 +112,13 @@ it("ZR-4 test builds no longer offer the upstream endpoint override", () => {
   expect(labels).toContain("What's new");
   expect(labels).not.toContain("nekcode Endpoint");
 });
+
+it.each(["zh-CN", "en-US"] as const)(
+  "ZR-6 passes the app language to Resource Manager: %s",
+  async (locale) => {
+    await executeDesktopCommand(
+      createCommandOptions(DesktopCommandIds.OpenResourceManager, locale),
+    );
+    expect(openResourceManager).toHaveBeenCalledExactlyOnceWith(locale);
+  },
+);

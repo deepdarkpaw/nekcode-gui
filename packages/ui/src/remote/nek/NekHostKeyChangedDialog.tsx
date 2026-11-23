@@ -33,8 +33,10 @@ export function NekHostKeyChangedDialog(props: NekHostKeyChangedDialogProps) {
       <DialogContent showCloseButton={false} onKeyDown={controller.onKeyDown} className="max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            主机身份发生变化：{controller.view.host}
-            {port}
+            {intl.formatMessage(
+              { id: "remote.nek.hostKeyChanged.title" },
+              { host: `${controller.view.host}${port}` },
+            )}
           </DialogTitle>
           <DialogDescription>{formatRemoteMessage(intl, controller.view.body)}</DialogDescription>
         </DialogHeader>
@@ -42,11 +44,15 @@ export function NekHostKeyChangedDialog(props: NekHostKeyChangedDialogProps) {
           <p className="text-foreground-subtle">{controller.view.keyType}</p>
           <div className="grid gap-2 rounded-xl border border-card-border bg-card p-3">
             <div>
-              <p className="text-foreground-subtle">旧指纹</p>
+              <p className="text-foreground-subtle">
+                {intl.formatMessage({ id: "remote.nek.hostKeyChanged.oldFingerprint" })}
+              </p>
               <p className="break-all font-mono text-ui-base">{controller.view.oldFingerprint}</p>
             </div>
             <div>
-              <p className="text-foreground-subtle">新指纹</p>
+              <p className="text-foreground-subtle">
+                {intl.formatMessage({ id: "remote.nek.hostKeyChanged.newFingerprint" })}
+              </p>
               <p className="break-all font-mono text-ui-base">{controller.view.newFingerprint}</p>
             </div>
           </div>

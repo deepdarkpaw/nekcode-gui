@@ -216,7 +216,11 @@ export interface RemoteConnectionRuntimeLog {
   sessionId?: string;
   level: "info" | "warn" | "error";
   source: string;
-  message: string;
+  /** Raw transport output or a desktop connection lifecycle message for renderer localization. */
+  message:
+    | string
+    | { code: "connecting" | "connected"; targetKind: RemoteTarget["kind"] }
+    | { code: "disconnected"; detail?: string };
   timestamp: string;
 }
 

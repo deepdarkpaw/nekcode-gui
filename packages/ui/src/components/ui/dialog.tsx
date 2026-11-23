@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { cn } from "../lib/utils.js";
 import { Button } from "./button.js";
 import { XIcon } from "lucide-react";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -37,6 +38,11 @@ function DialogOverlay({
       {...props}
     />
   );
+}
+
+function DialogCloseLabel() {
+  const { intl } = useZCodeIntl();
+  return intl.formatMessage({ id: "common.close" });
 }
 
 // 圆角规范迁移：默认外壳统一 2xl，三个截图/附件预览入口显式保留 xl，内容层级独立计算。
@@ -75,7 +81,9 @@ function DialogContent({
               size="icon-sm"
             >
               <XIcon />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">
+                <DialogCloseLabel />
+              </span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -107,7 +115,9 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button type="button" variant="outline">
+            <DialogCloseLabel />
+          </Button>
         </DialogPrimitive.Close>
       )}
     </div>

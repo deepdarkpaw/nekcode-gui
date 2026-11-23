@@ -335,7 +335,7 @@ export function createRemoteWorkspaceSessionManager(options: {
           requestId,
           sessionId: descriptor.remoteSessionId,
           level: "info",
-          message: `远程 ${descriptor.target.kind} workspace 已连接`,
+          message: { code: "connected", targetKind: descriptor.target.kind },
         });
         pending.resolve(descriptor.remoteSessionId);
       })
@@ -416,7 +416,7 @@ export function createRemoteWorkspaceSessionManager(options: {
       emitConnectionLog(win, {
         sessionId: event.remoteSessionId,
         level: "warn",
-        message: event.error || "远程 workspace 连接已断开",
+        message: { code: "disconnected", detail: event.error },
       });
     }
   }
@@ -512,7 +512,7 @@ export function createRemoteWorkspaceSessionManager(options: {
     emitConnectionLog(win, {
       requestId: resolvedRequestId,
       level: "info",
-      message: `正在通过窗口 Host 连接 ${resolvedTarget.kind} workspace`,
+      message: { code: "connecting", targetKind: resolvedTarget.kind },
     });
     return new Promise<string>((resolve, reject) => {
       pendingByRequestKey.set(key, {

@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { IPlatformService } from "@zcode/shared";
 import {
   appendRemoteConnectionRuntimeLog,
-  normalizeRemoteConnectionLogMessage,
+  formatRemoteConnectionLogMessage,
   type RemoteConnectionLogEntry,
 } from "@/hooks/useRemoteConnectionLogs.js";
 import { resolveRemoteWorkspaceReconnectLogWorkspaceKeys } from "@/root/reconnectingRemoteWorkspaceLogs.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 const RECONNECT_RUNTIME_LOG_LIMIT = 50;
 
@@ -22,6 +23,7 @@ export function useReconnectingRemoteWorkspaceLogs({
   ) => import("@zcode/shared").RemoteWorkspaceSessionEntry["target"] | null;
   resolveWorkspaceRequestIdByKey?: (workspaceKey: string) => string | null;
 }) {
+  const { intl } = useZCodeIntl();
   const reconnectingWorkspaceKeysRef = useRef<string[]>([]);
   const [logsByWorkspaceKey, setLogsByWorkspaceKey] = useState<
     Record<string, RemoteConnectionLogEntry[]>
@@ -43,7 +45,7 @@ export function useReconnectingRemoteWorkspaceLogs({
 
   useEffect(() => {
     const unsubscribe = platform.onRemoteConnectionLog((entry) => {
-      const normalizedMessage = normalizeRemoteConnectionLogMessage(entry.message);
+      const normalizedMessage = formatRemoteConnectionLogMessage(entry.message, intl);
       if (!normalizedMessage) {
         return;
       }
@@ -95,7 +97,7 @@ export function useReconnectingRemoteWorkspaceLogs({
     });
 
     return unsubscribe;
-  }, [platform, resolveWorkspaceRequestIdByKey, resolveWorkspaceTargetByKey]);
+  }, [intl, platform, resolveWorkspaceRequestIdByKey, resolveWorkspaceTargetByKey]);
 
   const resetLogsForWorkspaceKey = useCallback((workspaceKey: string) => {
     setLogsByWorkspaceKey((current) => ({

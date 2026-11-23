@@ -9,6 +9,7 @@
 import { Button } from "../ui/button.js";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip.js";
 import { cn } from "../lib/utils.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { LucideIcon } from "lucide-react";
 import { XIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";
@@ -42,18 +43,21 @@ export const ArtifactClose = ({
   size = "sm",
   variant = "ghost",
   ...props
-}: ArtifactCloseProps) => (
-  <Button
-    className={cn("size-8 p-0 text-muted-foreground hover:text-foreground", className)}
-    size={size}
-    type="button"
-    variant={variant}
-    {...props}
-  >
-    {children ?? <XIcon className="size-4" />}
-    <span className="sr-only">Close</span>
-  </Button>
-);
+}: ArtifactCloseProps) => {
+  const { intl } = useZCodeIntl();
+  return (
+    <Button
+      className={cn("size-8 p-0 text-muted-foreground hover:text-foreground", className)}
+      size={size}
+      type="button"
+      variant={variant}
+      {...props}
+    >
+      {children ?? <XIcon className="size-4" />}
+      <span className="sr-only">{intl.formatMessage({ id: "common.close" })}</span>
+    </Button>
+  );
+};
 
 export type ArtifactTitleProps = HTMLAttributes<HTMLParagraphElement>;
 

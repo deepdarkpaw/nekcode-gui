@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RemoteConnectionRuntimeLog } from "@zcode/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { useZCodeIntl, type IntlInstance } from "@/i18n/IntlProvider.js";
 
 export interface RemoteConnectionLogEntry {
   id: string;
@@ -9,12 +10,34 @@ export interface RemoteConnectionLogEntry {
   timestamp: string;
 }
 
-export function normalizeRemoteConnectionLogMessage(message: string): string {
+function normalizeRemoteConnectionLogMessage(message: string): string {
   return message
     .replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\]\s*/u, "")
     .replace(/^\[pid:\d+\]\s*/u, "")
     .replace(/^(?:\[[^\]]+\]\s*)+/u, "")
     .trim();
+}
+
+const REMOTE_TARGET_LABELS = { ssh: "SSH", wsl: "WSL", docker: "Docker" } as const;
+
+/** Format desktop lifecycle events; transport logs keep their original diagnostic text. */
+export function formatRemoteConnectionLogMessage(
+  message: RemoteConnectionRuntimeLog["message"],
+  intl: IntlInstance,
+): string {
+  if (typeof message === "string") return normalizeRemoteConnectionLogMessage(message);
+  if (message.code === "disconnected") {
+    return message.detail
+      ? intl.formatMessage(
+          { id: "remote.nek.connectionLog.disconnectedWithDetail" },
+          { detail: message.detail },
+        )
+      : intl.formatMessage({ id: "remote.nek.connectionLog.disconnected" });
+  }
+  return intl.formatMessage(
+    { id: `remote.nek.connectionLog.${message.code}` },
+    { kind: REMOTE_TARGET_LABELS[message.targetKind] },
+  );
 }
 
 function isRemoteDownloadProgressLog(message: string): boolean {
@@ -99,6 +122,7 @@ function shouldAcceptRemoteConnectionRuntimeLog(
 
 export function useRemoteConnectionLogs(activeRequestId?: string | null) {
   const platform = usePlatform();
+  const { intl } = useZCodeIntl();
   const activeRequestIdRef = useRef(activeRequestId);
   const [connectionLogs, setConnectionLogs] = useState<RemoteConnectionLogEntry[]>([]);
 
@@ -112,7 +136,7 @@ export function useRemoteConnectionLogs(activeRequestId?: string | null) {
         return;
       }
 
-      const normalizedMessage = normalizeRemoteConnectionLogMessage(entry.message);
+      const normalizedMessage = formatRemoteConnectionLogMessage(entry.message, intl);
       if (!normalizedMessage) {
         return;
       }
@@ -128,7 +152,7 @@ export function useRemoteConnectionLogs(activeRequestId?: string | null) {
     });
 
     return unsubscribe;
-  }, [platform]);
+  }, [intl, platform]);
 
   const resetConnectionLogs = () => {
     setConnectionLogs([]);

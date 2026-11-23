@@ -35,16 +35,22 @@ export function NekHostKeyConfirmDialog(props: NekHostKeyConfirmDialogProps) {
       <DialogContent showCloseButton={false} onKeyDown={controller.onKeyDown} className="max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            连接到 {controller.view.host}
-            {port}
+            {intl.formatMessage(
+              { id: "remote.nek.hostKey.title" },
+              { host: `${controller.view.host}${port}` },
+            )}
           </DialogTitle>
           <DialogDescription>{body}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3 text-ui-sm">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
-            <dt className="text-foreground-subtle">类型</dt>
+            <dt className="text-foreground-subtle">
+              {intl.formatMessage({ id: "remote.nek.hostKey.type" })}
+            </dt>
             <dd className="font-mono">{controller.view.keyType}</dd>
-            <dt className="text-foreground-subtle">指纹</dt>
+            <dt className="text-foreground-subtle">
+              {intl.formatMessage({ id: "remote.nek.hostKey.fingerprint" })}
+            </dt>
             <dd className="break-all font-mono text-ui-base">{controller.view.fingerprint}</dd>
           </dl>
           <RemoteActionError action={controller.actions.trust} />

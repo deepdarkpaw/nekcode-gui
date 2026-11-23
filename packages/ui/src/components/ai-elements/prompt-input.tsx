@@ -6,6 +6,7 @@
  */
 "use client";
 
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { InputGroup, InputGroupAddon } from "../ui/input-group.js";
 import { cn } from "../lib/utils.js";
 import type { FileUIPart, SourceDocumentUIPart } from "ai";
@@ -311,6 +312,8 @@ export const PromptInput = ({
   children,
   ...props
 }: PromptInputProps) => {
+  const { intl } = useZCodeIntl();
+  const uploadLabel = intl.formatMessage({ id: "chat.promptInput.uploadFiles" });
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController();
   const usingProvider = !!controller;
@@ -680,12 +683,12 @@ export const PromptInput = ({
     <>
       <input
         accept={accept}
-        aria-label="Upload files"
+        aria-label={uploadLabel}
         className="hidden"
         multiple={multiple}
         onChange={handleChange}
         ref={inputRef}
-        title="Upload files"
+        title={uploadLabel}
         type="file"
       />
       <form className={cn("w-full", className)} onSubmit={handleSubmit} ref={formRef} {...props}>

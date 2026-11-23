@@ -152,7 +152,10 @@ import {
 } from "./desktopDeepLinkUrl.js";
 import { createRemoteWorkspaceSessionManager } from "./desktopRemoteSessions.js";
 import { resolveCanonicalWslTarget } from "./desktopWslTargetResolver.js";
-import { listRegisteredHostAgentProcessIds } from "./resourceManagerWindow.js";
+import {
+  listRegisteredHostAgentProcessIds,
+  setResourceManagerWindowLocale,
+} from "./resourceManagerWindow.js";
 import { registerPlatformIpcHandlers } from "./desktopMainIpcPlatform.js";
 import { registerRemoteIpcHandlers } from "./desktopMainIpcRemote.js";
 import { registerNekIpcHandlers } from "./desktopMainIpcNek.js";
@@ -1382,6 +1385,7 @@ app.whenReady().then(async () => {
     applyApplicationLocale: async (locale) => {
       currentApplicationLocale = locale;
       rebuildMenu();
+      setResourceManagerWindowLocale(locale);
       for (const win of getApplicationWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send(PlatformChannels.ApplicationLocaleChanged, currentApplicationLocale);

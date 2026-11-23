@@ -1,14 +1,9 @@
 import type { BrowserWindow } from "electron";
-import { PlatformChannels } from "@zcode/shared";
+import { PlatformChannels, type RemoteConnectionRuntimeLog } from "@zcode/shared";
 
 export function emitRemoteConnectionLog(
   win: BrowserWindow,
-  payload: {
-    requestId?: string;
-    sessionId?: string;
-    level: "info" | "warn" | "error";
-    message: string;
-  },
+  payload: Pick<RemoteConnectionRuntimeLog, "requestId" | "sessionId" | "level" | "message">,
 ): void {
   if (win.isDestroyed() || win.webContents.isDestroyed()) return;
   win.webContents.send(PlatformChannels.RemoteConnectionLog, {

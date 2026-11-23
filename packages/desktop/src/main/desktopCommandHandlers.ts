@@ -264,7 +264,7 @@ export async function executeDesktopCommand(options: {
       targetWindow?.webContents.toggleDevTools();
       return;
     case DesktopCommandIds.OpenResourceManager:
-      openResourceManager();
+      openResourceManager(options.currentApplicationLocale);
       return;
     case DesktopCommandIds.ToggleZCodeStdioTapDevProxy:
       toggleZCodeStdioTapDevProxy({

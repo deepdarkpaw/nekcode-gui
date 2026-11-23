@@ -302,10 +302,11 @@ export type MessageBranchPreviousProps = ComponentProps<typeof Button>;
 
 export const MessageBranchPrevious = ({ children, ...props }: MessageBranchPreviousProps) => {
   const { goToPrevious, totalBranches } = useMessageBranch();
+  const { intl } = useZCodeIntl();
 
   return (
     <Button
-      aria-label="Previous branch"
+      aria-label={intl.formatMessage({ id: "chat.message.previousBranch" })}
       disabled={totalBranches <= 1}
       onClick={goToPrevious}
       size="icon-sm"
@@ -322,10 +323,11 @@ export type MessageBranchNextProps = ComponentProps<typeof Button>;
 
 export const MessageBranchNext = ({ children, ...props }: MessageBranchNextProps) => {
   const { goToNext, totalBranches } = useMessageBranch();
+  const { intl } = useZCodeIntl();
 
   return (
     <Button
-      aria-label="Next branch"
+      aria-label={intl.formatMessage({ id: "chat.message.nextBranch" })}
       disabled={totalBranches <= 1}
       onClick={goToNext}
       size="icon-sm"

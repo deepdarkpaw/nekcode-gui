@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { IRemoteInteractionHostApi, RemotePromptResponse } from "@zcode/shared/nek-protocol";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { createDesktopRemoteInteractionApi } from "@/settings/nek/api/ipcClient.js";
@@ -18,11 +18,6 @@ export interface NekRemotePromptHostProps {
   activeElement?: ActiveElementInfo;
   onOpenKnownHosts: (connectionId: string) => Promise<void> | void;
   copyFingerprint?: (fingerprint: string) => Promise<void> | void;
-}
-
-function copyToClipboard(value: string): Promise<void> {
-  if (!navigator.clipboard?.writeText) return Promise.reject(new Error("系统剪贴板不可用"));
-  return navigator.clipboard.writeText(value);
 }
 
 function PromptDialog({
@@ -83,9 +78,18 @@ export function NekRemotePromptHost({
   api: providedApi,
   activeElement,
   onOpenKnownHosts,
-  copyFingerprint = copyToClipboard,
+  copyFingerprint,
 }: NekRemotePromptHostProps) {
   const { intl } = useZCodeIntl();
+  const copyToClipboard = useCallback(
+    async (value: string) => {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error(intl.formatMessage({ id: "remote.nek.prompt.clipboardUnavailable" }));
+      }
+      await navigator.clipboard.writeText(value);
+    },
+    [intl],
+  );
   const api = useMemo(() => providedApi ?? createDesktopRemoteInteractionApi(), [providedApi]);
   const active = useRemotePromptQueueStore(selectActiveRemotePrompt);
   const queueLength = useRemotePromptQueueStore(selectRemotePromptQueueLength);
@@ -112,14 +116,20 @@ export function NekRemotePromptHost({
         </button>
       ) : null}
       {active ? (
-        <div aria-label={queueLength > 0 ? `还有 ${queueLength} 个远程请求` : undefined}>
+        <div
+          aria-label={
+            queueLength > 0
+              ? intl.formatMessage({ id: "remote.nek.prompt.queue" }, { count: queueLength })
+              : undefined
+          }
+        >
           <PromptDialog
             item={active}
             respond={(id, response) => useRemotePromptQueueStore.getState().respond(id, response)}
             removePrompt={useRemotePromptQueueStore.getState().removePrompt}
             activeElement={activeElement}
             onOpenKnownHosts={onOpenKnownHosts}
-            copyFingerprint={copyFingerprint}
+            copyFingerprint={copyFingerprint ?? copyToClipboard}
           />
         </div>
       ) : null}

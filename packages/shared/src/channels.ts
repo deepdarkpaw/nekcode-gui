@@ -18,6 +18,7 @@ import type {
   PrintPageToPdfResult,
   OpenInEditorOptions,
   PostUpdateReleaseNotesPayload,
+  RemoteConnectionRuntimeLog,
   RemoteSessionClosedEvent,
   SSHConfigAliasOption,
   TaskNotificationPayload,
@@ -433,15 +434,7 @@ export interface PlatformChannelMap {
     response: PrintPageToPdfResult;
   };
   [PlatformChannels.RemoteConnectionLog]: {
-    request: {
-      label: string;
-      requestId?: string;
-      sessionId?: string;
-      level: "info" | "warn" | "error";
-      source: string;
-      message: string;
-      timestamp: string;
-    };
+    request: RemoteConnectionRuntimeLog;
     response: void;
   };
   [PlatformChannels.RemoteSessionClosed]: {

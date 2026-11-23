@@ -14,6 +14,7 @@ import {
   InputGroupText,
 } from "../ui/input-group.js";
 import { cn } from "../lib/utils.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 import {
@@ -89,6 +90,8 @@ export const SnippetCopyButton = ({
   className,
   ...props
 }: SnippetCopyButtonProps) => {
+  const { intl } = useZCodeIntl();
+  const copyLabel = intl.formatMessage({ id: "common.copy" });
   const [isCopied, setIsCopied] = useState(false);
   const timeoutRef = useRef<number>(0);
   const { code } = useContext(SnippetContext);
@@ -122,11 +125,11 @@ export const SnippetCopyButton = ({
 
   return (
     <InputGroupButton
-      aria-label="Copy"
+      aria-label={copyLabel}
       className={className}
       onClick={copyToClipboard}
       size="icon-sm"
-      title="Copy"
+      title={copyLabel}
       {...props}
     >
       {children ?? <Icon className="size-3.5" size={14} />}

@@ -3,6 +3,8 @@ import type { UtilityProcess as ElectronUtilityProcess } from "electron";
 import os from "node:os";
 import { join } from "node:path";
 import {
+  desktopMenuMessageIds,
+  getDesktopMenuMessage,
   formatZCodeAgentProcessName,
   formatZCodeGpuProcessName,
   formatZCodeHostProcessName,
@@ -10,6 +12,7 @@ import {
   formatZCodeRendererProcessName,
   formatZCodeUtilityProcessName,
   type HostResourceUsageProcess,
+  type Locale,
   type ResourceUsageProcess,
   type ResourceUsageSnapshot,
   type ZCodeProvider,
@@ -32,7 +35,9 @@ import {
  */
 
 const preloadPath = join(import.meta.dirname, "../preload/resourceManager.cjs");
-const RESOURCE_MANAGER_WINDOW_TITLE = "Resource Manager";
+function getResourceManagerWindowTitle(locale: Locale): string {
+  return getDesktopMenuMessage(locale, desktopMenuMessageIds.helpResourceManager);
+}
 
 /** 系统整机 CPU：两次 os.cpus() 之间 busy / total 的差分 */
 interface SystemCpuMeter {
@@ -230,8 +235,9 @@ export function unregisterHostAgentProcess(label: string, pid: number): void {
  * 打开资源管理器窗口（单例）。
  * 如果已有实例则聚焦，不重复创建。
  */
-export function openResourceManager(): void {
+export function openResourceManager(locale: Locale): void {
   if (instance && !instance.isDestroyed()) {
+    setResourceManagerWindowLocale(locale);
     instance.focus();
     return;
   }
@@ -241,7 +247,7 @@ export function openResourceManager(): void {
     height: 600,
     minWidth: 640,
     minHeight: 420,
-    title: RESOURCE_MANAGER_WINDOW_TITLE,
+    title: getResourceManagerWindowTitle(locale),
     // 不继承主窗口的自定义标题栏，使用系统默认标题栏
     backgroundColor: "#1e1e1e",
     webPreferences: {
@@ -250,6 +256,9 @@ export function openResourceManager(): void {
       nodeIntegration: false,
     },
   });
+
+  // 主进程以当前应用语言控制系统标题栏，不让 HTML 静态 title 覆盖它。
+  instance.on("page-title-updated", (event) => event.preventDefault());
 
   // 与主窗口保持一致：生产包始终加载签名包内的渲染资源。
   if (!app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
@@ -267,6 +276,13 @@ export function openResourceManager(): void {
   instance.webContents.on("destroyed", stopResourceUsageSampling);
 
   logger.info("[resource-manager] window opened");
+}
+
+/** Synchronize the existing native window title when the application language changes. */
+export function setResourceManagerWindowLocale(locale: Locale): void {
+  if (instance && !instance.isDestroyed()) {
+    instance.setTitle(getResourceManagerWindowTitle(locale));
+  }
 }
 
 // ---------------------------------------------------------------------------
