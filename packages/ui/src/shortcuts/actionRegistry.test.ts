@@ -248,6 +248,17 @@ describe("nek action registry", () => {
 });
 
 describe("nek keybindings import", () => {
+  it("SC-7 ignores unavailable actions without reserving their bindings", () => {
+    const effective = resolveEffectiveActionBindings({ "app.tools.expand": ["Alt+i"] });
+    expect(findActionConflicts(effective, win)).toEqual([]);
+    expect(matchActionEvent(event({ key: "i", altKey: true }), effective, "global", win)).toBe(
+      "app.tools.expand",
+    );
+    expect(
+      importNekKeybindings({ "app.editor.external": "ctrl+g", "gui.interaction.focus": [] })
+        .overrides,
+    ).toEqual({});
+  });
   it("converts nek key ids to desktop bindings", () => {
     expect(fromNekKeyId("ctrl+shift+up")).toBe("CmdOrCtrl+Shift+ArrowUp");
     expect(fromNekKeyId("alt+enter")).toBe("Alt+Enter");

@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { KeyboardIcon, RotateCcwIcon, UploadIcon, XIcon } from "lucide-react";
+import { ActionTooltip } from "@/components/ui/action-tooltip.js";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,
@@ -21,12 +22,14 @@ import { cn } from "@/components/lib/utils.js";
 import { useFocusRestore } from "@/hooks/useFocusRestore.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { isImeComposing } from "@/lib/imeComposition.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import { formatActionBindingLabelParts } from "@/shortcuts/actionBinding.js";
 import { setShortcutRecordingActive } from "@/shortcuts/bindings.js";
 import {
   checkActionBindingConflict,
   findActionConflicts,
+  getNekActionDisabledReason,
   importNekKeybindings,
   resolveEffectiveActionBindings,
   type ActionShortcutOverrides,
@@ -73,7 +76,7 @@ function useRecorder(
   const { intl } = useZCodeIntl();
   // 菜单快捷键只在桌面端存在；没有平台（Web / 测试）时只需 renderer 侧短路。
   const platform = useOptionalPlatform();
-  const active = recording !== null;
+  const active = recording !== null && !getNekActionDisabledReason(recording.actionId);
   // 录制期间键盘归录制器独占：nek 动作分发器与旧命令表更早注册在同一 capture 阶段，
   // 菜单快捷键又先于 renderer 生效；不短路的话，录 Ctrl+K / Ctrl+N 会先真的执行原动作。
   useEffect(() => {
@@ -86,9 +89,10 @@ function useRecorder(
     };
   }, [active, platform]);
   useEffect(() => {
-    if (!recording) return undefined;
+    if (!recording || !active) return undefined;
     const effective = resolveEffectiveActionBindings(overrides);
     const handle = (event: KeyboardEvent) => {
+      if (isImeComposing(event)) return;
       event.preventDefault();
       event.stopPropagation();
       const result = recordActionBinding(event);
@@ -124,7 +128,7 @@ function useRecorder(
     };
     window.addEventListener("keydown", handle, true);
     return () => window.removeEventListener("keydown", handle, true);
-  }, [recording, setRecording, overrides, commit, intl]);
+  }, [active, recording, setRecording, overrides, commit, intl]);
 }
 
 function ImportDialog({
@@ -231,9 +235,14 @@ export function ShortcutsPage() {
   useRecorder(recording, setRecording, overrides, commit);
   const effective = resolveEffectiveActionBindings(overrides);
   const conflicted = new Set(findActionConflicts(effective).flatMap((group) => group.actionIds));
-  const resetOne = (id: NekActionId) => {
-    const next: Partial<Record<NekActionId, readonly string[]>> = { ...overrides };
-    delete next[id];
+  const resettableIds = NEK_ACTIONS.filter(
+    (action) => !action.disabledReason && overrides[action.id] !== undefined,
+  ).map((action) => action.id);
+  const reset = (ids: readonly NekActionId[]) => {
+    const next = { ...overrides };
+    for (const id of ids) {
+      if (!getNekActionDisabledReason(id)) delete next[id];
+    }
     commit(next);
   };
 
@@ -249,8 +258,8 @@ export function ShortcutsPage() {
           </Button>
           <Button
             variant="ghost"
-            disabled={Object.keys(overrides).length === 0}
-            onClick={() => commit({})}
+            disabled={resettableIds.length === 0}
+            onClick={() => reset(resettableIds)}
           >
             <RotateCcwIcon aria-hidden="true" />
             {t("settings.nek.shortcuts.resetAll")}
@@ -269,6 +278,10 @@ export function ShortcutsPage() {
                 const bindings = effective[action.id];
                 const isRecording = recording?.actionId === action.id;
                 const overridden = overrides[action.id] !== undefined;
+                const unavailable = action.disabledReason;
+                const disabledReason = unavailable
+                  ? t(unavailable.id, unavailable.values)
+                  : undefined;
                 return (
                   <div
                     key={action.id}
@@ -292,10 +305,9 @@ export function ShortcutsPage() {
                           {t(action.desktopNoteId)}
                         </span>
                       ) : null}
-                      {action.disabledReason ? (
-                        // 当前 GUI 还没有这个动作的目标：直说原因，不让用户以为按键坏了。
-                        <span role="status" className="text-ui-xs text-foreground-subtlest">
-                          {t(action.disabledReason.id)}
+                      {disabledReason ? (
+                        <span role="status" className="text-ui-xs text-foreground-subtle">
+                          {disabledReason}
                         </span>
                       ) : null}
                       {conflicted.has(action.id) ? (
@@ -321,36 +333,47 @@ export function ShortcutsPage() {
                       ) : (
                         bindings.map((binding) => <Keycaps key={binding} binding={binding} />)
                       )}
-                      <Button
-                        variant={isRecording ? "secondary" : "outline"}
-                        size="sm"
-                        aria-pressed={isRecording}
-                        onClick={() =>
-                          setRecording(isRecording ? null : { actionId: action.id, error: null })
-                        }
+                      <ActionTooltip
+                        disabled={Boolean(unavailable)}
+                        disabledReason={disabledReason}
                       >
-                        <KeyboardIcon aria-hidden="true" />
-                        {t(
-                          isRecording
-                            ? "settings.nek.shortcuts.stopRecording"
-                            : "settings.nek.shortcuts.record",
-                        )}
-                      </Button>
+                        <Button
+                          variant={isRecording ? "secondary" : "outline"}
+                          size="sm"
+                          disabled={Boolean(unavailable)}
+                          aria-pressed={isRecording}
+                          onClick={() => {
+                            if (!unavailable)
+                              setRecording(
+                                isRecording ? null : { actionId: action.id, error: null },
+                              );
+                          }}
+                        >
+                          <KeyboardIcon aria-hidden="true" />
+                          {t(
+                            isRecording
+                              ? "settings.nek.shortcuts.stopRecording"
+                              : "settings.nek.shortcuts.record",
+                          )}
+                        </Button>
+                      </ActionTooltip>
                       <IconButton
                         size="icon-sm"
                         label={t("settings.nek.shortcuts.clear")}
-                        disabled={bindings.length === 0}
-                        disabledReason={t("settings.nek.shortcuts.unset")}
-                        onClick={() => commit({ ...overrides, [action.id]: [] })}
+                        disabled={Boolean(unavailable) || bindings.length === 0}
+                        disabledReason={disabledReason ?? t("settings.nek.shortcuts.unset")}
+                        onClick={() => {
+                          if (!unavailable) commit({ ...overrides, [action.id]: [] });
+                        }}
                       >
                         <XIcon />
                       </IconButton>
                       <IconButton
                         size="icon-sm"
                         label={t("ui.setting.resetToDefault")}
-                        disabled={!overridden}
-                        disabledReason={t("settings.nek.shortcuts.isDefault")}
-                        onClick={() => resetOne(action.id)}
+                        disabled={Boolean(unavailable) || !overridden}
+                        disabledReason={disabledReason ?? t("settings.nek.shortcuts.isDefault")}
+                        onClick={() => reset([action.id])}
                       >
                         <RotateCcwIcon />
                       </IconButton>

@@ -103,7 +103,7 @@ export function checkActionBindingConflict(
   }
   const scope = getNekAction(actionId).scope;
   for (const other of NEK_ACTIONS) {
-    if (other.id === actionId || !scopesOverlap(scope, other.scope)) {
+    if (other.disabledReason || other.id === actionId || !scopesOverlap(scope, other.scope)) {
       continue;
     }
     if (effective[other.id].some((bound) => isSameActionBinding(bound, binding, platformInfo))) {
@@ -125,6 +125,7 @@ export function findActionConflicts(
 ): ActionConflictGroup[] {
   const groups: { binding: string; actionIds: NekActionId[] }[] = [];
   for (const action of NEK_ACTIONS) {
+    if (action.disabledReason) continue;
     for (const binding of effective[action.id]) {
       const group = groups.find(
         (candidate) =>
@@ -158,6 +159,7 @@ export function findLegacyCommandConflicts(
 ): LegacyCommandConflict[] {
   const conflicts: LegacyCommandConflict[] = [];
   for (const action of NEK_ACTIONS) {
+    if (action.disabledReason) continue;
     for (const [commandId, bindings] of Object.entries(legacy)) {
       if (commandId === action.legacyCommandId) {
         continue;
@@ -183,7 +185,7 @@ export function matchActionEvent(
   platformInfo?: KeyboardShortcutPlatformInfo,
 ): NekActionId | null {
   for (const action of NEK_ACTIONS) {
-    if (action.scope !== scope) {
+    if (action.disabledReason || action.scope !== scope) {
       continue;
     }
     if (
@@ -276,7 +278,7 @@ export function importNekKeybindings(
   const overrides: Partial<Record<NekActionId, readonly string[]>> = {};
   const unsupported: { actionId: string; keyId: string }[] = [];
   for (const [actionId, value] of Object.entries(config)) {
-    if (!isNekActionId(actionId)) {
+    if (!isNekActionId(actionId) || getNekActionDisabledReason(actionId)) {
       continue;
     }
     const keyIds = typeof value === "string" ? [value] : value;
