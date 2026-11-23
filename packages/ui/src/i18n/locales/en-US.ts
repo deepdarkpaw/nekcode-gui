@@ -150,7 +150,7 @@ const enUS: Record<string, string> = {
   "common.retry": "Retry",
   "common.close": "Close",
   "common.copy": "Copy",
-  "chat.plan.removeMarker": "Turn off Plan mode",
+  "chat.plan.removeMarker": "Turn off planning mode",
   "common.confirm": "Confirm",
   "common.more": "More",
   "common.refresh": "Refresh",
@@ -1389,10 +1389,10 @@ const enUS: Record<string, string> = {
   "chat.changeSummary.rewindDialog.reason.fileReadFailed": "current file unreadable",
   "chat.changeSummary.rewindDialog.reason.unsupportedCheckpoint":
     "old checkpoint cannot be safely restored",
-  "chat.edit.resetConversationAndFiles": "Reset chat + files",
+  "chat.edit.resetConversationAndFiles": "Reset task history and files",
   "chat.edit.resetConversationAndFiles.tooltip": "Reset with files",
   "chat.edit.resetConversationAndFiles.available":
-    "Restore this turn's files, reset the conversation, and send",
+    "Restore this turn's files, reset task history, and send",
   "chat.edit.resetConversationAndFiles.noFiles": "This turn has no reversible file changes",
   "chat.edit.resetConversationAndFiles.reverted": "This turn's file changes are already undone",
   "chat.edit.resetConversationAndFiles.running": "Wait for the current work to stop",
@@ -1400,8 +1400,8 @@ const enUS: Record<string, string> = {
     "File reset is unavailable while compacting or an interaction is pending",
   "chat.edit.workspaceConflict.title": "Files could not be safely reset",
   "chat.edit.workspaceConflict.description":
-    "No conversation history was changed. Review the conflicting or ignored files, then reset only the conversation or cancel.",
-  "chat.edit.workspaceConflict.conversationOnly": "Reset chat only and send",
+    "Task history has not changed. Review the conflicting or ignored files, then reset only the task history or cancel.",
+  "chat.edit.workspaceConflict.conversationOnly": "Reset only task history and send",
   "chat.previewCards.website": "Website",
   "chat.previewCards.htmlWebsite": "Website · HTML",
   "chat.previewCards.markdown": "Document · MD",
@@ -1414,7 +1414,7 @@ const enUS: Record<string, string> = {
   "chat.previewCards.audio": "Audio",
   "chat.previewCards.openExternal": "Open in browser",
   "chat.previewCards.noOpenApps": "No apps found",
-  "chat.turnNavigator.label": "Conversation query map",
+  "chat.turnNavigator.label": "Task query map",
   "chat.turnNavigator.jumpToQuery": "Jump to query {index}",
   "chat.turnNavigator.emptyAssistant": "No assistant text yet",
   "chat.turnNavigator.runningAssistant": "Assistant is still working",
@@ -1450,11 +1450,11 @@ const enUS: Record<string, string> = {
   "settings.interfaceMode.description":
     "Office mode focuses on summaries and results. Coding mode shows commands, output, and code changes.",
   "chat.toolCall.execute.conciseCompleted": "Ran a command",
-  "chat.contextOptimization.started": "Optimizing conversation",
-  "chat.contextOptimization.skipped": "No conversation optimization needed",
-  "chat.contextOptimization.interrupted": "Conversation optimization stopped",
-  "chat.contextOptimization.failed": "Conversation optimization failed",
-  "chat.contextOptimization.completed": "Conversation optimized",
+  "chat.contextOptimization.started": "Optimizing task context",
+  "chat.contextOptimization.skipped": "No task context optimization needed",
+  "chat.contextOptimization.interrupted": "Task context optimization stopped",
+  "chat.contextOptimization.failed": "Task context optimization failed",
+  "chat.contextOptimization.completed": "Task context optimized",
   "settings.themeMode": "App theme",
   "settings.modelProvider.connectionMode.codingPlan": "Individual Plan",
   "settings.modelProvider.connectionMode.startPlan": "Start Plan",
@@ -1473,7 +1473,7 @@ const enUS: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "Leave blank to inherit, e.g. MesloLGS NF, monospace",
   "settings.integratedTerminalShell": "Integrated terminal shell",
   "settings.integratedTerminalShellDescription":
-    "Applies to new sessions only. On Windows, Bash uses this shell; Auto tries Git Bash, then cmd.exe.",
+    "Applies to new terminal sessions only. On Windows, Bash uses this shell; Auto tries Git Bash, then cmd.exe.",
   "settings.integratedTerminalShell.auto": "Auto",
   "settings.httpProxy": "HTTP Proxy",
   "settings.httpProxyDescription":
@@ -1598,7 +1598,7 @@ const enUS: Record<string, string> = {
   "resourceManager.storage.cleanFailed": "Clean failed",
   "resourceManager.storage.confirmTitle": 'Clean "{category}"?',
   "resourceManager.storage.confirmSize": "About {size} will be deleted.",
-  "resourceManager.storage.category.sessionStore": "Sessions & databases",
+  "resourceManager.storage.category.sessionStore": "Task records & databases",
   "resourceManager.storage.category.subagentTranscripts": "Subagent transcripts",
   "resourceManager.storage.category.toolOutputs": "Tool outputs & temporary caches",
   "resourceManager.storage.category.devTraces": "Development traces",
@@ -1609,9 +1609,9 @@ const enUS: Record<string, string> = {
   "resourceManager.storage.category.config": "Settings, credentials & workspace",
   "resourceManager.storage.category.other": "Other",
   "resourceManager.storage.categoryDescription.sessionStore":
-    "Task index, session snapshots and checkpoints; cleaned by deleting or archiving tasks.",
+    "Task index, snapshots, and checkpoints; cleaned by deleting or archiving tasks.",
   "resourceManager.storage.categoryDescription.subagentTranscripts":
-    "Full conversation records of subagent runs (transcript.jsonl), up to tens of MB each; sessions active in the last 24 hours are kept.",
+    "Full subagent run records (transcript.jsonl), up to tens of MB each; records active in the last 24 hours are kept.",
   "resourceManager.storage.categoryDescription.toolOutputs":
     "Archived tool results, full command outputs, image caches and temporary files; not cleanable yet.",
   "resourceManager.storage.categoryDescription.devTraces":
@@ -1658,7 +1658,7 @@ const enUS: Record<string, string> = {
   "onboarding.nek.installLog": "nek installation log",
   "onboarding.account.configuredProviders": "Configured providers",
   "onboarding.workspace.selected": "Selected workspace",
-  "onboarding.dialog.description": "Choose how to start your first session.",
+  "onboarding.dialog.description": "Choose how to start your first task.",
   "onboarding.wizard.label": "Migration guide",
   "onboarding.welcome.eyebrow": "First run setup",
   "onboarding.welcome.title": "Welcome to nekcode",
@@ -1666,7 +1666,7 @@ const enUS: Record<string, string> = {
   "onboarding.welcome.migrate": "Migration Guide",
   "onboarding.welcome.helper":
     "Import existing tool settings now, or skip and continue later from Settings.",
-  "onboarding.step.session": "Sessions",
+  "onboarding.step.session": "Tasks",
   "onboarding.step.skillsImport": "Skills",
   "onboarding.step.mcpImport": "MCP servers",
   "onboarding.step.pluginsImport": "Plugins",
@@ -1674,7 +1674,7 @@ const enUS: Record<string, string> = {
   "onboarding.step.agentsFile": "AGENTS.md",
   "onboarding.step.migration": "Migration",
   "onboarding.stepDescription.session":
-    "Review what we found and choose sessions and workspaces to migrate.",
+    "Review what we found and choose tasks and workspaces to migrate.",
   "onboarding.stepDescription.skillsImport":
     "Import selected skills from external agents before the final migration.",
   "onboarding.stepDescription.mcpImport":
@@ -1687,7 +1687,7 @@ const enUS: Record<string, string> = {
     "Start migration and wait while nekcode imports your selections.",
   "onboarding.sessions.empty":
     "No workspaces yet. Scan local history, then pick workspaces to migrate.",
-  "onboarding.sessions.count": "{count} sessions",
+  "onboarding.sessions.count": "Tasks: {count}",
   "onboarding.sessions.unlimited": "Unlimited",
   "onboarding.sessions.chooseWorkspace": "Choose workspace",
   "onboarding.agentSettings.empty":
@@ -1719,10 +1719,10 @@ const enUS: Record<string, string> = {
   "onboarding.migration.confirmCloseConfirm": "Close anyway",
   "onboarding.finish.done": "Migration complete",
   "onboarding.finish.ready": "Review what was imported before you continue.",
-  "onboarding.finish.currentWorkspace": "Migrating sessions from {workspace}",
+  "onboarding.finish.currentWorkspace": "Migrating tasks from {workspace}",
   "onboarding.finish.currentAgentsFile": "Migrating AGENTS.md",
   "onboarding.finish.currentSettings": "Importing agent settings",
-  "onboarding.finish.summary.sessions": "Session migration",
+  "onboarding.finish.summary.sessions": "Task migration",
   "onboarding.finish.summary.sessions.detail":
     "Imported {imported}, skipped {skipped}, failed {failed}.",
   "onboarding.finish.summary.settings": "Settings import",
@@ -1731,7 +1731,7 @@ const enUS: Record<string, string> = {
     "Imported {imported}, skipped {skipped}, failed {failed}.",
 
   // Chat
-  "chat.empty.title": "Start a Conversation",
+  "chat.empty.title": "Start a task",
   "chat.empty.description": "Start a new task in {workspace}",
   "chat.empty.description.beforeWorkspace": "Start a new task in",
   "chat.empty.description.afterWorkspace": "",
@@ -1773,7 +1773,7 @@ const enUS: Record<string, string> = {
   "chat.empty.createWorkspace.error.createFailed": "Could not create workspace.",
   "chat.emptyResult.title": "No visible output",
   "chat.emptyResult.description":
-    "This task finished without any chat content. It may have been stopped before the model produced a response.",
+    "This task finished without visible output. It may have been stopped before the model produced a response.",
   "chat.placeholder.newTask":
     "Ask nekcode anything, @ to add context, / for commands or capabilities",
   "chat.placeholder.newTaskMobile": "Ask nekcode anything…",
@@ -1792,7 +1792,7 @@ const enUS: Record<string, string> = {
   "chat.promptInput.uploadFiles": "Upload files",
   "chat.message.copy.copied": "Copied",
   "chat.message.copy.requiresFull": "Load full message before copying",
-  "chat.message.fork.derivedFrom": "Forked from conversation",
+  "chat.message.fork.derivedFrom": "Forked from task",
   "chat.hooks.label": "Hooks",
   "chat.hooks.source.user": "User",
   "chat.hooks.source.project": "Workspace",
@@ -1854,7 +1854,7 @@ const enUS: Record<string, string> = {
     "Send or clear the current draft before editing a queued message.",
   "chat.queue.editRestoreFailed": "Couldn't return the queued message to the composer. Try again.",
   "chat.queue.remove": "Remove queued message",
-  "chat.queue.turnSteer.steering": "Steering conversation",
+  "chat.queue.turnSteer.steering": "Steering current task",
   "chat.queue.paused.stopped": "The queue was paused because you stopped the current response",
   "chat.queue.paused.error": "The queue was paused because the response failed",
   "chat.queue.paused.generic": "The queue is paused",
@@ -1865,7 +1865,7 @@ const enUS: Record<string, string> = {
     "You're about to send a message. Clear the {count} previously queued messages?",
   "chat.queue.sendConfirm.clear": "Clear queue",
   "chat.queue.sendConfirm.keep": "Send message",
-  "chat.message.turnSteer.guided": "Conversation steered",
+  "chat.message.turnSteer.guided": "Current task steered",
   "chat.message.turnSteer.pending": "Queued, waiting for the current step to finish",
   "chat.followup.guideCurrent": "Steer current run",
   "chat.followup.sendNow": "Send now",
@@ -1910,7 +1910,7 @@ const enUS: Record<string, string> = {
   "tokenDebug.column.cacheRead": "Cache read",
   "tokenDebug.column.cacheWrite": "Cache write",
   "tokenDebug.column.hitRate": "Hit rate",
-  "tokenDebug.empty": "No main session token records yet",
+  "tokenDebug.empty": "No main task token records yet",
   "developerTools.title": "Developer tools",
   "developerTools.tokenSection": "Token debug",
   "developerTools.networkSection": "Network status",
@@ -1981,7 +1981,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.modelSwitch.stage.fallbackConfigOption": "Falling back to config option API...",
   "chat.toolbar.modelSwitch.stage.applyingCustomProvider": "Applying custom model provider...",
   "chat.toolbar.modelSwitch.stage.restartingRuntime": "Restarting model runtime...",
-  "chat.toolbar.modelSwitch.stage.syncingSession": "Syncing session model...",
+  "chat.toolbar.modelSwitch.stage.syncingSession": "Syncing task model...",
   "chat.toolbar.modelSwitch.stage.persistingWorkspace": "Saving workspace default model...",
   "chat.toolbar.modelSwitch.lockedByRunningTask":
     "A task is running. Finish it before switching model providers.",
@@ -1993,12 +1993,12 @@ const enUS: Record<string, string> = {
   "chat.compact.duplicateBlocked": "A compaction is already running or queued.",
   "chat.modelSwitch.contextWindowGuard.title": "Compress context before switching models",
   "chat.modelSwitch.contextWindowGuard.description":
-    "This conversation has used {used} tokens, which exceeds {modelName}'s available context of {target} tokens after reserving maximum output.\nCompress the current conversation with the current model first. If the compressed context fits, nekcode will continue switching models.",
+    "This task has used {used} tokens, exceeding {modelName}'s available context of {target} tokens after reserving maximum output.\nCompress the context with the current model first. If the compressed context fits, nekcode will continue switching models.",
   "chat.modelSwitch.contextWindowGuard.compress": "Compress",
   "chat.modelSwitch.contextWindowGuard.runningBlocked":
-    "This conversation has used more context than the target model's available context after reserving maximum output. The conversation must be compressed before switching models, but the current task is still running and context compression cannot run now. Wait for the task to finish, then switch models again.",
+    "This task uses more context than the target model can fit after reserving maximum output. Compress the context before switching. Compression cannot run while the task is active; wait for it to finish, then try switching again.",
   "chat.modelSwitch.contextWindowGuard.stillTooLarge":
-    "After compression, the context used by this conversation is still larger than the target model's available context after reserving maximum output. Model switching was canceled.",
+    "After compression, this task still uses more context than the target model can fit after reserving maximum output. Model switching was canceled.",
   "chat.toolbar.mode.label": "Switch mode",
   "chat.toolbar.mode.description":
     "Switch the task's permission and execution mode, such as default, plan, or accept edits.",
@@ -2046,7 +2046,7 @@ const enUS: Record<string, string> = {
   "chat.toolCall.kind.delete": "Delete",
   "chat.toolCall.kind.terminal": "Terminal",
   "chat.toolCall.kind.skill": "Skill",
-  "chat.toolCall.kind.sessionContext": "Session context",
+  "chat.toolCall.kind.sessionContext": "Task context",
   "chat.toolCall.kind.nodeRepl": "Node.js",
   "chat.toolCall.kind.message": "Message",
   "chat.toolCall.kind.response": "Response",
@@ -2200,7 +2200,7 @@ const enUS: Record<string, string> = {
   "chat.toolCall.read.read": "Read",
   "chat.toolCall.sessionContext.reading": "Reading context",
   "chat.toolCall.sessionContext.read": "Read context",
-  "chat.toolCall.sessionContext.title": "Read session context",
+  "chat.toolCall.sessionContext.title": "Read task context",
   "chat.toolCall.sessionContext.query": "Query",
   "chat.toolCall.sessionContext.result": "Result",
   "chat.toolCall.sessionContext.noResult": "No context returned.",
@@ -2213,10 +2213,10 @@ const enUS: Record<string, string> = {
   "chat.toolCall.explore.bucket.file.other": "files",
   "chat.toolCall.explore.bucket.items": "items",
   "chat.toolCall.explore.emptySummary": "0 files",
-  "chat.toolCall.source.subAgent": "SubAgent",
-  "chat.toolCall.agent.label": "SubAgent",
+  "chat.toolCall.source.subAgent": "Subagent",
+  "chat.toolCall.agent.label": "Subagent",
   "chat.toolCall.agent.prompt": "Prompt",
-  "chat.toolCall.agent.fallback": "SubAgent",
+  "chat.toolCall.agent.fallback": "Subagent",
   "chat.toolCall.agent.backgroundProcess": "Background Agent process",
   "chat.toolCall.agent.backgroundLaunch": "Launch",
   "chat.toolCall.agent.backgroundLaunchFailed": "Launch failed",
@@ -2226,11 +2226,11 @@ const enUS: Record<string, string> = {
   "chat.toolCall.agent.backgroundActivityStreaming": "Running in background, syncing output",
   "chat.toolCall.agent.backgroundActivityRunningWaiting":
     "Running in background, waiting for output",
-  "chat.toolCall.agent.backgroundActivityReceived": "SubAgent output received",
-  "chat.toolCall.agent.backgroundActivityWaiting": "Waiting for SubAgent output",
+  "chat.toolCall.agent.backgroundActivityReceived": "Subagent output received",
+  "chat.toolCall.agent.backgroundActivityWaiting": "Waiting for Subagent output",
   "chat.toolCall.agent.outputFile": "Output file",
-  "chat.toolCall.agent.thought": "SubAgent thought",
-  "chat.toolCall.agent.output": "SubAgent output",
+  "chat.toolCall.agent.thought": "Subagent thought",
+  "chat.toolCall.agent.output": "Subagent output",
   "chat.toolCall.agent.output.syncing": "Syncing",
   "chat.toolCall.agent.output.error": "Sync failed: {error}",
   "chat.toolCall.agent.output.recentRows": "Latest {visible} rows / {total} total",
@@ -2282,7 +2282,7 @@ const enUS: Record<string, string> = {
   "chat.attachments.preview.videoUnavailable": "This video is no longer available to preview.",
   "chat.attachments.preview.videoUnsupported":
     "This video can still be sent, but this device cannot preview its format or codec.",
-  "chat.attachments.upload.waitingSession": "Waiting for session",
+  "chat.attachments.upload.waitingSession": "Waiting for the task to be ready",
   "chat.attachments.upload.queued": "Waiting to upload",
   "chat.attachments.upload.uploading": "Uploading {progress}%",
   "chat.attachments.upload.committing": "Finishing upload",
@@ -2290,7 +2290,7 @@ const enUS: Record<string, string> = {
   "chat.attachments.upload.failed": "Upload failed: {message}",
   "chat.attachments.upload.runtimeRestarted":
     "The runtime restarted and invalidated this attachment",
-  "chat.composer.draftRuntimeRebuilding": "Rebuilding session, please wait",
+  "chat.composer.draftRuntimeRebuilding": "Preparing the task again, please wait",
   "chat.composer.sendAfterCompaction": "Send after compaction",
   "chat.composer.compactionSendPending":
     "Waiting for compaction to finish; the message sends automatically afterwards",
@@ -2301,7 +2301,7 @@ const enUS: Record<string, string> = {
   "chat.attachments.upload.retry": "Retry upload",
   "chat.composer.actionMenu": "Add context",
   "chat.composer.insertMentionShortcut": "Use @ to add context",
-  "chat.composer.insertSessionShortcut": "Insert # session",
+  "chat.composer.insertSessionShortcut": "Use # to reference a task",
   "chat.composer.insertSlashShortcut": "Use / for capabilities",
   "chat.composer.insertSkillShortcut": "Use $ for skills",
   "chat.send.description": "Send the current text and attachments.",
@@ -2312,7 +2312,7 @@ const enUS: Record<string, string> = {
   "chat.mention.title": "Mention",
   "chat.mention.back": "Back to categories",
   "chat.mention.selectItem": "Choose an item to insert into the editor",
-  "chat.mention.searchHint": "Type to search plugins, files, or conversations",
+  "chat.mention.searchHint": "Type to search plugins, files, or tasks",
   "chat.mention.searching": "Filtering: {query}",
   "chat.mention.emptyResults": "No matching mention results",
   "chat.mention.category.empty": "No mention categories available",
@@ -2323,20 +2323,20 @@ const enUS: Record<string, string> = {
   "chat.mention.category.results": "{count} matches",
   "chat.mention.files.title": "Files",
   "chat.mention.files.empty": "No matching files",
-  "chat.mention.subagents.title": "Agents",
-  "chat.mention.subagents.empty": "No matching agents",
-  "chat.mention.sessions.title": "Sessions",
-  "chat.mention.sessions.empty": "No recent sessions match",
-  "chat.mention.sessions.searchHint": "Type to search recent sessions",
+  "chat.mention.subagents.title": "Subagents",
+  "chat.mention.subagents.empty": "No matching subagents",
+  "chat.mention.sessions.title": "Tasks",
+  "chat.mention.sessions.empty": "No recent tasks match",
+  "chat.mention.sessions.searchHint": "Type to search recent tasks",
   "chat.slash.title": "Commands and capabilities",
-  "chat.slash.searchHint": "Type to search commands, skills, or agents",
-  "chat.slash.app.side.description": "Open a new side conversation",
+  "chat.slash.searchHint": "Type to search commands, skills, or subagents",
+  "chat.slash.app.side.description": "Open a new side task",
   "chat.slash.planned":
     "/{name} is planned but not yet available in the GUI. Use it in the nek terminal for now.",
   "chat.slash.attachmentsBlocked":
     "Slash commands do not accept attachments or references. Remove them and try again.",
   "chat.slash.actionUnavailable":
-    "This action is unavailable here. Return to the conversation and try again.",
+    "This action is unavailable here. Return to the task and try again.",
   "chat.slash.modelUnavailable":
     "The model list is unavailable. Retry loading it from the model controls.",
   "chat.slash.unknownModel":
@@ -2344,31 +2344,31 @@ const enUS: Record<string, string> = {
   "chat.slash.thinkingNoModel": "Select an available model before setting its thinking level.",
   "chat.slash.unknownThinking":
     "The current model does not support {level}. Supported thinking levels: {levels}.",
-  "chat.slash.needsSession": "Use this command in an existing session.",
+  "chat.slash.needsSession": "Use this command in an existing task.",
   "chat.slash.noAnswer": "There is no assistant answer to copy yet.",
   "chat.slash.copied": "Copied the last assistant answer.",
   "chat.slash.cycleNeedsSession":
-    "The session is not ready. Choose a model from the model menu for now.",
+    "The task is not ready. Choose a model from the model menu for now.",
   "chat.slash.cycleNoOtherModel":
     "There is no other model in the current scope. Adjust the cycling scope in Default Model settings.",
   "chat.slash.cycleFailed": "Could not cycle to the next model: {reason}. Try again.",
   "chat.slash.reloadConfigError":
     "Reload found a configuration error: {reason}. Fix it in Settings and try again.",
   "chat.slash.reloadWarning":
-    "Reloaded {reloaded} sessions; {deferred} will reload after their current turn. Note: {reason}",
+    "Reloaded {reloaded} tasks; {deferred} will reload after their current turn. Note: {reason}",
   "chat.slash.forkHint":
     "Choose ‘Fork from this message’ below the user message you want to branch from.",
   "chat.slash.forkUnavailable":
-    "There is no user message to fork here. Look for the fork action under a user message in an existing session.",
+    "There is no user message to fork here. Look for the fork action under a user message in an existing task.",
   "chat.slash.quitHint": "Close the window to quit.",
   "chat.slash.failed": "/{name} failed: {reason}. Try again.",
-  "chat.slash.renameDescription": "Change the name of this session.",
-  "chat.slash.nameRequired": "Enter a session name.",
-  "chat.slash.session.title": "Session information",
-  "chat.slash.session.description": "Storage location and cumulative usage for this session.",
+  "chat.slash.renameDescription": "Change the name of this task.",
+  "chat.slash.nameRequired": "Enter a task name.",
+  "chat.slash.session.title": "Task information",
+  "chat.slash.session.description": "Storage location and cumulative usage for this task.",
   "chat.slash.session.name": "Name",
-  "chat.slash.session.id": "Session ID",
-  "chat.slash.session.file": "Session file",
+  "chat.slash.session.id": "Task ID",
+  "chat.slash.session.file": "Task file",
   "chat.slash.session.untitled": "Untitled",
   "chat.slash.session.noFile": "No path available",
   "chat.slash.session.statsUnavailable": "Usage data has not arrived yet.",
@@ -2381,29 +2381,28 @@ const enUS: Record<string, string> = {
   "chat.slash.builtin.export": "Export the current task as nek JSONL",
   "chat.slash.builtin.import": "Import a task from nek JSONL",
   "chat.slash.builtin.copy": "Copy the last assistant answer",
-  "chat.slash.builtin.name": "Rename the current session",
-  "chat.slash.builtin.session": "View session information and usage",
+  "chat.slash.builtin.name": "Rename the current task",
+  "chat.slash.builtin.session": "View task information and usage",
   "chat.slash.builtin.hotkeys": "Open keyboard shortcut settings",
   "chat.slash.builtin.fork": "Find the fork action on a user message",
   "chat.slash.builtin.trust": "Open project settings",
   "chat.slash.builtin.login": "Open Accounts to sign in",
   "chat.slash.builtin.logout": "Open Accounts to sign out",
-  "chat.slash.builtin.new": "Start a new session",
-  "chat.slash.builtin.compact": "Manually compact the session context",
-  "chat.slash.builtin.resume": "Search for and open another session",
+  "chat.slash.builtin.new": "Start a new task",
+  "chat.slash.builtin.compact": "Manually compact the task context",
+  "chat.slash.builtin.resume": "Search for and open another task",
   "chat.slash.builtin.reload": "Reload nek configuration for this target",
   "chat.slash.commands.title": "Commands",
   "chat.slash.skills.title": "Skills",
   "chat.slash.skills.empty": "No matching skills",
-  "chat.slash.subagents.title": "Agents",
-  "chat.slash.subagents.empty": "No matching agents",
-  "chat.slash.emptyUnavailable":
-    "No slash commands have been broadcast for the current nek Agent session",
+  "chat.slash.subagents.title": "Subagents",
+  "chat.slash.subagents.empty": "No matching subagents",
+  "chat.slash.emptyUnavailable": "No matching commands",
   "chat.slash.emptyResults": "No matching slash commands",
   // Errors
   "chat.error.connectionLost": "Connection to agent lost",
   "chat.error.recoveryDetails": "Error details",
-  "chat.error.sessionLoadFailed": "Couldn't load this conversation",
+  "chat.error.sessionLoadFailed": "Couldn't load this task",
   "chat.error.processExited": "Agent process exited unexpectedly",
   "chat.error.dismiss": "Dismiss error",
   "chat.error.retry": "Retry",
@@ -2417,7 +2416,7 @@ const enUS: Record<string, string> = {
   "chat.error.copyFailed": "Failed to copy error details: {error}",
   "chat.error.expandDetails": "Show details",
   "chat.error.collapseDetails": "Hide details",
-  "chat.error.noAvailableModel": "Configure a model to start a conversation.",
+  "chat.error.noAvailableModel": "Configure a model to start a task.",
   "chat.error.modelConfigUnreadable":
     "Cannot read the model configuration from nek. Check the nek config and try again.",
   "chat.error.sendFailed": "Failed to send. Try again later.",
@@ -2448,7 +2447,8 @@ const enUS: Record<string, string> = {
   "chat.elicitation.expandDialog": "Expand question dialog",
   "chat.elicitation.collapseDialog": "Collapse question dialog",
   "chat.elicitation.planApproval.approve": "Approve",
-  "chat.elicitation.planApproval.approveDescription": "Exit plan mode and start implementation.",
+  "chat.elicitation.planApproval.approveDescription":
+    "Exit planning mode and start implementation.",
   "chat.askQuestion.asking": "Asking questions",
   "chat.askQuestion.asked": "Asked",
   "chat.askQuestion.questionsCount": "{count} questions",
@@ -2456,7 +2456,7 @@ const enUS: Record<string, string> = {
   "chat.askQuestion.answerUnavailable": "Answer record unavailable",
   "chat.askQuestion.autoContinued": "No answer; continued automatically",
   "mode.label.agent": "Agent",
-  "mode.label.plan": "Plan",
+  "mode.label.plan": "Planning mode",
   "mode.description.agent": "Edit files and run commands to finish the task.",
   "mode.description.plan": "Plan before editing.",
 
@@ -2471,7 +2471,7 @@ const enUS: Record<string, string> = {
   "nek.status.subagent.openPreview": "Preview {description} in side pane",
   "nek.status.subagent.previewTruncated": "{count} earlier rows omitted",
   "nek.status.subagent.historyMore":
-    "{count} more subagents can be opened from links in the conversation",
+    "{count} more subagents can be opened from links in the task history",
   "nek.status.subagent.stopNamed": "Stop {description}",
   "nek.status.subagent.stopTimeout": "The stop request did not respond. Try again",
   "nek.status.subagent.stopAll": "Stop all",
@@ -2525,19 +2525,19 @@ const enUS: Record<string, string> = {
   "nek.interaction.queue.waiting": "Requests waiting: {count}",
   "nek.interaction.plan.implement": "Implement plan",
   "nek.interaction.plan.superseded": "New input replaced the previous plan review.",
-  "nek.interaction.plan.implementFresh": "Implement in a new session",
+  "nek.interaction.plan.implementFresh": "Implement in a new task",
   "nek.interaction.plan.keepPlanning": "Keep refining the plan",
-  "nek.interaction.plan.exit": "Exit Plan mode",
+  "nek.interaction.plan.exit": "Exit planning mode",
   "nek.interaction.plan.later": "Decide later",
   "nek.interaction.plan.openFile": "Open plan file",
   "nek.interaction.plan.revision": "Revision {revision}",
   "nek.interaction.plan.overview": "Overview",
   "nek.interaction.plan.todos": "Todos ({count})",
   "nek.interaction.mode.title": "nek wants to switch modes",
-  "nek.interaction.mode.approvePlan": "Switch to Plan mode",
+  "nek.interaction.mode.approvePlan": "Switch to planning mode",
   "nek.interaction.mode.approveAgent": "Switch to Agent mode",
   "nek.interaction.mode.keepAgent": "Stay in Agent mode",
-  "nek.interaction.mode.keepPlan": "Stay in Plan mode",
+  "nek.interaction.mode.keepPlan": "Stay in planning mode",
   "nek.interaction.dialog.cancel": "Cancel",
   "nek.interaction.dialog.continue": "Continue",
   "nek.interaction.dialog.submit": "Submit",
@@ -2551,9 +2551,9 @@ const enUS: Record<string, string> = {
   "nek.interaction.projectTrust.resources": "Resources that require trust",
   "nek.interaction.projectTrust.option.trust": "Trust",
   "nek.interaction.projectTrust.option.trust-parent": "Trust parent folder ({path})",
-  "nek.interaction.projectTrust.option.trust-session": "Trust for this session only",
+  "nek.interaction.projectTrust.option.trust-session": "Trust just this once",
   "nek.interaction.projectTrust.option.deny": "Do not trust",
-  "nek.interaction.projectTrust.option.deny-session": "Do not trust for this session only",
+  "nek.interaction.projectTrust.option.deny-session": "Do not trust this time",
   "nek.interaction.dialog.noResults": "No matching options",
   "nek.interaction.dialog.input": "Your answer",
   "nek.interaction.dialog.seconds": "{seconds}s",
@@ -2585,7 +2585,7 @@ const enUS: Record<string, string> = {
   "planTool.panel.open": "Open plan in side pane",
   "planTool.panel.viewFull": "View full plan",
   "planTool.panel.syncing": "Syncing plan…",
-  "planTool.guidance.enterMode": "Entered plan mode",
+  "planTool.guidance.enterMode": "Entered planning mode",
   "chat.permission.switchMode.placeholder": "Implementation plan",
 
   // nek Agent
@@ -2613,7 +2613,7 @@ const enUS: Record<string, string> = {
   // Debug info bar
   "debugInfo.taskId": "Task ID",
   "debugInfo.traceId": "Trace ID",
-  "debugInfo.sessionId": "Session ID",
+  "debugInfo.sessionId": "Task ID",
   "debugInfo.provider": "Provider",
   "debugInfo.copied": "Copied",
 
@@ -2667,7 +2667,7 @@ const enUS: Record<string, string> = {
   "modelSelection.invalidated.reselect":
     "The previous model selection is no longer available. Choose a model again.",
   "workspace.openSessionFailed":
-    "The target project is not connected, so this session cannot be opened.",
+    "The target project is not connected, so this task cannot be opened.",
   // 交互原语（components/ui、shortcuts/nekActions）
   "ui.relativeTime.justNow": "Just now",
   "ui.relativeTime.minutesAgo": "{count} min ago",
@@ -2692,7 +2692,7 @@ const enUS: Record<string, string> = {
   "shortcuts.action.app.message.followUp": "Queue as follow-up",
   "shortcuts.action.app.interrupt": "Stop / close",
   "shortcuts.action.app.message.dequeue": "Restore queued messages",
-  "shortcuts.action.nek.plan.toggle": "Toggle Agent / Plan",
+  "shortcuts.action.nek.plan.toggle": "Switch between Agent and planning mode",
   "shortcuts.action.app.thinking.cycle": "Cycle thinking level",
   "shortcuts.action.app.model.select": "Select model",
   "shortcuts.action.app.model.cycleForward": "Cycle to the next model",
@@ -2702,12 +2702,12 @@ const enUS: Record<string, string> = {
     "The desktop keeps Ctrl/⌘+X for Cut. Add Shift to copy the last answer.",
   "shortcuts.action.app.tools.expand": "Expand / collapse all tool output",
   "shortcuts.action.app.thinking.toggle": "Expand / collapse all thinking",
-  "shortcuts.action.tui.altScreen.search": "Search conversation",
+  "shortcuts.action.tui.altScreen.search": "Search within task",
   "shortcuts.action.tui.altScreen.previousPrompt": "Previous prompt",
   "shortcuts.action.tui.altScreen.nextPrompt": "Next prompt",
   "shortcuts.action.tui.altScreen.top": "Jump to top",
   "shortcuts.action.tui.altScreen.bottom": "Jump to bottom and follow",
-  "shortcuts.action.app.session.new": "New session",
+  "shortcuts.action.app.session.new": "New task",
   "shortcuts.action.gui.settings.open": "Open settings",
   "shortcuts.action.app.editor.external": "Open large editor",
   "shortcuts.action.gui.commandPalette.open": "Command palette",
@@ -3092,7 +3092,7 @@ const enUS: Record<string, string> = {
     "The default level must be one of the enabled levels",
   "settings.nek.modelEditor.error.cost": "Prices must be non-negative numbers",
   "settings.nek.defaultModel.pageDescription":
-    "The model and thinking level for new sessions, and the set of models to cycle through.",
+    "The model and thinking level for new tasks, and the set of models to cycle through.",
   "settings.nek.defaultModel.title": "Default model",
   "settings.nek.defaultModel.model": "Default model",
   "settings.nek.defaultModel.modelHint": "Writes defaultProvider and defaultModel.",
@@ -3121,7 +3121,7 @@ const enUS: Record<string, string> = {
   "settings.nek.scoped.useAllHint": "To clear the last pattern, choose Use all models.",
   "settings.nek.scoped.readConflict": "The model list changed during the read. Please retry.",
   "settings.nek.compaction.pageDescription":
-    "When the context fills up, nek summarizes older conversation.",
+    "When the context fills up, nek summarizes older messages.",
   "settings.nek.compaction.title": "Auto compaction",
   "settings.nek.compaction.enabled": "Auto compaction",
   "settings.nek.compaction.enabledHint": "When off, run /compact manually.",
@@ -3135,11 +3135,11 @@ const enUS: Record<string, string> = {
   "settings.nek.compaction.reserveHint": "Room kept for the reply and the compaction itself.",
   "settings.nek.compaction.keepRecent": "Keep recent tokens",
   "settings.nek.compaction.keepRecentHint":
-    "How much recent conversation stays verbatim after compaction.",
+    "How much recent messages stays verbatim after compaction.",
   "settings.nek.compaction.trigger":
-    "Main model context is {context}: compaction triggers above {context} − {reserve} = {threshold}; about {keep} of recent conversation stays verbatim.",
+    "Main model context is {context}: compaction triggers above {context} − {reserve} = {threshold}; about {keep} of recent messages stays verbatim.",
   "settings.nek.compaction.triggerGeneric":
-    "Compaction triggers above “context window − {reserve}”; about {keep} of recent conversation stays verbatim.",
+    "Compaction triggers above “context window − {reserve}”; about {keep} of recent messages stays verbatim.",
   "settings.nek.compaction.issue.modelMissing":
     "Compaction model {model} does not exist; nek will fail when compacting (it does not fall back to the main model).",
   "settings.nek.compaction.issue.thinkingUnsupported":
@@ -3147,7 +3147,7 @@ const enUS: Record<string, string> = {
   "settings.nek.compaction.issue.reserveExceedsContext":
     "Reserve {reserve} is not smaller than the compaction model's context {context}; compaction cannot run.",
   "settings.nek.compaction.issue.smallerContext":
-    "Compaction model {model} has a smaller context ({context}) than the main model ({main}); long conversations may not fit.",
+    "Compaction model {model} has a smaller context ({context}) than the main model ({main}); long task histories may not fit.",
   "settings.nek.compaction.overrides": "Per-model overrides",
   "settings.nek.compaction.overridesHint":
     "Set reserve / keep amounts for specific main models (modelOverrides).",
@@ -3184,7 +3184,7 @@ const enUS: Record<string, string> = {
   "settings.nek.branchSummary.skipPromptHint":
     "Do not ask whether to summarize when switching branches.",
   "settings.nek.tools.pageDescription":
-    "Built-in tools enabled for new sessions, shell, and web search.",
+    "Built-in tools enabled for new tasks, shell, and web search.",
   "settings.nek.tools.builtin": "Built-in tools",
   "settings.nek.tools.builtinHint":
     "Keeps the existing defaultTools format: changes to the defaults or an explicit list. An empty list enables no built-in tools.",
@@ -3215,7 +3215,7 @@ const enUS: Record<string, string> = {
   "settings.nek.web.title": "Web search",
   "settings.nek.web.description": "Search with Tavily or Exa through nek on the target machine.",
   "settings.nek.web.enabled": "Enable web search",
-  "settings.nek.web.enabledHint": "Controls the built-in web_search tool for new sessions.",
+  "settings.nek.web.enabledHint": "Controls the built-in web_search tool for new tasks.",
   "settings.nek.web.provider": "Search provider",
   "settings.nek.web.providerHint":
     "Tavily is the default. Clear the API key and custom endpoint before switching providers.",
@@ -3245,12 +3245,11 @@ const enUS: Record<string, string> = {
   "settings.nek.web.testDisabled": "Web search is off",
   "settings.nek.web.testOk": "Search succeeded: {count} results in {ms} ms",
   "settings.nek.mcp.pageDescription":
-    "MCP servers in mcp.json. Status comes from running sessions on the target host.",
+    "MCP servers in mcp.json. Status comes from running tasks on the target host.",
   "settings.nek.mcp.add": "Add server",
   "settings.nek.mcp.importJson": "Import from JSON",
   "settings.nek.mcp.emptyTitle": "No MCP servers yet",
-  "settings.nek.mcp.noSession":
-    "No running session, so connection status and tools are unavailable.",
+  "settings.nek.mcp.noSession": "No running task, so connection status and tools are unavailable.",
   "settings.nek.mcp.projectTitle": "Project overrides",
   "settings.nek.mcp.projectHint":
     "Overrides in {cwd} can only change enabled, exposure and per-tool exposure.",
@@ -3284,7 +3283,7 @@ const enUS: Record<string, string> = {
   "settings.nek.mcp.testOk": "Connected: {count} tools in {ms} ms",
   "settings.nek.mcp.reconnect": "Reconnect",
   "settings.nek.mcp.reconnectDisabled": "The server is disabled",
-  "settings.nek.mcp.notRunningHint": "No running session",
+  "settings.nek.mcp.notRunningHint": "No running task",
   "settings.nek.mcp.login": "Sign in (OAuth)",
   "settings.nek.mcp.logout": "Sign out (OAuth)",
   "settings.nek.mcp.edit": "Edit server",
@@ -3368,10 +3367,10 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.yamlTitle": "nek.yaml",
   "settings.nek.agent.planDir": "Plans directory",
   "settings.nek.agent.planDirHint":
-    "Where Plan mode writes plan files (relative to the workspace).",
+    "Where planning mode writes plan files (relative to the workspace).",
   "settings.nek.agent.planShortcut": "Mode toggle shortcut",
   "settings.nek.agent.planShortcutHint":
-    "Key that toggles Agent / Plan in terminal nek, e.g. alt+m.",
+    "Key for switching between Agent and planning mode in terminal nek, e.g. alt+m.",
   "settings.nek.agent.planShortcutInvalid": "Use a format like alt+m or ctrl+shift+p",
   "settings.nek.agent.settleReminder": "Todo settle reminder",
   "settings.nek.agent.settleReminderHint":
@@ -3411,7 +3410,7 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.description": "Description",
   "settings.nek.agent.preset.model": "Model",
   "settings.nek.agent.preset.thinking": "Thinking level",
-  "settings.nek.agent.preset.inherit": "Inherit from parent",
+  "settings.nek.agent.preset.inherit": "Inherit from parent task",
   "settings.nek.agent.preset.contextWindow": "Context window (context_window)",
   "settings.nek.agent.preset.tools": "Tools (tools)",
   "settings.nek.agent.preset.toolsHint":
@@ -3421,9 +3420,10 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.readonlyHint": "Cannot modify files.",
   "settings.nek.agent.preset.isBackground": "Background (is_background)",
   "settings.nek.agent.preset.isBackgroundHint":
-    "Does not block the parent session; notifies when done.",
+    "Does not block the parent task; notifies when done.",
   "settings.nek.agent.preset.autonomous": "Autonomous (autonomous)",
-  "settings.nek.agent.preset.autonomousHint": "Runs continuously without parent confirmation.",
+  "settings.nek.agent.preset.autonomousHint":
+    "Runs continuously without confirmation from the parent task.",
   "settings.nek.agent.preset.instructions": "Instructions (body)",
   "settings.nek.agent.preset.error.nameRequired": "Enter a name",
   "settings.nek.agent.preset.error.nameFormat":
@@ -3494,7 +3494,7 @@ const enUS: Record<string, string> = {
   "settings.nek.resources.deleteTitle": "Delete {name}?",
   "settings.nek.resources.deleteHint": "Permanently deletes {path}. Other files are not removed.",
   "settings.nek.resources.reloadDeferred":
-    "Configuration saved. Running sessions will reload after the current turn.",
+    "Configuration saved. Running tasks will reload after the current turn.",
   "settings.nek.instructions.save": "Save",
   "settings.nek.instructions.revert": "Revert",
   "settings.nek.instructions.unsaved": "Unsaved changes",
@@ -3510,16 +3510,16 @@ const enUS: Record<string, string> = {
     "Open a workspace to manage its trust and project configuration here.",
   "settings.nek.project.trust": "Project trust",
   "settings.nek.project.trustHint":
-    "Project trust controls whether new sessions load project configuration. Open sessions keep their startup decision.",
+    "Project trust controls whether new tasks load project configuration. Open tasks keep their startup decision.",
   "settings.nek.project.trustState.recordTrusted": "Trusted (saved decision)",
   "settings.nek.project.trustState.recordUntrusted": "Not trusted (saved decision)",
   "settings.nek.project.trustState.policyTrusted": "Trusted (default policy: Always trust)",
   "settings.nek.project.trustState.policyUntrusted": "Not trusted (default policy: Never trust)",
   "settings.nek.project.trustState.noResources":
     "No decision needed (no project configuration requires trust)",
-  "settings.nek.project.trustState.ask": "Will ask when a new session starts",
+  "settings.nek.project.trustState.ask": "Will ask when a new task starts",
   "settings.nek.project.inactiveResources":
-    "You can still edit project MCP and subagent files, but untrusted sessions will not load them.",
+    "You can still edit project MCP and subagent files, but untrusted tasks will not load them.",
   "settings.nek.project.policy.ask": "Ask",
   "settings.nek.project.policy.always": "Always trust",
   "settings.nek.project.policy.never": "Never trust",
@@ -3662,7 +3662,7 @@ const enUS: Record<string, string> = {
   "settings.nek.appearance.sendKeyHint": "The other combination inserts a new line.",
   "settings.nek.appearance.sendKey.enter": "Enter",
   "settings.nek.appearance.sendKey.ctrlEnter": "Ctrl+Enter",
-  "settings.nek.appearance.conversation": "Conversation",
+  "settings.nek.appearance.conversation": "Task content",
   "settings.nek.appearance.thinkingCollapsed": "Collapse thinking by default",
   "settings.nek.appearance.thinkingCollapsedHint":
     "Shows a one-line preview while streaming and collapses afterwards; the “Expand / collapse all thinking” shortcut toggles all.",
@@ -3742,12 +3742,12 @@ const enUS: Record<string, string> = {
   "settings.nek.advanced.rawJsonSave": "Save JSON",
   "settings.nek.advanced.maintenance": "Maintenance",
   "settings.nek.advanced.configDir": "Configuration folder",
-  "settings.nek.advanced.reload": "Reload running sessions",
+  "settings.nek.advanced.reload": "Reload running tasks",
   "settings.nek.advanced.reloadHint":
-    "Sessions reload automatically after writes; running turns pick changes up when they finish.",
+    "Tasks reload automatically after a configuration write. Running tasks pick up changes after the current turn.",
   "settings.nek.advanced.reloadRun": "Reload",
   "settings.nek.advanced.reloadResult":
-    "Reloaded {reloaded} sessions; {deferred} will apply after the current turn",
+    "Reloaded {reloaded} tasks; {deferred} will reload after the current turn",
   "settings.nek.reload.failed": "{count} nek processes could not reload: {reason}",
   "settings.nek.reload.retry": "Retry",
   "settings.nek.reload.recovered": "All nek processes reloaded",
