@@ -2308,6 +2308,11 @@ const enUS: Record<string, string> = {
   "chat.slash.needsSession": "Use this command in an existing session.",
   "chat.slash.noAnswer": "There is no assistant answer to copy yet.",
   "chat.slash.copied": "Copied the last assistant answer.",
+  "chat.slash.cycleNeedsSession":
+    "The session is not ready. Choose a model from the model menu for now.",
+  "chat.slash.cycleNoOtherModel":
+    "There is no other model in the current scope. Adjust the cycling scope in Default Model settings.",
+  "chat.slash.cycleFailed": "Could not cycle to the next model: {reason}. Try again.",
   "chat.slash.reloadConfigError":
     "Reload found a configuration error: {reason}. Fix it in Settings and try again.",
   "chat.slash.reloadWarning":
@@ -2515,6 +2520,8 @@ const enUS: Record<string, string> = {
   "ui.fold.expand": "Expand",
   "ui.fold.collapse": "Collapse",
   "ui.action.unavailable.externalEditor": "The external editor is not connected in this GUI yet",
+  "ui.action.unavailable.cycleModelBackward":
+    "The current nek RPC only cycles forward. To select the previous model, open the model menu.",
   "ui.action.unavailable.interactionFocus":
     "Pending requests keep their own focus target; shortcut focusing is not supported yet",
   "todo.panel.title": "Todo",
@@ -2645,6 +2652,11 @@ const enUS: Record<string, string> = {
   "shortcuts.action.nek.plan.toggle": "Toggle Agent / Plan",
   "shortcuts.action.app.thinking.cycle": "Cycle thinking level",
   "shortcuts.action.app.model.select": "Select model",
+  "shortcuts.action.app.model.cycleForward": "Cycle to the next model",
+  "shortcuts.action.app.model.cycleBackward": "Cycle to the previous model",
+  "shortcuts.action.app.message.copy": "Copy the last assistant answer",
+  "shortcuts.action.note.copyAnswer":
+    "The desktop keeps Ctrl/⌘+X for Cut. Add Shift to copy the last answer.",
   "shortcuts.action.app.tools.expand": "Expand / collapse all tool output",
   "shortcuts.action.app.thinking.toggle": "Expand / collapse all thinking",
   "shortcuts.action.tui.altScreen.search": "Search conversation",

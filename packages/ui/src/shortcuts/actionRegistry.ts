@@ -35,17 +35,23 @@ export function getNekActionDisabledReason(
 /** 合并默认绑定与用户覆盖。未知动作 id 被忽略。 */
 export function resolveEffectiveActionBindings(
   overrides: Readonly<Record<string, readonly string[] | undefined>> = {},
+  platformInfo: KeyboardShortcutPlatformInfo = typeof navigator === "undefined" ? {} : navigator,
 ): EffectiveActionBindings {
+  const windows =
+    /^Win/i.test(platformInfo.platform ?? "") ||
+    (!platformInfo.platform && /\bWindows\b/i.test(platformInfo.userAgent ?? ""));
   const entries = NEK_ACTIONS.map((action) => {
+    const defaults =
+      (windows ? action.windowsDefaultBindings : undefined) ?? action.defaultBindings;
     const override = overrides[action.id];
     if (override === undefined) {
-      return [action.id, action.defaultBindings] as const;
+      return [action.id, defaults] as const;
     }
     if (override.length === 0) {
       return [action.id, override] as const;
     }
     const valid = override.filter(isValidActionBinding);
-    return [action.id, valid.length > 0 ? valid : action.defaultBindings] as const;
+    return [action.id, valid.length > 0 ? valid : defaults] as const;
   });
   return Object.fromEntries(entries) as EffectiveActionBindings;
 }

@@ -187,6 +187,7 @@ import {
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
 import { dispatchNekAction, useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { useBuiltinSlashCommands } from "@/v4/useBuiltinSlashCommands.js";
+import { useNekModelCycleShortcut } from "@/v4/useNekModelCycleShortcut.js";
 import { BuiltinSlashSessionDialogs } from "@/v4/BuiltinSlashSessionDialogs.js";
 import type { BuiltinSlashDialog, BuiltinSlashPicker } from "@/v4/builtinSlashActions.js";
 import { useFoldStore } from "@/lib/foldState.js";
@@ -2847,6 +2848,13 @@ export function SessionPane({
   // 每个 handler 返回「本次是否真的执行了目标」，没执行时派发器不吞按键。
   const queueHasItems = (snapshot?.queue.items.length ?? 0) > 0;
   const timelineRendered = !(sessionId !== null && state.status === "error");
+  const modelCycle = useNekModelCycleShortcut({
+    sessionId: effectiveSessionId,
+    sendCommand,
+    readSelection: () => composerDraftRef.current.modelSelection,
+    selectModel: handleDraftSelectModel,
+    selectThinking: handleDraftSelectThought,
+  });
   useNekActionHandlers(
     {
       "app.interrupt": {
@@ -2880,6 +2888,18 @@ export function SessionPane({
           return true;
         },
       },
+      "app.model.cycleForward": {
+        enabled: !sessionLocked,
+        disabledReason: sessionLocked ? { id: "nek.conversation.readOnlyComposer" } : undefined,
+        run: () => {
+          if (composerDraftStateRef.current.busy || modelCycle.pending) {
+            toast(intl.formatMessage({ id: "ui.action.busy" }), { variant: "info" });
+          } else {
+            void modelCycle.run();
+          }
+        },
+      },
+      "app.message.copy": { run: () => { void runBuiltinSlash({ name: "copy", args: "" }); } },
       "app.message.dequeue": {
         // nek 一次取回全部排队消息；GUI 的输入框只有一份草稿，逐条取回（每次最早一条）。
         enabled: !readOnly && queueHasItems,
@@ -3502,7 +3522,7 @@ export function SessionPane({
       draftConfig={draftConfig}
       composerDraft={composerDraft}
       replaceComposerDraft={replaceComposerDraft}
-      submissionReady={composerSubmissionReady && !showLiveHistoryNotice}
+      submissionReady={composerSubmissionReady && !showLiveHistoryNotice && !modelCycle.pending}
       updateComposerContent={updateComposerContent}
       createSubmissionFromComposer={createSubmissionFromComposer}
       contextHeader={isDraft ? draftComposerHeader : undefined}
@@ -3634,7 +3654,7 @@ export function SessionPane({
         <BuiltinSlashSessionDialogs
           kind={slashDialog.kind}
           sessionId={sessionId}
-          title={snapshot?.sessionId === sessionId ? snapshot.meta.title : ""}
+          title={snapshot?.sessionId === sessionId ? (snapshot.meta.title ?? "") : ""}
           close={() => setSlashDialog((current) => current?.scope === slashScope ? null : current)}
           rename={renameFromSlash}
         />

@@ -213,6 +213,8 @@ function fakeProcess(
         data = { commands: [] };
       } else if (command.type === "get_last_assistant_text") {
         data = { text: "last assistant answer" };
+      } else if (command.type === "cycle_model") {
+        data = { model: { provider: "fake", id: "next" }, thinkingLevel: "low", isScoped: true };
       } else if (command.type === "prompt") {
         data = { disposition: "started" };
       }
@@ -493,6 +495,45 @@ test("SC-3 forwards compact instructions and reads last assistant text as dedica
       1,
     );
     assert(!session.commands.some((command) => command.type === "prompt"));
+  } finally {
+    await adapter.dispose();
+  }
+});
+
+test("SC-6 cycles using the directionless nek RPC and projects its accepted model and thinking level", async () => {
+  const control = fakeProcess("control");
+  const session = fakeProcess("session");
+  const adapter = createNekAgentServiceAdapter({
+    guiInfo,
+    askProjectTrust: () => true,
+    createControlProcess: () => control.process,
+    createSessionProcess: () => session.process,
+  });
+  try {
+    const target = { workspacePath: "/workspace" };
+    const { sessionId } = await adapter.createNekSession(target);
+    const ack = await adapter.sendNekConversationCommandV4({
+      target,
+      envelope: {
+        clientId: "test",
+        issuedAt: Date.now(),
+        sessionId,
+        commandId: "cycle",
+        type: "cycleNekModel",
+        payload: {},
+      },
+    });
+    assert.deepEqual(ack.result, {
+      type: "cycleNekModel",
+      selection: {
+        providerId: "fake",
+        modelId: "next",
+        options: { reasoningLevel: "low" },
+      },
+    });
+    const calls = session.commands.filter((command) => command.type === "cycle_model");
+    assert.equal(calls.length, 1);
+    assert.deepEqual(Object.keys(calls[0]!).sort(), ["id", "type"]);
   } finally {
     await adapter.dispose();
   }

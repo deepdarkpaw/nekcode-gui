@@ -2912,6 +2912,7 @@ export const diagnosticModules: readonly string[] = [
   "packages/ui/src/v4/useConversationProjection.ts",
   "packages/ui/src/v4/useConversationShareSelectionOutsideDismiss.ts",
   "packages/ui/src/v4/useConversationTimelineFind.ts",
+  "packages/ui/src/v4/useNekModelCycleShortcut.ts",
   "packages/ui/src/v4/usePaneSessionPersistence.ts",
   "packages/ui/src/v4/usePendingCommandRecovery.ts",
   "packages/ui/src/v4/useWorkspaceSessionsIndexItems.ts",

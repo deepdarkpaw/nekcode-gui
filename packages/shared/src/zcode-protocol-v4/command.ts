@@ -113,6 +113,7 @@ export const commandPayloadSchemas = {
   compact: z.object({ instructions: z.string().optional() }),
   // nek returns the last assistant's complete text, independent of the current history window.
   readLastAssistantText: z.object({}).strict(),
+  cycleNekModel: z.object({}).strict(),
   // nek forks before a persisted user message and returns its text to the editor.
   forkUserMessage: z.object({ target: conversationRowTargetSchema }),
   executeNekPlan: nekPlanRevisionSchema.extend({ fresh: z.boolean() }).strict(),
@@ -292,6 +293,7 @@ export const commandResultSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("executeNekPlan"), sessionId: z.string().optional() }),
   z.object({ type: z.literal("readLastAssistantText"), text: z.string().nullable() }),
+  z.object({ type: z.literal("cycleNekModel"), selection: modelSelectionSchema.nullable() }),
   z.object({
     type: z.enum(["createSession", "createSelectionSideSession"]),
     sessionId: z.string(),

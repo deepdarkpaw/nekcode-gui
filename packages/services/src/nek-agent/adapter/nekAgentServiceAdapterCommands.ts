@@ -114,6 +114,19 @@ export async function sendConversationCommand(
         text: text ?? null,
       });
     }
+    case "cycleNekModel": {
+      const result = await context.service.cycleModel(binding.sessionKey);
+      return acceptedCommand(envelope, revision, {
+        type: "cycleNekModel",
+        selection: result
+          ? {
+              providerId: result.model.provider,
+              modelId: result.model.id,
+              options: { reasoningLevel: result.thinkingLevel },
+            }
+          : null,
+      });
+    }
     case "switchModelConfig":
       await context.service.setModel({
         sessionKey: binding.sessionKey,

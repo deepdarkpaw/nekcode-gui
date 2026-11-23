@@ -151,6 +151,7 @@ export function dispatchNekAction(
   actionId: NekActionId,
   event: KeyboardEvent | null = null,
 ): boolean {
+  if (getNekAction(actionId).disabledReason) return false;
   const handler = currentHandler(actionId);
   if (!handler || handler.enabled === false) return false;
   return handler.run({ event }) !== false;

@@ -15,6 +15,7 @@ afterEach(() => cleanup());
 
 describe("ShortcutsPage recording", () => {
   it.each([
+    ["app.model.cycleBackward", "当前 nek RPC 仅支持向前切换。要选择上一个模型，请打开模型菜单。"],
     ["app.editor.external", "当前 GUI 尚未接通外部编辑器"],
     ["gui.interaction.focus", "待回答请求的焦点由交互卡片自己维护，暂不支持快捷键聚焦"],
   ])("SC-7 leaves recording and clearing disabled for %s and explains why", (actionId, reason) => {

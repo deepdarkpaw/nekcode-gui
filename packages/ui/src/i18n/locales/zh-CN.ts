@@ -2170,6 +2170,9 @@ const zhCN: Record<string, string> = {
   "chat.slash.needsSession": "请在已有会话中使用此命令。",
   "chat.slash.noAnswer": "还没有可复制的助手回答。",
   "chat.slash.copied": "已复制上一条助手回答。",
+  "chat.slash.cycleNeedsSession": "会话尚未就绪。可先从模型菜单选择模型。",
+  "chat.slash.cycleNoOtherModel": "当前循环范围没有其他可用模型。可在默认模型设置中调整循环范围。",
+  "chat.slash.cycleFailed": "无法切换到下一个模型：{reason}。请重试。",
   "chat.slash.reloadConfigError": "重新载入时发现配置错误：{reason}。请在设置中修正后重试。",
   "chat.slash.reloadWarning":
     "已重新载入 {reloaded} 个会话，{deferred} 个将于本轮结束后生效。提示：{reason}",
@@ -2374,6 +2377,8 @@ const zhCN: Record<string, string> = {
   "ui.fold.expand": "展开",
   "ui.fold.collapse": "收起",
   "ui.action.unavailable.externalEditor": "当前 GUI 尚未接通外部编辑器",
+  "ui.action.unavailable.cycleModelBackward":
+    "当前 nek RPC 仅支持向前切换。要选择上一个模型，请打开模型菜单。",
   "ui.action.unavailable.interactionFocus":
     "待回答请求的焦点由交互卡片自己维护，暂不支持快捷键聚焦",
   "todo.panel.title": "待办",
@@ -2498,6 +2503,10 @@ const zhCN: Record<string, string> = {
   "shortcuts.action.nek.plan.toggle": "切换 Agent / Plan",
   "shortcuts.action.app.thinking.cycle": "循环思考等级",
   "shortcuts.action.app.model.select": "选择模型",
+  "shortcuts.action.app.model.cycleForward": "切换到下一个模型",
+  "shortcuts.action.app.model.cycleBackward": "切换到上一个模型",
+  "shortcuts.action.app.message.copy": "复制上一条助手回答",
+  "shortcuts.action.note.copyAnswer": "桌面端保留 Ctrl/⌘+X 用于剪切；复制回答需再按 Shift。",
   "shortcuts.action.app.tools.expand": "展开 / 折叠全部工具输出",
   "shortcuts.action.app.thinking.toggle": "展开 / 折叠全部 thinking",
   "shortcuts.action.tui.altScreen.search": "会话内搜索",

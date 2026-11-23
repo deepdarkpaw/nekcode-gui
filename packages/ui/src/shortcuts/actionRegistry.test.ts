@@ -79,8 +79,8 @@ describe("action bindings", () => {
 });
 
 describe("nek action registry", () => {
-  it("ships the default keys from interaction spec §7.7", () => {
-    const effective = resolveEffectiveActionBindings();
+  it("ships the default keys from interaction spec §7.7 and SC-6", () => {
+    const effective = resolveEffectiveActionBindings({}, win);
     const labels = Object.fromEntries(
       NEK_ACTIONS.map((action) => [action.id, formatActionShortcut(action.id, effective, win)]),
     );
@@ -93,6 +93,9 @@ describe("nek action registry", () => {
       "nek.plan.toggle": "Alt+M",
       "app.thinking.cycle": "Shift+Tab",
       "app.model.select": "Ctrl+L",
+      "app.model.cycleForward": "Ctrl+P",
+      "app.model.cycleBackward": "Alt+P",
+      "app.message.copy": "Ctrl+Shift+X",
       "app.tools.expand": "Ctrl+Shift+O",
       "app.thinking.toggle": "Ctrl+T",
       "tui.altScreen.search": "Ctrl+F",

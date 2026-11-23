@@ -144,6 +144,38 @@ describe("nek action dispatch", () => {
     });
   });
 
+  it.each([
+    ["app.model.cycleForward", { key: "p", ctrlKey: true }],
+    ["app.message.copy", { key: "X", ctrlKey: true, shiftKey: true }],
+  ] as const)(
+    "SC-6 dispatches %s from the focused editor without stealing IME keys",
+    (actionId, key) => {
+      const bindings = resolveEffectiveActionBindings({}, win);
+      const run = vi.fn();
+      registerNekActionHandlers({ [actionId]: { run } });
+      expect(resolveNekActionKeyboardEvent(event(key), bindings, true, win)).toBe(actionId);
+      expect(
+        resolveNekActionKeyboardEvent(event({ ...key, keyCode: 229 }), bindings, true, win),
+      ).toBeNull();
+      expect(dispatchNekAction(actionId)).toBe(true);
+      expect(run).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("SC-6 leaves native Cut and unsupported backward cycling untouched", () => {
+    const bindings = resolveEffectiveActionBindings({}, win);
+    const run = vi.fn();
+    registerNekActionHandlers({ "app.model.cycleBackward": { run } });
+    expect(
+      resolveNekActionKeyboardEvent(event({ key: "x", ctrlKey: true }), bindings, true, win),
+    ).toBeNull();
+    expect(
+      resolveNekActionKeyboardEvent(event({ key: "p", altKey: true }), bindings, true, win),
+    ).toBeNull();
+    expect(dispatchNekAction("app.model.cycleBackward")).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("K8: a handler that reports no target is not handled, so the key stays untouched", () => {
     const run = vi.fn(() => false);
     registerNekActionHandlers({ "tui.altScreen.previousPrompt": { run } });

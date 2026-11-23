@@ -19,6 +19,9 @@ export type NekActionId =
   | "nek.plan.toggle"
   | "app.thinking.cycle"
   | "app.model.select"
+  | "app.model.cycleForward"
+  | "app.model.cycleBackward"
+  | "app.message.copy"
   | "app.tools.expand"
   | "app.thinking.toggle"
   | "tui.altScreen.search"
@@ -56,6 +59,7 @@ export interface NekActionDefinition {
   readonly category: NekActionCategory;
   readonly scope: NekActionScope;
   readonly defaultBindings: readonly string[];
+  readonly windowsDefaultBindings?: readonly string[];
   readonly legacyCommandId?: ShortcutCommandId;
   /** 与 nek 终端默认键不同的说明（i18n key）。 */
   readonly desktopNoteId?: string;
@@ -134,6 +138,30 @@ export const NEK_ACTIONS: readonly NekActionDefinition[] = [
     scope: "global",
     defaultBindings: ["CmdOrCtrl+l"],
     legacyCommandId: "openModelMenu",
+    allowInEditable: true,
+  },
+  {
+    id: "app.model.cycleForward",
+    category: "modeModel",
+    scope: "global",
+    defaultBindings: ["CmdOrCtrl+p"],
+    allowInEditable: true,
+  },
+  {
+    id: "app.model.cycleBackward",
+    category: "modeModel",
+    scope: "global",
+    defaultBindings: ["CmdOrCtrl+Shift+p"],
+    windowsDefaultBindings: ["Alt+p"],
+    disabledReason: { id: "ui.action.unavailable.cycleModelBackward" },
+  },
+  {
+    id: "app.message.copy",
+    category: "displayNavigation",
+    scope: "global",
+    // The Electron Edit menu reserves Ctrl/Cmd+X for native Cut.
+    defaultBindings: ["CmdOrCtrl+Shift+x"],
+    desktopNoteId: "shortcuts.action.note.copyAnswer",
     allowInEditable: true,
   },
   {
