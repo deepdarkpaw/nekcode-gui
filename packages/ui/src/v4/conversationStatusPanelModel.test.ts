@@ -61,7 +61,6 @@ describe("conversation status panel model", () => {
     expect(buildConversationStatusPanelModel({})).toEqual({
       hasContent: false,
       git: null,
-      goal: null,
       sessionPlans: null,
       runningBashWorks: [],
     });
@@ -108,7 +107,7 @@ describe("conversation status panel model", () => {
     expect(model.hasContent).toBe(true);
   });
 
-  it("preserves a goal as panel content independently of git or running work", () => {
+  it("SC-5 does not present legacy goal state in the status panel", () => {
     const goal: GoalState = {
       targetId: "target",
       objective: "Ship feature",
@@ -120,9 +119,10 @@ describe("conversation status panel model", () => {
       verifications: [],
       iterations: [],
     };
-    const model = buildConversationStatusPanelModel({ goal });
-    expect(model.goal).toBe(goal);
-    expect(model.hasContent).toBe(true);
+    const legacySnapshot = { goal, backgroundWorks: [] };
+    const model = buildConversationStatusPanelModel(legacySnapshot);
+    expect(model).not.toHaveProperty("goal");
+    expect(model.hasContent).toBe(false);
   });
 
   it("keeps terminal-state session plan documents newest first, not todos or running plan calls", () => {

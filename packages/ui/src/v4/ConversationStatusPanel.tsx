@@ -14,15 +14,11 @@ import {
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  CircleCheckBigIcon,
   EllipsisIcon,
   FileDiffIcon,
-  GoalIcon,
   ListChecksIcon,
   Maximize2Icon,
   Minimize2Icon,
-  PauseIcon,
-  PlayIcon,
   SquareIcon,
   SquareTerminalIcon,
 } from "lucide-react";
@@ -37,11 +33,7 @@ import type {
   GitRepositorySummary,
   ZCodeTaskChangeSummary,
 } from "@zcode/shared";
-import type {
-  BackgroundWorkSummary,
-  GoalState,
-  ToolCallRow,
-} from "@zcode/shared/zcode-protocol-v4";
+import type { BackgroundWorkSummary, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { useNowTicker } from "@/hooks/useNowTicker.js";
@@ -70,10 +62,6 @@ import {
   type ConversationStatusPanelModel,
   type ConversationStatusPanelSessionPlanItem,
 } from "@/v4/conversationStatusPanelModel.js";
-import {
-  buildConversationGoalIterationSummaries,
-  getConversationGoalElapsedSeconds,
-} from "@/v4/conversationGoalSummaryModel.js";
 
 interface ConversationStatusPanelProps {
   workspacePath: string;
@@ -83,7 +71,6 @@ interface ConversationStatusPanelProps {
   gitWorktreeReviewSourceId?: GitChangeSourceId | null;
   gitWorktreeChangeSummary?: { added: number; removed: number } | null;
   activeTaskChangeSummary?: ZCodeTaskChangeSummary | null;
-  goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
   backgroundWorks?: readonly BackgroundWorkSummary[];
   parentSessionId?: string;
@@ -97,8 +84,6 @@ interface ConversationStatusPanelProps {
   onTerminalSectionOpenChange?: (open: boolean) => void;
   onRefreshGit?: () => void;
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
-  onPauseGoal?: () => void;
-  onResumeGoal?: () => void;
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
   onOpenBackgroundBash?: (work: BackgroundWorkSummary) => void;
   onCancelBackgroundWork?: (workId: string) => void;
@@ -160,11 +145,10 @@ function formatRunningCount(
 }
 
 // 待办与子代理由输入框上方的 nek 状态槽展示，这里不再重复。
-type StatusSectionKind = "environment" | "goal" | "sessionPlans" | "terminal";
+type StatusSectionKind = "environment" | "sessionPlans" | "terminal";
 
 const STATUS_SECTION_SCROLL_POLICY = {
   environment: null,
-  goal: "max-h-48",
   sessionPlans: "max-h-48",
   terminal: "max-h-48",
 } as const satisfies Record<StatusSectionKind, string | null>;
@@ -372,133 +356,6 @@ function GitStatusSection({
           triggerLayout="status-row"
           className="w-full"
         />
-      </div>
-    </StatusSection>
-  );
-}
-
-function GoalStatusSection({
-  model,
-  onPauseGoal,
-  onResumeGoal,
-  separated,
-}: {
-  model: ConversationStatusPanelModel;
-  onPauseGoal?: () => void;
-  onResumeGoal?: () => void;
-  separated: boolean;
-}) {
-  const { intl } = useZCodeIntl();
-  const goal = model.goal;
-  const isPausable =
-    goal?.status === "active" || goal?.status === "verifying" || goal?.status === "notSatisfied";
-  const isPaused = goal?.status === "paused";
-  const isDone = goal?.status === "verified";
-  const iterationRows = useMemo(
-    () => (goal ? buildConversationGoalIterationSummaries(goal) : []),
-    [goal],
-  );
-  // 用时秒针只看「有没有在跑」这一个布尔。effect 不能以整个 goal 对象为依赖：
-  // 每个 goal 事件都同步 setNow 并重建 interval——落在投影帧的同步提交里，给 React 的嵌套更新计数
-  // 记一笔（与工作流卡 React #185 崩溃同形）。
-  const now = useNowTicker(isPausable && goal?.activeRunStartedAtMs != null);
-
-  if (!goal) return null;
-
-  const elapsed = formatDurationUnits(
-    getConversationGoalElapsedSeconds(goal, now),
-    intl.formatMessage,
-  );
-  const control = isPausable ? (
-    <ControlHintTooltip title={intl.formatMessage({ id: "chat.target.pause" })}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="size-6 shrink-0"
-        data-goal-action="pause"
-        disabled={!onPauseGoal}
-        aria-label={intl.formatMessage({ id: "chat.target.pause" })}
-        onClick={onPauseGoal}
-      >
-        <PauseIcon className="size-3.5" />
-      </Button>
-    </ControlHintTooltip>
-  ) : isPaused ? (
-    <ControlHintTooltip title={intl.formatMessage({ id: "chat.target.resume" })}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="size-6 shrink-0"
-        data-goal-action="resume"
-        disabled={!onResumeGoal}
-        aria-label={intl.formatMessage({ id: "chat.target.resume" })}
-        onClick={onResumeGoal}
-      >
-        <PlayIcon className="size-3.5" />
-      </Button>
-    </ControlHintTooltip>
-  ) : isDone ? (
-    <CircleCheckBigIcon
-      aria-label={intl.formatMessage({ id: "chat.goalVerification.complete" })}
-      className="size-4 shrink-0 text-[var(--color-success)]"
-    />
-  ) : null;
-
-  return (
-    <StatusSection
-      section="goal"
-      separated={separated}
-      title={intl.formatMessage({ id: "chat.statusPanel.goal" })}
-      trailing={() => (
-        <>
-          <span
-            className="shrink-0 tabular-nums"
-            data-goal-elapsed-seconds={getConversationGoalElapsedSeconds(goal, now)}
-          >
-            {elapsed}
-          </span>
-          {control ? <span className="shrink-0">·</span> : null}
-          {control}
-        </>
-      )}
-    >
-      <div className="space-y-0">
-        {iterationRows.map((row) => {
-          const title =
-            row.title ??
-            intl.formatMessage(
-              { id: "chat.summaryPanel.goalIterationValue" },
-              { count: String(row.iteration) },
-            );
-          return (
-            <div
-              key={row.iteration}
-              data-goal-iteration={row.iteration}
-              data-goal-iteration-completed={row.completed}
-              data-goal-verification-outcome={row.verificationOutcome ?? undefined}
-              className="flex min-w-0 cursor-default items-start gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-hover)]"
-              title={title}
-            >
-              {row.completed ? (
-                <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-[var(--color-success)] text-ui-xs tabular-nums text-[var(--color-success)]">
-                  {row.iteration}
-                </span>
-              ) : (
-                <GoalIcon className="size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
-              )}
-              <p className="line-clamp-3 min-w-0 flex-1 text-ui-base leading-4 text-[var(--color-foreground)]">
-                {title}
-              </p>
-              {row.totalCount > 0 ? (
-                <span className="shrink-0 text-ui-sm tabular-nums text-[var(--color-foreground-subtle)]">
-                  {row.completedCount}/{row.totalCount}
-                </span>
-              ) : null}
-            </div>
-          );
-        })}
       </div>
     </StatusSection>
   );
@@ -769,59 +626,37 @@ function StatusSummaryRow({
   const { intl } = useZCodeIntl();
   const expandLabel = intl.formatMessage({ id: "chat.summaryPanel.showPanel" });
   const latestSessionPlan = model.sessionPlans?.items[0] ?? null;
-  const goal = model.goal;
-  const goalTitle = goal ? goal.summaryTitle?.trim() || goal.objective.trim() || null : null;
-  const goalStatus = goal?.status ?? null;
-  // V4 goal 在 verifier 判定未完成后会进入 notSatisfied；mini 过去漏掉
-  // 这个合法开放态并返回 null，导致只剩 2px 空 shell，也失去重新展开入口。
-  const isActiveGoal =
-    goalStatus === "active" ||
-    goalStatus === "notSatisfied" ||
-    goalStatus === "paused" ||
-    goalStatus === "verifying";
-  const isDoneGoal = goalStatus === "verified";
   const added = gitWorktreeChangeSummary?.added ?? 0;
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
   const hasGitMiniSummary = Boolean(model.git && added + removed > 0);
 
   const runningCount = model.runningBashWorks.length;
-  // 待办由 nek 状态槽展示：胶囊只摘要本面板独有的目标、改动、计划文档与后台终端。
-  const summaryMetric =
-    goalTitle && isActiveGoal ? (
-      <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
-        <span className="min-w-0 truncate">{goalTitle}</span>
-      </StatusSummaryMetric>
-    ) : hasGitMiniSummary ? (
-      <StatusSummaryMetric
-        icon={<FileDiffIcon className="size-4 text-[var(--color-foreground)]" />}
-      >
-        <span className="min-w-0 truncate">
-          {intl.formatMessage({ id: "chat.statusPanel.changes" })}
-        </span>
-        <span className="shrink-0 text-[var(--color-diff-added)]">+{added}</span>
-        <span className="shrink-0 text-[var(--color-diff-removed)]">-{removed}</span>
-      </StatusSummaryMetric>
-    ) : goalTitle && isDoneGoal ? (
-      <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
-        <span className="min-w-0 truncate">{goalTitle}</span>
-      </StatusSummaryMetric>
-    ) : latestSessionPlan ? (
-      <StatusSummaryMetric
-        icon={<ListChecksIcon className="size-4 text-[var(--color-foreground)]" />}
-      >
-        <span className="min-w-0 truncate">
-          {latestSessionPlan.title ?? intl.formatMessage({ id: "chat.statusPanel.planFallback" })}
-        </span>
-      </StatusSummaryMetric>
-    ) : runningCount > 0 ? (
-      <StatusSummaryMetric
-        icon={<SquareTerminalIcon className="size-4 text-[var(--color-foreground)]" />}
-      >
-        {/* 产品规则：实时活动只能在没有 Goal/Git 等主状态时兜底，
+  // 待办由 nek 状态槽展示；这里仅摘要改动、计划文档与后台终端。
+  const summaryMetric = hasGitMiniSummary ? (
+    <StatusSummaryMetric icon={<FileDiffIcon className="size-4 text-[var(--color-foreground)]" />}>
+      <span className="min-w-0 truncate">
+        {intl.formatMessage({ id: "chat.statusPanel.changes" })}
+      </span>
+      <span className="shrink-0 text-[var(--color-diff-added)]">+{added}</span>
+      <span className="shrink-0 text-[var(--color-diff-removed)]">-{removed}</span>
+    </StatusSummaryMetric>
+  ) : latestSessionPlan ? (
+    <StatusSummaryMetric
+      icon={<ListChecksIcon className="size-4 text-[var(--color-foreground)]" />}
+    >
+      <span className="min-w-0 truncate">
+        {latestSessionPlan.title ?? intl.formatMessage({ id: "chat.statusPanel.planFallback" })}
+      </span>
+    </StatusSummaryMetric>
+  ) : runningCount > 0 ? (
+    <StatusSummaryMetric
+      icon={<SquareTerminalIcon className="size-4 text-[var(--color-foreground)]" />}
+    >
+      {/* 产品规则：实时活动只能在没有改动或计划等主状态时兜底，
           避免胶囊把主状态和输入框已展示的实时计数重复拼接。 */}
-        <span className="shrink-0">{formatRunningCount(intl.formatMessage, runningCount)}</span>
-      </StatusSummaryMetric>
-    ) : null;
+      <span className="shrink-0">{formatRunningCount(intl.formatMessage, runningCount)}</span>
+    </StatusSummaryMetric>
+  ) : null;
 
   if (!summaryMetric) {
     return null;
@@ -849,7 +684,6 @@ function ConversationStatusPanelImpl({
   gitWorktreeReviewSourceId,
   gitWorktreeChangeSummary,
   activeTaskChangeSummary,
-  goal,
   sessionPlans,
   backgroundWorks = EMPTY_BACKGROUND_WORKS,
   parentSessionId,
@@ -860,8 +694,6 @@ function ConversationStatusPanelImpl({
   onTerminalSectionOpenChange,
   onRefreshGit,
   onOpenGitReview,
-  onPauseGoal,
-  onResumeGoal,
   onOpenPlanDetail,
   onOpenBackgroundBash,
   onCancelBackgroundWork,
@@ -877,7 +709,6 @@ function ConversationStatusPanelImpl({
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
-        goal,
         sessionPlans,
         workspacePath,
         backgroundWorks,
@@ -888,7 +719,6 @@ function ConversationStatusPanelImpl({
       gitDirtyFileCount,
       gitSummary,
       gitWorktreeChangeSummary,
-      goal,
       sessionPlans,
       workspacePath,
     ],
@@ -911,7 +741,6 @@ function ConversationStatusPanelImpl({
     [miniWidth],
   );
   const canRenderGit = Boolean(model.git && gitSummary && onRefreshGit);
-  const canRenderGoal = Boolean(model.goal);
   const canRenderSessionPlans = Boolean(model.sessionPlans);
   const canRenderTerminals = model.runningBashWorks.length > 0;
   const handlePanelModeChange = useCallback(
@@ -980,8 +809,6 @@ function ConversationStatusPanelImpl({
         data-testid={TID_CHAT_SUMMARY_PANEL}
         data-state={variant === "mini" ? "collapsed" : "expanded"}
         data-display-mode={variant}
-        data-goal-status={model.goal?.status}
-        data-goal-objective={model.goal?.objective}
         data-running-background-count={model.runningBashWorks.length}
         data-running-terminal-count={model.runningBashWorks.length}
         style={shellStyle}
@@ -1070,20 +897,12 @@ function ConversationStatusPanelImpl({
                 useVerticalFloatingPanels={useVerticalFloatingPanels}
               />
             ) : null}
-            {canRenderGoal ? (
-              <GoalStatusSection
-                model={model}
-                separated={canRenderGit}
-                onPauseGoal={onPauseGoal}
-                onResumeGoal={onResumeGoal}
-              />
-            ) : null}
             {canRenderSessionPlans ? (
               <SessionPlansStatusSection
                 model={model}
                 parentSessionId={parentSessionId}
                 onOpenPlanDetail={onOpenPlanDetail}
-                separated={canRenderGit || canRenderGoal}
+                separated={canRenderGit}
               />
             ) : null}
             {canRenderTerminals ? (
@@ -1094,7 +913,7 @@ function ConversationStatusPanelImpl({
                 works={model.runningBashWorks}
                 open={terminalSectionOpen}
                 onOpenChange={onTerminalSectionOpenChange}
-                separated={canRenderGit || canRenderGoal || canRenderSessionPlans}
+                separated={canRenderGit || canRenderSessionPlans}
                 onCancelBackgroundWork={onCancelBackgroundWork}
               />
             ) : null}

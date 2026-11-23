@@ -426,7 +426,6 @@ const IZCODE_METHODS = [
   "generateWorkspaceText",
   "sendPrompt",
   "compactSession",
-  "goalSession",
   "closeSession",
   "setModel",
   "setThoughtLevel",

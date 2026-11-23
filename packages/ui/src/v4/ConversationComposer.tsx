@@ -184,7 +184,7 @@ export interface ConversationComposerSendOptions {
   expectedHeldQueueItemIds?: readonly string[];
   /** 附件命令面：已序列化附件（宿主转 AttachmentRef 后随 v4 sendText/createSession 发送）。 */
   attachments?: AttachmentRef[];
-  /** Prompt 文本内携带的上下文附件数量；用于阻止 /goal 等本地命令误消费。 */
+  /** Prompt 文本内携带的上下文附件数量；用于阻止本地命令误消费。 */
   contextAttachmentCount?: number;
   /** renderer-only：ACK accepted 后由 SessionPane 绑定真实 commandId/sessionId。 */
   localTtft?: LocalTtftContext;
@@ -269,7 +269,6 @@ export interface ComposerRestoreRequest {
   requestId: number;
   sessionId: string;
   workspaceKey: string;
-  inputKind: "sendText" | "sendGoalCommand";
   text: string;
   attachments: readonly AttachmentRef[];
   config?: Pick<V4ComposerDraft, "mode" | "planEnabled" | "modelSelection">;
@@ -436,8 +435,6 @@ interface ConversationComposerProps {
    */
   composerRestoreRequest?: ComposerRestoreRequest | null;
   onComposerRestoreApplied?: (requestId: number) => void;
-  /** 副屏会话不提供 goal 能力；协议层仍会拒绝直接调用。 */
-  suppressGoalCommands?: boolean;
   /** App 层本地斜杠命令（如 `/side`），由 SessionPane 按门禁组装后透传。 */
   appSlashCommands?: readonly AppSlashCommand[];
   /** 把 composer 的 drop 路由暴露给整个对话 pane / 桌面草稿标题栏。 */
@@ -497,7 +494,6 @@ function ConversationComposerImpl({
   onExternalTextInsertApplied,
   composerRestoreRequest = null,
   onComposerRestoreApplied,
-  suppressGoalCommands = false,
   appSlashCommands,
   onDropTargetControllerChange,
 }: ConversationComposerProps) {
@@ -2123,9 +2119,6 @@ function ConversationComposerImpl({
           inputTestId={TID_V4_COMPOSER_INPUT}
           inputApiRef={inputApiRef}
           promptHistory={promptHistory}
-          // 命令目录必须完整来自 CLI workspace slash catalog；UI 只在
-          // secondary pane 按产品能力隐藏 goal，不再追加任何内建命令或别名。
-          excludedSlashCommandNames={suppressGoalCommands ? ["goal"] : undefined}
           appSlashCommands={appSlashCommands}
           enableMentionPanel
           leadingActions={leadingActionsNode}

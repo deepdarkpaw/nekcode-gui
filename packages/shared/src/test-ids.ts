@@ -506,8 +506,6 @@ export const TID_V4_SESSION_TITLE = "v4-session-title";
 export const TID_V4_RENAME_INPUT = "v4-rename-input";
 /** v4 会话重命名提交按钮（renameSession 命令） */
 export const TID_V4_RENAME_SUBMIT = "v4-rename-submit";
-/** v4 goal 状态横幅（objective + status，sendGoalCommand/resumeGoal 效果投影） */
-export const TID_V4_GOAL_BANNER = "v4-goal-banner";
 /** v4 会话删除按钮（deleteSession 命令；删除后回 draft） */
 export const TID_V4_DELETE_SESSION = "v4-delete-session";
 /** v4 后台工作面板（backgroundWorks 投影） */

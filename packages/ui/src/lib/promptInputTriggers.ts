@@ -169,8 +169,7 @@ export function getActivePromptInputTokenTailLength(
 
     const comparableLength = Math.min(tailText.length, expectedTail.length);
     const typedTail = tailText.slice(0, comparableLength);
-    // 完整 `/goal` 后紧贴的正文若被当作同一个 token 的 tail 会整段删除。
-    // 这里只删除“候选值未输入后缀”能对上的那一小段，比如 `/go|al` 里的 `al`。
+    // 只删除与候选值未输入后缀相符的文本，例如 `/mo|del` 中的 `del`。
     if (expectedTail.toLowerCase().startsWith(typedTail.toLowerCase())) {
       matchedTailLength = Math.max(matchedTailLength, comparableLength);
     }

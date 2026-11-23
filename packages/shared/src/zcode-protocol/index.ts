@@ -1493,36 +1493,6 @@ export const zcodeSessionCompactResultSchema = z
   .strict();
 export type ZCodeSessionCompactResult = z.infer<typeof zcodeSessionCompactResultSchema>;
 
-export const zcodeSessionGoalActionSchema = z.enum([
-  "show",
-  "set",
-  "replace",
-  "pause",
-  "resume",
-  "clear",
-]);
-export type ZCodeSessionGoalAction = z.infer<typeof zcodeSessionGoalActionSchema>;
-
-export const zcodeSessionGoalParamsSchema = z
-  .object({
-    sessionId: nonEmptyString,
-    inputId: nonEmptyString.optional(),
-    action: zcodeSessionGoalActionSchema,
-    objective: z.string().optional(),
-    expectedRevision: z.number().int().nonnegative().optional(),
-  })
-  .strict();
-export type ZCodeSessionGoalParams = z.infer<typeof zcodeSessionGoalParamsSchema>;
-
-export const zcodeSessionGoalResultSchema = z
-  .object({
-    response: z.string(),
-    snapshot: zcodeSessionStateSnapshotSchema,
-    startedTurn: z.boolean().optional(),
-  })
-  .strict();
-export type ZCodeSessionGoalResult = z.infer<typeof zcodeSessionGoalResultSchema>;
-
 export const zcodeSessionStopParamsSchema = z
   .object({
     sessionId: nonEmptyString,

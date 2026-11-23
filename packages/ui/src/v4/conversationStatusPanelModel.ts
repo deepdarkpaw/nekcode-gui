@@ -1,9 +1,5 @@
 import type { GitRepositorySummary } from "@zcode/shared";
-import type {
-  BackgroundWorkSummary,
-  GoalState,
-  ToolCallRow,
-} from "@zcode/shared/zcode-protocol-v4";
+import type { BackgroundWorkSummary, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { extractPlanToolCallContent, getPlanDirectoryTitle } from "@/lib/planToolCall.js";
 
 export interface ConversationStatusPanelGitModel {
@@ -30,13 +26,12 @@ export interface ConversationStatusPanelSessionPlansModel {
 }
 
 /**
- * 面板只承载 nek 状态槽没有的信息：git 改动、目标、计划文档、后台终端。
+ * 面板只承载 nek 状态槽没有的信息：Git 改动、计划文档、后台终端。
  * 待办与子代理由输入框上方的 nek 状态槽展示，这里不再重复。
  */
 export interface ConversationStatusPanelModel {
   hasContent: boolean;
   git: ConversationStatusPanelGitModel | null;
-  goal: GoalState | null;
   sessionPlans: ConversationStatusPanelSessionPlansModel | null;
   runningBashWorks: BackgroundWorkSummary[];
 }
@@ -46,7 +41,6 @@ interface BuildConversationStatusPanelModelInput {
   gitSummary?: GitRepositorySummary | null;
   gitDirtyFileCount?: number;
   gitWorktreeChangeSummary?: { added: number; removed: number } | null;
-  goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
   workspacePath?: string;
   backgroundWorks?: readonly BackgroundWorkSummary[];
@@ -120,7 +114,6 @@ export function buildConversationStatusPanelModel(
   input: BuildConversationStatusPanelModelInput,
 ): ConversationStatusPanelModel {
   const git = input.isOfficeMode ? null : buildGitModel(input);
-  const goal = input.goal ?? null;
   const sessionPlans = buildSessionPlansModel(input.sessionPlans, input.workspacePath);
   const runningBashWorks = (input.backgroundWorks ?? []).filter(
     (work) => work.status === "running" && work.kind === "bash",
@@ -128,9 +121,8 @@ export function buildConversationStatusPanelModel(
 
   return {
     git,
-    goal,
     sessionPlans,
     runningBashWorks,
-    hasContent: Boolean(git || goal || sessionPlans || runningBashWorks.length > 0),
+    hasContent: Boolean(git || sessionPlans || runningBashWorks.length > 0),
   };
 }

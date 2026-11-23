@@ -35,7 +35,7 @@ export interface PendingCommandEntry {
 }
 
 interface PendingCommandReplayRequest {
-  type: "sendText" | "sendGoalCommand" | "compact" | "createSession";
+  type: "sendText" | "compact" | "createSession";
   payload: Record<string, unknown>;
   sessionId: string | null;
   baseRevision?: number;

@@ -77,7 +77,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly generateWorkspaceText: IZCodeAgentService["generateWorkspaceText"];
   declare readonly sendPrompt: IZCodeAgentService["sendPrompt"];
   declare readonly compactSession: IZCodeAgentService["compactSession"];
-  declare readonly goalSession: IZCodeAgentService["goalSession"];
   declare readonly closeSession: IZCodeAgentService["closeSession"];
   declare readonly setModel: IZCodeAgentService["setModel"];
   declare readonly setThoughtLevel: IZCodeAgentService["setThoughtLevel"];

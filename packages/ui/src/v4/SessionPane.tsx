@@ -181,8 +181,6 @@ import {
 import {
   parseV4VisibleSlashCommand,
   parseSelectionSideSlashCommand,
-  v4QueuedCommandText,
-  type V4VisibleSlashCommand,
 } from "@/v4/slashCommands.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
@@ -242,7 +240,7 @@ export interface SessionPaneProps {
   readOnly?: boolean;
   /** 观察视图的显式例外：允许文件摘要恢复 workspace，但不开放会话编辑能力。 */
   allowWorkspaceFileRewind?: boolean;
-  /** 框选副屏：保留普通 composer/tools，但隐藏并禁止 edit/retry/fork/goal。 */
+  /** 框选副屏：保留普通 composer/tools，但隐藏并禁止 edit/retry/fork。 */
   selectionSideChat?: boolean;
   /** 主会话划词动作只投递到 Side Pane 当前激活的辅助 child。 */
   activeSelectionSideChatSessionId?: string | null;
@@ -351,7 +349,7 @@ function submissionConfigFromCommand(
   const candidate =
     type === "createSession"
       ? (payload.firstInput as Record<string, unknown> | undefined)
-      : type === "sendText" || type === "sendGoalCommand"
+      : type === "sendText"
         ? payload
         : undefined;
   if (!candidate?.modelSelection || !candidate.mode) return null;
@@ -378,7 +376,6 @@ interface QueuedComposerRestoreTarget {
   baseRevision: number;
   queueItemId: string;
   sourceCommandId: string;
-  inputKind: "sendText" | "sendGoalCommand";
   text: string;
   attachments: readonly AttachmentRef[];
   config?: ComposerRestoreRequest["config"];
@@ -389,7 +386,7 @@ function resolveQueuedComposerRestore(
   queueItemId: string,
 ): QueuedComposerRestoreTarget | null {
   const item = snapshot.queue.items.find((candidate) => candidate.queueItemId === queueItemId);
-  if (!item || item.kind === "compact") return null;
+  if (item?.kind !== "sendText") return null;
   const config = {
     ...(item.mode ? { mode: item.mode } : {}),
     ...(typeof item.planEnabled === "boolean" ? { planEnabled: item.planEnabled } : {}),
@@ -399,8 +396,7 @@ function resolveQueuedComposerRestore(
     baseRevision: snapshot.revision,
     queueItemId,
     sourceCommandId: item.sourceCommandId,
-    inputKind: item.kind,
-    text: v4QueuedCommandText(item.kind, item.text),
+    text: item.text,
     attachments: item.attachments.map((attachment) => ({ ...attachment })),
     ...(Object.keys(config).length > 0 ? { config } : {}),
   };
@@ -414,7 +410,7 @@ function shouldRestoreQueuedComposerFromAck(status: CommandAck["status"]): boole
  * 单 pane 竖切：订阅 → 渲染 rows → composer 发送 / stop。
  *
  * React 性能（vercel-react-best-practices）：
- * - 叶子组件（Header/Timeline/QueuePanel/InputControls/Composer/GoalBanner）均 memo；
+ * - 叶子组件（Header/Timeline/QueuePanel/InputControls/Composer）均 memo；
  * - 所有回调用 useCallback 且**不依赖高频变化的 snapshot**——snapshot/composer 文本经 ref 读取，
  *   使回调在流式增量期间保持稳定引用，避免把新函数灌进 memo 子组件触发无谓重渲染；
  * - 模型表单的本地输入 state 下沉到对应子组件，输入时不牵动整个 pane。
@@ -2058,85 +2054,23 @@ export function SessionPane({
     }
   }, []);
 
-  const dispatchSlashCommand = useCallback(
-    async (
-      command: V4VisibleSlashCommand,
-      targetSessionId: string,
-      baseRevision: number | undefined,
-      heldQueueDisposition: "clearQueueAndSend" | "keepQueueAndSend" | undefined,
-      expectedHeldQueueItemIds?: readonly string[],
-      submission?: ComposerSubmissionConfig,
-    ): Promise<boolean | "confirmationRequired"> => {
-      let type: CommandType | null = null;
-      let payload: Record<string, unknown> = {};
-      // compact 是可排队 input command，不走 CAS；resumeGoal 仍是 CAS。
-      let withBaseRevision = false;
+  const dispatchCompact = useCallback(
+    async (targetSessionId: string) => {
       const currentRoutingMode = snapshotRef.current?.inputRouting.mode;
       const compactExpectedToQueue =
-        command.kind === "compact" &&
-        currentRoutingMode !== undefined &&
-        currentRoutingMode !== "startNow";
-      switch (command.kind) {
-        case "compact":
-          type = "compact";
-          break;
-        case "sendGoalCommand":
-          type = "sendGoalCommand";
-          // 人工合并曾让 /goal 在准备完成后重新读取 Composer，覆盖点击时已冻结的档位。
-          // 与 sendText 一样沿用本次 Submission；后续菜单修改只影响下一次发送。
-          if (!submission) return false;
-          payload = {
-            text: command.objective,
-            displayText: command.displayText,
-            ...submission,
-            ...(heldQueueDisposition ? { heldQueueDisposition } : {}),
-            ...(expectedHeldQueueItemIds ? { expectedHeldQueueItemIds } : {}),
-          };
-          break;
-        case "resumeGoal":
-          type = "resumeGoal";
-          withBaseRevision = true;
-          break;
-        case "emptyGoal":
-          logger.warn("[v4-pane] /goal 需要目标文本");
-          return true;
-        case "unsupportedGoal":
-          logger.warn(`[v4-pane] 暂不支持 /goal ${command.action}`);
-          return true;
-        default:
-          return false;
-      }
-      if (withBaseRevision && baseRevision === undefined) {
-        logger.warn(`[v4-pane] slash ${command.kind} 缺少 baseRevision`);
-        return true;
-      }
-      const ack = await dispatchCommand(
-        type,
-        payload,
-        targetSessionId,
-        withBaseRevision ? baseRevision : undefined,
-      );
-      if (ack.reasonCode === "guard.heldQueueConfirmationStale") {
-        return "confirmationRequired";
-      }
+        currentRoutingMode !== undefined && currentRoutingMode !== "startNow";
+      const ack = await dispatchCommand("compact", {}, targetSessionId);
       if (ack.status !== "accepted" && ack.status !== "noop") {
-        logger.warn(
-          `[v4-pane] slash ${command.kind} 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`,
-        );
-        if (command.kind === "compact" && ack.reasonCode === "compactOperationLock") {
+        if (ack.reasonCode === "compactOperationLock") {
           toast(intl.formatMessage({ id: "chat.compact.duplicateBlocked" }));
-        } else if (command.kind === "compact" && ack.reasonCode === "activeTurn") {
-          // 兼容尚未升级的 CLI：旧端仍会返回 activeTurn，不能再次无声清空命令。
+        } else if (ack.reasonCode === "activeTurn") {
           toast(intl.formatMessage({ id: "chat.compact.runningBlocked" }));
         }
-      } else if (command.kind === "compact" && compactExpectedToQueue) {
-        toast(intl.formatMessage({ id: "chat.compact.queued" }));
-      } else if (heldQueueDisposition === "clearQueueAndSend") {
-        settleCurrentQueueInputs(targetSessionId);
+        return;
       }
-      return true;
+      if (compactExpectedToQueue) toast(intl.formatMessage({ id: "chat.compact.queued" }));
     },
-    [dispatchCommand, intl, settleCurrentQueueInputs],
+    [dispatchCommand, intl],
   );
 
   const dispatchSendTextAfterConfig = useCallback(
@@ -2152,7 +2086,7 @@ export function SessionPane({
       const readyAttachments = options?.attachments ?? [];
       const sharedContextRefs = options?.sharedContextRefs;
       const contextAttachmentCount = options?.contextAttachmentCount ?? 0;
-      let slashCommand = parseV4VisibleSlashCommand(text, readyAttachments, {
+      const slashCommand = parseV4VisibleSlashCommand(text, readyAttachments, {
         contextAttachmentCount,
       });
 
@@ -2174,13 +2108,7 @@ export function SessionPane({
         return "blocked" as const;
       }
 
-      let effectiveText = text;
-      if (slashCommand?.kind === "planShortcut") {
-        // 命令显式指定本次 Submission 的模式，不能靠另一条 CAS 的先后顺序保证。
-        effectiveText = slashCommand.task;
-        // 命令只负责配置 shortcut；后续必须走普通 sendText，不能进入 goal/compact command 分支。
-        slashCommand = null;
-      }
+      const effectiveText = slashCommand?.kind === "planShortcut" ? slashCommand.task : text;
       // create/send ACK 期间用户可能切换任务或创建另一份 draft。
       // placement 必须绑定发送开始时的稳定 identity，不能在完成回调里读取当前 workspace 草稿。
       const groupedDraftTaskAtSend =
@@ -2202,125 +2130,16 @@ export function SessionPane({
         );
         return created ? ("sent" as const) : ("blocked" as const);
       }
-      if (
-        submission?.planEnabled &&
-        slashCommand !== null &&
-        (slashCommand.kind === "sendGoalCommand" ||
-          slashCommand.kind === "resumeGoal" ||
-          slashCommand.kind === "emptyGoal" ||
-          slashCommand.kind === "unsupportedGoal")
-      ) {
-        // Plan 模式不能创建、更新或恢复 goal。必须在 draft promotion / command dispatch
-        // 之前拒绝，否则即使 CLI 后续拒绝，composer 也会误以为发送成功并清空用户输入。
-        toast(intl.formatMessage({ id: "chat.goal.planModeBlocked" }));
-        return "blocked" as const;
-      }
       if (!submission) {
         logger.warn("[v4-pane] Submission 缺少完整模型或模式配置");
         return "blocked" as const;
       }
-      const currentRoutingMode = snapshotRef.current?.inputRouting.mode;
-      if (
-        currentRoutingMode === "choice" &&
-        !heldQueueDisposition &&
-        (slashCommand === null || slashCommand.kind === "sendGoalCommand")
-      ) {
-        // UI choice 只对普通输入和 /goal <新目标> 生效；/compact 直接追加暂停队列，
-        // resumeGoal 等控制命令也不应被发送消息确认框截获。
-        return "confirmationRequired" as const;
-      }
-      // 冻结的 Submission 保留用户选择；准入前不再插入官方套餐推荐或额外的选择写入路径。
-      // slash 命令优先：已有 session 直接消费；draft 首发 /goal 先建空会话再发命令。
-      // 携带附件或网页元素上下文时不消费为 v4 原生命令（compact/goal 等无附件语义），随 sendText 直发。
-      if (sessionId && slashCommand) {
-        const consumed = await dispatchSlashCommand(
-          slashCommand,
-          sessionId,
-          snapshotRef.current?.revision,
-          heldQueueDisposition,
-          expectedHeldQueueItemIds,
-          submission,
-        );
-        if (consumed === "confirmationRequired") return consumed;
-        if (consumed) {
-          return;
-        }
-      }
-      const draftSlashCommand =
-        slashCommand?.kind === "sendGoalCommand" ||
-        slashCommand?.kind === "resumeGoal" ||
-        slashCommand?.kind === "emptyGoal" ||
-        slashCommand?.kind === "unsupportedGoal"
-          ? slashCommand
-          : null;
-      if (!sessionId && draftSlashCommand) {
-        if (
-          draftSlashCommand.kind === "emptyGoal" ||
-          draftSlashCommand.kind === "unsupportedGoal"
-        ) {
-          await dispatchSlashCommand(
-            draftSlashCommand,
-            prewarmBindingRef.current?.sessionId ?? "__draft__",
-            undefined,
-            heldQueueDisposition,
-            expectedHeldQueueItemIds,
-            submission,
-          );
-          return;
-        }
-        const prewarm = prewarmBindingRef.current;
-        if (prewarm?.beginPromotion()) {
-          try {
-            const consumed = await dispatchSlashCommand(
-              draftSlashCommand,
-              prewarm.sessionId,
-              0,
-              heldQueueDisposition,
-              expectedHeldQueueItemIds,
-              submission,
-            );
-            if (consumed === "confirmationRequired") return consumed;
-            if (consumed) {
-              prewarm.promote();
-              handleDraftSessionCreated(prewarm.sessionId, groupedDraftTaskAtSend);
-              return;
-            }
-          } catch (error) {
-            if (isProviderNotReadyError(error)) throw error;
-            // 与普通首发相同：slash command 写出后的 transport error 也是 admission
-            // 结果未知，不能 discard 后换 session/command 再执行一次。
-            logger.warn(
-              `[v4-draft-prewarm] 预热会话 slash 结果未知，保留原 command 禁止自动重发: ${String(error)}`,
-            );
-            throw error;
-          }
-        }
-        const draftConfigPayload = buildDraftCreateConfigPayload(
-          { ...draftConfigRef.current, modelSelection: submission.modelSelection },
-        );
-        const createAck = await dispatchCommand(
-          "createSession",
-          { workspaceId: workspaceKey, ...draftConfigPayload },
-          null,
-        );
-        if (createAck.status !== "accepted") {
-          throw new Error(createAck.reasonCode ?? "createSession 被拒绝");
-        }
-        const createResult = createAck.result;
-        if (!createResult || createResult.type !== "createSession") {
-          throw new Error("createSession 缺少 sessionId");
-        }
-        const newSessionId = createResult.sessionId;
-        handleDraftSessionCreated(newSessionId, groupedDraftTaskAtSend);
-        await dispatchSlashCommand(
-          draftSlashCommand,
-          newSessionId,
-          0,
-          heldQueueDisposition,
-          expectedHeldQueueItemIds,
-          submission,
-        );
+      if (sessionId && slashCommand?.kind === "compact") {
+        await dispatchCompact(sessionId);
         return;
+      }
+      if (snapshotRef.current?.inputRouting.mode === "choice" && !heldQueueDisposition) {
+        return "confirmationRequired" as const;
       }
       if (!sessionId) {
         // 草稿附件在 composer 中已绑定预热 session 完成预传。
@@ -2468,7 +2287,7 @@ export function SessionPane({
     },
     [
       dispatchCommand,
-      dispatchSlashCommand,
+      dispatchCompact,
       ensureDraftModelReadyForSend,
       availableSelectionSideSlashCommandNames,
       appSlashCommands,
@@ -2747,7 +2566,6 @@ export function SessionPane({
           requestId: nextComposerRestoreRequestIdRef.current++,
           sessionId,
           workspaceKey,
-          inputKind: restoreTarget.inputKind,
           text: restoreTarget.text,
           attachments: restoreTarget.attachments,
           config: restoreTarget.config,
@@ -3046,26 +2864,6 @@ export function SessionPane({
     100,
   );
 
-  const handlePauseGoal = useCallback(() => {
-    const current = snapshotRef.current;
-    if (!sessionId || !current?.availability.pauseGoal.allowed) return;
-    void dispatchCommand("pauseGoal", {}, sessionId, current.revision).then((ack) => {
-      if (ack.status !== "accepted" && ack.status !== "noop") {
-        logger.warn(`[v4-pane] pauseGoal 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-      }
-    });
-  }, [dispatchCommand, sessionId]);
-
-  const handleResumeGoal = useCallback(() => {
-    const current = snapshotRef.current;
-    if (!sessionId || !current?.availability.resumeGoal.allowed) return;
-    void dispatchCommand("resumeGoal", {}, sessionId, current.revision).then((ack) => {
-      if (ack.status !== "accepted" && ack.status !== "noop") {
-        logger.warn(`[v4-pane] resumeGoal 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-      }
-    });
-  }, [dispatchCommand, sessionId]);
-
   // handleStop 带 source 参数（button / escape 两个调用点），但 ConversationComposer 是 memo：
   // 直接写 onStop={() => handleStop("button")} 每次 render 都换引用，memo 白做，而 composer
   // 恰好是每次输入都可能重渲染的组件。这里固定 button 版的引用，不动 handleStop 的双入口设计。
@@ -3232,7 +3030,6 @@ export function SessionPane({
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
-        goal: selectionSideChat ? null : (snapshot?.goal ?? null),
         sessionPlans: state.sessionPlans,
         backgroundWorks: snapshot?.backgroundWorks ?? [],
       }),
@@ -3242,9 +3039,7 @@ export function SessionPane({
       gitSummary,
       gitWorktreeChangeSummary,
       snapshot?.backgroundWorks,
-      snapshot?.goal,
       state.sessionPlans,
-      selectionSideChat,
       workspacePath,
     ],
   );
@@ -3692,7 +3487,6 @@ export function SessionPane({
       onDismissError={handleDismissComposerError}
       onRetryError={composerErrorRetry}
       onOpenModelSettings={handleOpenModelSettings}
-      suppressGoalCommands={selectionSideChat}
       appSlashCommands={appSlashCommands}
       onDropTargetControllerChange={handleDropTargetControllerChange}
     />
@@ -3891,7 +3685,6 @@ export function SessionPane({
             gitWorktreeReviewSourceId={gitWorktreeReviewSourceId}
             gitWorktreeChangeSummary={gitWorktreeChangeSummary}
             activeTaskChangeSummary={activeTaskChangeSummary}
-            goal={selectionSideChat ? null : (snapshot?.goal ?? null)}
             sessionPlans={state.sessionPlans}
             backgroundWorks={snapshot?.backgroundWorks ?? []}
             parentSessionId={sessionId ?? undefined}
@@ -3902,16 +3695,6 @@ export function SessionPane({
             onTerminalSectionOpenChange={setTerminalSectionOpen}
             onRefreshGit={onRefreshGit}
             onOpenGitReview={onOpenGitReview}
-            onPauseGoal={
-              !readOnly && !selectionSideChat && snapshot?.availability.pauseGoal.allowed
-                ? handlePauseGoal
-                : undefined
-            }
-            onResumeGoal={
-              !readOnly && !selectionSideChat && snapshot?.availability.resumeGoal.allowed
-                ? handleResumeGoal
-                : undefined
-            }
             onOpenPlanDetail={onOpenPlanDetail ? handleOpenPlanDetail : undefined}
             onOpenBackgroundBash={
               onOpenBackgroundBash && sessionId

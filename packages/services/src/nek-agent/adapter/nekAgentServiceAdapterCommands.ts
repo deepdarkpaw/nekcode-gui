@@ -95,14 +95,6 @@ export async function sendConversationCommand(
         inputId: envelope.commandId,
       });
     }
-    case "sendGoalCommand": {
-      const result = await sendWhenAdmissible(context, binding.sessionKey, payload);
-      return acceptedCommand(envelope, revision, {
-        type: "inputAccepted",
-        delivery: acceptedDelivery(result.disposition, result.delivery),
-        inputId: envelope.commandId,
-      });
-    }
     case "stop":
       await context.service.abort(binding.sessionKey);
       return acceptedCommand(envelope, revision);

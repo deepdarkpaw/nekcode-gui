@@ -32,11 +32,6 @@ export const SUBAGENT_MENTION_ICON_NODE = [
   ["path", { d: "M15 13v2" }],
   ["path", { d: "M9 13v2" }],
 ] as const satisfies MentionLucideIconNode;
-export const GOAL_COMMAND_MENTION_ICON_NODE = [
-  ["path", { d: "M12 13V2l8 4-8 4" }],
-  ["path", { d: "M20.561 10.222a9 9 0 1 1-12.55-5.29" }],
-  ["path", { d: "M8.002 9.997a5 5 0 1 0 8.9 2.02" }],
-] as const satisfies MentionLucideIconNode;
 export const WORKFLOW_COMMAND_MENTION_ICON_NODE = [
   ["rect", { width: "8", height: "8", x: "3", y: "3", rx: "2" }],
   ["path", { d: "M7 11v4a2 2 0 0 0 2 2h4" }],

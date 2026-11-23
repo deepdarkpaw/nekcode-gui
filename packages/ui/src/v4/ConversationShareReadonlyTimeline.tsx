@@ -148,7 +148,6 @@ function resolveReadonlyMarkerLabel(
 const EMPTY_ARTIFACT_URLS: ReadonlyMap<string, string> = new Map();
 const EMPTY_ARTIFACT_NAMES: ReadonlyMap<string, string> = new Map();
 const EMPTY_ARTIFACT_WORKSPACE_RELATIVE_PATHS: ReadonlyMap<string, string> = new Map();
-const EMPTY_ATTACHMENTS: readonly unknown[] = [];
 
 interface ArtifactOpenContextValue {
   artifactWorkspaceRelativePaths: ReadonlyMap<string, string>;
@@ -232,10 +231,7 @@ function UserInputPresentation({
         className="flex max-w-xl flex-col gap-2 rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base text-foreground"
       >
         <ConversationUserInputBody contentText={row.text} rowId={row.rowId}>
-          <ConversationUserInputContent
-            text={row.text}
-            attachments={row.attachments ?? EMPTY_ATTACHMENTS}
-          />
+          <ConversationUserInputContent text={row.text} />
         </ConversationUserInputBody>
       </div>
     </div>

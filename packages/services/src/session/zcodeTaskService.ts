@@ -7,8 +7,6 @@ import type {
   ZCodeImportSessionsResult,
   ZCodeImportableSessionCandidate,
   ZCodeSessionCompactResult,
-  ZCodeSessionGoalAction,
-  ZCodeSessionGoalResult,
   ZCodeTaskCreateResult,
   ZCodeTaskMeta,
   ZCodeStreamEvent,
@@ -226,17 +224,6 @@ export interface IZCodeTaskService {
     instructions?: string;
     expectedRevision?: number;
   }): Promise<ZCodeSessionCompactResult>;
-
-  /** 执行 agent 内建 /goal 命令；不要把 /goal 当普通正文 prompt 发送。 */
-  goalSession(params: {
-    taskId: string;
-    workspacePath?: string;
-    workspaceIdentity?: string;
-    inputId?: string;
-    action: ZCodeSessionGoalAction;
-    objective?: string;
-    expectedRevision?: number;
-  }): Promise<ZCodeSessionGoalResult>;
 
   /** 响应权限请求 */
   respondPermission(params: {

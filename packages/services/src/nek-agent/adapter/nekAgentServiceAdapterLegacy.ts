@@ -264,7 +264,6 @@ export function createNekLegacyMethods(
         compact: { state: "accepted" },
       } satisfies LegacyCompactResult;
     },
-    goalSession: () => unsupported("goalSession"),
     async closeSession(input) {
       return await target.closeNekSession(input);
     },

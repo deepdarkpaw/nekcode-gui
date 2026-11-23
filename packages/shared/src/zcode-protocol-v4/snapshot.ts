@@ -169,8 +169,9 @@ export const sessionActionAvailabilitySchema = z.object({
   setFollowupMode: actionAvailabilitySchema,
   queueEdit: actionAvailabilitySchema,
   sendQueuedNow: actionAvailabilitySchema,
-  pauseGoal: actionAvailabilitySchema,
-  resumeGoal: actionAvailabilitySchema,
+  // Read old ZCode snapshots without publishing goal actions for nek sessions.
+  pauseGoal: actionAvailabilitySchema.optional(),
+  resumeGoal: actionAvailabilitySchema.optional(),
 });
 export type SessionActionAvailability = z.infer<typeof sessionActionAvailabilitySchema>;
 

@@ -104,15 +104,6 @@ export const commandPayloadSchemas = {
         });
       }
     }),
-  sendGoalCommand: z.object({
-    text: z.string(),
-    displayText: z.string().optional(),
-    modelSelection: modelSelectionSchema.optional(),
-    mode: submissionModeSchema.optional(),
-    planEnabled: z.boolean().optional(),
-    heldQueueDisposition: z.enum(["clearQueueAndSend", "keepQueueAndSend"]).optional(),
-    expectedHeldQueueItemIds: z.array(z.string().min(1)).optional(),
-  }),
   stop: z.object({
     // 来自 activeWorks；CLI 用它拒绝会误杀后续无关执行的迟到 Stop。
     expectedForegroundExecutionId: z.string().min(1).optional(),
@@ -185,8 +176,6 @@ export const commandPayloadSchemas = {
     mode: z.enum(["agent", "plan"]),
   }),
   setFollowupMode: z.object({ mode: z.enum(["queue", "guide"]) }),
-  pauseGoal: z.object({}),
-  resumeGoal: z.object({}),
   cancelBackgroundWork: z.object({ workId: z.string() }),
   renameSession: z.object({ title: z.string() }),
   deleteSession: z.object({}),
@@ -223,8 +212,6 @@ export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Se
   "switchModelConfig",
   "switchCollaborationMode",
   "setFollowupMode",
-  "pauseGoal",
-  "resumeGoal",
 ]);
 
 export const ROW_TARGETING_COMMANDS: ReadonlySet<CommandType> = new Set([

@@ -1175,11 +1175,7 @@ const UserInputRowView = memo(function UserInputRowView({
         >
           {hasVisibleText ? (
             <ConversationUserInputBody contentText={visibleText} rowId={row.rowId}>
-              <ConversationUserInputContent
-                text={visibleText}
-                attachments={row.attachments}
-                contextAttachmentCount={countComposerPromptContexts(parsedPrompt)}
-              />
+              <ConversationUserInputContent text={visibleText} />
             </ConversationUserInputBody>
           ) : null}
           {epilogue === undefined ? null : <ConversationUserInputEpilogue text={epilogue} />}

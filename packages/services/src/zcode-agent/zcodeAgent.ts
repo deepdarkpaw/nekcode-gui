@@ -10,8 +10,6 @@ import type {
   ZCodeAgentMcpServer,
   TraceId,
   ZCodeSessionCompactResult,
-  ZCodeSessionGoalAction,
-  ZCodeSessionGoalResult,
   ZCodeMessageWithParts,
   ModelSelection,
   ZCodeSessionImportHistory,
@@ -227,13 +225,6 @@ export type ZCodeAgentSendPromptParams = ZCodeAgentSendPromptParamsBase;
 export interface ZCodeAgentCompactParams extends ZCodeAgentSessionTarget {
   inputId?: string;
   instructions?: string;
-  expectedRevision?: number;
-}
-
-export interface ZCodeAgentGoalParams extends ZCodeAgentSessionTarget {
-  inputId?: string;
-  action: ZCodeSessionGoalAction;
-  objective?: string;
   expectedRevision?: number;
 }
 
@@ -510,7 +501,6 @@ export interface IZCodeAgentService {
    */
   sendPrompt(params: ZCodeAgentSendPromptParams): Promise<ZCodeSessionSendResult>;
   compactSession(params: ZCodeAgentCompactParams): Promise<ZCodeSessionCompactResult>;
-  goalSession(params: ZCodeAgentGoalParams): Promise<ZCodeSessionGoalResult>;
   closeSession(
     params: ZCodeAgentSessionTarget & { expectedPersistence?: "deferred" | "immediate" },
   ): Promise<boolean>;

@@ -212,8 +212,6 @@ export function buildAvailability(compacting = false): SessionActionAvailability
     setFollowupMode: { allowed: false, reasonCode: "nek_settings_only" },
     queueEdit: ALLOWED,
     sendQueuedNow: compactLock,
-    pauseGoal: ALLOWED,
-    resumeGoal: ALLOWED,
   };
 }
 
