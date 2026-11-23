@@ -3105,6 +3105,8 @@ const zhCN: Record<string, string> = {
   "settings.nek.agent.preset.untrusted": "项目未受信任，nek 不会加载此预设。",
   "settings.nek.agent.preset.effectiveTools": "生效工具：{tools}",
   "settings.nek.agent.preset.noTools": "无",
+  "settings.nek.agent.openRemoteFileUnavailable":
+    "此远程目标没有可用的编辑器连接。请在目标主机打开 {path}。",
   "settings.nek.agent.preset.addTitle": "新建子代理预设",
   "settings.nek.agent.preset.editTitle": "编辑子代理预设",
   "settings.nek.agent.preset.create": "创建预设",

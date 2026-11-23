@@ -103,7 +103,8 @@ function InstructionsEditorImpl({ scope, cwd, title }: InstructionsEditorProps) 
                 ) : null}
                 <ActionTooltip
                   label={intl.formatMessage({ id: "settings.nek.instructions.revert" })}
-                  disabledReason={!dirty ? noChanges : undefined}
+                  disabled={!dirty}
+                  disabledReason={noChanges}
                 >
                   <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(undefined)}>
                     {intl.formatMessage({ id: "settings.nek.instructions.revert" })}
@@ -140,12 +141,8 @@ function InstructionFileSources({ data }: { data: NekInstructionsView }) {
           {intl.formatMessage(
             { id: "settings.nek.instructions.ignored" },
             {
-              active: <code className="font-mono">{data.filename}</code>,
-              ignored: (
-                <code className="font-mono">
-                  {data.ignored.map((file) => file.filename).join(", ")}
-                </code>
-              ),
+              active: data.filename,
+              ignored: data.ignored.map((file) => file.filename).join(", "),
             },
           )}
         </p>

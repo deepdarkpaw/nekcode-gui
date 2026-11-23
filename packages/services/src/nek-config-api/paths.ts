@@ -78,7 +78,12 @@ export function newAgentPresetPath(dir: string, name: string): string {
 export function agentPresetFileName(dir: string, file: string): string {
   const paths = targetPaths(dir);
   const filename = paths.basename(file);
-  if (!filename.endsWith(".md") || file.includes("\0") || file !== paths.join(dir, filename)) {
+  if (
+    !filename.endsWith(".md") ||
+    file.includes("\0") ||
+    (paths === win32 && filename.includes(":")) ||
+    file !== paths.join(dir, filename)
+  ) {
     throw validationError(`invalid preset path: ${file}`);
   }
   return filename;

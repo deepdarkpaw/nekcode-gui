@@ -5,7 +5,6 @@ import {
   builtinAgentPresetEntries,
   effectiveAgentPresetTools,
   type NekAgentPreset,
-  type NekAgentPresetEntry,
   type NekAgentPresetsView,
   type NekConfigDiagnostic,
   type NekConfigScope,
@@ -121,6 +120,17 @@ function filenameConflict(path: string) {
   return validationError(`preset file already exists: ${path}`, { name: "duplicate filename" });
 }
 
+function serializeCheckedPreset(
+  path: string,
+  preset: NekAgentPreset,
+  existing?: ReturnType<typeof parseAgentMarkdown>,
+): string {
+  const content = serializeAgentMarkdown(path, preset, existing);
+  if (Buffer.byteLength(content) > MAX_PRESET_BYTES)
+    throw validationError(`Preset file exceeds ${MAX_PRESET_BYTES / 1024} KB: ${path}`);
+  return content;
+}
+
 /** Create exclusively, even if a file (including invalid YAML or a link) appears after the check. */
 async function createPresetFile(executor: NekConfigHostExecutor, path: string, content: string) {
   if ((await executor.resourceEntryKind(path)) !== null) throw filenameConflict(path);
@@ -152,7 +162,7 @@ export async function writeAgentPreset({
   const name = preset.name.trim();
   if (expectedRevision === ABSENT_REVISION) {
     const path = newAgentPresetPath(dir, name);
-    const content = serializeAgentMarkdown(path, { ...preset, name });
+    const content = serializeCheckedPreset(path, { ...preset, name });
     return { path, revision: await createPresetFile(executor, path, content) };
   }
   const source = presetFileRef(expectedRevision);
@@ -163,9 +173,7 @@ export async function writeAgentPreset({
   const renameFile =
     filename.slice(0, -3) === existing.preset.name && name !== existing.preset.name;
   const path = renameFile ? newAgentPresetPath(dir, name) : source.path;
-  const content = serializeAgentMarkdown(path, { ...preset, name }, existing);
-  if (Buffer.byteLength(content) > MAX_PRESET_BYTES)
-    throw validationError(`Preset file exceeds ${MAX_PRESET_BYTES / 1024} KB: ${path}`);
+  const content = serializeCheckedPreset(path, { ...preset, name }, existing);
   if (!renameFile) return { path, revision: await writeTextDocument(executor, path, content) };
   const revision = await createPresetFile(executor, path, content);
   // Publish the new file before removing the source; a failed removal never loses the preset.

@@ -1,12 +1,10 @@
 /**
- * mock：settings.json、nek.yaml、子代理预设、AGENTS.md、资源清单、项目信任、复制到远程。
+ * mock：settings.json、nek.yaml、子代理预设、扩展清单、项目信任、复制到远程。
  */
 import type {
   NekAgentPreset,
   NekAgentPresetsView,
   NekConfigScope,
-  NekInstructionFile,
-  NekInstructionsView,
   NekCopyItemResult,
   NekCopyPreview,
   NekCopyResolution,
@@ -24,14 +22,12 @@ import {
   builtinAgentPresetEntries,
   effectiveAgentPresetTools,
   isAgentPresetFileName,
-  NEK_INSTRUCTION_FILE_NAMES,
 } from "@zcode/shared/nek-protocol";
 import { mergeDeep } from "../../lib/settingsPatch.js";
 import {
   assertRevision,
   clone,
   mockError,
-  mockFile,
   projectFile,
   type MockFile,
   type MockMachine,
@@ -245,70 +241,6 @@ export function deletePreset(
   }
   machine.presets = machine.presets.filter((entry) => entry !== existing);
   return touch({ path: existing.path, revision: existing.revision, value: null });
-}
-
-function contextFileRef({ path }: MockFile<string>): NekInstructionFile {
-  return { path, filename: path.slice(path.lastIndexOf("/") + 1) };
-}
-
-function contextFiles(machine: MockMachine, dir: string): MockFile<string>[] {
-  const primary =
-    dir === machine.agentDir ? machine.instructions : machine.projectInstructions.get(dir);
-  const files: MockFile<string>[] = [];
-  for (const name of NEK_INSTRUCTION_FILE_NAMES) {
-    const path = `${dir}/${name}`;
-    const file = path === primary?.path ? primary : machine.otherInstructionFiles.get(path);
-    if (file && file.revision !== "absent") files.push(file);
-  }
-  return files;
-}
-
-export function readInstructions(
-  machine: MockMachine,
-  scope: NekConfigScope,
-  cwd?: string,
-): NekInstructionsView {
-  const dir = scope === "global" ? machine.agentDir : cwd;
-  if (!dir) throw mockError("validation", "project scope requires cwd");
-  const [file = mockFile(`${dir}/AGENTS.md`, "", false), ...ignored] = contextFiles(machine, dir);
-  const ancestors: NekInstructionFile[] = [];
-  if (scope === "project") {
-    let parent = dir;
-    while (parent.includes("/")) {
-      parent = parent.slice(0, parent.lastIndexOf("/"));
-      const [ancestor] = contextFiles(machine, parent);
-      if (ancestor && parent !== machine.agentDir) ancestors.unshift(contextFileRef(ancestor));
-    }
-  }
-  return {
-    ...contextFileRef(file),
-    revision: file.revision,
-    content: file.value,
-    ignored: ignored.map(contextFileRef),
-    ancestors,
-    diagnostics: [],
-  };
-}
-
-export function writeInstructions(
-  machine: MockMachine,
-  scope: NekConfigScope,
-  content: string,
-  options: { path: string; revision: string; cwd?: string },
-  touch: Touch,
-): string {
-  const view = readInstructions(machine, scope, options.cwd);
-  if (view.path !== options.path || view.revision !== options.revision)
-    throw mockError("conflict", `${options.path} was modified externally`);
-  const dir = scope === "global" ? machine.agentDir : options.cwd!;
-  const [active] = contextFiles(machine, dir);
-  const file = active ?? mockFile(view.path, "", false);
-  if (!active) {
-    if (scope === "global") machine.instructions = file;
-    else machine.projectInstructions.set(dir, file);
-  }
-  file.value = content;
-  return touch(file);
 }
 
 export function extensions(machine: MockMachine) {

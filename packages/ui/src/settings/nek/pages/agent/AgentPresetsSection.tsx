@@ -144,14 +144,7 @@ export function AgentPresetsSection({
                       ) : null}
                       {entry.overriddenBy ? (
                         <span className="break-words text-ui-sm text-foreground-subtle">
-                          {intl.formatMessage(
-                            { id: "settings.nek.agent.preset.overridden" },
-                            {
-                              path: (
-                                <code className="break-all font-mono">{entry.overriddenBy}</code>
-                              ),
-                            },
-                          )}
+                          {t("settings.nek.agent.preset.overridden", { path: entry.overriddenBy })}
                         </span>
                       ) : null}
                       {entry.untrusted ? (

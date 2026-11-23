@@ -371,7 +371,11 @@ export class NekConfigService {
     if (!existing && !isAgentPresetFileName(name))
       throw new Error(`invalid agent preset name "${name}"`);
     const path = existing?.path ?? join(dir, `${name}.md`);
-    await assertRevision(this.fs, path, options.expectedRevision ?? existing?.revision ?? null);
+    const expected =
+      options.expectedRevision === undefined
+        ? (existing?.revision ?? null)
+        : options.expectedRevision;
+    await this.assertAgentPresetRevision(path, expected);
     await atomicWrite(
       this.fs,
       path,
@@ -388,9 +392,20 @@ export class NekConfigService {
   ): Promise<boolean> {
     const existing = await this.readAgentPreset(name, options.scope);
     if (!existing) return false;
-    await assertRevision(this.fs, existing.path, options.expectedRevision ?? existing.revision);
+    const expected =
+      options.expectedRevision === undefined ? existing.revision : options.expectedRevision;
+    await this.assertAgentPresetRevision(existing.path, expected);
     await this.fs.remove(existing.path);
     return true;
+  }
+
+  private async assertAgentPresetRevision(
+    path: string,
+    expected: NekConfigRevision | null,
+  ): Promise<void> {
+    if (expected && "path" in expected && expected.path !== path)
+      throw new NekConfigConflictError(path, expected, null);
+    await assertRevision(this.fs, path, expected);
   }
 
   // --------------------------------------------------------------------------

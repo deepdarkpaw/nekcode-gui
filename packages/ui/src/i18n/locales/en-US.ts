@@ -3295,6 +3295,8 @@ const enUS: Record<string, string> = {
     "nek won't load this preset because the project is not trusted.",
   "settings.nek.agent.preset.effectiveTools": "Effective tools: {tools}",
   "settings.nek.agent.preset.noTools": "None",
+  "settings.nek.agent.openRemoteFileUnavailable":
+    "No editor is connected to this remote target. Open {path} on the target machine.",
   "settings.nek.agent.preset.addTitle": "New subagent preset",
   "settings.nek.agent.preset.editTitle": "Edit subagent preset",
   "settings.nek.agent.preset.create": "Create preset",

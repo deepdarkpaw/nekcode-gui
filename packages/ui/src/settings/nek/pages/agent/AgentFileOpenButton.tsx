@@ -30,7 +30,10 @@ export function AgentFileOpenButton({ path }: { path: string }) {
       size="sm"
       icon={<ExternalLinkIcon />}
       disabled={target.kind === "remote" && !external}
-      disabledReason={intl.formatMessage({ id: "settings.nek.openDir.remote" }, { path })}
+      disabledReason={intl.formatMessage(
+        { id: "settings.nek.agent.openRemoteFileUnavailable" },
+        { path },
+      )}
       successFeedback="none"
       onClick={open}
     >

@@ -9,11 +9,8 @@ import { SettingSection, SettingSwitchField } from "@/components/ui/setting-fiel
 import { SettingNumberField, SettingTextField } from "@/components/ui/setting-text-field.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatBytes } from "@/lib/displayFormat.js";
-import {
-  useNekHostApi,
-  useNekSettingsContext,
-  useNekTarget,
-} from "../../api/NekSettingsContext.js";
+import { useNekHostApi, useNekTarget } from "../../api/NekSettingsContext.js";
+import { useModelScopeCwd } from "../../api/useModelScopeCwd.js";
 import { useNekAgentPresetsDoc } from "../../api/mcpDocs.js";
 import { useNekYamlDoc, yamlValue, type NekYamlDocument } from "../../api/settingsDocs.js";
 import { useNekQuery } from "../../api/useNekQuery.js";
@@ -166,7 +163,7 @@ function ResourcesSection() {
 
 export function AgentPage() {
   const { intl } = useZCodeIntl();
-  const { projectCwd } = useNekSettingsContext();
+  const projectCwd = useModelScopeCwd();
   const yaml = useNekYamlDoc();
   const presets = useNekAgentPresetsDoc(projectCwd);
   const available = useNekQuery((api, target) => api.listAvailableModels(target), []);

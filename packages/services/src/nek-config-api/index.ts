@@ -56,7 +56,6 @@ export { ABSENT_REVISION, encodeRevision, sameRevision } from "./revision.js";
 export type { NekHostStat, NekRevisionParts } from "./revision.js";
 export { NEK_SETTINGS_DEFAULTS, COMPACTION_CONTENT_DEFAULTS } from "./settingsDefaults.js";
 export { NEK_YAML_DEFAULTS } from "./yamlApi.js";
-export { BUILTIN_PRESETS, BUILTIN_PRESET_REVISION } from "./presetsDocument.js";
 export { BUILTIN_PROVIDER_IDS, maskApiKey, apiKeyView } from "./modelsDocument.js";
 export { LOGIN_CALLBACK_PORTS } from "./login.js";
 export { copyItemKey } from "./copyApi.js";

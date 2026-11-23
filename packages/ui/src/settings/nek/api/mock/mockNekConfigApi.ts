@@ -23,6 +23,7 @@ import * as models from "./mockModels.js";
 import { mockModelScope, saveMockModelScope, updateMockModelScope } from "./mockModelScope.js";
 import { MOCK_BUILTIN_TOOLS } from "./mockBuiltinTools.js";
 import * as settings from "./mockSettings.js";
+import * as instructions from "./mockInstructions.js";
 import {
   createMockResource,
   deleteMockResource,
@@ -312,12 +313,12 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
 
   readInstructions: INekConfigApi["readInstructions"] = (target, scope, cwd) =>
     this.call("readInstructions", () =>
-      settings.readInstructions(this.machineOf(target), scope, cwd),
+      instructions.readInstructions(this.machineOf(target), scope, cwd),
     );
 
   writeInstructions: INekConfigApi["writeInstructions"] = (target, scope, content, options) =>
     this.write(target, "writeInstructions", (machine, touch) =>
-      settings.writeInstructions(machine, scope, content, options, touch),
+      instructions.writeInstructions(machine, scope, content, options, touch),
     );
 
   listExtensions: INekConfigApi["listExtensions"] = (target) =>
