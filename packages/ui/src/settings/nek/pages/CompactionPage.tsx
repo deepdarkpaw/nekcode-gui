@@ -5,11 +5,8 @@
  */
 import { useState } from "react";
 import { AlertTriangleIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import type {
-  NekCatalogModel,
-  NekCompactionContentSettings,
-  NekThinkingLevel,
-} from "@zcode/shared/nek-protocol";
+import type { NekCatalogModel, NekThinkingLevel } from "@zcode/shared/nek-protocol";
+import { nekSettingsIssues } from "@zcode/shared/nek-protocol";
 import { Button } from "@/components/ui/button.js";
 import { IconButton } from "@/components/ui/icon-button.js";
 import {
@@ -20,7 +17,6 @@ import {
   useInstantCommit,
 } from "@/components/ui/setting-fields.js";
 import { SettingNumberField } from "@/components/ui/setting-text-field.js";
-import { Switch } from "@/components/ui/switch.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatTokens } from "@/lib/displayFormat.js";
@@ -28,22 +24,17 @@ import { useNekQuery } from "../api/useNekQuery.js";
 import { useNekSettingsDoc, type NekSettingsDocument } from "../api/settingsDocs.js";
 import { checkCompaction, mainModelRef, type CompactionIssue } from "../lib/compactionChecks.js";
 import { findCatalogModel, supportedThinkingLevels } from "../lib/modelRef.js";
-import { nestedSettingsPatch, type NestedSettingsPatch } from "../lib/settingsPatch.js";
+import {
+  isPlainObject,
+  nestedSettingsPatch,
+  type NestedSettingsPatch,
+} from "../lib/settingsPatch.js";
+import { CompactionRepairs, ContentSettings } from "./compaction/ContentSettings.js";
 import { DocumentGate } from "../components/DocumentStatus.js";
 import { ModelSelect, ThinkingLevelSelect } from "../components/modelControls.js";
 import { NekPageFrame } from "../components/NekPageFrame.js";
 
 type Compaction = NonNullable<NestedSettingsPatch["compaction"]>;
-
-const CONTENT_NUMBER_FIELDS = [
-  ["thinkingMaxChars", "chars"],
-  ["thinkingTotalMaxChars", "chars"],
-  ["toolResultMaxChars", "chars"],
-  ["toolErrorMaxChars", "chars"],
-  ["toolArgumentMaxChars", "chars"],
-  ["protectedRecentTokens", "tokens"],
-  ["protectedToolResults", "count"],
-] as const;
 
 function IssueList({ issues }: { issues: readonly CompactionIssue[] }) {
   const { intl } = useZCodeIntl();
@@ -99,16 +90,21 @@ function ModelSection({
   const defaults = settings.data?.defaults ?? {};
   const compaction = values.compaction ?? {};
   const mainRef = mainModelRef(values);
-  const modelCommit = useInstantCommit<string | undefined>(compaction.model, (model) =>
-    write({ model: model ?? null }),
-  );
-  const levelCommit = useInstantCommit<NekThinkingLevel | undefined>(
-    compaction.thinkingLevel,
-    (thinkingLevel) => write({ thinkingLevel: thinkingLevel ?? null }),
+  const issues = nekSettingsIssues({ compaction });
+  const model = issues.some(({ path }) => path[1] === "model") ? undefined : compaction.model;
+  const level = issues.some(({ path }) => path[1] === "thinkingLevel")
+    ? undefined
+    : compaction.thinkingLevel;
+  const modelCommit = useInstantCommit(model, (next) => write({ model: next ?? null }));
+  const levelCommit = useInstantCommit<NekThinkingLevel | undefined>(level, (thinkingLevel) =>
+    write({ thinkingLevel: thinkingLevel ?? null }),
   );
   const chosen = findCatalogModel(models, modelCommit.displayValue ?? mainRef);
   const reserve = compaction.reserveTokens ?? defaults.compaction?.reserveTokens ?? 0;
   const keep = compaction.keepRecentTokens ?? defaults.compaction?.keepRecentTokens ?? 0;
+  const override = mainRef === undefined ? undefined : compaction.modelOverrides?.[mainRef];
+  const effectiveReserve = override?.reserveTokens ?? reserve;
+  const effectiveKeep = override?.keepRecentTokens ?? keep;
   const mainContext = findCatalogModel(models, mainRef)?.contextWindow;
   return (
     <SettingSection title={intl.formatMessage({ id: "settings.nek.compaction.title" })}>
@@ -153,6 +149,7 @@ function ModelSection({
         unit="tokens"
         integer
         min={0}
+        max={Number.MAX_SAFE_INTEGER}
         value={reserve}
         defaultValue={defaults.compaction?.reserveTokens}
         onCommit={(value) =>
@@ -165,29 +162,40 @@ function ModelSection({
         unit="tokens"
         integer
         min={0}
+        max={Number.MAX_SAFE_INTEGER}
         value={keep}
         defaultValue={defaults.compaction?.keepRecentTokens}
         onCommit={(value) =>
           write({ keepRecentTokens: numberOrNull(value, defaults.compaction?.keepRecentTokens) })
         }
       />
-      <p className="rounded-lg bg-surface px-3 py-2 text-ui-sm text-foreground-subtle">
-        {mainContext
-          ? intl.formatMessage(
-              { id: "settings.nek.compaction.trigger" },
-              {
-                context: formatTokens(mainContext),
-                reserve: formatTokens(reserve),
-                threshold: formatTokens(Math.max(0, mainContext - reserve)),
-                keep: formatTokens(keep),
-              },
-            )
-          : intl.formatMessage(
-              { id: "settings.nek.compaction.triggerGeneric" },
-              { reserve: formatTokens(reserve), keep: formatTokens(keep) },
+      {issues.length === 0 ? (
+        <>
+          <p className="rounded-lg bg-surface px-3 py-2 text-ui-sm text-foreground-subtle">
+            {mainContext
+              ? intl.formatMessage(
+                  { id: "settings.nek.compaction.trigger" },
+                  {
+                    context: formatTokens(mainContext),
+                    reserve: formatTokens(effectiveReserve),
+                    threshold: formatTokens(mainContext - effectiveReserve),
+                    keep: formatTokens(effectiveKeep),
+                  },
+                )
+              : intl.formatMessage(
+                  { id: "settings.nek.compaction.triggerGeneric" },
+                  { reserve: formatTokens(reserve), keep: formatTokens(keep) },
+                )}
+          </p>
+          <IssueList
+            issues={checkCompaction(
+              { ...values, compaction: { ...compaction, reserveTokens: effectiveReserve } },
+              models,
+              defaults,
             )}
-      </p>
-      <IssueList issues={checkCompaction(values, models, defaults)} />
+          />
+        </>
+      ) : null}
     </SettingSection>
   );
 }
@@ -202,9 +210,11 @@ function OverridesSection({
   const { intl } = useZCodeIntl();
   const write = useCompactionWriter(settings);
   const [adding, setAdding] = useState<string | undefined>(undefined);
-  const overrides = settings.data?.values.compaction?.modelOverrides ?? {};
   const defaults = settings.data?.values.compaction ?? {};
   const fallback = settings.data?.defaults.compaction ?? {};
+  const overrides = isPlainObject(defaults.modelOverrides) ? defaults.modelOverrides : {};
+  const reserveDefault = defaults.reserveTokens ?? fallback.reserveTokens ?? 0;
+  const keepDefault = defaults.keepRecentTokens ?? fallback.keepRecentTokens ?? 0;
   return (
     <SettingAdvancedGroup title={intl.formatMessage({ id: "settings.nek.compaction.overrides" })}>
       <p className="text-ui-sm text-foreground-subtle">
@@ -230,22 +240,31 @@ function OverridesSection({
             unit="tokens"
             integer
             min={0}
-            value={override.reserveTokens ?? defaults.reserveTokens ?? fallback.reserveTokens ?? 0}
-            onCommit={(reserveTokens) => write({ modelOverrides: { [ref]: { reserveTokens } } })}
+            max={Number.MAX_SAFE_INTEGER}
+            value={override?.reserveTokens ?? reserveDefault}
+            defaultValue={reserveDefault}
+            onCommit={(reserveTokens) =>
+              write({
+                modelOverrides: {
+                  [ref]: { reserveTokens: numberOrNull(reserveTokens, reserveDefault) },
+                },
+              })
+            }
           />
           <SettingNumberField
             label={intl.formatMessage({ id: "settings.nek.compaction.keepRecent" })}
             unit="tokens"
             integer
             min={0}
-            value={
-              override.keepRecentTokens ??
-              defaults.keepRecentTokens ??
-              fallback.keepRecentTokens ??
-              0
-            }
+            max={Number.MAX_SAFE_INTEGER}
+            value={override?.keepRecentTokens ?? keepDefault}
+            defaultValue={keepDefault}
             onCommit={(keepRecentTokens) =>
-              write({ modelOverrides: { [ref]: { keepRecentTokens } } })
+              write({
+                modelOverrides: {
+                  [ref]: { keepRecentTokens: numberOrNull(keepRecentTokens, keepDefault) },
+                },
+              })
             }
           />
         </div>
@@ -275,75 +294,6 @@ function OverridesSection({
           {intl.formatMessage({ id: "settings.nek.compaction.addOverride" })}
         </Button>
       </div>
-    </SettingAdvancedGroup>
-  );
-}
-
-function PruneSwitchRow({ settings }: { settings: NekSettingsDocument }) {
-  const { intl } = useZCodeIntl();
-  const write = useCompactionWriter(settings);
-  const explicit = settings.data?.values.compaction?.content?.pruneToolResults;
-  const fallback = settings.data?.defaults.compaction?.content?.pruneToolResults ?? true;
-  const commit = useInstantCommit<boolean>(explicit ?? fallback, (pruneToolResults) =>
-    write({
-      content: { pruneToolResults: pruneToolResults === fallback ? null : pruneToolResults },
-    }),
-  );
-  return (
-    <SettingRow
-      label={intl.formatMessage({ id: "settings.nek.compaction.content.pruneToolResults" })}
-      description={intl.formatMessage({
-        id: "settings.nek.compaction.content.pruneToolResultsHint",
-      })}
-      state={commit.action.state}
-      trailing={
-        explicit !== undefined && explicit !== fallback ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void write({ content: { pruneToolResults: null } })}
-          >
-            {intl.formatMessage({ id: "ui.setting.resetToDefault" })}
-          </Button>
-        ) : null
-      }
-    >
-      <Switch
-        checked={commit.displayValue}
-        onCheckedChange={commit.commit}
-        aria-label={intl.formatMessage({ id: "settings.nek.compaction.content.pruneToolResults" })}
-      />
-    </SettingRow>
-  );
-}
-
-function ContentSection({ settings }: { settings: NekSettingsDocument }) {
-  const { intl } = useZCodeIntl();
-  const write = useCompactionWriter(settings);
-  const content: NekCompactionContentSettings = settings.data?.values.compaction?.content ?? {};
-  const defaults: NekCompactionContentSettings = settings.data?.defaults.compaction?.content ?? {};
-  return (
-    <SettingAdvancedGroup
-      title={intl.formatMessage({ id: "settings.nek.compaction.content.title" })}
-    >
-      <p className="text-ui-sm text-foreground-subtle">
-        {intl.formatMessage({ id: "settings.nek.compaction.content.hint" })}
-      </p>
-      {CONTENT_NUMBER_FIELDS.map(([field, unit]) => (
-        <SettingNumberField
-          key={field}
-          label={intl.formatMessage({ id: `settings.nek.compaction.content.${field}` })}
-          unit={intl.formatMessage({ id: `settings.nek.unit.${unit}` })}
-          integer
-          min={0}
-          value={content[field] ?? defaults[field] ?? 0}
-          defaultValue={defaults[field]}
-          onCommit={(value) =>
-            write({ content: { [field]: numberOrNull(value, defaults[field]) } })
-          }
-        />
-      ))}
-      <PruneSwitchRow settings={settings} />
     </SettingAdvancedGroup>
   );
 }
@@ -392,9 +342,10 @@ export function CompactionPage() {
         {() => (
           <div className="flex flex-col gap-8">
             <div className="flex flex-col gap-2">
+              <CompactionRepairs settings={settings} />
               <ModelSection settings={settings} models={available.data ?? []} />
               <OverridesSection settings={settings} models={available.data ?? []} />
-              <ContentSection settings={settings} />
+              <ContentSettings settings={settings} />
             </div>
             <BranchSummarySection settings={settings} />
           </div>
