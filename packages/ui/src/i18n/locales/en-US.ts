@@ -3596,6 +3596,7 @@ const enUS: Record<string, string> = {
   "settings.nek.advanced.retry.baseDelayMs": "Base delay",
   "settings.nek.advanced.retry.maxAgentDelayMs": "Max delay",
   "settings.nek.advanced.retry.provider": "Provider requests",
+  "settings.nek.advanced.retry.sdkDefault": "SDK default",
   "settings.nek.advanced.retry.provider.timeoutMs": "Request timeout",
   "settings.nek.advanced.retry.provider.maxRetries": "SDK retries",
   "settings.nek.advanced.retry.provider.maxRetryDelayMs": "SDK max delay",

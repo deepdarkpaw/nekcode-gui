@@ -3389,6 +3389,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.advanced.retry.baseDelayMs": "初始退避",
   "settings.nek.advanced.retry.maxAgentDelayMs": "最长等待",
   "settings.nek.advanced.retry.provider": "服务商请求层",
+  "settings.nek.advanced.retry.sdkDefault": "SDK 默认",
   "settings.nek.advanced.retry.provider.timeoutMs": "请求超时",
   "settings.nek.advanced.retry.provider.maxRetries": "SDK 重试次数",
   "settings.nek.advanced.retry.provider.maxRetryDelayMs": "SDK 最长退避",

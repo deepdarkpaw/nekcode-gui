@@ -22,6 +22,7 @@ import { validationError } from "./errors.js";
 import { settingsPath } from "./paths.js";
 import type { NekConfigRuntime } from "./runtime.js";
 import {
+  loadNekSettings,
   NEK_SETTINGS_DEFAULTS,
   settingsPatchToRecord,
   toSettingsView,
@@ -225,11 +226,11 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       const readScope = async (otherScope: NekConfigScope): Promise<Record<string, unknown>> => {
         if (otherScope === "project" && !cwd) return {};
         const otherPath = settingsPath(context.layout, otherScope, cwd);
-        if (otherScope === scope) return document.raw;
+        if (otherScope === scope) return loadNekSettings(document.raw);
         try {
           const { raw } = await readSettingsDocument(context.executor, otherPath);
           diagnostics.push(...settingsRuleDiagnostics(otherPath, raw));
-          return raw;
+          return loadNekSettings(raw);
         } catch (error) {
           diagnostics.push(
             diagnostic(otherPath, error instanceof Error ? error.message : String(error)),

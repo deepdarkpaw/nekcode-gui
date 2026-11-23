@@ -117,14 +117,6 @@ export type NekModelOverride = z.infer<typeof nekModelOverrideSchema>;
 // settings.json（nek core/settings-manager.ts）
 // ============================================================================
 
-export const nekRetrySettingsSchema = loose({
-  enabled: z.boolean().optional(),
-  timeoutMs: z.number().optional(),
-  maxRetries: z.number().optional(),
-  maxRetryDelayMs: z.number().optional(),
-  provider: nekOpaqueJsonSchema.optional(),
-});
-
 /**
  * nek `getWebSearchSettings()` 要求 endpoint/apiKey 存在时 `trim()` 后非空，
  * 空串同样让会话启动失败。这里只判空、不 trim：密钥原样落盘。
@@ -150,7 +142,9 @@ export const nekSettingsFileSchema = loose({
   enabledModels: z.array(z.string()).optional(),
   defaultTools: z.array(z.string()).optional(),
   compaction: nekOpaqueJsonSchema.optional(),
-  retry: nekRetrySettingsSchema.optional(),
+  // v0.5.1 retry getters do not validate the shape. See NekSettingsView: timeoutMs and
+  // maxRetryDelayMs belong to retry.provider; unrelated fields are preserved but not interpreted.
+  retry: nekOpaqueJsonSchema.optional(),
   branchSummary: nekOpaqueJsonSchema.optional(),
   transport: z.string().optional(),
   steeringMode: z.enum(["all", "one-at-a-time"]).optional(),

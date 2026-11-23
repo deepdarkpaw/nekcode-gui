@@ -54,7 +54,13 @@ export const NEK_SETTINGS_DEFAULTS: NekSettingsView = {
     modelOverrides: {},
   },
   branchSummary: { reserveTokens: 16384, skipPrompt: false },
-  retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, maxAgentDelayMs: 60000 },
+  retry: {
+    enabled: true,
+    maxRetries: 3,
+    baseDelayMs: 2000,
+    maxAgentDelayMs: 60000,
+    provider: { maxRetryDelayMs: 60000 },
+  },
   webSearch: { provider: "tavily", numResults: 8 },
   httpIdleTimeoutMs: 300_000,
   transport: "auto",
@@ -64,6 +70,21 @@ export const NEK_SETTINGS_DEFAULTS: NekSettingsView = {
   hideThinkingBlock: false,
   updateChannel: "stable",
 };
+
+/** Apply the nek v0.5.1 settings-manager.ts load migration to a single scope, without touching disk. */
+export function loadNekSettings(raw: Record<string, unknown>): Record<string, unknown> {
+  if (!isPlainObject(raw.retry)) return raw;
+  const { maxDelayMs, ...retry } = raw.retry;
+  const provider = retry.provider;
+  const providerSettings = typeof provider === "object" && provider !== null ? provider : undefined;
+  if (
+    typeof maxDelayMs === "number" &&
+    (!isPlainObject(providerSettings) || providerSettings.maxRetryDelayMs == null)
+  ) {
+    retry.provider = { ...providerSettings, maxRetryDelayMs: maxDelayMs };
+  }
+  return { ...raw, retry };
+}
 
 /** 文件内容 → 视图：认识的键原样带出，未知键收进 `extra`（保存时原样写回）。 */
 export function toSettingsView(raw: Record<string, unknown>): NekSettingsView {

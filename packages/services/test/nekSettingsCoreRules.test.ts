@@ -212,3 +212,50 @@ test("SR-5 round-trips each tool-list style and gets the catalogue from nek RPC"
     assert.deepEqual(readJson(local, SETTINGS), { defaultTools });
   }
 });
+
+test("SR-6 keeps provider settings nested and leaves unspecified SDK options unset", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  let read = await api.readSettings(LOCAL, "global");
+  assert.deepEqual(read.defaults.retry, {
+    enabled: true,
+    maxRetries: 3,
+    baseDelayMs: 2000,
+    maxAgentDelayMs: 60000,
+    provider: { maxRetryDelayMs: 60000 },
+  });
+  const retry = {
+    maxRetries: 1.5,
+    timeoutMs: "ignored top-level field",
+    maxRetryDelayMs: "ignored top-level field",
+    provider: { timeoutMs: 4000, maxRetries: 0, maxRetryDelayMs: 8000 },
+  };
+  await api.patchSettings(LOCAL, "global", { retry }, read);
+  read = await api.readSettings(LOCAL, "global");
+  assert.deepEqual(readJson(local, SETTINGS), { retry });
+  assert.deepEqual(read.effective.retry?.provider, retry.provider);
+  await api.patchSettings(LOCAL, "global", { retry: { provider: null } } as NekSettingsPatch, read);
+  read = await api.readSettings(LOCAL, "global");
+  assert.deepEqual(read.effective.retry?.provider, read.defaults.retry?.provider);
+});
+
+test("SR-6 applies legacy maxDelayMs only to the loaded projection, per file before merging", async (t) => {
+  const global = { retry: { maxDelayMs: 100, provider: { maxRetries: 0, maxRetryDelayMs: 200 } } };
+  const project = { retry: { maxDelayMs: 300 } };
+  const { api, local } = createHarness({
+    localFiles: {
+      [SETTINGS]: JSON.stringify(global),
+      [PROJECT_SETTINGS]: JSON.stringify(project),
+    },
+  });
+  t.after(() => api.dispose());
+  assert.equal(
+    (await api.readSettings(LOCAL, "global")).effective.retry?.provider?.maxRetryDelayMs,
+    200,
+  );
+  assert.deepEqual((await api.readSettings(LOCAL, "project", PROJECT)).effective.retry?.provider, {
+    maxRetries: 0,
+    maxRetryDelayMs: 300,
+  });
+  assert.deepEqual(readJson(local, PROJECT_SETTINGS), project);
+});

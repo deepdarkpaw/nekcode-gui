@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { NekSettingsView } from "@zcode/shared/nek-protocol";
 import { createNekTestEnv, installDomPolyfills } from "../test/nekTestUtils.js";
+import { AdvancedPage } from "./AdvancedPage.js";
 import { CompactionPage } from "./CompactionPage.js";
 import { ToolsPage } from "./ToolsPage.js";
 
@@ -133,4 +134,51 @@ it("SR-5 diagnoses and keeps unknown entries verbatim when editing an explicit l
   expect(screen.getByRole("switch", { name: "启用联网搜索" }).getAttribute("aria-checked")).toBe(
     "false",
   );
+});
+
+it("SR-6 shows inherited SDK options and deletes only the provider overrides on reset", async () => {
+  const env = createNekTestEnv();
+  const machine = env.config.machines.get("local")!;
+  machine.settings.value.retry = { maxRetries: 2 };
+  const mockRead = env.config.readSettings;
+  vi.spyOn(env.config, "readSettings").mockImplementation(async (...args) => {
+    const data = await mockRead(...args);
+    const provider = { maxRetryDelayMs: 60000 };
+    return {
+      ...data,
+      defaults: { ...data.defaults, retry: { ...data.defaults.retry, provider } },
+      effective: {
+        ...data.effective,
+        retry: {
+          ...data.effective.retry,
+          provider: { ...provider, ...data.values.retry?.provider },
+        },
+      },
+    };
+  });
+  render(<AdvancedPage />, { wrapper: env.wrapper });
+  fireEvent.click(await screen.findByRole("button", { name: "服务商请求层" }));
+  const timeout = (await screen.findByLabelText("请求超时")) as HTMLInputElement;
+  const retries = screen.getByLabelText<HTMLInputElement>("SDK 重试次数");
+  const cap = screen.getByLabelText<HTMLInputElement>("SDK 最长退避");
+  for (const input of [timeout, retries]) {
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("SDK 默认");
+  }
+  expect(cap.value).toBe("60000");
+  await act(async () => editNumber(timeout, "4500"));
+  await act(async () => editNumber(retries, "0"));
+  await act(async () => editNumber(cap, "9000"));
+  expect(machine.settings.value.retry).toEqual({
+    maxRetries: 2,
+    provider: { timeoutMs: 4500, maxRetries: 0, maxRetryDelayMs: 9000 },
+  });
+  for (const input of [timeout, retries, cap]) {
+    const row = input.closest<HTMLElement>("[data-slot='setting-row']")!;
+    await act(async () => fireEvent.click(within(row).getByRole("button", { name: "恢复默认" })));
+  }
+  expect(machine.settings.value.retry).toEqual({ maxRetries: 2 });
+  expect(timeout.value).toBe("");
+  expect(retries.value).toBe("");
+  expect(cap.value).toBe("60000");
 });

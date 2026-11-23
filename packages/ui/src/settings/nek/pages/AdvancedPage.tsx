@@ -48,7 +48,7 @@ const PROVIDER_RETRY_NUMBERS = [
 function RetrySection({ settings }: { settings: NekSettingsDocument }) {
   const { intl } = useZCodeIntl();
   const t = (id: string) => intl.formatMessage({ id });
-  const values: Retry = settings.data?.values.retry ?? {};
+  const values: Retry = settings.data?.effective.retry ?? {};
   const defaults: Retry = settings.data?.defaults.retry ?? {};
   const write = (retry: NonNullable<NestedSettingsPatch["retry"]>) =>
     settings.patch(nestedSettingsPatch({ retry }));
@@ -60,35 +60,48 @@ function RetrySection({ settings }: { settings: NekSettingsDocument }) {
       <SettingSwitchField
         label={t("settings.nek.advanced.retry.enabled")}
         value={values.enabled ?? defaults.enabled ?? true}
-        onCommit={(enabled) => write({ enabled })}
+        onCommit={(enabled) => write({ enabled: enabled === defaults.enabled ? null : enabled })}
       />
       {RETRY_NUMBERS.map(([field, unit]) => (
         <SettingNumberField
           key={field}
           label={t(`settings.nek.advanced.retry.${field}`)}
           unit={t(`settings.nek.unit.${unit}`)}
-          integer
-          min={0}
           value={values[field] ?? defaults[field] ?? 0}
           defaultValue={defaults[field]}
           onCommit={(value) => write({ [field]: value === defaults[field] ? null : value })}
         />
       ))}
       <SettingAdvancedGroup title={t("settings.nek.advanced.retry.provider")}>
-        {PROVIDER_RETRY_NUMBERS.map(([field, unit]) => (
-          <SettingNumberField
-            key={field}
-            label={t(`settings.nek.advanced.retry.provider.${field}`)}
-            unit={t(`settings.nek.unit.${unit}`)}
-            integer
-            min={0}
-            value={values.provider?.[field] ?? defaults.provider?.[field] ?? 0}
-            defaultValue={defaults.provider?.[field]}
-            onCommit={(value) =>
-              write({ provider: { [field]: value === defaults.provider?.[field] ? null : value } })
-            }
-          />
-        ))}
+        {PROVIDER_RETRY_NUMBERS.map(([field, unit]) => {
+          const fallback = defaults.provider?.[field];
+          const configured = values.provider?.[field] ?? fallback;
+          return (
+            <SettingTextField
+              key={field}
+              label={t(`settings.nek.advanced.retry.provider.${field}`)}
+              unit={t(`settings.nek.unit.${unit}`)}
+              value={configured === undefined ? "" : String(configured)}
+              defaultValue={fallback === undefined ? "" : String(fallback)}
+              placeholder={
+                fallback === undefined ? t("settings.nek.advanced.retry.sdkDefault") : undefined
+              }
+              validate={(value) =>
+                (value === "" ? fallback === undefined : Number.isFinite(Number(value)))
+                  ? null
+                  : t("ui.field.error.notNumber")
+              }
+              onCommit={async (value) => {
+                const next = value === "" || Number(value) === fallback ? null : Number(value);
+                await write({
+                  provider: { [field]: next },
+                  // Reset the legacy source too; otherwise nek's migration restores the cap.
+                  ...(field === "maxRetryDelayMs" && next === null ? { maxDelayMs: null } : {}),
+                });
+              }}
+            />
+          );
+        })}
       </SettingAdvancedGroup>
     </SettingSection>
   );
