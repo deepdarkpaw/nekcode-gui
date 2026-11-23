@@ -73,7 +73,7 @@ export function resolveNekActionKeyboardEvent(
   platformInfo?: KeyboardShortcutPlatformInfo,
   phase: NekActionDispatchPhase = "capture",
 ): NekActionId | null {
-  const globalActionId = matchActionEvent(event, effective, "global", platformInfo);
+  const globalActionId = matchActionEvent(event, effective, "global", platformInfo, true);
   if (globalActionId !== null) {
     // 全局动作要显式声明可在可编辑元素内生效。
     if (editableTarget && !getNekAction(globalActionId).allowInEditable) return null;
@@ -86,7 +86,7 @@ export function resolveNekActionKeyboardEvent(
     return resolveNekActionDispatchPhase(globalActionId) === phase ? globalActionId : null;
   }
   if (!editableTarget) return null;
-  const composerActionId = matchActionEvent(event, effective, "composer", platformInfo);
+  const composerActionId = matchActionEvent(event, effective, "composer", platformInfo, true);
   if (composerActionId === null) return null;
   // composer 动作本来就只在输入框里生效，只需保证不抢「打字」这一类物理事件。
   if (matchesShiftOnlyPrintable(event, effective, composerActionId, platformInfo)) return null;

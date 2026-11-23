@@ -13,18 +13,16 @@ type SettingsDestination = Extract<
   "nekAccounts" | "nekDefaultModel" | "nekProject" | "nekShortcuts"
 >;
 
-const PLANNED_COMMANDS: ReadonlySet<NekBuiltinSlashCommandName> = new Set([
-  "tree",
-  "export",
-  "import",
-  "share",
-  "clone",
-  "changelog",
-]);
+const PLANNED_COMMANDS = ["tree", "export", "import", "share", "clone", "changelog"] as const;
+type PlannedCommand = (typeof PLANNED_COMMANDS)[number];
+
+function isPlannedCommand(name: NekBuiltinSlashCommandName): name is PlannedCommand {
+  return PLANNED_COMMANDS.some((command) => command === name);
+}
 
 /** Listed in completion only if the GUI can do more than show a notice. */
 export function hasBuiltinSlashAction(name: NekBuiltinSlashCommandName): boolean {
-  return name !== "quit" && !PLANNED_COMMANDS.has(name);
+  return name !== "quit" && !isPlannedCommand(name);
 }
 
 export type BuiltinSlashPicker = "model" | "thought";
@@ -144,7 +142,7 @@ export async function executeBuiltinSlashCommand(
   isCurrent: () => boolean,
 ): Promise<SlashOutcome> {
   if (name === "quit") return blocked("chat.slash.quitHint", undefined, "info");
-  if (!hasBuiltinSlashAction(name)) return blocked("chat.slash.planned", { name }, "info");
+  if (isPlannedCommand(name)) return blocked("chat.slash.planned", { name }, "info");
   if (hasAttachments) return blocked("chat.slash.attachmentsBlocked");
   switch (name) {
     case "model":
@@ -189,7 +187,7 @@ export async function executeBuiltinSlashCommand(
       return ports.focusFork()
         ? sentWithNotice("chat.slash.forkHint")
         : blocked("chat.slash.forkUnavailable", undefined, "info");
-    default:
-      return blocked("chat.slash.planned", { name }, "info");
+    case "reload":
+      return await reload(ports);
   }
 }

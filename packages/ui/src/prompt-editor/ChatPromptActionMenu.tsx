@@ -200,16 +200,11 @@ export function ChatPromptActionMenu({
           // 命令目录以 CLI catalog 为权威，catalog 缺 workflow（插件被禁用）时不提供，
           // 否则会把 CLI 不会展开的裸文本发给模型。
           const emptyDraft = inputApiRef.current?.getText() === "";
-          const offered = (command: QuickCommand, available: boolean) =>
-            emptyDraft && available && !excludedSlashCommandNames?.includes(command);
-          setQuickCommands([
-            ...(offered(
-              "workflow",
-              slashCommands.some((entry) => normalizeSlashCommandValue(entry.name) === "workflow"),
-            )
-              ? (["workflow"] as const)
-              : []),
-          ]);
+          const offerWorkflow =
+            emptyDraft &&
+            !excludedSlashCommandNames?.includes("workflow") &&
+            slashCommands.some((entry) => normalizeSlashCommandValue(entry.name) === "workflow");
+          setQuickCommands(offerWorkflow ? ["workflow"] : []);
           selectionStateRef.current = inputApiRef.current?.getEditorState();
           setSelectedIndex(0);
         }

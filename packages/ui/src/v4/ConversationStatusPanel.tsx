@@ -36,7 +36,6 @@ import type {
 import type { BackgroundWorkSummary, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
-import { useNowTicker } from "@/hooks/useNowTicker.js";
 import {
   Collapsible,
   CollapsibleContent,

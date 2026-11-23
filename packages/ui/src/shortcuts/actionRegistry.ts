@@ -189,9 +189,10 @@ export function matchActionEvent(
   effective: EffectiveActionBindings,
   scope: NekActionScope,
   platformInfo?: KeyboardShortcutPlatformInfo,
+  enabledOnly = false,
 ): NekActionId | null {
   for (const action of NEK_ACTIONS) {
-    if (action.disabledReason || action.scope !== scope) {
+    if (action.scope !== scope || (enabledOnly && action.disabledReason)) {
       continue;
     }
     if (

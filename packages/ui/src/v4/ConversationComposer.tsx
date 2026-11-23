@@ -547,11 +547,15 @@ function ConversationComposerImpl({
     },
     [configPickerScopeKey],
   );
-  useImperativeHandle(slashPickerRef, () => (picker) => {
-    if (disabled || blockingRequestId || modelSelectionState.status !== "ready") return false;
-    handleConfigPickerOpenChange(picker, true);
-    return true;
-  }, [blockingRequestId, disabled, handleConfigPickerOpenChange, modelSelectionState.status]);
+  useImperativeHandle(
+    slashPickerRef,
+    () => (picker) => {
+      if (disabled || blockingRequestId || modelSelectionState.status !== "ready") return false;
+      handleConfigPickerOpenChange(picker, true);
+      return true;
+    },
+    [blockingRequestId, disabled, handleConfigPickerOpenChange, modelSelectionState.status],
+  );
   const [heldQueueConfirmation, setHeldQueueConfirmation] = useState<{
     queueItemIds: readonly string[];
     localTtft?: LocalTtftContext;
@@ -1165,7 +1169,8 @@ function ConversationComposerImpl({
         pendingRef.current ||
         snapshotRef.current?.control.readOnly ||
         (!isBuiltinCommand &&
-          (!submissionReady || (createSubmissionFromComposer !== undefined && submission === null))) ||
+          (!submissionReady ||
+            (createSubmissionFromComposer !== undefined && submission === null))) ||
         attachmentsApi.hasUnreadyAttachments
       ) {
         return;
