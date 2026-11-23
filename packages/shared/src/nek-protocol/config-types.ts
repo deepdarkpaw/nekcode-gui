@@ -208,30 +208,6 @@ export interface NekSettingsView {
   extra?: Record<string, unknown>;
 }
 
-/** GUI 设置视图中的顶层键；其他 nek 字段原样装进 extra。 */
-export const NEK_SETTINGS_KNOWN_KEYS: ReadonlySet<string> = new Set([
-  "defaultProvider",
-  "defaultModel",
-  "defaultThinkingLevel",
-  "modelThinkingLevels",
-  "enabledModels",
-  "defaultTools",
-  "shellPath",
-  "shellCommandPrefix",
-  "compaction",
-  "branchSummary",
-  "retry",
-  "webSearch",
-  "httpProxy",
-  "httpIdleTimeoutMs",
-  "transport",
-  "steeringMode",
-  "followUpMode",
-  "defaultProjectTrust",
-  "hideThinkingBlock",
-  "updateChannel",
-] as const satisfies readonly Exclude<keyof NekSettingsView, "extra">[]);
-
 export interface NekSettingsReadResult extends NekConfigRevision {
   path: string;
   scope: NekConfigScope;

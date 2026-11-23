@@ -47,6 +47,14 @@ describe("settings center i18n", () => {
   it("covers every enumerated dynamic key family", () => {
     const families: Record<string, readonly string[]> = {
       "settings.nek.thinking.": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+      "settings.nek.compaction.repair.": [
+        "safeInteger",
+        "object",
+        "boolean",
+        "unknownContentKey",
+        "modelRef",
+        "thinkingLevel",
+      ],
       "settings.nek.mcp.state.": [
         "connected",
         "connecting",
