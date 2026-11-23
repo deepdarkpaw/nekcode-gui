@@ -1,248 +1,241 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CONVERSATION_ARCHIVE_LIMITS, type IPlatformService } from "@zcode/shared";
-import type { ImportConversationShareInput } from "@zcode/services";
-type IntlShape = ReturnType<typeof import("@/i18n/IntlProvider.js").useZCodeIntl>["intl"];
+import type { TaskArchiveTarget } from "@/hooks/useConversationImport.js";
 import { useOptionalBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { seedImportedSessionDraft } from "@/v4/composer/newTaskDraft.js";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
+import { useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
+import { isWorkspaceTab } from "@/store/tabStore.js";
+import { useConfirmDialogStore } from "@/store/confirmDialogStore.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import type { WindowTabState } from "@/store/tabStore.js";
 import { dismissToast, toast, updateToast } from "@/components/ui/toast.js";
 import { importConversationArchive } from "@/lib/importConversationArchive.js";
+import { saveConversationExport } from "@/lib/saveConversationExport.js";
 import { logger } from "@/logger.js";
+import { captureTaskArchiveTarget, watchTaskArchiveTarget } from "./taskArchiveTarget.js";
 
-interface Options {
+type IntlShape = ReturnType<typeof import("@/i18n/IntlProvider.js").useZCodeIntl>["intl"];
+type Operation = { kind: "import" } | { kind: "export"; taskId: string };
+const EXPORT_DIALOG = "task-archive-export-confirmation";
+
+function validateArchiveName(name: string): void {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".nekcode")) throw new Error("fault.taskArchive.legacyFile");
+  if (!lower.endsWith(".jsonl")) throw new Error("fault.taskArchive.invalidFile");
+}
+
+function dismissExportConfirmation() {
+  const dialog = useConfirmDialogStore.getState();
+  if (dialog.pendingRequest?.testId === EXPORT_DIALOG) dialog.settleChoice("dismiss");
+}
+
+function failureId(error: unknown, operation: Operation, committing: boolean) {
+  const message = error instanceof Error ? error.message : "";
+  switch (message) {
+    case "fault.taskArchive.invalidFile":
+    case "fault.taskArchive.legacyFile":
+    case "fault.taskArchive.limitExceeded":
+    case "fault.taskArchive.importRejected":
+    case "fault.taskArchive.importedButNotIndexed":
+    case "fault.taskArchive.noTask":
+    case "fault.taskArchive.permissionDenied":
+    case "fault.taskArchive.taskLocked":
+    case "fault.taskArchive.targetUnavailable":
+    case "fault.taskArchive.targetChanged":
+      return message.slice("fault.".length);
+    case "fault.taskArchive.unavailable":
+      return committing ? "taskArchive.importUnknown" : "taskArchive.targetUnavailable";
+  }
+  if (error && typeof error === "object" && "kind" in error) {
+    if (error.kind === "limit_exceeded") return "taskArchive.limitExceeded";
+    if (error.kind === "invalid_file") return "taskArchive.invalidFile";
+  }
+  if (committing) return "taskArchive.importUnknown";
+  return operation.kind === "import" ? "taskArchive.importFailed" : "taskArchive.exportFailed";
+}
+
+/** One window owns file selection, confirmation, transfer and normal task navigation. */
+export function useConversationArchiveImport({
+  platform,
+  intl,
+  isDesktop,
+}: {
   platform: IPlatformService;
-  locale: "zh-CN" | "en-US";
   intl: IntlShape;
-  tabs: WindowTabState[];
-  activeWorkspacePath?: string | null;
-  activeWorkspaceIdentity?: string | null;
-  activateTabByPath: (path: string, options?: { workspaceIdentity?: string }) => boolean;
-  addTab: (
-    path: string,
-    options?: { workspaceIdentity?: string; workspacePurpose?: "conversation" },
-  ) => void;
-}
-
-function failurePresentation(error: unknown): {
-  messageId: string;
-  retryable: boolean;
-  kind: string;
-} {
-  const kind =
-    error && typeof error === "object" && "kind" in error && typeof error.kind === "string"
-      ? error.kind
-      : "unknown";
-  const messageId =
-    kind === "limit_exceeded"
-      ? "conversationShare.import.fileTooLarge"
-      : kind === "unsupported_schema_version"
-        ? "conversationShare.import.unsupportedVersion"
-        : kind === "invalid_contract"
-          ? "conversationShare.import.integrityFailed"
-          : kind === "feature_disabled"
-            ? "conversationShare.error.featureDisabled"
-            : "conversationShare.import.failed";
-  return {
-    kind,
-    messageId,
-    retryable: ![
-      "invalid_contract",
-      "limit_exceeded",
-      "unsupported_schema_version",
-      "feature_disabled",
-    ].includes(kind),
-  };
-}
-
-/** 窗口级选择/反馈 owner；Host 事务是会话提交的唯一事实来源。 */
-export function useConversationArchiveImport(options: Options) {
-  const service = useOptionalBaseWorkspaceServices()?.conversationShareService;
-  const { platform, intl, locale, activateTabByPath, addTab } = options;
-  const [available, setAvailable] = useState(false);
+  isDesktop?: boolean;
+}) {
+  const base = useOptionalBaseWorkspaceServices();
+  const tabs = useTabStoreApi();
+  const hasWorkspace = useTabStore((state) =>
+    state.tabs.some((tab) => tab.id === state.activeTabId && isWorkspaceTab(tab)),
+  );
+  const confirm = useConfirmDialog();
   const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const generation = useRef(0);
+  const locking = useRef(false);
+  const lifetime = useRef(0);
   const failureToast = useRef<number | null>(null);
-  const progressToast = useRef<number | null>(null);
+  const available = Boolean(isDesktop && hasWorkspace && platform.selectFileData);
+  const canExport = Boolean(isDesktop && hasWorkspace && platform.saveFile);
   useEffect(() => {
-    const current = ++generation.current;
-    setAvailable(false);
-    busyRef.current = false;
-    setBusy(false);
-    if (service && platform.selectFileData)
-      void service.canImport().then(
-        (value) => {
-          if (generation.current === current) setAvailable(value);
-        },
-        () => {},
-      );
     return () => {
-      generation.current++;
+      lifetime.current++;
       if (failureToast.current !== null) dismissToast(failureToast.current);
-      if (progressToast.current !== null) dismissToast(progressToast.current);
-      progressToast.current = null;
+      dismissExportConfirmation();
     };
-  }, [platform, service]);
+  }, []);
 
-  const runImport = useCallback(
-    async function run(
-      data: ArrayBuffer,
-      input: Omit<ImportConversationShareInput, "archiveId">,
-    ): Promise<void> {
-      if (!service) return;
+  const start = useCallback(
+    (operation: Operation, from?: TaskArchiveTarget, callerCurrent?: () => boolean): boolean => {
+      if (locking.current || (operation.kind === "import" ? !available : !canExport)) return false;
+      const msg = (id: string) => intl.formatMessage({ id });
       if (failureToast.current !== null) dismissToast(failureToast.current);
-      failureToast.current = null;
-      const owner = generation.current;
-      const operationId = `archive-import-${crypto.randomUUID()}`;
-      let toastId: number | null = null;
-      let subscription: { dispose(): void } | undefined;
-      const dismissProgress = () => {
-        if (toastId === null) return;
-        dismissToast(toastId);
-        if (progressToast.current === toastId) progressToast.current = null;
-        toastId = null;
-      };
-      const showProgress = (message: string) => {
-        if (generation.current !== owner) return;
-        if (toastId === null)
-          toastId = toast(message, { durationMs: 0, variant: "info", dismissible: false });
-        else updateToast(toastId, { message });
-        progressToast.current = toastId;
-      };
+      let binding: ReturnType<typeof captureTaskArchiveTarget>;
       try {
-        showProgress(intl.formatMessage({ id: "conversationShare.import.validating" }));
-        subscription = service.onDynamicImportProgress(operationId)((progress) => {
-          if (progress.phase === "complete") return;
-          showProgress(
-            intl.formatMessage({
-              id:
-                progress.phase === "installing"
-                  ? "conversationShare.import.installing"
-                  : progress.phase === "committing"
-                    ? "conversationShare.import.committing"
-                    : "conversationShare.import.validating",
-            }),
-          );
-        });
-        const result = await importConversationArchive(service, data, input, operationId);
-        if (generation.current !== owner) return;
-        seedImportedSessionDraft(result);
-        if (
-          !activateTabByPath(
-            result.workspacePath,
-            result.workspaceIdentity ? { workspaceIdentity: result.workspaceIdentity } : undefined,
-          )
-        ) {
-          addTab(result.workspacePath, {
-            workspaceIdentity: result.workspaceIdentity,
-            workspacePurpose: "conversation",
-          });
+        if (!base) throw new Error("fault.taskArchive.targetUnavailable");
+        binding = captureTaskArchiveTarget(tabs, base, from);
+      } catch {
+        failureToast.current = toast(msg("taskArchive.targetUnavailable"), { variant: "warning" });
+        return true;
+      }
+      locking.current = true;
+      setBusy(true);
+      const owner = lifetime.current;
+      const watched = watchTaskArchiveTarget(tabs, base, binding, dismissExportConfirmation);
+      const isCurrent = () =>
+        lifetime.current === owner && watched.isCurrent() && (callerCurrent?.() ?? true);
+      const assertCurrent = () => {
+        if (!isCurrent()) throw new Error("fault.taskArchive.targetChanged");
+      };
+      const { service, workspacePath, workspaceIdentity } = binding;
+      const target = { workspacePath, workspaceIdentity };
+      const call: typeof service.nekTaskArchive = (request) => service.nekTaskArchive(request);
+      let progress: number | undefined;
+      let committing = false;
+      const reportProgress = (id: string) => {
+        if (progress === undefined) {
+          progress = toast(msg(id), { variant: "info", durationMs: 0, dismissible: false });
+        } else {
+          updateToast(progress, { message: msg(id) });
         }
-        const store = useZCodeSessionStore.getState();
-        store.setActiveTaskId(result.workspacePath, result.sessionId, result.workspaceIdentity);
-        store.requestTimelineBottom(
-          result.workspacePath,
-          result.sessionId,
-          result.workspaceIdentity,
-        );
-        const message = intl.formatMessage(
-          {
-            id:
-              result.fallbackReason === "remote_workspace"
-                ? "conversationShare.import.fallbackRemoteWorkspace"
-                : result.reused
-                  ? "conversationShare.import.reopened"
-                  : "conversationShare.import.source",
-          },
-          { title: result.title, workspacePath: result.workspacePath },
-        );
-        dismissProgress();
-        toast(message, { durationMs: result.fallbackReason === "remote_workspace" ? 7000 : 3000 });
-      } catch (error) {
-        if (generation.current !== owner) return;
-        const presentation = failurePresentation(error);
-        logger.warn("[conversation-import] 导入失败", { kind: presentation.kind });
-        dismissProgress();
-        failureToast.current = toast(intl.formatMessage({ id: presentation.messageId }), {
-          // 默认 Toast 不渲染 action；使用 warning 才能让失败后的重试按钮实际可见。
-          variant: "warning",
-          durationMs: presentation.retryable ? 0 : 7000,
-          dismissible: true,
-          dismissLabel: intl.formatMessage({ id: "common.close" }),
-          ...(presentation.retryable
-            ? {
-                actionLabel: intl.formatMessage({ id: "conversationShare.import.retry" }),
-                onAction: () => {
-                  if (generation.current !== owner || busyRef.current) return;
-                  busyRef.current = true;
-                  setBusy(true);
-                  void run(data, input);
+      };
+
+      async function run() {
+        try {
+          assertCurrent();
+          if (operation.kind === "export") {
+            const approved = await confirm({
+              title: msg("taskArchive.export"),
+              description: msg("taskArchive.exportDisclosure"),
+              confirmLabel: msg("taskArchive.exportContinue"),
+              testId: EXPORT_DIALOG,
+            });
+            assertCurrent();
+            if (!approved) return;
+            reportProgress("taskArchive.exporting");
+            const result = await call({ ...target, action: "export", sessionId: operation.taskId });
+            if (result.action !== "export") throw new Error("Invalid native export response");
+            const saved = await saveConversationExport(
+              {
+                readExportChunk: async (archiveId, offset) => {
+                  const chunk = await call({ ...target, action: "readExport", archiveId, offset });
+                  if (chunk.action !== "readExport") throw new Error("Invalid native export chunk");
+                  return chunk.data;
                 },
-              }
-            : {}),
-        });
-      } finally {
-        subscription?.dispose();
-        dismissProgress();
-        // 旧 Host 的异步收尾不能解除新 Host 的 busy 状态。
-        if (generation.current === owner) {
-          busyRef.current = false;
-          setBusy(false);
+                releaseExport: (archiveId) => call({ ...target, action: "release", archiveId }),
+              },
+              platform,
+              result.archive,
+              assertCurrent,
+            );
+            if (!isCurrent() || saved.canceled) return;
+            if (!saved.success) {
+              throw new Error(
+                saved.error === "write_failed"
+                  ? "fault.taskArchive.permissionDenied"
+                  : "Task archive was not saved",
+              );
+            }
+            toast(msg(saved.downloadStarted ? "taskArchive.downloadStarted" : "taskArchive.saved"));
+            return;
+          }
+
+          // Include .nekcode only so selecting a legacy file can give a targeted, non-destructive error.
+          const file = await platform.selectFileData!({
+            accept: ".jsonl,.nekcode",
+            maxBytes: CONVERSATION_ARCHIVE_LIMITS.archiveBytes,
+            validateName: validateArchiveName,
+          });
+          if (!file) return;
+          assertCurrent();
+          validateArchiveName(file.name);
+          reportProgress("taskArchive.uploading");
+          const sessionId = await importConversationArchive(
+            call,
+            target,
+            file.data,
+            assertCurrent,
+            () => {
+              committing = true;
+              reportProgress("taskArchive.importing");
+            },
+          );
+          if (lifetime.current !== owner) return;
+          if (!isCurrent()) {
+            toast(msg("taskArchive.importedElsewhere"), { variant: "info" });
+            return;
+          }
+          // catalog_changed refreshes the normal sessions index; selecting this real nek task mounts the standard pane.
+          useZCodeSessionStore
+            .getState()
+            .setActiveTaskId(workspacePath, sessionId, workspaceIdentity);
+          toast(msg("taskArchive.imported"));
+        } catch (error) {
+          if (lifetime.current !== owner) return;
+          const id = failureId(error, operation, committing);
+          const retryable =
+            isCurrent() &&
+            [
+              "taskArchive.importRejected",
+              "taskArchive.permissionDenied",
+              "taskArchive.importFailed",
+              "taskArchive.exportFailed",
+            ].includes(id);
+          logger.warn("[task-archive] operation failed", { kind: operation.kind, id });
+          failureToast.current = toast(msg(id), {
+            variant: "warning",
+            durationMs: 9000,
+            dismissible: true,
+            ...(retryable
+              ? {
+                  actionLabel: msg("taskArchive.retry"),
+                  onAction: () => {
+                    if (isCurrent()) start(operation, binding, callerCurrent);
+                  },
+                }
+              : {}),
+          });
+        } finally {
+          watched.dispose();
+          if (progress !== undefined) dismissToast(progress);
+          locking.current = false;
+          if (lifetime.current === owner) setBusy(false);
         }
       }
+      void run();
+      return true;
     },
-    [activateTabByPath, addTab, intl, service],
+    [available, base, canExport, confirm, intl, platform, tabs],
   );
 
-  const open = useCallback(() => {
-    if (!available || !platform.selectFileData || busyRef.current) return;
-    if (failureToast.current !== null) dismissToast(failureToast.current);
-    failureToast.current = null;
-    const owner = generation.current;
-    const activeTab = options.tabs.find(
-      (tab) =>
-        tab.kind === "workspace" &&
-        (tab.workspaceIdentity?.trim() || tab.workspacePath) ===
-          (options.activeWorkspaceIdentity?.trim() || options.activeWorkspacePath),
-    );
-    const input: Omit<ImportConversationShareInput, "archiveId"> = {
-      clientRequestId: crypto.randomUUID(),
-      locale,
-      targetWorkspacePath: options.activeWorkspacePath ?? undefined,
-      targetWorkspaceIdentity: options.activeWorkspaceIdentity ?? undefined,
-      targetWorkspaceKind:
-        activeTab?.kind === "workspace" && (activeTab.remoteSessionId || activeTab.remoteTarget)
-          ? "remote"
-          : "local",
-    };
-    busyRef.current = true;
-    setBusy(true);
-    void platform
-      .selectFileData({ accept: ".nekcode", maxBytes: CONVERSATION_ARCHIVE_LIMITS.archiveBytes })
-      .then(async (file) => {
-        if (generation.current !== owner) return;
-        if (file) await runImport(file.data, input);
-        else {
-          busyRef.current = false;
-          setBusy(false);
-        }
-      })
-      .catch((error) => {
-        if (generation.current !== owner) return;
-        busyRef.current = false;
-        setBusy(false);
-        toast(intl.formatMessage({ id: failurePresentation(error).messageId }));
-      });
-  }, [
-    available,
-    intl,
-    locale,
-    options.activeWorkspaceIdentity,
-    options.activeWorkspacePath,
-    options.tabs,
-    platform,
-    runImport,
-  ]);
-  return useMemo(() => ({ available, busy, open }), [available, busy, open]);
+  return useMemo(
+    () => ({
+      available,
+      canExport,
+      busy,
+      open: (from?: TaskArchiveTarget, isCurrent?: () => boolean) =>
+        start({ kind: "import" }, from, isCurrent),
+      exportTask: (from: TaskArchiveTarget, taskId: string, isCurrent?: () => boolean) =>
+        start({ kind: "export", taskId }, from, isCurrent),
+    }),
+    [available, busy, canExport, start],
+  );
 }

@@ -25,11 +25,19 @@ const { ConversationShareService, conversationShareConnectionScopeFactory } = aw
   "../../packages/services/src/conversation-share/conversationShareService.ts",
   import.meta.url,
 );
-const { importConversationArchive } = await tsImport(
-  "../../packages/ui/src/lib/importConversationArchive.ts",
-  import.meta.url,
-);
 const hash = (data) => createHash("sha256").update(data).digest("hex");
+
+// Retain old service/decoder coverage separately from the GUI's native archive path.
+async function importLegacyFixture(service, bytes, clientRequestId) {
+  assert.ok(bytes.length < 512 * 1024);
+  const archiveId = await service.beginArchiveImport(bytes.length);
+  try {
+    await service.appendArchiveImport(archiveId, 0, bytes.toString("base64"));
+    return await service.importShare({ archiveId, clientRequestId }, clientRequestId);
+  } finally {
+    await service.releaseArchiveImport(archiveId);
+  }
+}
 
 test("import transport enforces scope, length, sequential chunks, retry identity and capacity", async () => {
   let now = 0;
@@ -227,22 +235,11 @@ test("real codec, scoped service and UI transfer import offline; corrupt files n
       await assert.rejects(other.appendArchiveImport(id, 0, "YWJj"));
       await one.releaseArchiveImport(id);
       await assert.rejects(
-        importConversationArchive(
-          one,
-          Uint8Array.from([0, 1, 2]).buffer,
-          { clientRequestId: "bad" },
-          "bad",
-        ),
+        importLegacyFixture(one, Buffer.from([0, 1, 2]), "bad"),
         (error) => error.kind === "invalid_contract",
       );
       assert.deepEqual(await readdir(root), []);
-      const bytes = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.length);
-      const result = await importConversationArchive(
-        one,
-        bytes,
-        { clientRequestId: "good" },
-        "good",
-      );
+      const result = await importLegacyFixture(one, Buffer.from(encoded), "good");
       assert.equal(creates.length, 1);
       assert.equal(creates[0].importedHistory.provenance.source.archiveSha256, hash(encoded));
       const restored = await one.getImportedConversation({

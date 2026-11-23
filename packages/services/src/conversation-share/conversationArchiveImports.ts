@@ -99,9 +99,9 @@ export class ConversationArchiveImports {
   }
 
   /** A closed connection cannot start an import even if the temporary input is still being written. */
-  closeOwner(owner?: string): void {
+  closeOwners(matches?: (owner: symbol | string) => boolean): void {
     for (const [id, entry] of this.transfers) {
-      if (owner !== undefined && owner !== entry.owner) continue;
+      if (matches && !matches(entry.owner)) continue;
       if (entry.consuming) entry.closed = true;
       else this.remove(id);
     }

@@ -9,7 +9,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { WorkspaceHeaderActionSectionProps } from "@/WorkspaceHeaderSections/shared.js";
 import { WINDOWS_CAPTION_CONTROL_CLASS } from "@/windowCaptionControls.js";
 import { WorkspaceHelpMenuButton } from "@/WorkspaceHelpMenuButton.js";
-import { ConversationShareMenu } from "@/ConversationShareMenu.js";
+import { TaskArchiveExportButton } from "@/TaskArchiveExportButton.js";
 import { DesktopWindowControls } from "@/DesktopWindowControls.js";
 
 export type { WorkspaceHeaderActionSectionProps } from "@/WorkspaceHeaderSections/shared.js";
@@ -20,6 +20,7 @@ export function WorkspaceHeaderActionSection({
   readOnlyReason,
   workspaceAbsPath,
   workspaceIdentity,
+  remoteSessionId,
   remoteTarget,
   isDesktop,
   isTerminalOpen,
@@ -57,10 +58,11 @@ export function WorkspaceHeaderActionSection({
           onSelectedEditorChange={onSelectedEditorChange}
         />
       ) : null}
-      {/* 导出已由本地会话负责；旧账号门禁会让自配模型用户找不到导出入口。 */}
       {activeTaskId && isDesktop !== false ? (
-        <ConversationShareMenu
+        <TaskArchiveExportButton
+          target={{ workspacePath: workspaceAbsPath, workspaceIdentity, remoteSessionId }}
           taskId={activeTaskId}
+          disabledReason={readOnlyReason}
           useWindowsCaptionSpacing={useWindowsCaptionSpacing}
         />
       ) : null}

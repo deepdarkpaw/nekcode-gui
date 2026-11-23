@@ -5,15 +5,20 @@ import {
   type IPlatformService,
   type SaveFileResult,
 } from "@zcode/shared";
-import type { IConversationShareService } from "@zcode/services";
 
-/** 字节仅存在于本次操作中，保存或取消后释放 Host 句柄，不写入 UI store。 */
+/** Read the bounded host transfer, release its handle, then hand it to the local save dialog. */
 export async function saveConversationExport(
-  service: Pick<IConversationShareService, "readExportChunk" | "releaseExport">,
+  service: {
+    readExportChunk: (archiveId: string, offset: number) => Promise<string>;
+    releaseExport: (archiveId: string) => Promise<unknown>;
+  },
   platform: Pick<IPlatformService, "saveFile">,
   archive: ConversationArchiveExport,
+  assertCurrent?: () => void,
 ): Promise<SaveFileResult> {
+  let bytes: Uint8Array<ArrayBuffer>;
   try {
+    assertCurrent?.();
     if (
       !platform.saveFile ||
       !Number.isSafeInteger(archive.byteLength) ||
@@ -22,8 +27,9 @@ export async function saveConversationExport(
     ) {
       throw new Error("Conversation export cannot be saved");
     }
-    const bytes = new Uint8Array(archive.byteLength);
+    bytes = new Uint8Array(archive.byteLength);
     for (let offset = 0; offset < bytes.length; ) {
+      assertCurrent?.();
       const encoded = await service.readExportChunk(archive.archiveId, offset);
       const expected = Math.min(CONVERSATION_ARCHIVE_CHUNK_BYTES, bytes.length - offset);
       if (encoded.length !== Math.ceil(expected / 3) * 4)
@@ -33,9 +39,11 @@ export async function saveConversationExport(
       for (let i = 0; i < chunk.length; i++) bytes[offset + i] = chunk.charCodeAt(i);
       offset += chunk.length;
     }
-    return await platform.saveFile({ data: bytes.buffer, suggestedName: archive.suggestedName });
   } finally {
-    // 释放失败由 Host 的闲置期限兜底，不把已经完成的保存错误地呈现为失败。
+    // 断连时 Host 的连接关闭/闲置期限负责回收；释放不改变对操作结果的判断。
     await service.releaseExport(archive.archiveId).catch(() => undefined);
   }
+  assertCurrent?.();
+  if (!platform.saveFile) throw new Error("Task export cannot be saved");
+  return await platform.saveFile({ data: bytes.buffer, suggestedName: archive.suggestedName });
 }

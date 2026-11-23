@@ -256,6 +256,8 @@ export function createZCodeAgentConnectionScope(
   const forwardedFlowStateByRoute = new Map<string, V4ConnectionFlowState>();
   /** attachment 曾触及的 workspace route 留到 port dispose，保证无 subscription 也能 trusted closed。 */
   const attachmentFlowRoutes = new Map<string, ConnectionFlowRoute>();
+  // Archives close by connection, not by workspace. One route covers all targets touched by it.
+  const archiveFlowRoutes = new Map<string, ConnectionFlowRoute>();
 
   const forwardedConnection = (params: unknown): ZCodeAgentV4ConnectionContext => {
     const downstream = readTrustedZCodeAgentV4Connection(params);
@@ -302,6 +304,7 @@ export function createZCodeAgentConnectionScope(
   });
   const currentFlowRoutes = () => {
     const routes = new Map<string, ConnectionFlowRoute>(attachmentFlowRoutes);
+    for (const route of archiveFlowRoutes.values()) routes.set(route.key, route);
     for (const entry of owned.values()) {
       const route = flowRouteForEntry(entry);
       routes.set(route.key, route);
@@ -716,7 +719,9 @@ export function createZCodeAgentConnectionScope(
       const downstream = readTrustedZCodeAgentV4Connection(params);
       if (!downstream) throw new Error("fault.connection.flowControlUntrusted");
       const forwarded = forwardedConnection(params);
+      const archiveRoute = archiveFlowRoutes.get(forwarded.connectionId);
       const ownsRoute =
+        Boolean(archiveRoute) ||
         attachmentFlowRoutes.has(flowRouteKey(params, forwarded.connectionId)) ||
         [...owned.values()].some(
           (entry) =>
@@ -724,6 +729,10 @@ export function createZCodeAgentConnectionScope(
             entry.connectionId === forwarded.connectionId,
         );
       if (!ownsRoute) throw new Error("fault.subscription.notOwned");
+      if (params.state === "closed" && archiveRoute) {
+        archiveFlowRoutes.delete(forwarded.connectionId);
+        forwardedFlowStateByRoute.delete(archiveRoute.key);
+      }
       await base.setConnectionFlowStateV4(withTrustedConnection(params, forwarded));
     },
     // nek interaction feed
@@ -823,14 +832,17 @@ export function createZCodeAgentConnectionScope(
       if (connection.clientMode !== "desktop-continuous" || flowClosed)
         throw new Error("fault.taskArchive.unavailable");
       if (params.action === "beginImport" || params.action === "export") {
-        const key = flowRouteKey(params, connection.connectionId);
-        if (!attachmentFlowRoutes.has(key) && attachmentFlowRoutes.size >= 128)
-          throw new Error("fault.taskArchive.tooManyTargets");
+        if (!archiveFlowRoutes.has(connection.connectionId) && archiveFlowRoutes.size >= 128)
+          throw new Error("fault.taskArchive.tooManyConnections");
         // Register before the RPC: disconnect must revoke an in-flight reservation too.
-        attachmentFlowRoutes.set(key, { key, target: workspaceTarget(params), connection });
+        archiveFlowRoutes.set(connection.connectionId, {
+          key: `archive\0${connection.connectionId}`,
+          target: workspaceTarget(params),
+          connection,
+        });
       }
       const result = await base.nekTaskArchive(withTrustedConnection(params, connection));
-      assertOpen();
+      if (flowClosed || disposed) throw new Error("fault.connection.closed");
       return result;
     },
     async attachmentBeginV4(params) {
@@ -1159,6 +1171,7 @@ export function createZCodeAgentConnectionScope(
       runtimeRestartDisposable?.dispose();
       runtimeGenerationByWorkspaceKey.clear();
       attachmentFlowRoutes.clear();
+      archiveFlowRoutes.clear();
       forwardedFlowStateByRoute.clear();
       await Promise.allSettled(entries.map((entry) => unsubscribeBase(entry)));
     },

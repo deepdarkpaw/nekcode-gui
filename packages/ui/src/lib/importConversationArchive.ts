@@ -1,38 +1,46 @@
 import { CONVERSATION_ARCHIVE_CHUNK_BYTES, CONVERSATION_ARCHIVE_LIMITS } from "@zcode/shared";
-import type {
-  IConversationShareService,
-  ImportConversationShareInput,
-  ImportConversationShareResult,
-} from "@zcode/services";
+import type { NekTaskArchiveRequest, NekTaskArchiveResult } from "@zcode/shared/nek-protocol";
 
-/** 文件字节只进入用户已选择的 Host，底层传输不增加交互步骤。 */
+/** File bytes only enter this operation's captured host attachment. */
 export async function importConversationArchive(
-  service: Pick<
-    IConversationShareService,
-    "beginArchiveImport" | "appendArchiveImport" | "releaseArchiveImport" | "importShare"
-  >,
+  call: (request: NekTaskArchiveRequest) => Promise<NekTaskArchiveResult>,
+  target: Pick<NekTaskArchiveRequest, "workspacePath" | "workspaceIdentity">,
   data: ArrayBuffer,
-  input: Omit<ImportConversationShareInput, "archiveId">,
-  operationId: string,
-): Promise<ImportConversationShareResult> {
-  if (!data.byteLength || data.byteLength > CONVERSATION_ARCHIVE_LIMITS.archiveBytes) {
-    throw Object.assign(new Error("Conversation file exceeds the import limit"), {
-      kind: "limit_exceeded",
-    });
+  assertCurrent: () => void,
+  onCommit: () => void,
+): Promise<string> {
+  if (!data.byteLength) throw new Error("fault.taskArchive.invalidFile");
+  if (data.byteLength > CONVERSATION_ARCHIVE_LIMITS.archiveBytes) {
+    throw new Error("fault.taskArchive.limitExceeded");
   }
-  const archiveId = await service.beginArchiveImport(data.byteLength);
+  assertCurrent();
+  const begin = await call({ ...target, action: "beginImport", byteLength: data.byteLength });
+  if (begin.action !== "beginImport") throw new Error("Invalid task archive transfer response");
+  const transfer = { ...target, archiveId: begin.archiveId };
   try {
     const bytes = new Uint8Array(data);
     for (let offset = 0; offset < bytes.length; offset += CONVERSATION_ARCHIVE_CHUNK_BYTES) {
+      assertCurrent();
       const chunk = bytes.subarray(offset, offset + CONVERSATION_ARCHIVE_CHUNK_BYTES);
       let binary = "";
       for (let start = 0; start < chunk.length; start += 8192) {
         binary += String.fromCharCode(...chunk.subarray(start, start + 8192));
       }
-      await service.appendArchiveImport(archiveId, offset, btoa(binary));
+      const result = await call({
+        ...transfer,
+        action: "appendImport",
+        offset,
+        data: btoa(binary),
+      });
+      if (result.action !== "appendImport")
+        throw new Error("Invalid task archive transfer response");
     }
-    return await service.importShare({ ...input, archiveId }, operationId);
+    assertCurrent();
+    onCommit();
+    const result = await call({ ...transfer, action: "import" });
+    if (result.action !== "import") throw new Error("Invalid task archive import response");
+    return result.sessionId;
   } finally {
-    await service.releaseArchiveImport(archiveId).catch(() => undefined);
+    await call({ ...transfer, action: "release" }).catch(() => undefined);
   }
 }

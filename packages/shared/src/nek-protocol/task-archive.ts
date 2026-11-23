@@ -45,5 +45,5 @@ export type NekTaskArchiveResult =
   | { action: "readExport"; data: string }
   | { action: "beginImport"; archiveId: string }
   | { action: "import"; sessionId: string }
-  | { action: "appendImport" | "release" };
-EOF;
+  | { action: "appendImport" }
+  | { action: "release" };

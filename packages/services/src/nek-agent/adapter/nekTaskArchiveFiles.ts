@@ -9,15 +9,29 @@ export async function withNekTaskArchiveFile<T>(
   run: (path: string) => Promise<T>,
   logger?: { warn: (...args: unknown[]) => void },
 ): Promise<T> {
-  await mkdir(root, { recursive: true, mode: 0o700 });
-  const directory = await mkdtemp(join(root, "task-"));
+  let directory: string | undefined;
   try {
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    directory = await mkdtemp(join(root, "task-"));
     return await run(join(directory, "archive.jsonl"));
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      ["EACCES", "EPERM", "ENOSPC", "EROFS"].includes(String(error.code))
+    ) {
+      throw new Error("fault.taskArchive.permissionDenied", { cause: error });
+    }
+    throw error;
   } finally {
     // Never replace a committed import's ACK with a local cleanup error.
-    await rm(directory, { recursive: true, force: true, maxRetries: 3 }).catch((error: unknown) => {
-      logger?.warn("nek task archive temporary file cleanup failed", error);
-    });
+    if (directory) {
+      await rm(directory, { recursive: true, force: true, maxRetries: 3 }).catch(
+        (error: NodeJS.ErrnoException) => {
+          logger?.warn("nek task archive temporary file cleanup failed", { code: error.code });
+        },
+      );
+    }
   }
 }
 
@@ -80,4 +94,3 @@ export function checkNekTaskArchiveInput(bytes: Buffer): void {
   }
   if (!header || !hasMessage) throw new Error("fault.taskArchive.invalidFile");
 }
-EOF;

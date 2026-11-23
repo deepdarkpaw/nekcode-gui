@@ -382,7 +382,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     if (input.state !== "closed") return;
     const connection = readTrustedZCodeAgentV4Connection(input);
     if (!connection) return;
-    this.taskArchive.closeConnection(input, connection.connectionId);
+    this.taskArchive.closeConnection(connection.connectionId);
     await this.attachments.closeConnection(connection.connectionId);
   };
 

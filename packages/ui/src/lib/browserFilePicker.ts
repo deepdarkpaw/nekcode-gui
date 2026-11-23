@@ -4,6 +4,7 @@ import type { SelectedFileData } from "@zcode/shared";
 export function selectBrowserFileData(options: {
   accept: string;
   maxBytes: number;
+  validateName?: (name: string) => void;
 }): Promise<SelectedFileData | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
@@ -26,7 +27,17 @@ export function selectBrowserFileData(options: {
         resolve(null);
         return;
       }
-      if (file.size <= 0 || file.size > options.maxBytes) {
+      try {
+        options.validateName?.(file.name);
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      if (!file.size) {
+        reject(Object.assign(new Error("Selected file is empty"), { kind: "invalid_file" }));
+        return;
+      }
+      if (file.size > options.maxBytes) {
         reject(
           Object.assign(new Error("Selected file exceeds the import limit"), {
             kind: "limit_exceeded",

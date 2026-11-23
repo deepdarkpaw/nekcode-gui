@@ -76,6 +76,10 @@ function fixture(overrides: Partial<Ports> = {}) {
       calls.push(["focusFork"]);
       return true;
     }),
+    openTaskArchive: vi.fn((mode) => {
+      calls.push(["archive", mode]);
+      return true;
+    }),
     ...overrides,
   } satisfies Ports;
   return {
@@ -177,7 +181,35 @@ describe("builtin GUI slash actions", () => {
     });
   });
 
-  it.each(["tree", "export", "import", "share", "clone", "changelog"] as const)(
+  it.each(["export", "import"] as const)(
+    "NA-5 /%s opens the shared archive action only without arguments or attachments",
+    async (name) => {
+      const { calls, execute } = fixture();
+      expect(await execute(name, "archive.jsonl")).toMatchObject({
+        status: "blocked",
+        notice: { id: "taskArchive.slashNoArgs", values: { name } },
+      });
+      expect(await execute(name, "", true)).toMatchObject({
+        status: "blocked",
+        notice: { id: "chat.slash.attachmentsBlocked" },
+      });
+      expect(calls).toEqual([]);
+      expect(await execute(name)).toEqual({ status: "sent" });
+      expect(calls).toEqual([["archive", name]]);
+    },
+  );
+
+  it("NA-5 /import works from a draft but /export requires an active task", async () => {
+    const draft = fixture({ sessionId: null, modelView: null });
+    expect(await draft.execute("export")).toMatchObject({
+      status: "blocked",
+      notice: { id: "taskArchive.noTask" },
+    });
+    expect(await draft.execute("import")).toEqual({ status: "sent" });
+    expect(draft.calls).toEqual([["archive", "import"]]);
+  });
+
+  it.each(["tree", "share", "clone", "changelog"] as const)(
     "SC-3 /%s only shows the planned notice and keeps the draft",
     async (name) => {
       const { calls, execute } = fixture();

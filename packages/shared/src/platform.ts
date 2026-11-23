@@ -295,7 +295,11 @@ export interface IPlatformService {
   selectFile(): Promise<string | null>;
 
   /** 用户显式选文件；读取前验证大小，取消返回 null。 */
-  selectFileData?(options: { accept: string; maxBytes: number }): Promise<SelectedFileData | null>;
+  selectFileData?(options: {
+    accept: string;
+    maxBytes: number;
+    validateName?: (name: string) => void;
+  }): Promise<SelectedFileData | null>;
 
   /** 打开系统多文件选择框，返回选中的文件路径；取消时返回空数组 */
   selectFiles?(): Promise<string[]>;

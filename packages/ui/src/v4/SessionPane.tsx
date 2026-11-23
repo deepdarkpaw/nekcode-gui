@@ -66,6 +66,7 @@ import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js"
 import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { saveConversationExport } from "@/lib/saveConversationExport.js";
+import { useConversationImport } from "@/hooks/useConversationImport.js";
 
 import { useWorkspaceHomePath } from "@/hooks/useWorkspaceHomePath.js";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
@@ -2065,7 +2066,8 @@ export function SessionPane({
     }
   }, []);
 
-  const slashScope = useMemo(() => ({}), [sessionId, workspaceKey, sendCommand]);
+  const archive = useConversationImport();
+  const slashScope = useMemo(() => ({}), [sessionId, workspaceKey, remoteSessionId, sendCommand]);
   const slashPickerRef = useRef<((picker: BuiltinSlashPicker) => boolean) | null>(null);
   const [slashDialog, setSlashDialog] = useState<{ scope: object; kind: BuiltinSlashDialog } | null>(null);
   const renameFromSlash = useCallback(async (title: string) => {
@@ -2104,6 +2106,12 @@ export function SessionPane({
     writeClipboard: (text) => navigator.clipboard.writeText(text),
     reload: () => nekWorkspaceConfigService.callConfig("reloadRunningSessions"),
     focusSessionSearch: () => dispatchNekAction("gui.commandPalette.open"),
+    openTaskArchive: (mode, isCurrent) => {
+      if (!archive || readOnly || selectionSideChat) return false;
+      const target = { workspacePath, workspaceIdentity, remoteSessionId: remoteSessionId ?? undefined };
+      if (mode === "import") return archive.open(target, isCurrent);
+      return Boolean(sessionId && archive.exportTask(target, sessionId, isCurrent));
+    },
     focusFork: () => {
       if (!sessionId || sessionLocked || selectionSideChat || readOnly) return false;
       const row = snapshotRef.current?.rows.window.findLast(

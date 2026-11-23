@@ -29,8 +29,15 @@ interface Ports {
   logger?: { warn: (...args: unknown[]) => void };
 }
 
+function ownerPrefix(connectionId: string): string {
+  return `${JSON.stringify(connectionId)}\0`;
+}
+
 function ownerKey(target: NekWorkspaceTarget, connectionId: string): string {
-  return JSON.stringify([connectionId, target.workspacePath, target.workspaceIdentity ?? ""]);
+  return (
+    ownerPrefix(connectionId) +
+    JSON.stringify([target.workspacePath, target.workspaceIdentity ?? ""])
+  );
 }
 
 function samePath(left: string, right: string): boolean {
@@ -61,7 +68,9 @@ export function createNekTaskArchive(ports: Ports) {
         try {
           ({ sessionPath } = await ports.service.importSession({ inputPath, cwd }));
         } catch (error) {
-          if (error instanceof NekRpcCommandError) throw error;
+          if (error instanceof NekRpcCommandError) {
+            throw new Error("fault.taskArchive.importRejected", { cause: error });
+          }
           // Not every transport failure proves that the CLI did not create a task. Do not replay.
           throw new Error("fault.taskArchive.importUnknown", { cause: error });
         }
@@ -152,16 +161,17 @@ export function createNekTaskArchive(ports: Ports) {
           return { action: "release" };
       }
     },
-    closeConnection(target: NekWorkspaceTarget, connectionId: string): void {
-      const owner = ownerKey(target, connectionId);
-      exports.closeOwner(owner);
-      imports.closeOwner(owner);
+    closeConnection(connectionId: string): void {
+      const prefix = ownerPrefix(connectionId);
+      const matches = (owner: symbol | string) =>
+        typeof owner === "string" && owner.startsWith(prefix);
+      exports.closeOwners(matches);
+      imports.closeOwners(matches);
     },
     dispose(): void {
       disposed = true;
-      exports.closeOwner();
-      imports.closeOwner();
+      exports.closeOwners();
+      imports.closeOwners();
     },
   };
 }
-EOF;

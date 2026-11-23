@@ -96,9 +96,9 @@ export class ConversationArchiveExports {
   }
 
   /** Keep a closing generator's slot reserved until its file operation settles. */
-  closeOwner(owner?: string): void {
+  closeOwners(matches?: (owner: symbol | string) => boolean): void {
     for (const [id, entry] of this.entries) {
-      if (owner !== undefined && owner !== entry.owner) continue;
+      if (matches && !matches(entry.owner)) continue;
       if (entry.bytes) this.remove(id);
       else entry.closed = true;
     }

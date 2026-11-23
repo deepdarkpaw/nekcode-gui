@@ -49,7 +49,7 @@ export function NewTaskButtonGroup({
               type="button"
               disabled={disabled || importing.busy}
               aria-busy={importing.busy}
-              aria-label={intl.formatMessage({ id: "conversationShare.import.menu" })}
+              aria-label={intl.formatMessage({ id: "taskArchive.menu" })}
               className="flex w-8 shrink-0 items-center justify-center rounded-lg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused disabled:opacity-50"
             >
               {importing.busy ? (
@@ -60,9 +60,9 @@ export function NewTaskButtonGroup({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={importing.open}>
+            <DropdownMenuItem onSelect={() => importing.open()}>
               <FileUp className="size-4" aria-hidden="true" />
-              {intl.formatMessage({ id: "conversationShare.import.fromFile" })}
+              {intl.formatMessage({ id: "taskArchive.import" })}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -159,6 +159,47 @@ const enUS: Record<string, string> = {
   "common.save": "Save",
   "common.saving": "Saving...",
   "common.delete": "Delete",
+  "taskArchive.menu": "Task options",
+  "taskArchive.import": "Import task from JSONL…",
+  "taskArchive.export": "Export task",
+  "taskArchive.exportContinue": "Continue to export",
+  "taskArchive.exportDisclosure":
+    "Export the current branch as native nek JSONL. Nothing is redacted: the file may include sensitive messages, paths, and tool results. External attachments are referenced, not bundled. The file is saved only where you choose and is not shared automatically.",
+  "taskArchive.uploading": "Transferring task file…",
+  "taskArchive.importing": "nek is importing the task…",
+  "taskArchive.exporting": "Preparing task archive…",
+  "taskArchive.imported": "Task imported and opened",
+  "taskArchive.importedElsewhere":
+    "The task was imported into the original project. Return to its task list to open it.",
+  "taskArchive.saved": "Task archive saved",
+  "taskArchive.downloadStarted": "Task archive download started",
+  "taskArchive.retry": "Retry",
+  "taskArchive.legacyFile":
+    "Legacy .nekcode archives are not supported. Open the original task and export it as nek JSONL.",
+  "taskArchive.invalidFile":
+    "This is not a valid nek JSONL task archive, or it contains no messages to import.",
+  "taskArchive.limitExceeded": "Task archives cannot exceed 72 MB.",
+  "taskArchive.targetUnavailable":
+    "The current project is unavailable. Open the intended project or reconnect to its host and try again.",
+  "taskArchive.targetChanged": "The task or project changed, so the archive operation stopped.",
+  "taskArchive.permissionDenied":
+    "Could not write the task file. Check permissions and available disk space and try again.",
+  "taskArchive.noTask": "Open a task with messages before exporting an archive.",
+  "taskArchive.taskLocked":
+    "Another process has locked this task. Close the task there and try again.",
+  "taskArchive.importFailed":
+    "The task archive could not be transferred. Check the file and the connection to the target host and try again.",
+  "taskArchive.importRejected":
+    "nek could not import the task. Check the archive and the target project's permissions and try again.",
+  "taskArchive.importUnknown":
+    "Could not confirm the import. Refresh the original project's task list and check for the task before importing again.",
+  "taskArchive.importedButNotIndexed":
+    "nek imported the task, but it could not be opened from the task list. Refresh the original project's task list instead of importing again.",
+  "taskArchive.exportFailed":
+    "Task export failed. Check the task and the connection to the target host and try again.",
+  "taskArchive.unavailable":
+    "Task archives are unavailable here. Check that the project is connected and no other archive operation is running.",
+  "taskArchive.slashNoArgs": "/{name} does not take arguments. Use the file dialog instead.",
   "conversationShare.export.fileName": "File name",
   "conversationShare.export.note":
     "The file includes the selected conversation and available attachments. Review sensitive content before sending it to others.",
@@ -2339,6 +2380,8 @@ const enUS: Record<string, string> = {
   "chat.slash.builtin.model": "Select or switch models",
   "chat.slash.builtin.thinking": "Set the thinking level",
   "chat.slash.builtin.scoped-models": "Edit the model cycling scope",
+  "chat.slash.builtin.export": "Export the current task as nek JSONL",
+  "chat.slash.builtin.import": "Import a task from nek JSONL",
   "chat.slash.builtin.copy": "Copy the last assistant answer",
   "chat.slash.builtin.name": "Rename the current session",
   "chat.slash.builtin.session": "View session information and usage",

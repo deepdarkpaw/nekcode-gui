@@ -476,16 +476,7 @@ function RootInner({
     });
   }, [isStartupRenderBlocked]);
 
-  const conversationImport = useConversationArchiveImport({
-    platform,
-    intl,
-    locale,
-    tabs,
-    activeWorkspacePath,
-    activeWorkspaceIdentity,
-    activateTabByPath,
-    addTab,
-  });
+  const conversationImport = useConversationArchiveImport({ platform, intl, isDesktop });
 
   useRootPlatformEffects({
     initialWorkspaceAbsPath,

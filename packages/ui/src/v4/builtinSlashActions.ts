@@ -13,7 +13,7 @@ type SettingsDestination = Extract<
   "nekAccounts" | "nekDefaultModel" | "nekProject" | "nekShortcuts"
 >;
 
-const PLANNED_COMMANDS = ["tree", "export", "import", "share", "clone", "changelog"] as const;
+const PLANNED_COMMANDS = ["tree", "share", "clone", "changelog"] as const;
 type PlannedCommand = (typeof PLANNED_COMMANDS)[number];
 
 function isPlannedCommand(name: NekBuiltinSlashCommandName): name is PlannedCommand {
@@ -56,6 +56,7 @@ interface SlashActionPorts {
   reload: () => Promise<NekSessionReloadOutcome>;
   focusSessionSearch: () => boolean;
   focusFork: () => boolean;
+  openTaskArchive: (mode: "import" | "export", isCurrent: () => boolean) => boolean;
 }
 
 const SENT: SlashOutcome = { status: "sent" };
@@ -145,6 +146,11 @@ export async function executeBuiltinSlashCommand(
   if (isPlannedCommand(name)) return blocked("chat.slash.planned", { name }, "info");
   if (hasAttachments) return blocked("chat.slash.attachmentsBlocked");
   switch (name) {
+    case "import":
+    case "export":
+      if (args) return blocked("taskArchive.slashNoArgs", { name });
+      if (name === "export" && !ports.sessionId) return blocked("taskArchive.noTask");
+      return ports.openTaskArchive(name, isCurrent) ? SENT : blocked("taskArchive.unavailable");
     case "model":
       return selectModel(args, ports);
     case "thinking":
