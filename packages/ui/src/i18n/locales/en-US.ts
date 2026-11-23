@@ -2333,6 +2333,8 @@ const enUS: Record<string, string> = {
   "chat.slash.session.untitled": "Untitled",
   "chat.slash.session.noFile": "No path available",
   "chat.slash.session.statsUnavailable": "Usage data has not arrived yet.",
+  "chat.slash.session.totalTokens": "Total tokens",
+  "chat.slash.session.cost": "Total cost",
   "chat.slash.builtin.settings": "Open Settings",
   "chat.slash.builtin.model": "Select or switch models",
   "chat.slash.builtin.thinking": "Set the thinking level",

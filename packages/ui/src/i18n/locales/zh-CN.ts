@@ -2190,6 +2190,8 @@ const zhCN: Record<string, string> = {
   "chat.slash.session.untitled": "未命名",
   "chat.slash.session.noFile": "暂无路径",
   "chat.slash.session.statsUnavailable": "暂未收到用量数据。",
+  "chat.slash.session.totalTokens": "总 tokens",
+  "chat.slash.session.cost": "累计费用",
   "chat.slash.builtin.settings": "打开设置",
   "chat.slash.builtin.model": "选择或切换模型",
   "chat.slash.builtin.thinking": "设置思考等级",

@@ -32,7 +32,7 @@ export function useSlashCommandMentionPanelSections(
               <span className="truncate text-ui-base font-medium text-foreground max-w-[40%]">
                 {`/${suggestion.value}`}
               </span>
-              <span className="truncate text-ui-base text-foreground-subtlest flex-1">
+              <span className="truncate text-ui-base text-foreground-subtle flex-1">
                 {suggestion.description}
               </span>
             </span>

@@ -40,12 +40,12 @@ function SessionInfoDialog({ sessionId, title, close }: SessionDialogProps) {
     },
     ...(usage
       ? [
-          { id: "tokenDebug.column.input", value: usage.input },
-          { id: "tokenDebug.column.output", value: usage.output },
-          { id: "tokenDebug.column.cacheRead", value: usage.cacheRead },
-          { id: "tokenDebug.column.cacheWrite", value: usage.cacheWrite },
-          { id: "tokenDebug.column.total", value: usage.total },
-          { id: "settings.nek.modelEditor.cost", value: usage.cost },
+          { id: "settings.nek.modelEditor.cost.input", value: usage.input },
+          { id: "settings.nek.modelEditor.cost.output", value: usage.output },
+          { id: "settings.nek.modelEditor.cost.cacheRead", value: usage.cacheRead },
+          { id: "settings.nek.modelEditor.cost.cacheWrite", value: usage.cacheWrite },
+          { id: "chat.slash.session.totalTokens", value: usage.total },
+          { id: "chat.slash.session.cost", value: usage.cost },
         ]
       : []),
   ];

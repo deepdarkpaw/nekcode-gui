@@ -355,7 +355,12 @@ export function SlashCommandPlugin({
         if (event && isImeComposing(event)) return false;
         // An exact built-in is ready to submit, not a fuzzy completion to replace.
         const command = parseNekBuiltinSlashCommand($getRoot().getTextContent());
-        if (command && command.name === activeTrigger?.query) return false;
+        if (command && command.name === activeTrigger?.query) {
+          dismissedSignatureRef.current = activeSignatureRef.current;
+          setActiveTrigger(null);
+          setSelectedIndex(0);
+          return false;
+        }
         if (!selectSuggestion(selectedIndex)) {
           return false;
         }
