@@ -27,7 +27,7 @@ interface ExtensionDialogShellProps {
   deadline: { remainingMs?: number };
   notice?: string;
   error?: string;
-  focusRef: Ref<HTMLDivElement>;
+  focusRef?: Ref<HTMLDivElement>;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   testId: string;
   children: ReactNode;
@@ -56,6 +56,7 @@ function ExtensionDialogShell({
         data-interaction-focus="card"
         data-testid={testId}
         role="dialog"
+        aria-label={title}
         className="relative z-1 flex max-h-[min(72dvh,42rem)] w-full flex-col overflow-hidden rounded-2xl border border-popover-border bg-popover shadow-xs outline-none"
         onKeyDown={onKeyDown}
       >
@@ -109,30 +110,48 @@ function SelectDialogCard({
     onRespond,
   });
   const { intl } = useZCodeIntl();
+  const t = (id: string) => intl.formatMessage({ id: `nek.interaction.projectTrust.${id}` });
+  const trust = request.projectTrust;
+  const title = trust ? t("title") : controller.view.title;
   return (
     <ExtensionDialogShell
-      title={controller.view.title}
+      title={title}
       deadline={controller.view.deadline}
       notice={controller.view.notice}
       error={controller.view.error}
-      focusRef={controller.focus.ref("filter")}
+      focusRef={trust ? controller.focus.ref("filter") : undefined}
       onKeyDown={controller.onKeyDown}
       testId="nek-extension-select-card"
     >
       <div className="flex flex-col gap-3">
-        <Input
-          ref={controller.focus.ref("filter")}
-          value={controller.view.filter}
-          placeholder={intl.formatMessage({ id: "nek.interaction.dialog.filter" })}
-          aria-label={intl.formatMessage({ id: "nek.interaction.dialog.filter" })}
-          onChange={(event) => controller.setFilter(event.target.value)}
-        />
+        {trust ? (
+          <div className="flex flex-col gap-2">
+            <p className="font-mono text-ui-sm break-all text-foreground">{trust.cwd}</p>
+            <p className="text-ui-sm text-foreground-subtle">{t("description")}</p>
+            <ul
+              aria-label={t("resources")}
+              className="rounded-xl border border-border bg-surface px-3 py-2 font-mono text-ui-sm break-all"
+            >
+              {trust.resourcePaths.map((path) => (
+                <li key={path}>{path}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <Input
+            ref={controller.focus.ref("filter")}
+            value={controller.view.filter}
+            placeholder={intl.formatMessage({ id: "nek.interaction.dialog.filter" })}
+            aria-label={intl.formatMessage({ id: "nek.interaction.dialog.filter" })}
+            onChange={(event) => controller.setFilter(event.target.value)}
+          />
+        )}
         {controller.view.empty ? (
           <p className="px-2 py-3 text-ui-sm text-foreground-subtle">
             {intl.formatMessage({ id: "nek.interaction.dialog.noResults" })}
           </p>
         ) : (
-          <div className="space-y-1" role="listbox" aria-label={controller.view.title}>
+          <div className="space-y-1" role="listbox" aria-label={title}>
             {controller.view.items.map((item, index) => (
               <button
                 key={`${item.index}:${item.value}`}
@@ -141,9 +160,14 @@ function SelectDialogCard({
                 aria-selected={controller.view.highlighted === index}
                 onMouseEnter={() => controller.highlight(index)}
                 onClick={() => void controller.select(index)}
-                className="w-full rounded-xl px-3 py-2 text-left text-ui-base text-foreground outline-none hover:bg-hover focus-visible:bg-hover"
+                className="w-full rounded-xl px-3 py-2 text-left text-ui-base break-words text-foreground outline-none hover:bg-hover focus-visible:bg-hover aria-selected:bg-selected"
               >
-                {item.value}
+                {trust
+                  ? intl.formatMessage(
+                      { id: `nek.interaction.projectTrust.option.${item.value}` },
+                      { path: trust.parentPath ?? "" },
+                    )
+                  : item.value}
               </button>
             ))}
           </div>
@@ -151,7 +175,7 @@ function SelectDialogCard({
         <div className="flex justify-end border-t border-popover-border pt-3">
           <InteractionActionButton
             handle={controller.actions.cancel}
-            labelId="nek.interaction.dialog.cancel"
+            labelId={trust ? "common.close" : "nek.interaction.dialog.cancel"}
             size="lg"
           />
         </div>

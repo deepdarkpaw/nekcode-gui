@@ -2,7 +2,8 @@
  * 项目（当前工作区）：信任状态与需要信任的资源；项目级 settings 覆盖（显示继承来的全局值）；
  * 项目 MCP 覆盖、项目 AGENTS.md 与项目子代理。
  */
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { resolveNekProjectTrust } from "@zcode/shared/nek-protocol";
 import { FolderGit2Icon, ShieldCheckIcon, ShieldOffIcon, ShieldQuestionIcon } from "lucide-react";
 import type {
   NekCatalogModel,
@@ -41,75 +42,98 @@ import { AgentPresetsSection } from "./agent/AgentPresetsSection.js";
 import { InstructionsEditor } from "./agent/InstructionsEditor.js";
 import { ServerList } from "./mcp/McpPage.js";
 
-function TrustSection({ cwd }: { cwd: string }) {
+function trustStateKey(decision: ReturnType<typeof resolveNekProjectTrust>): string {
+  switch (decision.kind) {
+    case "record":
+      return decision.trusted ? "recordTrusted" : "recordUntrusted";
+    case "policy":
+      return decision.trusted ? "policyTrusted" : "policyUntrusted";
+    default:
+      return decision.kind;
+  }
+}
+
+function TrustSection({
+  cwd,
+  reloadSettings,
+}: {
+  cwd: string;
+  reloadSettings: () => Promise<void>;
+}) {
   const { intl } = useZCodeIntl();
-  const t = (id: string, values?: Record<string, string | number>) =>
-    intl.formatMessage({ id }, values);
+  const t = (id: string) => intl.formatMessage({ id: `settings.nek.project.${id}` });
   const api = useNekConfigApi();
   const { target } = useNekTarget();
   const trust = useNekQuery((config, current) => config.getProjectTrust(current, cwd), [cwd]);
-  const state =
-    trust.data?.trusted === true
-      ? "trusted"
-      : trust.data?.trusted === false
-        ? "untrusted"
-        : "undecided";
+  const decision = trust.data && resolveNekProjectTrust(trust.data);
   const Icon =
-    state === "trusted"
-      ? ShieldCheckIcon
-      : state === "untrusted"
-        ? ShieldOffIcon
-        : ShieldQuestionIcon;
+    decision?.kind === "ask"
+      ? ShieldQuestionIcon
+      : decision?.trusted
+        ? ShieldCheckIcon
+        : ShieldOffIcon;
+  const [saving, setSaving] = useState(false);
+  const pending = useRef(false);
+  const busyReason = intl.formatMessage({ id: "ui.action.busy" });
   const set = async (trusted: boolean) => {
-    await api.setProjectTrust(target, cwd, trusted);
-    await trust.reload();
+    if (pending.current) throw new Error(busyReason);
+    pending.current = true;
+    setSaving(true);
+    try {
+      await api.setProjectTrust(target, cwd, trusted);
+      await Promise.all([trust.reload(), reloadSettings()]);
+    } finally {
+      pending.current = false;
+      setSaving(false);
+    }
   };
   return (
-    <SettingSection
-      title={t("settings.nek.project.trust")}
-      description={t("settings.nek.project.trustHint")}
-    >
+    <SettingSection title={t("trust")} description={t("trustHint")}>
       <DocumentGate documents={[trust]}>
-        {() => (
-          <div className="flex flex-col gap-3 rounded-xl border border-card-border bg-card p-4">
-            <p className="flex items-center gap-2 text-ui-base" role="status">
-              <Icon className="size-4" aria-hidden="true" />
-              {t(`settings.nek.project.trustState.${state}`, {
-                policy: t(
-                  `settings.nek.project.policy.${trust.data?.defaultProjectTrust ?? "ask"}`,
-                ),
-              })}
-            </p>
-            <ul className="flex flex-col gap-0.5">
-              {trust.data?.resources.map((resource) => (
-                <li key={resource.path} className="flex items-center gap-2 text-ui-sm">
-                  <span className="w-24 shrink-0 text-foreground-subtle">
-                    {t(`settings.nek.project.resource.${resource.kind}`)}
-                  </span>
-                  <span className="truncate font-mono text-foreground">{resource.path}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="flex gap-2">
-              <AsyncButton
-                variant={state === "trusted" ? "outline" : "default"}
-                disabled={state === "trusted"}
-                disabledReason={t("settings.nek.project.alreadyTrusted")}
-                onClick={() => set(true)}
-              >
-                {t("settings.nek.project.trustAction")}
-              </AsyncButton>
-              <AsyncButton
-                variant="ghost"
-                disabled={state === "untrusted"}
-                disabledReason={t("settings.nek.project.alreadyUntrusted")}
-                onClick={() => set(false)}
-              >
-                {t("settings.nek.project.untrustAction")}
-              </AsyncButton>
+        {() =>
+          decision && (
+            <div className="flex flex-col gap-3 rounded-xl border border-card-border bg-card p-4">
+              <p className="flex items-center gap-2 text-ui-base" role="status">
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                {t(`trustState.${trustStateKey(decision)}`)}
+              </p>
+              {!decision.trusted ? (
+                <p className="text-ui-sm text-foreground-subtle">{t("inactiveResources")}</p>
+              ) : null}
+              {decision.resources.length > 0 ? (
+                <ul className="flex flex-col gap-0.5">
+                  {decision.resources.map((resource) => (
+                    <li key={resource.path} className="flex items-start gap-2 text-ui-sm">
+                      <span className="w-24 shrink-0 text-foreground-subtle">
+                        {t(`resource.${resource.kind}`)}
+                      </span>
+                      <span className="min-w-0 font-mono break-all text-foreground">
+                        {resource.path}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="flex gap-2">
+                <AsyncButton
+                  disabled={saving}
+                  disabledReason={busyReason}
+                  onClick={() => set(true)}
+                >
+                  {t("trustAction")}
+                </AsyncButton>
+                <AsyncButton
+                  variant="outline"
+                  disabled={saving}
+                  disabledReason={busyReason}
+                  onClick={() => set(false)}
+                >
+                  {t("untrustAction")}
+                </AsyncButton>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        }
       </DocumentGate>
     </SettingSection>
   );
@@ -285,11 +309,19 @@ function ProjectBody({ cwd }: { cwd: string }) {
       documents={[project, mcp, presets]}
     >
       <div className="flex flex-col gap-8">
-        <TrustSection cwd={cwd} />
+        <TrustSection cwd={cwd} reloadSettings={project.reload} />
         <DocumentGate documents={[project, global]}>
-          {() => (
-            <OverridesSection project={project} global={global} models={available.data ?? []} />
-          )}
+          {() =>
+            project.data?.projectTrusted === false ? (
+              <SettingSection title={intl.formatMessage({ id: "settings.nek.project.overrides" })}>
+                <p role="status" className="text-ui-sm text-foreground-subtle">
+                  {intl.formatMessage({ id: "settings.nek.project.ignoredSettings" })}
+                </p>
+              </SettingSection>
+            ) : (
+              <OverridesSection project={project} global={global} models={available.data ?? []} />
+            )
+          }
         </DocumentGate>
         <SettingSection
           title={intl.formatMessage({ id: "settings.nek.mcp.projectTitle" })}
@@ -332,7 +364,7 @@ function ProjectBody({ cwd }: { cwd: string }) {
 
 export function ProjectPage() {
   const { intl } = useZCodeIntl();
-  const { projectCwd } = useNekSettingsContext();
+  const { projectCwd, targetKey } = useNekSettingsContext();
   if (!projectCwd) {
     return (
       <NekPageFrame usesTarget>
@@ -344,5 +376,5 @@ export function ProjectPage() {
       </NekPageFrame>
     );
   }
-  return <ProjectBody cwd={projectCwd} />;
+  return <ProjectBody key={`${targetKey}:${projectCwd}`} cwd={projectCwd} />;
 }

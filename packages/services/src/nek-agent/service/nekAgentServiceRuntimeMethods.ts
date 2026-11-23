@@ -215,11 +215,9 @@ export abstract class NekAgentServiceRuntimeBase {
   protected async ensureProcess(record: NekSessionRecord): Promise<NekRpcProcess> {
     if (record.process) return await this.acquireProcess(record, this.processRequest(record));
     if (!record.path) throw new Error(`nek session ${record.key} has no session path to reopen`);
-    const approval = await this.resolveProjectApproval(record.cwd);
-    const process = await this.acquireProcess(record, {
-      ...this.processRequest(record),
-      approve: approval,
-    });
+    record.projectTrusted ??= await this.resolveProjectApproval(record.cwd);
+    this.assertAlive();
+    const process = await this.acquireProcess(record, this.processRequest(record));
     try {
       await this.initializeProcess(record, process);
       await this.refreshProcessSnapshot(record);
@@ -419,6 +417,7 @@ export abstract class NekAgentServiceRuntimeBase {
       sessionKey: record.key,
       cwd: record.cwd,
       ...(record.path ? { sessionPath: record.path } : {}),
+      approve: record.projectTrusted,
     };
   }
 

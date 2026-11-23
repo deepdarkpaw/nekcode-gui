@@ -22,6 +22,7 @@ import {
   builtinAgentPresetEntries,
   effectiveAgentPresetTools,
   isAgentPresetFileName,
+  resolveNekProjectTrust,
 } from "@zcode/shared/nek-protocol";
 import { mergeDeep } from "../../lib/settingsPatch.js";
 import {
@@ -60,10 +61,13 @@ export function readSettings(
   cwd?: string,
 ): NekSettingsReadResult {
   const file = settingsFile(machine, scope, cwd);
-  const project = cwd ? (machine.projectSettings.get(cwd)?.value ?? {}) : {};
+  const projectTrusted = cwd
+    ? resolveNekProjectTrust(projectTrust(machine, cwd)).trusted
+    : undefined;
+  const project = cwd && projectTrusted ? (machine.projectSettings.get(cwd)?.value ?? {}) : {};
   const effective = mergeDeep(
     mergeDeep(MOCK_DEFAULT_SETTINGS as Plain, machine.settings.value as Plain),
-    (scope === "project" ? project : {}) as Plain,
+    project as Plain,
   );
   return {
     path: file.path,
@@ -71,6 +75,7 @@ export function readSettings(
     scope,
     values: clone(file.value),
     effective: effective as NekSettingsView,
+    ...(projectTrusted === undefined ? {} : { projectTrusted }),
     defaults: clone(MOCK_DEFAULT_SETTINGS),
     diagnostics: [],
   };
@@ -83,6 +88,16 @@ export function patchSettings(
   options: { revision: string; cwd?: string },
   touch: Touch,
 ): string {
+  if (
+    scope === "project" &&
+    options.cwd &&
+    !resolveNekProjectTrust(projectTrust(machine, options.cwd)).trusted
+  ) {
+    throw mockError(
+      "validation",
+      "Trust this project in Project settings before writing project settings.json",
+    );
+  }
   const file = settingsFile(machine, scope, options.cwd);
   assertRevision(file, options.revision);
   file.value = mergeDeep(file.value as Plain, patch as Plain) as NekSettingsView;
@@ -248,17 +263,29 @@ export function extensions(machine: MockMachine) {
   return { directory, extensions: [{ name: "llama", path: `${directory}/llama.ts` }] };
 }
 
+/** Only mock fixtures are inspected; production gets this data from the target's RPC. */
 export function projectTrust(machine: MockMachine, cwd: string): NekProjectTrust {
+  let trusted = machine.trust.get(cwd) ?? null;
+  let path = cwd;
+  while (trusted === null && path !== "/" && path.includes("/")) {
+    path = path.slice(0, path.lastIndexOf("/")) || "/";
+    trusted = machine.trust.get(path) ?? null;
+  }
+  const resources: NekProjectTrust["resources"] = [];
+  const settings = machine.projectSettings.get(cwd);
+  const mcp = machine.projectMcp.get(cwd);
+  const agents = `${cwd}/.nek/agents`;
+  if (settings && settings.revision !== "absent")
+    resources.push({ kind: "settings", path: settings.path });
+  if (mcp && mcp.revision !== "absent") resources.push({ kind: "mcp", path: mcp.path });
+  if (machine.presets.some((preset) => preset.path?.startsWith(`${agents}/`))) {
+    resources.push({ kind: "agents", path: agents });
+  }
   return {
     cwd,
-    trusted: machine.trust.get(cwd) ?? null,
+    trusted,
     defaultProjectTrust: machine.settings.value.defaultProjectTrust ?? "ask",
-    resources: [
-      { kind: "settings", path: `${cwd}/.nek/settings.json` },
-      { kind: "mcp", path: `${cwd}/.nek/mcp.json` },
-      { kind: "agents", path: `${cwd}/.nek/agents/docs-writer.md` },
-      { kind: "system_prompt", path: `${cwd}/AGENTS.md` },
-    ],
+    resources,
   };
 }
 

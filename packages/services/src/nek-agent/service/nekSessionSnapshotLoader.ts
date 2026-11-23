@@ -170,6 +170,7 @@ export async function reloadSessionSnapshot(
         metadata,
         state,
         stats,
+        projectTrusted: record.projectTrusted,
         nekState: isNekState(extension.result) ? extension.result : undefined,
       });
     } catch (error) {

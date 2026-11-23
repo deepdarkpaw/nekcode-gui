@@ -26,6 +26,7 @@ import {
 } from "@/v4/pendingInteractionAdapter.js";
 import { V4UserInputDialog } from "@/v4/V4UserInputDialog.js";
 import { NekInteractionHost } from "@/nek/interactions/NekInteractionHost.js";
+import { NekProjectTrustBanner } from "@/nek/status/NekProjectTrustBanner.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
 
 interface V4InteractionDialogsProps {
@@ -252,13 +253,16 @@ export function V4InteractionDialogs({
   }, [pending?.autoResolution, pending?.interactionId, sendSnoozeOnce]);
 
   const nekInteractionHost = (
-    <NekInteractionHost
-      sessionKey={sessionId}
-      workspacePath={workspacePath}
-      workspaceIdentity={workspaceIdentity}
-      onOpenPlanFile={onOpenPlanFile}
-      focusComposer={focusComposer}
-    />
+    <>
+      <NekProjectTrustBanner projectTrusted={currentSnapshot?.control.projectTrusted} />
+      <NekInteractionHost
+        sessionKey={sessionId}
+        workspacePath={workspacePath}
+        workspaceIdentity={workspaceIdentity}
+        onOpenPlanFile={onOpenPlanFile}
+        focusComposer={focusComposer}
+      />
+    </>
   );
   if (!pending) {
     return nekInteractionHost;

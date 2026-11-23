@@ -136,6 +136,8 @@ export const sessionControlSchema = z.object({
   activeWorks: z.array(activeWorkSummarySchema),
   lastError: sessionErrorInfoSchema.nullable(),
   apiRetry: apiRetryStateSchema.nullable(),
+  // 启动 nek 时实际使用的项目信任决定；没有启动该进程时不推测。
+  projectTrusted: z.boolean().optional(),
   readOnly: z
     .object({
       reason: z.literal("locked"),

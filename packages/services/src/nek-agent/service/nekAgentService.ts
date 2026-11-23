@@ -277,6 +277,7 @@ export class NekAgentService extends NekPlanSessionBase implements Methods {
       key,
       sessionId: key,
       cwd: input.cwd,
+      projectTrusted: approval,
       phase: "idle",
       readonly: false,
       closing: false,
@@ -284,11 +285,7 @@ export class NekAgentService extends NekPlanSessionBase implements Methods {
     };
     this.sessions.set(key, record);
     try {
-      const process = await this.openProcess(record, {
-        sessionKey: key,
-        cwd: input.cwd,
-        approve: approval,
-      });
+      const process = await this.openProcess(record, this.processRequest(record));
       if (input.model || input.thinking || input.mode) {
         await this.withLease(record, async () => {
           if (input.model) await this.setModel({ sessionKey: key, ...input.model });

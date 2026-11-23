@@ -43,6 +43,7 @@ export interface NekHistorySnapshotInput {
   metadata: NekHistoryMetadata;
   state?: NekRpcSessionState;
   stats?: NekSessionStats;
+  projectTrusted?: boolean;
   nekState?: NekState;
 }
 
@@ -220,7 +221,10 @@ export class NekProjectorHistory {
         },
       },
       plan: nekState ? planFromNekState(nekState) : store.state.plan,
-      control: buildControlState(state, state?.isStreaming ? "running" : "completedSuccess"),
+      control: {
+        ...buildControlState(state, state?.isStreaming ? "running" : "completedSuccess"),
+        ...(input.projectTrusted === undefined ? {} : { projectTrusted: input.projectTrusted }),
+      },
     });
   }
 

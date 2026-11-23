@@ -58,8 +58,8 @@ export function useSelectDialogController({
   const [state, dispatch] = useReducer(
     (current: SelectState, event: Parameters<typeof reduceSelect>[1]) =>
       reduceSelect(current, event),
-    undefined,
-    createSelectState,
+    request.projectTrust !== undefined,
+    (isTrustPrompt) => ({ ...createSelectState(), ...(isTrustPrompt ? { highlighted: -1 } : {}) }),
   );
   const focus = useInteractionFocus();
   const operationRef = useRef<"select" | "cancel" | null>(null);
@@ -134,6 +134,13 @@ export function useSelectDialogController({
   );
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent) => {
+      // Let Enter activate a focused button (especially Close), not the highlighted option.
+      if (
+        event.key === "Enter" &&
+        event.target instanceof HTMLElement &&
+        event.target.closest("button")
+      )
+        return;
       const command = resolveSelectKey({
         key: event.key,
         isComposing: event.nativeEvent.isComposing,

@@ -127,22 +127,13 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
         closing: false,
       });
     try {
-      const approval = await this.resolveProjectApproval(record.cwd);
+      record.projectTrusted ??= await this.resolveProjectApproval(record.cwd);
       this.assertAlive();
       record.readonly = false;
       record.lockedBy = undefined;
       record.lockHolder = undefined;
       record.snapshot = undefined;
-      await this.openProcess(
-        record,
-        {
-          sessionKey: record.key,
-          cwd: record.cwd,
-          sessionPath: input.sessionPath,
-          approve: approval,
-        },
-        openTiming,
-      );
+      await this.openProcess(record, this.processRequest(record), openTiming);
       this.assertAlive();
       return {
         ...this.result(record),

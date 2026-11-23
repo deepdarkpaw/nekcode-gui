@@ -37,6 +37,8 @@ export interface NekSessionRecord {
   sessionId: string;
   path?: string;
   cwd: string;
+  /** 启动时决定；同一会话的进程回收、重连不丢失「仅本次」。 */
+  projectTrusted?: boolean;
   process?: NekRpcProcess;
   /** 随已获准的 nek 原生新会话迁移的进程交互范围。 */
   interactionScope?: NekInteractionScope;

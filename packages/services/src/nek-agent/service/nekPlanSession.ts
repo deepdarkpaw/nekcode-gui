@@ -166,6 +166,7 @@ export abstract class NekPlanSessionBase extends NekAgentSessionResumeBase {
       sessionId: record.sessionId,
       path: record.path,
       cwd: record.cwd,
+      projectTrusted: record.projectTrusted,
       projector: record.projector,
       historyMetadata: record.historyMetadata,
       readonly: false,

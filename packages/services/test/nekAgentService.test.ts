@@ -334,6 +334,7 @@ test("PT-4 restores an unlocked session without project trust and still admits a
     const result = await harness.service.resumeSession({ sessionPath: "/tmp/session.jsonl" });
     assert.equal(result.readonly, false);
     assert.deepEqual(harness.approvals, [false]);
+    assert.equal(result.conversation.control.projectTrusted, false);
     assert.ok(!harness.control.commands.some(({ type }) => type === "set_project_trust"));
     await harness.service.sendPrompt({
       sessionKey: result.sessionKey,

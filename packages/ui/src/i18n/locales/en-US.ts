@@ -10,6 +10,8 @@ const enUS: Record<string, string> = {
   "nek.conversation.modelError.api": "API: {api}",
   "nek.conversation.modelError.notFoundGuidance": "Check the model API and Base URL configuration.",
   "nek.conversation.readOnlyLocked": "Read-only: another nek process holds this session.",
+  "nek.conversation.projectUntrusted": "Project not trusted: project configuration was not loaded",
+  "nek.conversation.changeProjectTrust": "Change",
   "nek.conversation.lockHolder": "Holder: {hostname}, PID {pid}, mode {kind}, started {startedAt}.",
   "nek.conversation.retryWritable": "Retry writable access",
   "nek.conversation.readOnlyComposer": "Read-only — release the lock in nek, then retry.",
@@ -2505,6 +2507,15 @@ const enUS: Record<string, string> = {
   "nek.interaction.dialog.keepEditing": "Keep editing",
   "nek.interaction.dialog.confirmDiscard": "Discard your unsubmitted changes?",
   "nek.interaction.dialog.filter": "Filter options",
+  "nek.interaction.projectTrust.title": "Trust this project?",
+  "nek.interaction.projectTrust.description":
+    "Trust allows nek to load project settings and resources, install missing project packages, and run project extensions.",
+  "nek.interaction.projectTrust.resources": "Resources that require trust",
+  "nek.interaction.projectTrust.option.trust": "Trust",
+  "nek.interaction.projectTrust.option.trust-parent": "Trust parent folder ({path})",
+  "nek.interaction.projectTrust.option.trust-session": "Trust for this session only",
+  "nek.interaction.projectTrust.option.deny": "Do not trust",
+  "nek.interaction.projectTrust.option.deny-session": "Do not trust for this session only",
   "nek.interaction.dialog.noResults": "No matching options",
   "nek.interaction.dialog.input": "Your answer",
   "nek.interaction.dialog.seconds": "{seconds}s",
@@ -3386,11 +3397,16 @@ const enUS: Record<string, string> = {
     "Open a workspace to manage its trust and project configuration here.",
   "settings.nek.project.trust": "Project trust",
   "settings.nek.project.trustHint":
-    "Only trusted projects load settings, MCP, extensions and subagents from .nek.",
-  "settings.nek.project.trustState.trusted": "This project is trusted",
-  "settings.nek.project.trustState.untrusted":
-    "This project is not trusted; its configuration is not loaded",
-  "settings.nek.project.trustState.undecided": "Not decided yet (default policy: {policy})",
+    "Project trust controls whether new sessions load project configuration. Open sessions keep their startup decision.",
+  "settings.nek.project.trustState.recordTrusted": "Trusted (saved decision)",
+  "settings.nek.project.trustState.recordUntrusted": "Not trusted (saved decision)",
+  "settings.nek.project.trustState.policyTrusted": "Trusted (default policy: Always trust)",
+  "settings.nek.project.trustState.policyUntrusted": "Not trusted (default policy: Never trust)",
+  "settings.nek.project.trustState.noResources":
+    "No decision needed (no project configuration requires trust)",
+  "settings.nek.project.trustState.ask": "Will ask when a new session starts",
+  "settings.nek.project.inactiveResources":
+    "You can still edit project MCP and subagent files, but untrusted sessions will not load them.",
   "settings.nek.project.policy.ask": "Ask",
   "settings.nek.project.policy.always": "Always trust",
   "settings.nek.project.policy.never": "Never trust",
@@ -3405,9 +3421,9 @@ const enUS: Record<string, string> = {
   "settings.nek.project.resource.other": "Other",
   "settings.nek.project.trustAction": "Trust this project",
   "settings.nek.project.untrustAction": "Do not trust",
-  "settings.nek.project.alreadyTrusted": "Already trusted",
-  "settings.nek.project.alreadyUntrusted": "Already untrusted",
   "settings.nek.project.overrides": "Project settings overrides",
+  "settings.nek.project.ignoredSettings":
+    "Project settings are ignored; global settings apply. Trust this project before changing project settings.",
   "settings.nek.project.inherit": "Inherit global",
   "settings.nek.project.inherited": "Inherited: {value}",
   "settings.nek.project.mcpHint":

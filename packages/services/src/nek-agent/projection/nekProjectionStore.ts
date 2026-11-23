@@ -111,6 +111,17 @@ export class NekProjectionStore {
   /** State-only events must cross the same flush boundary as rows; no snapshot polling. */
   setState(patch: Partial<NekProjectionState>): void {
     const previous = this.stateValue;
+    // Live get_state/control events do not report trust. Only process startup can set it.
+    if (
+      patch.control &&
+      patch.control.projectTrusted === undefined &&
+      previous.control.projectTrusted !== undefined
+    ) {
+      patch = {
+        ...patch,
+        control: { ...patch.control, projectTrusted: previous.control.projectTrusted },
+      };
+    }
     const next = { ...previous };
     const changed: StatePatch = {};
     for (const key of ["config", "usage", "plan", "queue", "control"] as const) {
