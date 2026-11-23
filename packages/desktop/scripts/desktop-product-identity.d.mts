@@ -17,6 +17,7 @@ export declare const NEKCODE_DEEP_LINK_SCHEME: string;
 
 export function resolveGithubPublishOwner(env?: Record<string, string | undefined>): string;
 export function resolveGithubPublishRepo(env?: Record<string, string | undefined>): string;
+export function resolveGithubReleasesUrl(env?: Record<string, string | undefined>): string;
 
 export function isPreviewIdentityRequested(env?: Record<string, string | undefined>): boolean;
 export function resolveDesktopProductFlavor(

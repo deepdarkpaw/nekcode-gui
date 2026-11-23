@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig } from "tsup";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
-import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
+import {
+  resolveDesktopProductFlavor,
+  resolveGithubReleasesUrl,
+} from "./scripts/desktop-product-identity.mjs";
 
 const { resolveBuildEnvironment } = await import(
   pathToFileURL(resolve(import.meta.dirname, "../../scripts/build-environment.mjs")).href
@@ -157,7 +160,10 @@ export default defineConfig([
       "@zcode/services",
       "@zcode/client",
     ],
-    define: createSharedDefines(),
+    define: {
+      ...createSharedDefines(),
+      __NEKCODE_GITHUB_RELEASES_URL__: JSON.stringify(resolveGithubReleasesUrl(process.env)),
+    },
     // main/host 同时 watch 且共享 out 根目录时，默认 chunk 命名会互相覆盖，
     // 可能让 main 的 import 指向被 host 刚重写的 chunk，触发“缺少命名导出”的偶发启动报错。
     // 这里按目标分目录输出 chunk，确保并发构建下产物隔离。

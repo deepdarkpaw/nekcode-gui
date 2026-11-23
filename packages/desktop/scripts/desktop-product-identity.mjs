@@ -45,6 +45,13 @@ export function resolveGithubPublishRepo(env = process.env) {
   return configured ? configured : DEFAULT_GITHUB_PUBLISH_REPO;
 }
 
+/** GitHub Releases page for the repository used by the packaged updater. */
+export function resolveGithubReleasesUrl(env = process.env) {
+  const owner = encodeURIComponent(resolveGithubPublishOwner(env));
+  const repo = encodeURIComponent(resolveGithubPublishRepo(env));
+  return `https://github.com/${owner}/${repo}/releases`;
+}
+
 export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
 const PRODUCTION_IDENTITY = Object.freeze({
