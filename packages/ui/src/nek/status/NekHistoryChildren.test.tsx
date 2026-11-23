@@ -45,7 +45,7 @@ it("HS6: a stored child outside the transcript page remains reachable without be
   expect(onOpen).toHaveBeenCalledWith("stored-child");
   expect(onStop).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: /^停止/ })).toBeNull();
-  expect(screen.getByText("另有 70 个子代理，可从对话中的链接打开")).toBeTruthy();
+  expect(screen.getByText("另有 70 个子代理，可从任务记录中的链接打开")).toBeTruthy();
 });
 
 it("HS6: live records win without duplicating their stored directory row", () => {

@@ -328,7 +328,7 @@ it("makes the locked composer visibly read-only and blocks even a stale editor s
   );
   expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(true);
   expect(
-    screen.getByPlaceholderText("Read-only — release the lock in nek, then retry."),
+    screen.getByPlaceholderText("Read-only: release this task's lock in nek, then retry."),
   ).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Invoke editor submit" }));
   await new Promise((resolve) => setTimeout(resolve, 10));

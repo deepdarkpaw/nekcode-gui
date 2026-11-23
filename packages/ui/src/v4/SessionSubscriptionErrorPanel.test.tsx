@@ -25,7 +25,7 @@ describe("SessionSubscriptionErrorPanel", () => {
       "fault.subscription.recoveryFrameTimedOut",
       vi.fn(() => gate.promise),
     );
-    const alert = screen.getByRole("alert", { name: "无法加载此会话" });
+    const alert = screen.getByRole("alert", { name: "无法加载此任务" });
     expect(alert.className).toContain("justify-center");
     expect(alert.textContent).not.toContain("fault.subscription");
     fireEvent.click(screen.getByRole("button", { name: "错误详情" }));
@@ -44,7 +44,7 @@ describe("SessionSubscriptionErrorPanel", () => {
   it("omits the detail line when the store has no error text", () => {
     renderPanel(null);
     expect(screen.getByRole("alert").querySelectorAll("p")).toHaveLength(1);
-    expect(screen.getByRole("alert").textContent).not.toContain("无法加载此会话");
+    expect(screen.getByRole("alert").textContent).not.toContain("无法加载此任务");
     expect(screen.getByRole("alert").textContent).toContain("连接");
   });
 });

@@ -93,5 +93,5 @@ it("LR5: tool extras are explicitly expanded without replacing the stored tool o
   );
   expect(container.querySelector("img, a")).toBeNull();
   expect(row.output?.text).toBe("stored output");
-  expect(screen.getByText(/可能未写入会话历史/)).toBeTruthy();
+  expect(screen.getByText(/可能未写入任务记录/)).toBeTruthy();
 });

@@ -95,9 +95,9 @@ it("PT-2 renders the localized project path, gated resources and five choices in
     expect(card.getAllByRole("option").map((option) => option.textContent)).toEqual([
       "Trust",
       "Trust parent folder (/fixtures/work)",
-      "Trust for this session only",
+      "Trust just this once",
       "Do not trust",
-      "Do not trust for this session only",
+      "Do not trust this time",
     ]);
     fireEvent.keyDown(card.getByText("Trust this project?"), { key: "Enter" });
     expect(responses).toEqual([]);
