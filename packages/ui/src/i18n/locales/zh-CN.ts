@@ -3122,7 +3122,8 @@ const zhCN: Record<string, string> = {
   "settings.nek.agent.preset.autonomousHint": "无需主会话确认即可连续执行。",
   "settings.nek.agent.preset.instructions": "说明（正文）",
   "settings.nek.agent.preset.error.nameRequired": "请填写名称",
-  "settings.nek.agent.preset.error.nameFormat": "此名称不能用作预设文件名，请避开路径分隔符、文件名禁用字符和系统保留名。",
+  "settings.nek.agent.preset.error.nameFormat":
+    "此名称不能用作预设文件名，请避开路径分隔符、文件名禁用字符和系统保留名。",
   "settings.nek.agent.preset.error.nameDuplicate": "已存在同名预设",
   "settings.nek.agent.preset.error.descriptionRequired": "请填写描述",
   "settings.nek.agent.instructions": "全局 AGENTS.md",
