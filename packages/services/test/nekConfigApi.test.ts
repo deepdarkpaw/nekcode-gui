@@ -1279,7 +1279,7 @@ test("model CRUD keeps order, rejects duplicates and appends unlisted models on 
     async () =>
       await harness.api.saveProvider(
         LOCAL,
-        { id: "Bad ID", api: "openai-completions", baseUrl: "http://x", models: [] },
+        { id: "Bad/ID", api: "openai-completions", baseUrl: "http://x", models: [] },
         { revision: view.revision, isNew: true },
       ),
     "validation",

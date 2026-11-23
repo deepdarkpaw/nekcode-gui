@@ -61,4 +61,3 @@ export { LOGIN_CALLBACK_PORTS } from "./login.js";
 export { copyItemKey } from "./copyApi.js";
 export { CONFIG_FILE_NAMES } from "./watchFiles.js";
 export { readRawMcpServers, serializeMcpServers } from "./mcpDocument.js";
-export type { RawMcpServers } from "./mcpDocument.js";

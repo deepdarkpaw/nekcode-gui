@@ -15,11 +15,13 @@ it("NM-1 adds CPA without replacing it with the generated slug and explains an i
     <ProviderFormDialog open existingIds={new Set()} onOpenChange={() => {}} onSave={onSave} />,
     { wrapper },
   );
-  fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Company Proxy" } });
-  fireEvent.change(screen.getByLabelText("Base URL"), {
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), {
+    target: { value: "Company Proxy" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "Base URL" }), {
     target: { value: "https://proxy.example.test/v1" },
   });
-  const id = screen.getByLabelText("ID");
+  const id = screen.getByRole("textbox", { name: "ID" });
   expect((id as HTMLInputElement).value).toBe("company-proxy");
   fireEvent.change(id, { target: { value: "CPA/vendor" } });
   expect(id.getAttribute("aria-invalid")).toBe("true");
@@ -46,7 +48,7 @@ it("NM-2 blocks another provider's case-folded ID but submits a case-only rename
     />,
     { wrapper },
   );
-  const id = screen.getByLabelText("新 ID");
+  const id = screen.getByRole("textbox", { name: "新 ID" });
   const save = screen.getByRole("button", { name: "修改 ID" });
   fireEvent.change(id, { target: { value: "my_proxy" } });
   expect(screen.getByText(/模型引用不区分大小写/u)).toBeTruthy();

@@ -80,7 +80,7 @@ it.each(["review_pr", "代码审查", "Fix.Issue"])(
       />,
       { wrapper: env.wrapper },
     );
-    const field = screen.getByLabelText("名称");
+    const field = screen.getByRole("textbox", { name: "名称" });
     const save = screen.getByRole("button", { name: "新建命令模板" });
     fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "Review $1" } });
     fireEvent.change(field, { target: { value: `${name} args` } });
@@ -108,8 +108,8 @@ it("NM-4 shows skill name and description errors at their fields before creating
     />,
     { wrapper: env.wrapper },
   );
-  const name = screen.getByLabelText("名称");
-  const description = screen.getByLabelText("描述");
+  const name = screen.getByRole("textbox", { name: "名称" });
+  const description = screen.getByRole("textbox", { name: "描述" });
   fireEvent.change(name, { target: { value: "two--hyphens" } });
   fireEvent.change(description, { target: { value: "x".repeat(1025) } });
   fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "Instructions" } });

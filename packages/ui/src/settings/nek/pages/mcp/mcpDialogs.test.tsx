@@ -16,8 +16,8 @@ it("NM-5 create form rejects dots and untrimmed invalid names and keeps a valid 
     <McpServerFormDialog open onOpenChange={() => {}} existingNames={new Set()} onSave={onSave} />,
     { wrapper },
   );
-  const name = screen.getByLabelText("名称");
-  fireEvent.change(screen.getByLabelText("命令"), { target: { value: "node" } });
+  const name = screen.getByRole("textbox", { name: "名称" });
+  fireEvent.change(screen.getByRole("textbox", { name: "命令" }), { target: { value: "node" } });
   const submit = screen.getByRole("button", { name: "添加服务器" });
   for (const value of ["Vendor.AI", " Vendor_AI", "Vendor_AI "]) {
     fireEvent.change(name, { target: { value } });
@@ -107,9 +107,9 @@ it("NM-7 puts the URL, timeout and OAuth errors next to their actual fields and 
     <McpServerFormDialog open onOpenChange={() => {}} existingNames={new Set()} onSave={onSave} />,
     { wrapper },
   );
-  fireEvent.change(screen.getByLabelText("名称"), { target: { value: "docs" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "docs" } });
   fireEvent.click(screen.getByRole("radio", { name: "HTTP" }));
-  const url = screen.getByLabelText("URL");
+  const url = screen.getByRole("textbox", { name: "URL" });
   const change = (field: HTMLElement, value: string) =>
     fireEvent.change(field, { target: { value } });
   change(url, "ftp://example.test/mcp");

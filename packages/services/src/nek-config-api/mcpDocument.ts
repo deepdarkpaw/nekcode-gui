@@ -4,7 +4,7 @@ import { parseJsonMapping, readTextDocument } from "./documents.js";
 import { validationError } from "./errors.js";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
 
-export type RawMcpServers = Record<string, Record<string, unknown>>;
+type RawMcpServers = Record<string, Record<string, unknown>>;
 
 export async function readMcpServerFile(executor: NekConfigHostExecutor, path: string) {
   const document = await readTextDocument(executor, path);

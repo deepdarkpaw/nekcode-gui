@@ -3,7 +3,7 @@
  * core/prompt-templates.ts, core/package-manager.ts (auto discovery), and core/skills.ts.
  */
 import { isAgentPresetFileName } from "./agent-preset-name.js";
-import type { NekResourceType } from "./resource-config.js";
+import type { NekResourceType } from "./gui-rpc.js";
 
 export type NekProviderIdError = "required" | "slash" | "edgeWhitespace" | "duplicate";
 
