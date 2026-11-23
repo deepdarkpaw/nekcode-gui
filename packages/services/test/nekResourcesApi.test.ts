@@ -13,7 +13,8 @@ import {
   createWorkspaceConfigService,
   NekConfigApi,
 } from "../src/nek-config-api/index.js";
-import { FakeControlClient, LOCAL, REMOTE } from "./nekConfigApiHarness.js";
+import { parseFrontmatterDocument } from "../src/nek-agent/config/nekConfigDocuments.js";
+import { FakeControlClient, LOCAL, REMOTE, expectNekError } from "./nekConfigApiHarness.js";
 
 const CWD = "/work/project";
 const LOCAL_AGENT = "/home/l/.nek/agent";
@@ -201,6 +202,86 @@ test("managed Markdown writes stay on the target, retain template frontmatter an
   );
   await h.api.deleteResource(REMOTE, file);
   assert.equal(h.remote.files.has(prompt.path), false);
+});
+
+test("NM-3 saves callable template names verbatim, not as skill slugs", async (t) => {
+  const h = setup();
+  t.after(() => h.api.dispose());
+  const input = { resourceType: "prompts", scope: "global", content: "Review $1" } as const;
+  for (const name of ["review_pr", "代码审查", "Fix.Issue", "x".repeat(65)]) {
+    const description = "a".repeat(1025);
+    await h.api.createResource(LOCAL, { ...input, name, description });
+    const path = `${LOCAL_AGENT}/prompts/${name}.md`;
+    const text = h.local.files.get(path);
+    assert.ok(text);
+    assert.equal(parseFrontmatterDocument(path, text).frontmatter.description, description);
+  }
+  for (const [name, code] of [
+    ["", "nameRequired"],
+    ["two words", "promptWhitespace"],
+    ["fix\u00a0pr", "promptWhitespace"],
+    ["Fix.Issue ", "promptWhitespace"],
+    [".hidden", "promptHidden"],
+    ["../outside", "promptFilename"],
+    ["CON.test", "promptFilename"],
+  ]) {
+    const error = await expectNekError(
+      () => h.api.createResource(LOCAL, { ...input, name }),
+      "validation",
+    );
+    assert.deepEqual(error.fieldErrors, { name: code });
+  }
+});
+
+test("NM-4 enforces the skill name and description rules only when creating", async (t) => {
+  const h = setup();
+  t.after(() => h.api.dispose());
+  const input = {
+    resourceType: "skills",
+    scope: "global",
+    content: "Instructions",
+    description: "Description",
+  } as const;
+  for (const [name, code] of [
+    ["a".repeat(65), "skillNameLength"],
+    ["My_Skill", "skillCharacters"],
+    ["-start", "skillEdgeHyphen"],
+    ["end-", "skillEdgeHyphen"],
+    ["bad--skill", "skillDoubleHyphen"],
+  ]) {
+    const error = await expectNekError(
+      () => h.api.createResource(LOCAL, { ...input, name }),
+      "validation",
+    );
+    assert.deepEqual(error.fieldErrors, { name: code });
+  }
+  const name = "a".repeat(64);
+  for (const [description, code] of [
+    [" \t", "descriptionRequired"],
+    [` ${"a".repeat(1024)}`, "descriptionLength"],
+  ]) {
+    const error = await expectNekError(
+      () => h.api.createResource(LOCAL, { ...input, name, description }),
+      "validation",
+    );
+    assert.deepEqual(error.fieldErrors, { description: code });
+  }
+  assert.deepEqual(h.local.writes, []);
+  const validDescription = ` ${"a".repeat(1023)}`;
+  await h.api.createResource(LOCAL, { ...input, name, description: validDescription });
+  const path = `${LOCAL_AGENT}/skills/${name}/SKILL.md`;
+  assert.equal(
+    parseFrontmatterDocument(path, h.local.files.get(path)!).frontmatter.description,
+    validDescription,
+  );
+  await h.api.createResource(REMOTE, { ...input, name: "con" });
+  assert.ok(h.remote.files.has(`${REMOTE_AGENT}/skills/con/SKILL.md`));
+
+  const existing = resource("skills", "Legacy_Name", LOCAL_AGENT, "user");
+  h.localControl.entries = [existing];
+  const catalog = await h.api.listConfigResources(LOCAL, { resourceType: "skills" });
+  assert.deepEqual(catalog.resources, [existing]);
+  assert.deepEqual(catalog.diagnostics, [{ type: "warning", message: "from nek" }]);
 });
 
 test("file mutations reject linked directories and explicit resources; workspace RPC stays on its execution target", async (t) => {

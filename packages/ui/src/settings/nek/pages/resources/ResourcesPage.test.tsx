@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { NekConfigTarget, NekResourceType } from "@zcode/shared/nek-protocol";
+import { ResourceDialog } from "./ResourceDialog.js";
 import { ResourcesPage } from "./ResourcesPage.js";
 import { createNekTestEnv, installDomPolyfills } from "../../test/nekTestUtils.js";
 import { MOCK_PROJECT_CWD, MOCK_REMOTE_CONNECTED } from "../../api/mock/mockSeed.js";
@@ -64,3 +65,81 @@ for (const resourceType of ["skills", "prompts"] as const satisfies readonly Nek
     expect(screen.queryByText(/此项目未受信任/u)).toBeNull();
   });
 }
+
+it.each(["review_pr", "代码审查", "Fix.Issue"])(
+  "NM-3 creates /%s while rejecting whitespace at the name field",
+  async (name) => {
+    const env = createNekTestEnv();
+    const create = vi.spyOn(env.config, "createResource");
+    render(
+      <ResourceDialog
+        editor={{ kind: "create", scope: "global" }}
+        query={{ resourceType: "prompts" }}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+      { wrapper: env.wrapper },
+    );
+    const field = screen.getByLabelText("名称");
+    const save = screen.getByRole("button", { name: "新建命令模板" });
+    fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "Review $1" } });
+    fireEvent.change(field, { target: { value: `${name} args` } });
+    fireEvent.click(save);
+    expect(create).not.toHaveBeenCalled();
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/空白分隔命令和参数/u)).toBeTruthy();
+    fireEvent.change(field, { target: { value: name } });
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(LOCAL, expect.objectContaining({ name })),
+    );
+  },
+);
+
+it("NM-4 shows skill name and description errors at their fields before creating", async () => {
+  const env = createNekTestEnv();
+  const create = vi.spyOn(env.config, "createResource");
+  render(
+    <ResourceDialog
+      editor={{ kind: "create", scope: "global" }}
+      query={{ resourceType: "skills" }}
+      onClose={() => {}}
+      onSaved={() => {}}
+    />,
+    { wrapper: env.wrapper },
+  );
+  const name = screen.getByLabelText("名称");
+  const description = screen.getByLabelText("描述");
+  fireEvent.change(name, { target: { value: "two--hyphens" } });
+  fireEvent.change(description, { target: { value: "x".repeat(1025) } });
+  fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "Instructions" } });
+  const save = screen.getByRole("button", { name: "新建技能" });
+  fireEvent.click(save);
+  expect(create).not.toHaveBeenCalled();
+  expect(name.getAttribute("aria-invalid")).toBe("true");
+  expect(description.getAttribute("aria-invalid")).toBe("true");
+  expect(screen.getByText(/连续的连字符/u)).toBeTruthy();
+  expect(screen.getByText(/描述不能超过 1024/u)).toBeTruthy();
+  fireEvent.change(name, { target: { value: "valid-skill" } });
+  fireEvent.change(description, { target: { value: "Description" } });
+  fireEvent.click(save);
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+});
+
+it("NM-4 keeps a legacy skill visible beside its original nek warning", async () => {
+  const env = createNekTestEnv();
+  const query = { resourceType: "skills" } as const;
+  const catalog = await env.config.listConfigResources(LOCAL, query);
+  const warning = "name contains invalid characters (must be lowercase a-z, 0-9, hyphens only)";
+  const path = `${catalog.roots.global}/Legacy_Name/SKILL.md`;
+  vi.spyOn(env.config, "listConfigResources").mockResolvedValue({
+    ...catalog,
+    resources: [{ ...catalog.resources[0]!, name: "Legacy_Name", path }],
+    diagnostics: [{ type: "warning", message: warning, path }],
+  });
+  render(<ResourcesPage resourceType="skills" />, { wrapper: env.wrapper });
+  expect(await screen.findByRole("switch", { name: "启用 Legacy_Name" })).toBeTruthy();
+  const warningItem = (await screen.findByText(warning)).closest("li")!;
+  expect(within(warningItem).getByText(path)).toBeTruthy();
+  expect(warningItem.querySelector(".text-warning")).not.toBeNull();
+});

@@ -1,11 +1,14 @@
-import type {
-  INekResourceConfigApi,
-  NekConfigTarget,
-  NekListResourcesResult,
-  NekResourceCatalog,
-  NekResourceFileRef,
-  NekResourceInfo,
-  NekResourceQuery,
+import {
+  validateNekResourceName,
+  validateNekSkillDescription,
+  type INekResourceConfigApi,
+  type NekConfigTarget,
+  type NekListResourcesResult,
+  type NekResourceCatalog,
+  type NekResourceFileRef,
+  type NekResourceInfo,
+  type NekResourceNameError,
+  type NekResourceQuery,
 } from "@zcode/shared/nek-protocol";
 import { serializeFrontmatterDocument } from "../nek-agent/config/nekConfigDocuments.js";
 import { conflict, validationError } from "./errors.js";
@@ -21,8 +24,17 @@ import {
 import type { NekConfigRuntime, NekTargetContext } from "./runtime.js";
 
 const MAX_RESOURCES = 4_096;
-const RESOURCE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/iu;
+const RESOURCE_NAME_ERRORS: Record<NekResourceNameError, string> = {
+  nameRequired: "enter a name",
+  promptWhitespace: "whitespace separates a slash command from its arguments",
+  promptFilename:
+    "use a portable filename, without path separators, invalid characters or reserved device names",
+  promptHidden: "nek does not discover template files starting with a dot",
+  skillNameLength: "name exceeds 64 characters",
+  skillCharacters: "name contains invalid characters (must be lowercase a-z, 0-9, hyphens only)",
+  skillEdgeHyphen: "name must not start or end with a hyphen",
+  skillDoubleHyphen: "name must not contain consecutive hyphens",
+};
 
 async function list(
   runtime: NekConfigRuntime,
@@ -129,24 +141,27 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
       const { resourceType, name, description, content, scope } = input;
       if (scope !== "global" && scope !== "project")
         throw validationError("Invalid resource scope");
-      if (
-        typeof name !== "string" ||
-        name.length > 64 ||
-        !RESOURCE_NAME.test(name) ||
-        WINDOWS_DEVICE_NAME.test(name)
-      ) {
-        throw validationError(
-          "Use up to 64 lowercase letters, digits, and single hyphens for the resource name",
-        );
+      assertResourceQuery(input);
+      const nameIssue = validateNekResourceName(resourceType, name);
+      if (nameIssue) {
+        throw validationError(`Invalid resource name: ${RESOURCE_NAME_ERRORS[nameIssue]}`, {
+          name: nameIssue,
+        });
       }
-      if (
-        typeof content !== "string" ||
-        (description !== undefined &&
-          (typeof description !== "string" || description.length > 1_024)) ||
-        (resourceType === "skills" && !description?.trim())
-      ) {
-        throw validationError("A skill needs a description of up to 1024 characters");
+      if (resourceType === "skills") {
+        const descriptionIssue = validateNekSkillDescription(description);
+        if (descriptionIssue) {
+          throw validationError(
+            descriptionIssue === "descriptionRequired"
+              ? "description is required"
+              : "description exceeds 1024 characters",
+            { description: descriptionIssue },
+          );
+        }
+      } else if (description !== undefined && typeof description !== "string") {
+        throw validationError("Template description must be a string");
       }
+      if (typeof content !== "string") throw validationError("Resource Markdown must be a string");
       const context = runtime.target(target);
       const catalog = await list(runtime, target, input);
       const cwd =
@@ -159,7 +174,7 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
           : paths.join(root, `${name}.md`);
       const metadata = {
         ...(resourceType === "skills" ? { name } : {}),
-        ...(description?.trim() ? { description: description.trim() } : {}),
+        ...(description ? { description } : {}),
       };
       const markdown = Object.keys(metadata).length
         ? serializeFrontmatterDocument(metadata, content)

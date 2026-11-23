@@ -1,6 +1,8 @@
 import { useId, useState } from "react";
 import {
   MAX_NEK_RESOURCE_FILE_BYTES,
+  validateNekResourceName,
+  validateNekSkillDescription,
   type NekConfigScope,
   type NekResourceFileRef,
   type NekResourceQuery,
@@ -11,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useNekConfigApi, useNekTarget } from "../../api/NekSettingsContext.js";
 import { localizeNekError } from "../../api/nekErrors.js";
+import { Field, invalidProps } from "../../components/Field.js";
 import { NekFormDialog } from "../../components/NekFormDialog.js";
 
 type Editor =
@@ -46,8 +49,8 @@ export function ResourceDialog({
     editing ? { content: editor.content, revision: editor.revision } : undefined,
   );
   const [conflicted, setConflicted] = useState(false);
-  const validName = editing || /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name.trim());
-  const validDescription = !skill || Boolean(description.trim());
+  const nameIssue = editing ? null : validateNekResourceName(query.resourceType, name);
+  const descriptionIssue = skill ? validateNekSkillDescription(description) : null;
   const validBody =
     Boolean(draft.trim()) && new TextEncoder().encode(draft).length <= MAX_NEK_RESOURCE_FILE_BYTES;
   const commit = async () => {
@@ -62,7 +65,7 @@ export function ResourceDialog({
         await api.createResource(target, {
           ...query,
           scope: editor.scope,
-          name: name.trim(),
+          name,
           description,
           content: draft,
         });
@@ -90,73 +93,91 @@ export function ResourceDialog({
         skill ? "settings.nek.resources.skillBodyHint" : "settings.nek.resources.promptBodyHint",
       )}
       dirty={editing ? draft !== baseline?.content : Boolean(name || description || draft)}
-      valid={validName && validDescription && validBody && !conflicted}
+      valid={!nameIssue && !descriptionIssue && validBody && !conflicted}
       saveLabel={editing ? t("settings.nek.resources.saveTemplate") : title}
       onSave={commit}
     >
-      {({ attempted }) => (
-        <>
-          {!editing ? (
-            <>
-              <label htmlFor={`${id}-name`} className="text-ui-sm">
-                {t("settings.nek.resources.name")}
-                <Input
-                  id={`${id}-name`}
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  maxLength={64}
+      {({ attempted }) => {
+        const nameId = `${id}-name`;
+        const descriptionId = `${id}-description`;
+        const nameError =
+          nameIssue && (attempted || name) ? t(`settings.nek.resources.error.${nameIssue}`) : null;
+        const descriptionError =
+          descriptionIssue && (attempted || description)
+            ? t(`settings.nek.resources.error.${descriptionIssue}`)
+            : null;
+        return (
+          <>
+            {!editing ? (
+              <>
+                <Field
+                  label={t("settings.nek.resources.name")}
+                  htmlFor={nameId}
                   required
-                  className="font-mono"
-                  aria-invalid={attempted && !validName}
-                />
-                <span className="text-foreground-subtle">
-                  {t("settings.nek.resources.nameHint")}
-                </span>
-              </label>
-              <label htmlFor={`${id}-description`} className="text-ui-sm">
-                {t("settings.nek.resources.description")}
-                <Input
-                  id={`${id}-description`}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  maxLength={1024}
+                  hint={t(
+                    skill
+                      ? "settings.nek.resources.skillNameHint"
+                      : "settings.nek.resources.promptNameHint",
+                  )}
+                  error={nameError}
+                >
+                  <Input
+                    id={nameId}
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    required
+                    className="font-mono"
+                    {...invalidProps(nameId, nameError)}
+                  />
+                </Field>
+                <Field
+                  label={t("settings.nek.resources.description")}
+                  htmlFor={descriptionId}
                   required={skill}
-                  aria-invalid={attempted && !validDescription}
-                />
-              </label>
-            </>
-          ) : null}
-          {conflicted && (
-            <div className="flex flex-wrap gap-2" role="alert">
-              <AsyncButton size="sm" variant="outline" onClick={() => readAgain(false)}>
-                {t("settings.nek.banner.reload")}
-              </AsyncButton>
-              <AsyncButton size="sm" variant="outline" onClick={() => readAgain(true)}>
-                {t("settings.nek.banner.keepMine")}
-              </AsyncButton>
-            </div>
-          )}
-          <label htmlFor={`${id}-body`} className="text-ui-sm">
-            {t("settings.nek.resources.body")}
-            <Textarea
-              id={`${id}-body`}
-              className="min-h-48 font-mono"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              maxLength={MAX_NEK_RESOURCE_FILE_BYTES}
-              required
-              aria-invalid={attempted && !validBody}
-            />
-            {attempted && !validBody ? (
-              <span className="text-destructive">
-                {t("settings.nek.resources.bodyRequired", {
-                  size: MAX_NEK_RESOURCE_FILE_BYTES / 1024,
-                })}
-              </span>
+                  error={descriptionError}
+                >
+                  <Input
+                    id={descriptionId}
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    required={skill}
+                    {...invalidProps(descriptionId, descriptionError)}
+                  />
+                </Field>
+              </>
             ) : null}
-          </label>
-        </>
-      )}
+            {conflicted && (
+              <div className="flex flex-wrap gap-2" role="alert">
+                <AsyncButton size="sm" variant="outline" onClick={() => readAgain(false)}>
+                  {t("settings.nek.banner.reload")}
+                </AsyncButton>
+                <AsyncButton size="sm" variant="outline" onClick={() => readAgain(true)}>
+                  {t("settings.nek.banner.keepMine")}
+                </AsyncButton>
+              </div>
+            )}
+            <label htmlFor={`${id}-body`} className="text-ui-sm">
+              {t("settings.nek.resources.body")}
+              <Textarea
+                id={`${id}-body`}
+                className="min-h-48 font-mono"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                maxLength={MAX_NEK_RESOURCE_FILE_BYTES}
+                required
+                aria-invalid={attempted && !validBody}
+              />
+              {attempted && !validBody ? (
+                <span className="text-destructive">
+                  {t("settings.nek.resources.bodyRequired", {
+                    size: MAX_NEK_RESOURCE_FILE_BYTES / 1024,
+                  })}
+                </span>
+              ) : null}
+            </label>
+          </>
+        );
+      }}
     </NekFormDialog>
   );
 }

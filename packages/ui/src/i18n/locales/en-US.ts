@@ -3334,8 +3334,27 @@ const enUS: Record<string, string> = {
   "settings.nek.resources.edit": "Edit command template",
   "settings.nek.resources.saveTemplate": "Save command template",
   "settings.nek.resources.name": "Name",
-  "settings.nek.resources.nameHint": "Use up to 64 lowercase letters, digits, and single hyphens.",
+  "settings.nek.resources.skillNameHint": "Use up to 64 lowercase letters, digits, and hyphens.",
+  "settings.nek.resources.promptNameHint":
+    "Enter the name after /, such as review_pr, 代码审查, or Fix.Issue.",
+  "settings.nek.resources.error.nameRequired": "Enter a name.",
+  "settings.nek.resources.error.promptWhitespace":
+    "Do not use whitespace; nek uses it to separate the command from its arguments.",
+  "settings.nek.resources.error.promptFilename":
+    "Use a portable filename without path separators, invalid characters, or reserved device names.",
+  "settings.nek.resources.error.promptHidden":
+    "Do not start with a dot; nek does not discover hidden template files automatically.",
+  "settings.nek.resources.error.skillNameLength": "A skill name cannot exceed 64 characters.",
+  "settings.nek.resources.error.skillCharacters":
+    "Use only lowercase letters a–z, digits, and hyphens.",
+  "settings.nek.resources.error.skillEdgeHyphen":
+    "Do not start or end the skill name with a hyphen.",
+  "settings.nek.resources.error.skillDoubleHyphen":
+    "Do not use consecutive hyphens in the skill name.",
   "settings.nek.resources.description": "Description",
+  "settings.nek.resources.error.descriptionRequired": "Enter a skill description.",
+  "settings.nek.resources.error.descriptionLength":
+    "A skill description cannot exceed 1024 characters.",
   "settings.nek.resources.body": "Markdown body",
   "settings.nek.resources.bodyRequired": "Enter a body no larger than {size} KB.",
   "settings.nek.resources.skillBodyHint": "Creates a SKILL.md with a name and description.",

@@ -3133,8 +3133,23 @@ const zhCN: Record<string, string> = {
   "settings.nek.resources.edit": "编辑命令模板",
   "settings.nek.resources.saveTemplate": "保存命令模板",
   "settings.nek.resources.name": "名称",
-  "settings.nek.resources.nameHint": "使用小写字母、数字和单个连字符，最多 64 个字符。",
+  "settings.nek.resources.skillNameHint": "使用小写字母、数字和连字符，最多 64 个字符。",
+  "settings.nek.resources.promptNameHint":
+    "填写 / 后面的命令名，例如 review_pr、代码审查或 Fix.Issue。",
+  "settings.nek.resources.error.nameRequired": "请填写名称。",
+  "settings.nek.resources.error.promptWhitespace":
+    "命令名不能包含空白，nek 会用空白分隔命令和参数。",
+  "settings.nek.resources.error.promptFilename":
+    "此名称不能用作文件名，请避开路径分隔符、禁用字符和系统保留名。",
+  "settings.nek.resources.error.promptHidden":
+    "命令名不能以 . 开头，nek 不会自动加载隐藏模板文件。",
+  "settings.nek.resources.error.skillNameLength": "技能名不能超过 64 个字符。",
+  "settings.nek.resources.error.skillCharacters": "技能名只能包含小写字母 a–z、数字和连字符。",
+  "settings.nek.resources.error.skillEdgeHyphen": "技能名不能以连字符开头或结尾。",
+  "settings.nek.resources.error.skillDoubleHyphen": "技能名不能包含连续的连字符。",
   "settings.nek.resources.description": "描述",
+  "settings.nek.resources.error.descriptionRequired": "请填写技能描述。",
+  "settings.nek.resources.error.descriptionLength": "技能描述不能超过 1024 个字符。",
   "settings.nek.resources.body": "Markdown 正文",
   "settings.nek.resources.bodyRequired": "请输入正文，大小不能超过 {size} KB。",
   "settings.nek.resources.skillBodyHint": "将创建包含名称和描述的 SKILL.md。",
