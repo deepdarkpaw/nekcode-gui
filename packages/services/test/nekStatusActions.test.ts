@@ -167,7 +167,7 @@ function createAdapter() {
   const session = fakeProcess("session");
   const service = createNekZCodeAgentService({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });

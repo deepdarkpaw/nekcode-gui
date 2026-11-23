@@ -9,7 +9,7 @@ import type {
   NekHistoryMetadata,
   NekGuiInfo,
   NekInteractionScope,
-  NekProjectTrust,
+  NekProjectTrustChoice,
   NekPromptAttachment,
   NekRpcEvent,
   NekRpcSessionState,
@@ -115,13 +115,17 @@ export interface NekSessionProcessCreateOptions {
   extensionUi?: NekExtensionUiHandler;
 }
 
-export interface NekTrustPromptContext {
-  trust: NekProjectTrust;
+interface NekTrustPromptContext {
+  workspacePath: string;
   cwd: string;
-  signal?: AbortSignal;
+  resourcePaths: string[];
+  parentPath?: string;
+  options: NekProjectTrustChoice[];
 }
 
-export type NekTrustPrompt = (context: NekTrustPromptContext) => Promise<boolean> | boolean;
+export type NekTrustPrompt = (
+  context: NekTrustPromptContext,
+) => Promise<NekProjectTrustChoice | undefined> | NekProjectTrustChoice | undefined;
 
 export interface NekAgentServiceOptions {
   runtimeConfig?: GuiRuntimeConfig;

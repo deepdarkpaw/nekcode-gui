@@ -115,7 +115,7 @@ test(
     // A separate config owner models Electron main; the host learns via fs.watch/content admission.
     const settings = new NekConfigApi({ hosts });
     const host = createNekRuntimeServices({
-      agent: { guiInfo: info, cwd: project, env, askProjectTrust: () => true },
+      agent: { guiInfo: info, cwd: project, env, askProjectTrust: () => "trust" },
       config: { hosts, config: { watchDebounceMs: 60_000 } },
     });
     const local = { kind: "local" } as const;

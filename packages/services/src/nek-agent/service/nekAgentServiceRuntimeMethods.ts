@@ -55,7 +55,7 @@ export abstract class NekAgentServiceRuntimeBase {
   protected readonly logger: NekAgentServiceOptions["logger"];
   protected readonly customExtensionUi: NekExtensionUiHandler | undefined;
   protected readonly interactions: NekGuiInteractionBridge;
-  protected readonly askProjectTrust: NekAgentServiceOptions["askProjectTrust"];
+  protected readonly askProjectTrust: NonNullable<NekAgentServiceOptions["askProjectTrust"]>;
   /** 信任确认是否只能走渲染层交互通道（注入回调或自定义 handler 时不是）。 */
   protected readonly trustThroughInteractions: boolean;
   protected readonly defaultCwd: string;
@@ -161,6 +161,7 @@ export abstract class NekAgentServiceRuntimeBase {
       askProjectTrust: this.askProjectTrust,
       ensureControl: async () => await this.pool.ensureControl(),
       assertCanAsk: () => this.assertInteractionChannel(cwd),
+      assertAlive: () => this.assertAlive(),
     });
   }
 

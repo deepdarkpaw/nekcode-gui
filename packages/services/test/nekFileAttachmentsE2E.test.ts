@@ -229,7 +229,7 @@ test(
         guiInfo,
         cwd: project,
         attachmentStagingDir: staging,
-        askProjectTrust: () => true,
+        askProjectTrust: () => "trust",
       };
       adapter = createNekAgentServiceAdapter(options);
       const created = await adapter.createNekSession({ workspacePath: project });

@@ -113,7 +113,7 @@ function fakeProcess(
         if (command.type === "get_project_trust")
           data = {
             cwd: command.cwd,
-            resources: [],
+            resources: [{ kind: "settings", path: `${command.cwd}/.nek/settings.json` }],
             ...(options.projectTrust ?? { trusted: true, defaultProjectTrust: "always" }),
           };
         if (command.type === "list_sessions") data = { sessions: [] };
@@ -280,7 +280,7 @@ test("PERF-1: streaming chunks cause no catalog RPCs; semantic changes coalesce 
   const warnings: unknown[] = [];
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
     logger: { warn: (...args) => warnings.push(args) },
@@ -360,7 +360,7 @@ test("maps a nek session to v4 and requires the target nek attachment capability
   const session = fakeProcess("session");
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });
@@ -481,7 +481,7 @@ test("maps nek plan snapshots into the v4 plan result", async () => {
   const session = fakeProcess("session");
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });
@@ -511,7 +511,7 @@ test("routes subagent stop, transcript, and agent type RPCs through the adapter"
   const session = fakeProcess("session");
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });
@@ -605,7 +605,7 @@ test("SC1/SC5: session skill catalog uses its loaded resources, not the control 
   });
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });
@@ -679,7 +679,7 @@ test("node factory returns an IZCodeAgentService with every method", () => {
   const session = fakeProcess("session");
   const service: IZCodeAgentService = createNekZCodeAgentService({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });
@@ -687,7 +687,7 @@ test("node factory returns an IZCodeAgentService with every method", () => {
   service.disposeAll();
 });
 
-test("publishes the project trust confirm through the interaction channel and stores it", async () => {
+test("PT-2 publishes the project trust select through the adapter and stores the answer", async () => {
   const control = fakeProcess("control", {
     projectTrust: { trusted: null, defaultProjectTrust: "ask" },
   });
@@ -709,11 +709,11 @@ test("publishes the project trust confirm through the interaction channel and st
     const frame = frames[0];
     assert.equal(frame?.kind, "request");
     if (frame?.kind !== "request") throw new Error("expected a trust request frame");
-    assert.equal(frame.request.method, "confirm");
-    assert.match(frame.request.title, /信任此项目/u);
+    assert.equal(frame.request.method, "select");
+    assert.deepEqual(frame.request.projectTrust?.resourcePaths, ["/workspace/.nek/settings.json"]);
     await adapter.respondNekInteraction({
       requestId: frame.request.id,
-      response: { type: "extension_ui_response", id: frame.request.id, confirmed: true },
+      response: { type: "extension_ui_response", id: frame.request.id, value: "trust" },
     });
     const created = await pending;
     assert.equal(created.sessionId.length > 0, true);
@@ -732,7 +732,7 @@ test("hosts the interaction feed and subagent RPCs on the connection scope facad
   const sessions: FakeProcess[] = [];
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: (request) => {
       const created = fakeProcess(
@@ -835,7 +835,7 @@ test("surfaces subagent RPC failures and closed-session errors", async () => {
   const session = fakeProcess("session");
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });
@@ -887,7 +887,7 @@ test("bounds the conversation plan list with the GUI runtime config", async () =
   const session = fakeProcess("session", { planCount: 3 });
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
     runtimeConfig: {
@@ -919,7 +919,7 @@ test("v4 createSession carries the protocol modelSelection to nek as provider/mo
   const session = fakeProcess("session");
   const adapter = createNekAgentServiceAdapter({
     guiInfo,
-    askProjectTrust: () => true,
+    askProjectTrust: () => "trust",
     createControlProcess: () => control.process,
     createSessionProcess: () => session.process,
   });

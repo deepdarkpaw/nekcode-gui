@@ -89,7 +89,7 @@ export function runtimeHarness(shared?: MemoryNekConfigHostExecutor) {
     },
     agent: {
       guiInfo: { ...guiInfo, agentDir },
-      askProjectTrust: () => true,
+      askProjectTrust: () => "trust",
       attachmentStagingDir: resolve(".tmp/model-runtime/attachments"),
       createControlProcess: () => control.process,
       createSessionProcess: (request) => {

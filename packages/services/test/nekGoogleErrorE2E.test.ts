@@ -115,7 +115,7 @@ test(
     executor.spawnNek = async (args) => spawnNekProcess({ guiInfo, cwd, args: [...args] }).handle;
     const { configApi, agentService } = createNekRuntimeServices({
       config: { hosts: { executor: () => executor, listTargets: async () => [] } },
-      agent: { guiInfo, cwd, askProjectTrust: () => true },
+      agent: { guiInfo, cwd, askProjectTrust: () => "trust" },
     });
     try {
       const opened = await agentService.service.createSession({ cwd });

@@ -469,7 +469,7 @@ export interface NekProjectTrustResource {
 
 export interface NekProjectTrust {
   cwd: string;
-  /** null：没有记录（`defaultProjectTrust` 为 ask 时需要询问）。 */
+  /** 最近的本目录或上级记录；null 表示没有记录。v0.5.1 RPC 不返回记录所在路径。 */
   trusted: boolean | null;
   defaultProjectTrust: "ask" | "always" | "never";
   resources: NekProjectTrustResource[];

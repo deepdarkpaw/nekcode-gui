@@ -271,6 +271,7 @@ export class NekAgentService extends NekPlanSessionBase implements Methods {
   }): Promise<NekSessionResult> {
     this.assertAlive();
     const approval = await this.resolveProjectApproval(input.cwd);
+    this.assertAlive();
     const key = `new:${randomUUID()}`;
     const record: NekSessionRecord = {
       key,

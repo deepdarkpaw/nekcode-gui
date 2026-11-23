@@ -1,4 +1,5 @@
 export * from "./gui-rpc.js";
+export * from "./project-trust.js";
 export * from "./history.js";
 export * from "./history-stream.js";
 export * from "./config-api.js";

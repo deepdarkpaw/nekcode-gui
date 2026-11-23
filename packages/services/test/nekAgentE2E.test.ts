@@ -75,7 +75,7 @@ test(
       adapter = createNekAgentServiceAdapter({
         guiInfo,
         cwd: projectDir,
-        askProjectTrust: () => true,
+        askProjectTrust: () => "trust",
       });
       const target = { workspacePath: projectDir };
       // nek status feed：必须在创建会话前订阅（打开会话时服务侧才补快照）。
@@ -140,7 +140,7 @@ test(
       adapter = createNekAgentServiceAdapter({
         guiInfo,
         cwd: projectDir,
-        askProjectTrust: () => true,
+        askProjectTrust: () => "trust",
       });
       const reopenedFrames: unknown[] = [];
       const reopenedStatus: NekStatusFrame[] = [];

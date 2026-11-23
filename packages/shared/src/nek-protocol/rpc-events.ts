@@ -147,6 +147,8 @@ export type NekExtensionUiDialogRequest =
       title: string;
       options: string[];
       timeout?: number;
+      /** GUI 启动会话前的项目信任询问；options 仍经原 select 响应返回。 */
+      projectTrust?: { cwd: string; resourcePaths: string[]; parentPath?: string };
     }
   | {
       type: "extension_ui_request";

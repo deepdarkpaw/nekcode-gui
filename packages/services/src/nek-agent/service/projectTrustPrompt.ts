@@ -1,118 +1,102 @@
 /**
- * 项目信任确认：走 nek 的扩展 UI 通道（confirm dialog），不是 GUI 自创的通道。
- *
- * 渲染层用同一套 `NekInteractionHost` 卡片渲染这条 confirm；用户点确认后才由调用方
- * 通过 nek 的 `set_project_trust` 落盘（`<agentDir>/trust.json`，与 `/trust` 同一份），
- * 所以下一次不会再问。拒绝返回 `false`，由调用方抛出可重试的可见错误。
+ * nek v0.5.1: core/project-trust.ts and core/trust-manager.ts:getProjectTrustOptions.
+ * RPC has no startup UI; the GUI drives the same select and persists through nek's trust store.
  */
 import { randomUUID } from "node:crypto";
-import type {
-  NekExtensionUiDialogRequest,
-  NekInteractionScope,
-  NekProjectTrust,
+import { dirname } from "node:path";
+import {
+  resolveNekProjectTrust,
+  type NekInteractionScope,
+  type NekProjectTrustChoice,
 } from "@zcode/shared/nek-protocol";
 import type { NekRpcClient } from "../nekRpcClient.js";
 import type { NekExtensionUiHandler } from "../nekExtensionUiRouter.js";
 import type { NekTrustPrompt } from "./types.js";
 
-/**
- * 启动前确定项目信任：注入的判定优先；否则按 `defaultProjectTrust` 或渲染层确认。
- * 确认后立刻按 nek 的规则落盘（`set_project_trust`），下次（含终端 `/trust`）不再询问。
- */
-export async function requestProjectApproval(input: {
-  cwd: string;
-  askProjectTrust: NekTrustPrompt | undefined;
-  ensureControl: () => Promise<{ client: NekRpcClient }>;
-  assertCanAsk: () => void;
-}): Promise<boolean> {
-  if (!input.askProjectTrust) throw new Error(`project trust decision required for ${input.cwd}`);
-  return await resolveProjectApprovalThroughControl({
-    cwd: input.cwd,
-    askProjectTrust: input.askProjectTrust,
-    ensureControl: input.ensureControl,
-    assertCanAsk: input.assertCanAsk,
-  });
-}
-
-/** 一个目录的信任状态：已记录决定就直接用，没记录才需要问。 */
-type NekProjectTrustDecision = "trusted" | "denied" | "ask";
-
-function projectTrustDecision(trust: NekProjectTrust): NekProjectTrustDecision {
-  if (trust.trusted === true) return "trusted";
-  if (trust.trusted === false) return "denied";
-  if (trust.defaultProjectTrust === "always") return "trusted";
-  if (trust.defaultProjectTrust === "never") return "denied";
-  return "ask";
-}
-
-function trustDialogRequest(context: { cwd: string; trust: NekProjectTrust }): {
-  request: NekExtensionUiDialogRequest;
-  scope: NekInteractionScope;
-} {
-  const resources = context.trust.resources.map((resource) => resource.path);
-  const detail =
-    resources.length > 0
-      ? `信任 ${context.cwd} 将允许 nek 加载项目设置、资源和扩展：\n${resources.join("\n")}`
-      : `信任 ${context.cwd} 将允许 nek 加载项目设置、资源和扩展。`;
-  return {
-    scope: { workspacePath: context.cwd },
-    request: {
-      type: "extension_ui_request",
-      id: `project-trust-${randomUUID()}`,
-      method: "confirm",
-      title: "是否信任此项目？",
-      message: detail,
-    },
-  };
-}
-
-/**
- * 生产默认实现：把确认请求交给渲染层。
- *
- * `handlerFor` 按范围给出扩展 UI 处理器（生产是交互桥，测试可注入）。
- */
+/** Render through exactly the same select channel as nek's extension UI. */
 export function createProjectTrustPrompt(
   handlerFor: (scope: NekInteractionScope) => NekExtensionUiHandler | undefined,
 ): NekTrustPrompt {
-  return async (context) => {
-    const { request, scope } = trustDialogRequest(context);
-    const handler = handlerFor(scope);
+  return async ({ workspacePath, cwd, resourcePaths, parentPath, options }) => {
+    const handler = handlerFor({ workspacePath });
     if (!handler?.dialog) {
       throw new Error(
-        `project trust decision required for ${context.cwd}, but no GUI interaction channel is attached`,
+        `project trust decision required for ${cwd}, but no GUI interaction channel is attached`,
       );
     }
-    const answer = await handler.dialog(request, context.signal ?? new AbortController().signal);
-    return answer !== undefined && "confirmed" in answer && answer.confirmed === true;
+    const answer = await handler.dialog(
+      {
+        type: "extension_ui_request",
+        id: `project-trust-${randomUUID()}`,
+        method: "select",
+        title: "Trust project folder?",
+        options,
+        projectTrust: { cwd, resourcePaths, parentPath },
+      },
+      new AbortController().signal,
+    );
+    return answer && "value" in answer
+      ? options.find((option) => option === answer.value)
+      : undefined;
   };
 }
 
-/**
- * 向控制进程取信任状态，必要时问渲染层，确认后立刻按 nek 的规则落盘。
- *
- * 已记录的决定（含 `defaultProjectTrust: always/never`）不询问；拒绝直接抛错，
- * 错误信息包含"确认信任后重试"，调用方可以原样重试。
- */
-interface ResolveProjectApprovalOptions {
-  /** 控制进程（每台机器一个）：信任状态与落盘都走它。 */
-  ensureControl: () => Promise<{ client: NekRpcClient }>;
-  askProjectTrust: NekTrustPrompt;
+/** Startup precedence and persistence are independent of the renderer or the process launch. */
+export async function requestProjectApproval(input: {
   cwd: string;
-  /** 询问前的可用性检查：通道没接上时抛接线错误，而不是当成"用户拒绝"。 */
-  assertCanAsk?: () => void;
-}
+  askProjectTrust: NekTrustPrompt;
+  ensureControl: () => Promise<{ client: NekRpcClient }>;
+  assertCanAsk: () => void;
+  assertAlive: () => void;
+}): Promise<boolean> {
+  const { cwd, askProjectTrust, assertCanAsk, assertAlive } = input;
+  const { client } = await input.ensureControl();
+  const trust = await client.call({ type: "get_project_trust", cwd });
+  const resolved = resolveNekProjectTrust(trust);
+  if (resolved.kind !== "ask") return resolved.trusted;
+  assertAlive();
+  assertCanAsk();
 
-async function resolveProjectApprovalThroughControl(
-  options: ResolveProjectApprovalOptions,
-): Promise<boolean> {
-  const { cwd } = options;
-  const control = await options.ensureControl();
-  const trust = await control.client.call({ type: "get_project_trust", cwd });
-  const decision = projectTrustDecision(trust);
-  if (decision !== "ask") return decision === "trusted";
-  options.assertCanAsk?.();
-  const approved = await options.askProjectTrust({ trust, cwd });
-  if (!approved) throw new Error(`project trust denied for ${cwd}; confirm trust and retry`);
-  await control.client.call({ type: "set_project_trust", cwd, trusted: true });
-  return true;
+  const resourcePaths = resolved.resources.map(({ path }) => path);
+  // Unlike RPC's `cwd`, the resource path is rooted at nek's realpath(cwd)/.nek.
+  // The ask case guarantees a gated resource, so parent trust also works through symlinks.
+  const canonicalCwd = dirname(dirname(resourcePaths[0]!));
+  const parent = dirname(canonicalCwd);
+  const parentPath = parent === canonicalCwd ? undefined : parent;
+  const options: NekProjectTrustChoice[] = ["trust"];
+  if (parentPath !== undefined) options.push("trust-parent");
+  options.push("trust-session", "deny", "deny-session");
+  const choice = await askProjectTrust({
+    workspacePath: cwd,
+    cwd: trust.cwd,
+    resourcePaths,
+    parentPath,
+    options,
+  });
+  assertAlive();
+
+  switch (choice) {
+    case "trust-parent": {
+      if (parentPath === undefined) throw new Error(`project ${cwd} has no parent folder`);
+      // Core sets parent=true and clears the child's record. RPC cannot clear, so assert that
+      // no record (including one added while this card was open) could mask the new decision.
+      const current = await client.call({ type: "get_project_trust", cwd });
+      assertAlive();
+      if (current.trusted !== null) {
+        throw new Error(
+          `project trust changed for ${cwd}; reopen the session to use the saved decision`,
+        );
+      }
+      await client.call({ type: "set_project_trust", cwd: parentPath, trusted: true });
+      return true;
+    }
+    case "trust":
+    case "deny": {
+      const trusted = choice === "trust";
+      await client.call({ type: "set_project_trust", cwd, trusted });
+      return trusted;
+    }
+    default:
+      return choice === "trust-session";
+  }
 }

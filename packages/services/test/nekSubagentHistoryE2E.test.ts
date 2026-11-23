@@ -141,7 +141,7 @@ for (const background of [false, true])
           platform: process.platform,
           arch: process.arch,
         };
-        adapter = createNekAgentServiceAdapter({ guiInfo, cwd, askProjectTrust: () => true });
+        adapter = createNekAgentServiceAdapter({ guiInfo, cwd, askProjectTrust: () => "trust" });
         const target = { workspacePath: cwd };
         const status: NekStatusFrame[] = [];
         const subscription = adapter.onDynamicNekStatusFrame(target)((frame) => status.push(frame));

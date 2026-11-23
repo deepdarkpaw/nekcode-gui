@@ -58,6 +58,8 @@ function requestTimeoutMs(
       request.kind === NEK_STRUCTURED_KINDS.switchMode)
   )
     return undefined;
+  // core/project-trust.ts supplies no deadline for the startup trust selection.
+  if (request.method === "select" && request.projectTrust) return undefined;
   const requested = "timeout" in request ? request.timeout : undefined;
   if (typeof requested !== "number" || !Number.isFinite(requested) || requested <= 0) {
     return options.timeoutMs;

@@ -3,9 +3,15 @@ import { createHistoryStream, historyStreamCapabilities } from "./nekHistoryStre
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
-import type { NekGuiInfo, NekInteractionFrame, NekRpcCommand } from "@zcode/shared/nek-protocol";
-import { DEFAULT_GUI_RUNTIME_CONFIG } from "@zcode/shared/guiRuntimeConfig";
-import type { NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
+import { dirname } from "node:path";
+import type {
+  NekGuiInfo,
+  NekInteractionFrame,
+  NekProjectTrust,
+  NekProjectTrustChoice,
+  NekRpcCommand,
+} from "@zcode/shared/nek-protocol";
+import { buildNekRpcArgs, type NekRpcProcess } from "../src/nek-agent/nekRpcProcess.js";
 import type { NekRpcProcessExit, NekRpcProcessHandle } from "../src/nek-agent/nekRpcClient.js";
 import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
 import { NekAgentInteractionChannel } from "../src/nek-agent/adapter/nekAgentInteractionChannel.js";
@@ -35,13 +41,27 @@ interface FakeProcess {
   emit(record: unknown): void;
 }
 
+const CWD = "/workspace";
+const DEFAULT_TRUST = {
+  trusted: null,
+  defaultProjectTrust: "ask",
+  resources: [{ kind: "settings", path: `${CWD}/.nek/settings.json` }],
+} satisfies Omit<NekProjectTrust, "cwd">;
+
+type TrustFixture = Partial<Omit<NekProjectTrust, "cwd" | "trusted">> & {
+  decisions?: Map<string, boolean>;
+};
+
+function storedDecision(cwd: string, decisions: Map<string, boolean>): boolean | null {
+  return (
+    decisions.get(cwd) ?? (dirname(cwd) !== cwd ? storedDecision(dirname(cwd), decisions) : null)
+  );
+}
+
 function fakeProcess(
   kind: "control" | "session",
   extensionUi?: NekExtensionUiHandler,
-  projectTrust: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" } = {
-    trusted: null,
-    defaultProjectTrust: "ask",
-  },
+  { decisions = new Map<string, boolean>(), ...facts }: TrustFixture = {},
 ): FakeProcess {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -81,7 +101,14 @@ function fakeProcess(
         data = fixtureHistory([], command);
       } else if (kind === "control") {
         if (command.type === "get_project_trust") {
-          data = { cwd: command.cwd, resources: [], ...projectTrust };
+          data = {
+            ...DEFAULT_TRUST,
+            ...facts,
+            cwd: command.cwd,
+            trusted: storedDecision(command.cwd, decisions),
+          };
+        } else if (command.type === "set_project_trust") {
+          decisions.set(command.cwd, command.trusted);
         } else if (command.type === "list_sessions") {
           data = { sessions: [] };
         }
@@ -148,13 +175,15 @@ function fakeProcess(
   };
 }
 
-function harness(overrides: Partial<NekAgentServiceOptions> = {}) {
-  const control = fakeProcess("control");
+function harness(overrides: Partial<NekAgentServiceOptions> = {}, trust?: TrustFixture) {
+  const control = fakeProcess("control", undefined, trust);
   const sessions: FakeProcess[] = [];
+  const sessionArgs: string[][] = [];
   const service = new NekAgentService({
     guiInfo,
     createControlProcess: () => control.process,
     createSessionProcess: (request) => {
+      sessionArgs.push(buildNekRpcArgs(request));
       const session = fakeProcess("session", request.extensionUi);
       sessions.push(session);
       return session.process;
@@ -163,7 +192,7 @@ function harness(overrides: Partial<NekAgentServiceOptions> = {}) {
   });
   const frames: NekInteractionFrame[] = [];
   service.onInteractionEvent((frame) => frames.push(frame));
-  return { control, sessions, service, frames };
+  return { control, sessions, sessionArgs, service, frames };
 }
 
 async function waitFor(check: () => boolean, message: string): Promise<void> {
@@ -175,89 +204,208 @@ async function waitFor(check: () => boolean, message: string): Promise<void> {
   throw new Error(`timed out waiting for ${message}`);
 }
 
-test("publishes the project trust confirm on the GUI channel and records the decision", async () => {
-  const { control, service, frames } = harness();
-  try {
-    const pending = service.createSession({ cwd: "/workspace" });
-    await waitFor(() => frames.length > 0, "the trust confirm request");
-    const frame = frames[0];
-    assert.ok(frame);
-    assert.equal(frame.kind, "request");
-    if (frame.kind !== "request") throw new Error("unreachable");
-    assert.equal(frame.request.method, "confirm");
-    assert.deepEqual(frame.scope, { workspacePath: "/workspace" });
-    await service.respondInteraction({
-      type: "extension_ui_response",
-      id: frame.request.id,
-      confirmed: true,
-    });
-    const created = await pending;
-    assert.equal(created.readonly, false);
-    assert.deepEqual(
-      control.commands.map((command) => command.type),
-      ["get_project_trust", "set_project_trust"],
-    );
-  } finally {
-    await service.dispose();
-  }
-});
+const AGENTS = { kind: "agents", path: `${CWD}/.nek/agents` } as const;
 
-test("a rejected trust prompt fails visibly and a later retry can be approved", async () => {
-  const { control, service, frames } = harness();
-  try {
-    const pending = service.createSession({ cwd: "/workspace" });
-    await waitFor(() => frames.length > 0, "the trust confirm request");
-    const frame = frames[0];
-    if (frame?.kind !== "request") throw new Error("expected a trust request frame");
-    await service.respondInteraction({
-      type: "extension_ui_response",
-      id: frame.request.id,
-      confirmed: false,
-    });
-    await assert.rejects(pending, /project trust denied for \/workspace; confirm trust and retry/u);
-    assert.deepEqual(
-      control.commands.map((command) => command.type),
-      ["get_project_trust"],
-    );
-
-    const retry = service.createSession({ cwd: "/workspace" });
-    await waitFor(() => frames.length > 1, "the retried trust confirm request");
-    const second = frames[1];
-    if (second?.kind !== "request") throw new Error("expected a trust request frame");
-    await service.respondInteraction({
-      type: "extension_ui_response",
-      id: second.request.id,
-      confirmed: true,
-    });
-    assert.equal((await retry).readonly, false);
-    assert.deepEqual(
-      control.commands.map((command) => command.type),
-      ["get_project_trust", "get_project_trust", "set_project_trust"],
-    );
-  } finally {
-    await service.dispose();
-  }
-});
-
-test("an unanswered interaction is cancelled on timeout instead of hanging nek", async () => {
-  const { service, frames } = harness({
-    runtimeConfig: {
-      ...DEFAULT_GUI_RUNTIME_CONFIG,
-      timeouts: { ...DEFAULT_GUI_RUNTIME_CONFIG.timeouts, interactionMs: 5 },
+for (const { label, facts, trusted } of [
+  { label: "no gated resources under ask", facts: { resources: [] }, trusted: true },
+  {
+    label: "agents alone even under never",
+    facts: { resources: [AGENTS], defaultProjectTrust: "never" },
+    trusted: true,
+  },
+  {
+    label: "stored ancestor trust overrides never",
+    facts: { decisions: new Map([["/", true]]), defaultProjectTrust: "never" },
+    trusted: true,
+  },
+  {
+    label: "stored ancestor denial overrides even no resources",
+    facts: { decisions: new Map([["/", false]]), resources: [] },
+    trusted: false,
+  },
+  {
+    label: "nearest record overrides parent",
+    facts: {
+      decisions: new Map([
+        ["/", true],
+        [CWD, false],
+      ]),
     },
+    trusted: false,
+  },
+  { label: "always with gated resources", facts: { defaultProjectTrust: "always" }, trusted: true },
+  { label: "never with gated resources", facts: { defaultProjectTrust: "never" }, trusted: false },
+] satisfies Array<{ label: string; facts: TrustFixture; trusted: boolean }>) {
+  test(`PT-1 opens without asking: ${label}`, async () => {
+    const { control, frames, service, sessionArgs } = harness({}, facts);
+    try {
+      const created = await service.createSession({ cwd: CWD });
+      assert.equal(created.readonly, false);
+      assert.deepEqual(frames, []);
+      assert.deepEqual(
+        control.commands.map(({ type }) => type),
+        ["get_project_trust"],
+      );
+      assert.deepEqual(sessionArgs[0], ["--mode", "rpc", trusted ? "--approve" : "--no-approve"]);
+    } finally {
+      await service.dispose();
+    }
   });
+}
+
+async function selectFrame(frames: NekInteractionFrame[]) {
+  await waitFor(() => frames.length > 0, "the trust select request");
+  const frame = frames[0];
+  if (frame?.kind !== "request" || frame.request.method !== "select") {
+    throw new Error("expected a trust select frame");
+  }
+  return frame.request;
+}
+
+for (const { answer, saved, trusted } of [
+  { answer: "trust", saved: CWD, trusted: true },
+  { answer: "trust-parent", saved: "/", trusted: true },
+  { answer: "trust-session", saved: undefined, trusted: true },
+  { answer: "deny", saved: CWD, trusted: false },
+  { answer: "deny-session", saved: undefined, trusted: false },
+  { answer: undefined, saved: undefined, trusted: false },
+] satisfies Array<{ answer?: NekProjectTrustChoice; saved?: string; trusted: boolean }>) {
+  test(`PT-2/PT-3/PT-4 selects ${answer ?? "close / Esc"} and starts with the matching flag`, async () => {
+    const decisions = new Map<string, boolean>();
+    const { control, frames, service, sessionArgs } = harness(
+      {},
+      {
+        decisions,
+        resources: [...DEFAULT_TRUST.resources, AGENTS],
+      },
+    );
+    try {
+      const pending = service.createSession({ cwd: CWD });
+      const request = await selectFrame(frames);
+      assert.deepEqual(frames[0]?.scope, { workspacePath: CWD });
+      assert.deepEqual(request.options, [
+        "trust",
+        "trust-parent",
+        "trust-session",
+        "deny",
+        "deny-session",
+      ]);
+      assert.deepEqual(request.projectTrust, {
+        cwd: CWD,
+        parentPath: "/",
+        resourcePaths: [`${CWD}/.nek/settings.json`],
+      });
+      assert.deepEqual(sessionArgs, [], "do not start nek before choosing");
+      assert.equal(
+        service.respondInteraction({
+          type: "extension_ui_response",
+          id: request.id,
+          ...(answer ? { value: answer } : { cancelled: true }),
+        }),
+        true,
+      );
+      const session = await pending;
+      assert.equal(session.readonly, false);
+      assert.equal(session.phase, "idle");
+      assert.deepEqual(sessionArgs[0], ["--mode", "rpc", trusted ? "--approve" : "--no-approve"]);
+      assert.deepEqual([...decisions], saved ? [[saved, trusted]] : []);
+      assert.equal(
+        control.commands.filter(({ type }) => type === "set_project_trust").length,
+        saved ? 1 : 0,
+      );
+      if (saved) {
+        await service.closeSession(session.sessionKey);
+        await service.createSession({ cwd: CWD });
+        assert.equal(
+          frames.length,
+          1,
+          "the next session uses the persisted decision without asking",
+        );
+        assert.deepEqual(sessionArgs[1], sessionArgs[0]);
+      }
+    } finally {
+      await service.dispose();
+    }
+  });
+}
+
+test("PT-2 root projects have no parent option; aliases use the canonical resource parent", async () => {
+  for (const [cwd, config, expected] of [
+    ["/", "/.nek/mcp.json", undefined],
+    ["/symlink", "/real/nested/work/.nek/mcp.json", "/real/nested"],
+  ] as const) {
+    const { frames, service } = harness({}, { resources: [{ kind: "mcp", path: config }] });
+    try {
+      const pending = service.createSession({ cwd });
+      const request = await selectFrame(frames);
+      assert.equal(request.options.includes("trust-parent"), expected !== undefined);
+      assert.equal(request.projectTrust?.parentPath, expected);
+      service.respondInteraction({
+        type: "extension_ui_response",
+        id: request.id,
+        cancelled: true,
+      });
+      await pending;
+    } finally {
+      await service.dispose();
+    }
+  }
+});
+
+test("PT-3 parent trust refuses to override a record saved while the card was open", async () => {
+  const decisions = new Map<string, boolean>();
+  const { frames, service, sessionArgs } = harness({}, { decisions });
   try {
-    await assert.rejects(
-      service.createSession({ cwd: "/workspace" }),
-      /project trust denied for \/workspace/u,
-    );
-    assert.equal(frames[0]?.kind, "request");
-    assert.ok(
-      frames.some((frame) => frame.kind === "cancel"),
-      "timeout must publish a cancel frame so the GUI closes the card",
-    );
+    const pending = service.createSession({ cwd: CWD });
+    const request = await selectFrame(frames);
+    decisions.set(CWD, false);
+    service.respondInteraction({
+      type: "extension_ui_response",
+      id: request.id,
+      value: "trust-parent",
+    });
+    await assert.rejects(pending, /trust changed.*reopen the session/u);
+    assert.deepEqual([...decisions], [[CWD, false]]);
+    assert.deepEqual(sessionArgs, []);
   } finally {
     await service.dispose();
+  }
+});
+
+test("PT-4 trust select has no implicit deadline; ordinary dialogs still time out", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const bridge = new NekGuiInteractionBridge({ timeoutMs: 300_000, maxPending: 2 });
+  const handler = bridge.scoped({ workspacePath: CWD });
+  const signal = new AbortController().signal;
+  try {
+    const trust = handler.dialog!(
+      {
+        type: "extension_ui_request",
+        id: "trust",
+        method: "select",
+        title: "Trust",
+        options: ["trust"],
+        projectTrust: { cwd: CWD, resourcePaths: [`${CWD}/.nek/settings.json`] },
+      },
+      signal,
+    );
+    const ordinary = handler.dialog!(
+      {
+        type: "extension_ui_request",
+        id: "dialog",
+        method: "select",
+        title: "Select",
+        options: ["one"],
+      },
+      signal,
+    );
+    t.mock.timers.tick(600_000);
+    assert.deepEqual(await ordinary, { cancelled: true });
+    assert.equal(bridge.pendingFrames(CWD).length, 1);
+    bridge.respond({ type: "extension_ui_response", id: "trust", value: "trust" });
+    assert.deepEqual(await trust, { value: "trust" });
+  } finally {
+    bridge.dispose();
   }
 });
 
@@ -303,7 +451,7 @@ test("P2: leaving and returning to a workspace preserves and replays pending app
     await channel.respond({
       type: "extension_ui_response",
       id: request.request.id,
-      confirmed: true,
+      value: "trust",
     });
     assert.equal((await pending).readonly, false);
     assert.equal(service.pendingInteractions("/workspace").length, 0);
@@ -319,7 +467,7 @@ test("P2: leaving and returning to a workspace preserves and replays pending app
 });
 
 test("P2/P3: structured mode and plan approvals survive identity-scoped reconnects", async () => {
-  const { service, sessions } = harness({ askProjectTrust: () => true });
+  const { service, sessions } = harness({ askProjectTrust: () => "trust" });
   const channel = new NekAgentInteractionChannel(service);
   const target = { workspacePath: "/workspace", workspaceIdentity: "local-workspace" };
   const other: NekInteractionFrame[] = [];
@@ -400,7 +548,7 @@ test("nek structured questions and approvals still replay after the old five-min
 });
 
 test("sending new input settles the previous plan review and it cannot replay on resubscribe", async () => {
-  const { sessions, service, frames } = harness({ askProjectTrust: () => true });
+  const { sessions, service, frames } = harness({ askProjectTrust: () => "trust" });
   const channel = new NekAgentInteractionChannel(service);
   const scope = { workspacePath: "/workspace" };
   try {
@@ -439,7 +587,7 @@ test("sending new input settles the previous plan review and it cannot replay on
 });
 
 test("process exit cancels the live review without replying to the terminated process", async () => {
-  const { sessions, service, frames } = harness({ askProjectTrust: () => true });
+  const { sessions, service, frames } = harness({ askProjectTrust: () => "trust" });
   try {
     await service.createSession({ cwd: "/workspace" });
     const proc = sessions[0]!;
@@ -463,13 +611,14 @@ test("process exit cancels the live review without replying to the terminated pr
   }
 });
 
-test("cancelling a workspace answers every pending interaction as cancelled", async () => {
-  const { service, frames } = harness();
+test("PT-4 cancelling a workspace settles the pending trust selection as untrusted", async () => {
+  const { service, frames, sessionArgs } = harness();
   try {
     const pending = service.createSession({ cwd: "/workspace" });
     await waitFor(() => frames.some((frame) => frame.kind === "request"), "the trust request");
     service.cancelWorkspaceInteractions("/workspace");
-    await assert.rejects(pending, /project trust denied for \/workspace/u);
+    assert.equal((await pending).phase, "idle");
+    assert.ok(sessionArgs[0]?.includes("--no-approve"));
     assert.ok(
       frames.some((frame) => frame.kind === "cancel"),
       "workspace cancellation must publish a cancel frame",
@@ -480,7 +629,7 @@ test("cancelling a workspace answers every pending interaction as cancelled", as
 });
 
 test("nek cancelling a session dialog publishes a cancel frame and answers nek", async () => {
-  const { sessions, service, frames } = harness({ askProjectTrust: () => true });
+  const { sessions, service, frames } = harness({ askProjectTrust: () => "trust" });
   try {
     const created = await service.createSession({ cwd: "/workspace" });
     const session = sessions[0];
@@ -532,8 +681,7 @@ test("an unattached renderer channel is a wiring error, but recorded trust still
 
   // 已经记录过的信任不需要询问，也不该因为渲染层没订阅而失败。
   const trustedControl = fakeProcess("control", undefined, {
-    trusted: true,
-    defaultProjectTrust: "ask",
+    decisions: new Map([[CWD, true]]),
   });
   const trusted = new NekAgentService({
     guiInfo,

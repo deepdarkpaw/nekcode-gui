@@ -11,7 +11,7 @@ import { NekRpcClient } from "../src/nek-agent/nekRpcClient.js";
 import { NekProcessPool } from "../src/nek-agent/nekProcessPool.js";
 import { NekAgentService } from "../src/nek-agent/service/nekAgentService.js";
 import { createNekAgentRuntimeLifecycle } from "../src/nek-agent/adapter/nekAgentRuntimeLifecycle.js";
-import type { NekAgentServiceEvent } from "../src/nek-agent/service/types.js";
+import type { NekAgentServiceEvent, NekTrustPrompt } from "../src/nek-agent/service/types.js";
 
 const guiInfo = {
   protocolVersion: 1,
@@ -135,7 +135,11 @@ function fakeProcess(
         data = fixtureHistory(saved.entries, command, saved.session, saved.lockedBy);
       } else if (kind === "control") {
         if (command.type === "get_project_trust") {
-          data = { cwd: command.cwd, ...projectTrust, resources: [] };
+          data = {
+            cwd: command.cwd,
+            ...projectTrust,
+            resources: [{ kind: "settings", path: `${command.cwd}/.nek/settings.json` }],
+          };
         } else if (command.type === "read_session_snapshot") {
           data = snapshot(snapshotLocked, lockHolder);
         } else if (command.type === "list_sessions") {
@@ -260,7 +264,7 @@ function fakeProcess(
 function serviceHarness(
   extensionUi?: NekExtensionUiHandler,
   lockHolder?: NekSessionSnapshot["lockedBy"],
-  askProjectTrust: () => boolean = () => true,
+  askProjectTrust: NekTrustPrompt = () => "trust",
   projectTrust?: { trusted: boolean | null; defaultProjectTrust: "ask" | "always" | "never" },
   /** 会话进程 get_state 一开始就报告压缩中（快照恢复场景）。 */
   initialCompacting = false,
@@ -321,22 +325,22 @@ test("opens an already trusted project without prompting or rewriting trust", as
   await harness.service.dispose();
 });
 
-test("rejects an untrusted project visibly and allows a later retry", async () => {
-  let approved = false;
-  const harness = serviceHarness(undefined, undefined, () => approved);
-  await assert.rejects(
-    harness.service.createSession({ cwd: "/workspace" }),
-    /project trust denied.*confirm trust and retry/u,
-  );
-  assert.equal(harness.sessions.length, 0);
-  approved = true;
-  const result = await harness.service.createSession({ cwd: "/workspace" });
-  assert.equal(result.readonly, false);
-  assert.deepEqual(
-    harness.control.commands.map((command) => command.type),
-    ["get_project_trust", "get_project_trust", "set_project_trust"],
-  );
-  await harness.service.dispose();
+test("PT-4 restores an unlocked session without project trust and still admits a prompt", async () => {
+  const harness = serviceHarness(undefined, undefined, () => "deny-session");
+  try {
+    harness.control.setSnapshotLocked(false);
+    const result = await harness.service.resumeSession({ sessionPath: "/tmp/session.jsonl" });
+    assert.equal(result.readonly, false);
+    assert.deepEqual(harness.approvals, [false]);
+    assert.ok(!harness.control.commands.some(({ type }) => type === "set_project_trust"));
+    await harness.service.sendPrompt({
+      sessionKey: result.sessionKey,
+      message: "test fixture prompt",
+    });
+    assert.ok(harness.sessions[0]?.commands.some(({ type }) => type === "prompt"));
+  } finally {
+    await harness.service.dispose();
+  }
 });
 
 test("opens a locked session from a read-only snapshot", async () => {
@@ -1193,7 +1197,11 @@ test("reopens a session process reclaimed by the idle sweep", async () => {
     },
     createControlProcess: async () => control.process,
   });
-  const service = new NekAgentService({ guiInfo, processPool: pool, askProjectTrust: () => true });
+  const service = new NekAgentService({
+    guiInfo,
+    processPool: pool,
+    askProjectTrust: () => "trust",
+  });
   try {
     const result = await service.createSession({ cwd: "/workspace" });
     assert.equal(sessions.length, 1);
