@@ -346,6 +346,29 @@ test("PT-4 restores an unlocked session without project trust and still admits a
   }
 });
 
+test("PT-5 retains session-only trust across a process restart and projects the session's actual decision", async () => {
+  let asks = 0;
+  const h = serviceHarness(undefined, undefined, () => {
+    asks++;
+    return "deny-session";
+  });
+  try {
+    h.control.setSnapshotLocked(false);
+    const created = await h.service.createSession({ cwd: "/workspace" });
+    assert.equal(created.conversation.control.projectTrusted, false);
+    h.sessions[0]!.emit({ type: "agent_start" });
+    assert.equal(h.service.conversationSnapshot(created.sessionKey).control.projectTrusted, false);
+    h.sessions[0]!.exit();
+    const reopened = await h.service.restartSession(created.sessionKey);
+    assert.equal(reopened.conversation.control.projectTrusted, false);
+    assert.deepEqual(h.approvals, [false, false]);
+    assert.equal(asks, 1);
+    assert.ok(!h.control.commands.some(({ type }) => type === "set_project_trust"));
+  } finally {
+    await h.service.dispose();
+  }
+});
+
 test("opens a locked session from a read-only snapshot", async () => {
   const harness = serviceHarness();
   const result = await harness.service.resumeSession({ sessionPath: "/tmp/session.jsonl" });

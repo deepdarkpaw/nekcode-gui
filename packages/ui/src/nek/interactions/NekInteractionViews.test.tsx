@@ -71,6 +71,73 @@ function submitButton(root: ParentNode): HTMLButtonElement {
   return button;
 }
 
+const trustSelect: NekExtensionUiRequest = {
+  type: "extension_ui_request",
+  id: "project-trust-fixture",
+  method: "select",
+  title: "Trust project folder?",
+  options: ["trust", "trust-parent", "trust-session", "deny", "deny-session"],
+  projectTrust: {
+    cwd: "/fixtures/work/demo",
+    resourcePaths: ["/fixtures/work/demo/.nek/settings.json", "/fixtures/work/demo/.nek/skills"],
+    parentPath: "/fixtures/work",
+  },
+};
+
+it("PT-2 renders the localized project path, gated resources and five choices in select order", async () => {
+  const { responses, rendered } = enqueueAndRender(trustSelect);
+  try {
+    const card = within(screen.getByRole("dialog", { name: "Trust this project?" }));
+    expect(card.getByText("/fixtures/work/demo")).toBeDefined();
+    expect(card.getByRole("list", { name: "Resources that require trust" }).textContent).toContain(
+      "/fixtures/work/demo/.nek/skills",
+    );
+    expect(card.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Trust",
+      "Trust parent folder (/fixtures/work)",
+      "Trust for this session only",
+      "Do not trust",
+      "Do not trust for this session only",
+    ]);
+    fireEvent.keyDown(card.getByText("Trust this project?"), { key: "Enter" });
+    expect(responses).toEqual([]);
+    fireEvent.click(card.getByRole("option", { name: "Trust parent folder (/fixtures/work)" }));
+    await waitFor(() =>
+      expect(responses).toEqual([
+        { type: "extension_ui_response", id: trustSelect.id, value: "trust-parent" },
+      ]),
+    );
+  } finally {
+    rendered.unmount();
+  }
+});
+
+it.each(["click", "Escape"])(
+  "PT-4 select dismissal via %s answers cancelled (not persistent denial)",
+  async (action) => {
+    const { responses, rendered } = enqueueAndRender(trustSelect);
+    try {
+      const dialog = screen.getByRole("dialog", { name: "Trust this project?" });
+      if (action === "Escape") {
+        fireEvent.keyDown(dialog, { key: "Escape", isComposing: true });
+        expect(responses).toEqual([]);
+        fireEvent.keyDown(dialog, { key: "Escape" });
+      } else {
+        const close = within(dialog).getByRole("button", { name: "Close" });
+        expect(fireEvent.keyDown(close, { key: "Enter" })).toBe(true);
+        fireEvent.click(close);
+      }
+      await waitFor(() =>
+        expect(responses).toEqual([
+          { type: "extension_ui_response", id: trustSelect.id, cancelled: true },
+        ]),
+      );
+    } finally {
+      rendered.unmount();
+    }
+  },
+);
+
 describe("Nek interaction views", () => {
   it("renders the four interaction card kinds through the host", () => {
     const cases: Array<[NekExtensionUiRequest, string]> = [
