@@ -1,6 +1,10 @@
 import { useState } from "react";
-import type { NekSettingsPatch } from "@zcode/shared/nek-protocol";
-import { NEK_COMPACTION_CONTENT_MINIMUMS, nekSettingsIssues } from "@zcode/shared/nek-protocol";
+import {
+  NEK_COMPACTION_CONTENT_MINIMUMS,
+  NEK_THINKING_LEVELS,
+  nekCompactionIssues,
+  type NekSettingsPatch,
+} from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { SettingNumberField } from "@/components/ui/setting-text-field.js";
 import {
@@ -9,7 +13,7 @@ import {
   useInstantCommit,
 } from "@/components/ui/setting-fields.js";
 import { Switch } from "@/components/ui/switch.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useZCodeIntl, type IntlInstance } from "@/i18n/IntlProvider.js";
 import type { NekSettingsDocument } from "../../api/settingsDocs.js";
 import { DiagnosticsList } from "../../components/DocumentStatus.js";
 import { nestedSettingsPatch } from "../../lib/settingsPatch.js";
@@ -89,7 +93,51 @@ export function ContentSettings({ settings }: { settings: NekSettingsDocument })
   );
 }
 
-type Issue = ReturnType<typeof nekSettingsIssues>[number];
+type Issue = ReturnType<typeof nekCompactionIssues>[number];
+
+function compactionFieldLabel(
+  intl: IntlInstance,
+  [, section, key, overrideField]: string[],
+): string {
+  switch (section) {
+    case "content":
+      if (key === undefined)
+        return intl.formatMessage({ id: "settings.nek.compaction.content.title" });
+      return key === "pruneToolResults" || Object.hasOwn(NEK_COMPACTION_CONTENT_MINIMUMS, key)
+        ? intl.formatMessage({ id: `settings.nek.compaction.content.${key}` })
+        : key;
+    case "reserveTokens":
+      return intl.formatMessage({ id: "settings.nek.compaction.reserve" });
+    case "keepRecentTokens":
+      return intl.formatMessage({ id: "settings.nek.compaction.keepRecent" });
+    case "model":
+      return intl.formatMessage({ id: "settings.nek.compaction.model" });
+    case "thinkingLevel":
+      return intl.formatMessage({ id: "settings.nek.compaction.thinking" });
+    case "modelOverrides":
+      return overrideField === undefined
+        ? intl.formatMessage(
+            { id: "settings.nek.compaction.repair.override" },
+            { model: key ?? "" },
+          )
+        : intl.formatMessage(
+            { id: "settings.nek.compaction.repair.overrideField" },
+            {
+              model: key ?? "",
+              field: compactionFieldLabel(intl, ["compaction", overrideField]),
+            },
+          );
+    default:
+      return intl.formatMessage({ id: "settings.nek.compaction.title" });
+  }
+}
+
+function compactionRepairMessage(intl: IntlInstance, { path, rule }: Issue): string {
+  const values: Record<string, string | number> = { field: compactionFieldLabel(intl, path) };
+  if (rule.kind === "safeInteger") values.minimum = rule.minimum;
+  if (rule.kind === "thinkingLevel") values.levels = NEK_THINKING_LEVELS.join(", ");
+  return intl.formatMessage({ id: `settings.nek.compaction.repair.${rule.kind}` }, values);
+}
 
 function removeSetting(path: string[]): NekSettingsPatch {
   return path.reduceRight<Record<string, unknown> | null>(
@@ -105,7 +153,7 @@ export function CompactionRepairs({ settings }: { settings: NekSettingsDocument 
   const [pending, setPending] = useState<Issue>();
   if (!data) return null;
   const label = intl.formatMessage({ id: "ui.setting.resetToDefault" });
-  const issues = nekSettingsIssues({ compaction: data.values.compaction });
+  const issues = nekCompactionIssues(data.values.compaction);
   const pendingKey = pending ? JSON.stringify(pending.path) : undefined;
   // Keep the action mounted across the optimistic deletion so a failed write is visible and retryable.
   if (pending && !issues.some(({ path }) => JSON.stringify(path) === pendingKey)) {
@@ -116,10 +164,10 @@ export function CompactionRepairs({ settings }: { settings: NekSettingsDocument 
     const field = issue.path.join(".");
     return (
       <div key={key} className="flex flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1" title={`${field}: ${issue.message}`}>
           <DiagnosticsList
             diagnostics={[
-              { file: data.path, severity: "error", message: `${field}: ${issue.message}` },
+              { file: data.path, severity: "error", message: compactionRepairMessage(intl, issue) },
             ]}
           />
         </div>

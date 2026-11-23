@@ -3119,6 +3119,16 @@ const enUS: Record<string, string> = {
   "settings.nek.compaction.content.pruneToolResults": "Prune old tool results",
   "settings.nek.compaction.content.pruneToolResultsHint":
     "Clear older tool output before compaction.",
+  "settings.nek.compaction.repair.safeInteger":
+    "{field} must be a safe integer of at least {minimum}.",
+  "settings.nek.compaction.repair.object": "{field} must be a JSON object.",
+  "settings.nek.compaction.repair.boolean": "{field} must be true or false.",
+  "settings.nek.compaction.repair.unknownContentKey":
+    "nek does not recognize the content folding field “{field}”.",
+  "settings.nek.compaction.repair.modelRef": "{field} must use the provider/modelId format.",
+  "settings.nek.compaction.repair.thinkingLevel": "{field} must be one of: {levels}.",
+  "settings.nek.compaction.repair.override": "Compaction override for model {model}",
+  "settings.nek.compaction.repair.overrideField": "{field} for model {model}",
   "settings.nek.branchSummary.title": "Branch summary",
   "settings.nek.branchSummary.description":
     "Summarize the branch you leave when switching branches in /tree.",

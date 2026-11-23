@@ -74,7 +74,7 @@ test("SR-1 accepts all exact content minima and safe integer maxima", async (t) 
   assert.deepEqual(readJson(local, SETTINGS), { compaction: { content } });
 });
 
-test("SR-2 reports invalid values at the owning file and supports one-field resets", async (t) => {
+test("SR-2 reports invalid values at the owning file, preserves PT-6, and supports one-field resets", async (t) => {
   const global = { compaction: { content: { toolArgumentMaxChars: 0, pruneToolResults: null } } };
   const project = { compaction: { content: [] } };
   const { api, control, local } = createHarness({
@@ -84,28 +84,35 @@ test("SR-2 reports invalid values at the owning file and supports one-field rese
     },
   });
   t.after(() => api.dispose());
-  control.projectTrusted = true;
+  control.projectResources = [{ kind: "settings", path: PROJECT_SETTINGS }];
   const read = await api.readSettings(LOCAL, "project", PROJECT);
-  assert.deepEqual(read.diagnostics, [
-    {
-      file: PROJECT_SETTINGS,
-      severity: "error",
-      message: "compaction.content: expected an object",
-    },
-    {
-      file: SETTINGS,
-      severity: "error",
-      message: "compaction.content.toolArgumentMaxChars: expected a safe integer >= 256",
-    },
-    {
-      file: SETTINGS,
-      severity: "error",
-      message: "compaction.content.pruneToolResults: expected a boolean",
-    },
-  ]);
+  assert.equal(read.projectTrusted, false);
+  assert.equal(read.effective.compaction?.content?.toolArgumentMaxChars, 0);
+  assert.ok(read.diagnostics.every(({ severity }) => severity === "error"));
+  assert.deepEqual(
+    read.diagnostics.map(({ file, message }) => [file, message]),
+    [
+      [PROJECT_SETTINGS, "compaction.content: expected an object"],
+      [SETTINGS, "compaction.content.toolArgumentMaxChars: expected a safe integer >= 256"],
+      [SETTINGS, "compaction.content.pruneToolResults: expected a boolean"],
+    ],
+  );
+  const denied = await expectNekError(
+    () =>
+      api.patchSettings(
+        LOCAL,
+        "project",
+        { compaction: { content: { toolArgumentMaxChars: 0 } } },
+        { ...read, cwd: PROJECT },
+      ),
+    "validation",
+  );
+  assert.deepEqual(denied.fieldErrors, { cwd: "project is not trusted" });
+  assert.deepEqual(local.writes, []);
   assert.deepEqual(readJson(local, SETTINGS), global);
   assert.deepEqual(readJson(local, PROJECT_SETTINGS), project);
 
+  control.projectTrusted = true;
   await api.patchSettings(LOCAL, "project", { compaction: { content: null } } as NekSettingsPatch, {
     revision: read.revision,
     cwd: PROJECT,

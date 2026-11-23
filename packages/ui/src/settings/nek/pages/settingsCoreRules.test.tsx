@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { NekSettingsView } from "@zcode/shared/nek-protocol";
+import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { createNekTestEnv, installDomPolyfills } from "../test/nekTestUtils.js";
 import { AdvancedPage } from "./AdvancedPage.js";
 import { CompactionPage } from "./CompactionPage.js";
@@ -53,17 +54,19 @@ it("SR-3 accepts zero for a thinking budget but not an unsafe integer", async ()
   ).toBe(0);
 });
 
-it("SR-2 lets the user reset only the bad field and retry a failed repair", async () => {
+it("SR-2 localizes stored errors in Chinese and lets the user retry a one-field reset", async () => {
   const env = createNekTestEnv();
   const machine = env.config.machines.get("local")!;
   machine.settings.value.compaction = {
     content: { toolResultMaxChars: 0, typo: true, toolArgumentMaxChars: 1024 },
   } as NekSettingsView["compaction"];
   render(<CompactionPage />, { wrapper: env.wrapper });
-  const rule = await screen.findByText(
-    "compaction.content.toolResultMaxChars: expected a safe integer >= 256",
-  );
+  const message = "工具结果上限必须是不小于 256 的安全整数。";
+  const raw = "compaction.content.toolResultMaxChars: expected a safe integer >= 256";
+  const rule = await screen.findByText(message);
   expect(within(rule).getByText(machine.settings.path)).toBeDefined();
+  expect(screen.queryByText(raw)).toBeNull();
+  expect(screen.getByTitle(raw).contains(rule)).toBe(true);
   const reset = () =>
     within(rule.closest("ul")!.parentElement!.parentElement!).getByRole("button", {
       name: "恢复默认",
@@ -78,8 +81,31 @@ it("SR-2 lets the user reset only the bad field and retry a failed repair", asyn
       toolArgumentMaxChars: 1024,
     }),
   );
-  expect(screen.queryByText(/compaction.content.toolResultMaxChars:/)).toBeNull();
-  expect(screen.getByText(/compaction.content.typo: unknown/)).toBeDefined();
+  expect(screen.queryByText(message)).toBeNull();
+  expect(screen.getByText("nek 不识别内容折叠字段“typo”。")).toBeDefined();
+});
+
+it("SR-2 localizes stored compaction diagnostics in English with the same field labels as the form", async () => {
+  const env = createNekTestEnv();
+  env.config.machines.get("local")!.settings.value.compaction = {
+    content: { toolResultMaxChars: 0 },
+    modelOverrides: { "example/org/model": { reserveTokens: -1 } },
+  };
+  render(
+    <ZCodeIntlProvider initialLocale="en-US">
+      <CompactionPage />
+    </ZCodeIntlProvider>,
+    { wrapper: env.wrapper },
+  );
+  expect(
+    await screen.findByText("Max tool result chars must be a safe integer of at least 256."),
+  ).toBeDefined();
+  expect(
+    screen.getByText(
+      "Reserve tokens for model example/org/model must be a safe integer of at least 0.",
+    ),
+  ).toBeDefined();
+  expect(screen.queryByText(/compaction\.content\.toolResultMaxChars:/)).toBeNull();
 });
 
 it("SR-4 uses the main model's exact override for the compaction threshold", async () => {

@@ -24,6 +24,16 @@ interface SettingsIssue {
 
 type AddIssue = (path: string[], message: string) => void;
 
+type CompactionRule =
+  | { kind: "object" | "boolean" | "unknownContentKey" | "modelRef" | "thinkingLevel" }
+  | { kind: "safeInteger"; minimum: number };
+
+interface CompactionIssue extends SettingsIssue {
+  rule: CompactionRule;
+}
+
+type AddCompactionIssue = (path: string[], message: string, rule: CompactionRule) => void;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -32,38 +42,48 @@ function safeInteger(value: unknown, min: number): boolean {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= min;
 }
 
-function checkContent(value: unknown, add: AddIssue): void {
+function checkContent(value: unknown, add: AddCompactionIssue): void {
   if (value === undefined) return;
   const path = ["compaction", "content"];
   if (!isRecord(value)) {
-    add(path, "expected an object");
+    add(path, "expected an object", { kind: "object" });
     return;
   }
   for (const key of Object.keys(value)) {
     // Match nek's membership test against its default object (including inherited names).
     if (key !== "pruneToolResults" && !(key in NEK_COMPACTION_CONTENT_MINIMUMS)) {
-      add([...path, key], "unknown compaction content setting");
+      add([...path, key], "unknown compaction content setting", { kind: "unknownContentKey" });
     }
   }
   for (const [key, minimum] of Object.entries(NEK_COMPACTION_CONTENT_MINIMUMS)) {
     if (value[key] !== undefined && !safeInteger(value[key], minimum)) {
-      add([...path, key], `expected a safe integer >= ${minimum}`);
+      add([...path, key], `expected a safe integer >= ${minimum}`, {
+        kind: "safeInteger",
+        minimum,
+      });
     }
   }
   if (value.pruneToolResults !== undefined && typeof value.pruneToolResults !== "boolean") {
-    add([...path, "pruneToolResults"], "expected a boolean");
+    add([...path, "pruneToolResults"], "expected a boolean", { kind: "boolean" });
   }
 }
 
-function checkTokens(record: Record<string, unknown>, path: string[], add: AddIssue): void {
+function checkTokens(
+  record: Record<string, unknown>,
+  path: string[],
+  add: AddCompactionIssue,
+): void {
   for (const key of ["reserveTokens", "keepRecentTokens"]) {
     if (record[key] !== undefined && !safeInteger(record[key], 0)) {
-      add([...path, key], "expected a non-negative safe integer");
+      add([...path, key], "expected a non-negative safe integer", {
+        kind: "safeInteger",
+        minimum: 0,
+      });
     }
   }
 }
 
-function checkCompaction(value: unknown, add: AddIssue): void {
+function checkCompaction(value: unknown, add: AddCompactionIssue): void {
   // The getters access members via optional chaining, with no enclosing shape check.
   if (!isRecord(value)) return;
   checkContent(value.content, add);
@@ -72,13 +92,15 @@ function checkCompaction(value: unknown, add: AddIssue): void {
     value.model !== undefined &&
     (typeof value.model !== "string" || !/^[^/\s]+\/\S+$/.test(value.model))
   ) {
-    add(["compaction", "model"], "expected exact provider/modelId");
+    add(["compaction", "model"], "expected exact provider/modelId", { kind: "modelRef" });
   }
   if (
     value.thinkingLevel !== undefined &&
     !NEK_THINKING_LEVELS.some((level) => level === value.thinkingLevel)
   ) {
-    add(["compaction", "thinkingLevel"], `expected one of ${NEK_THINKING_LEVELS.join(", ")}`);
+    add(["compaction", "thinkingLevel"], `expected one of ${NEK_THINKING_LEVELS.join(", ")}`, {
+      kind: "thinkingLevel",
+    });
   }
 
   if (!isRecord(value.modelOverrides)) return;
@@ -86,9 +108,16 @@ function checkCompaction(value: unknown, add: AddIssue): void {
     // Only keys that can be looked up as `${model.provider}/${model.id}` are used by nek.
     if (!key.slice(1, -1).includes("/") || entry === undefined) continue;
     const path = ["compaction", "modelOverrides", key];
-    if (!isRecord(entry)) add(path, "expected an object");
+    if (!isRecord(entry)) add(path, "expected an object", { kind: "object" });
     else checkTokens(entry, path, add);
   }
+}
+
+/** Same compaction checks as the host, with structured details for localized field feedback. */
+export function nekCompactionIssues(value: unknown): CompactionIssue[] {
+  const issues: CompactionIssue[] = [];
+  checkCompaction(value, (path, message, rule) => issues.push({ path, message, rule }));
+  return issues;
 }
 
 /** `core/http-dispatcher.ts` accepts finite non-negative numbers, numeric strings and `disabled`. */
@@ -171,9 +200,8 @@ export function nekSettingsIssues(
   settings: Record<string, unknown>,
   scope: NekConfigScope = "global",
 ): SettingsIssue[] {
-  const issues: SettingsIssue[] = [];
+  const issues: SettingsIssue[] = nekCompactionIssues(settings.compaction);
   const add: AddIssue = (path, message) => issues.push({ path, message });
-  checkCompaction(settings.compaction, add);
   checkWebSearch(settings.webSearch, add);
   for (const key of ["httpIdleTimeoutMs", "websocketConnectTimeoutMs"]) {
     const value = settings[key];

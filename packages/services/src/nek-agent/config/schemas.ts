@@ -119,8 +119,8 @@ export type NekModelOverride = z.infer<typeof nekModelOverrideSchema>;
 
 /** Runtime rules, not a schema derived from the Settings interface's TypeScript enums. */
 export const nekSettingsFileSchema = loose({}).superRefine((settings, context) => {
-  for (const issue of nekSettingsIssues(settings)) {
-    context.addIssue({ code: "custom", ...issue });
+  for (const { path, message } of nekSettingsIssues(settings)) {
+    context.addIssue({ code: "custom", path, message });
   }
 });
 
