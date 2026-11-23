@@ -17,9 +17,8 @@ import {
   isNekWebSearchProviderSupported,
   NEK_WEB_SEARCH_PROVIDER_MIN_VERSION,
 } from "@zcode/shared/nek-protocol";
-import { nekSettingsFileSchema, parseWithSchema } from "../nek-agent/config/schemas.js";
 import { diagnostic, mergeDeep } from "./documents.js";
-import { fieldErrorsOf, validationError } from "./errors.js";
+import { validationError } from "./errors.js";
 import { settingsPath } from "./paths.js";
 import type { NekConfigRuntime } from "./runtime.js";
 import {
@@ -29,6 +28,7 @@ import {
 } from "./settingsDefaults.js";
 import { patchSettingsDocument, readSettingsDocument } from "./settingsDocument.js";
 import { assertSettingsProjectTrusted, settingsProjectTrusted } from "./settingsProjectTrust.js";
+import { settingsRuleDiagnostics } from "./settingsValidation.js";
 
 export interface NekSettingsGroup {
   readSettings: (
@@ -42,24 +42,6 @@ export interface NekSettingsGroup {
     patch: NekSettingsPatch,
     options: { revision: string; cwd?: string },
   ) => Promise<NekConfigRevision>;
-}
-
-/** 删除标记（`null`）不能出现在校验对象里：它不是合法的 settings 值。 */
-function stripNulls(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripNulls);
-  if (typeof value !== "object" || value === null) return value;
-  const result: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (entry === null) continue;
-    result[key] = stripNulls(entry);
-  }
-  return result;
-}
-
-export function validateSettingsPatch(record: Record<string, unknown>): void {
-  const validated = parseWithSchema(nekSettingsFileSchema, stripNulls(record));
-  if (validated.ok) return;
-  throw validationError("invalid settings patch", fieldErrorsOf(validated.issues));
 }
 
 /**
@@ -239,13 +221,15 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       }
       const path = settingsPath(context.layout, scope, cwd);
       const document = await readSettingsDocument(context.executor, path);
-      const diagnostics: NekConfigDiagnostic[] = [];
+      const diagnostics: NekConfigDiagnostic[] = settingsRuleDiagnostics(path, document.raw);
       const readScope = async (otherScope: NekConfigScope): Promise<Record<string, unknown>> => {
         if (otherScope === "project" && !cwd) return {};
         const otherPath = settingsPath(context.layout, otherScope, cwd);
         if (otherScope === scope) return document.raw;
         try {
-          return (await readSettingsDocument(context.executor, otherPath)).raw;
+          const { raw } = await readSettingsDocument(context.executor, otherPath);
+          diagnostics.push(...settingsRuleDiagnostics(otherPath, raw));
+          return raw;
         } catch (error) {
           diagnostics.push(
             diagnostic(otherPath, error instanceof Error ? error.message : String(error)),
@@ -284,7 +268,6 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
       }
       await assertSettingsProjectTrusted(runtime, context, scope, options.cwd);
       const record = settingsPatchToRecord(patch as Record<string, unknown>);
-      validateSettingsPatch(record);
       const inherited =
         scope === "project"
           ? (await readSettingsDocument(context.executor, settingsPath(context.layout, "global")))

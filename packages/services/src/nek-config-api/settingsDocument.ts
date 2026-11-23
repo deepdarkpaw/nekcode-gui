@@ -8,10 +8,11 @@
  */
 import type { NekSettingsView } from "@zcode/shared/nek-protocol";
 import type { NekConfigHostExecutor } from "./hostExecutor.js";
-import { applySettingsPatch, parseJsonMapping, readTextDocument } from "./documents.js";
+import { parseJsonMapping, readTextDocument } from "./documents.js";
 import { conflict, ioError } from "./errors.js";
 import { ABSENT_REVISION, encodeRevision, sameRevision } from "./revision.js";
 import { toSettingsView } from "./settingsDefaults.js";
+import { mergeSettingsPatch, validateSettingsPatch } from "./settingsValidation.js";
 
 export interface NekSettingsDocument {
   path: string;
@@ -73,7 +74,8 @@ export async function patchSettingsDocument(
     if (!sameRevision(currentRevision, expectedRevision)) throw conflict(path);
     const parsed =
       current === undefined || current.trim() === "" ? {} : parseJsonMapping(path, current);
-    const merged = applySettingsPatch(parsed, patch);
+    validateSettingsPatch(patch);
+    const merged = mergeSettingsPatch(parsed, patch);
     args.validate?.(merged, parsed);
     next = `${JSON.stringify(merged, null, 2)}\n`;
     return next;

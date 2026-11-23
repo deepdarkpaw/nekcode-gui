@@ -1,0 +1,188 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+import test from "node:test";
+import type { NekSettingsPatch } from "@zcode/shared/nek-protocol";
+import {
+  AGENT_DIR,
+  LOCAL,
+  PROJECT,
+  PROJECT_DIR,
+  createHarness,
+  expectNekError,
+  readJson,
+} from "./nekConfigApiHarness.js";
+
+const SETTINGS = join(AGENT_DIR, "settings.json");
+const PROJECT_SETTINGS = join(PROJECT_DIR, "settings.json");
+
+for (const scope of ["global", "project"] as const) {
+  test(`SR-1 rejects invalid compaction.content before writing ${scope} settings`, async (t) => {
+    const { api, local } = createHarness();
+    t.after(() => api.dispose());
+    const cwd = scope === "project" ? PROJECT : undefined;
+    const { revision, path } = await api.readSettings(LOCAL, scope, cwd);
+    const cases = [
+      [[], "", /object/],
+      [false, "", /object/],
+      ["content", "", /object/],
+      [{ typo: true }, ".typo", /unknown/],
+      [{ pruneToolResults: "false" }, ".pruneToolResults", /boolean/],
+      [{ toolResultMaxChars: 0 }, ".toolResultMaxChars", />= 256/],
+      [{ toolErrorMaxChars: 255 }, ".toolErrorMaxChars", />= 256/],
+      [{ toolArgumentMaxChars: 255.9 }, ".toolArgumentMaxChars", />= 256/],
+      [{ thinkingMaxChars: 1.5 }, ".thinkingMaxChars", /safe integer >= 0/],
+      [{ thinkingTotalMaxChars: -1 }, ".thinkingTotalMaxChars", /safe integer >= 0/],
+      [
+        { protectedRecentTokens: Number.MAX_SAFE_INTEGER + 1 },
+        ".protectedRecentTokens",
+        /safe integer >= 0/,
+      ],
+      [{ protectedToolResults: "6" }, ".protectedToolResults", /safe integer >= 0/],
+    ] as const;
+    for (const [content, suffix, message] of cases) {
+      const error = await expectNekError(
+        () =>
+          api.patchSettings(LOCAL, scope, { compaction: { content } } as NekSettingsPatch, {
+            revision,
+            cwd,
+          }),
+        "validation",
+      );
+      assert.match(error.fieldErrors?.[`compaction.content${suffix}`] ?? "", message);
+      assert.equal(local.files.has(path), false);
+    }
+    assert.deepEqual(local.writes, []);
+  });
+}
+
+test("SR-1 accepts all exact content minima and safe integer maxima", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  const { revision } = await api.readSettings(LOCAL, "global");
+  const content = {
+    thinkingMaxChars: 0,
+    thinkingTotalMaxChars: Number.MAX_SAFE_INTEGER,
+    toolResultMaxChars: 256,
+    toolErrorMaxChars: 256,
+    toolArgumentMaxChars: 256,
+    protectedRecentTokens: 0,
+    protectedToolResults: 0,
+    pruneToolResults: false,
+  };
+  await api.patchSettings(LOCAL, "global", { compaction: { content } }, { revision });
+  assert.deepEqual(readJson(local, SETTINGS), { compaction: { content } });
+});
+
+test("SR-2 reports invalid values at the owning file and supports one-field resets", async (t) => {
+  const global = { compaction: { content: { toolArgumentMaxChars: 0, pruneToolResults: null } } };
+  const project = { compaction: { content: [] } };
+  const { api, local } = createHarness({
+    localFiles: {
+      [SETTINGS]: JSON.stringify(global),
+      [PROJECT_SETTINGS]: JSON.stringify(project),
+    },
+  });
+  t.after(() => api.dispose());
+  const read = await api.readSettings(LOCAL, "project", PROJECT);
+  assert.deepEqual(read.diagnostics, [
+    {
+      file: PROJECT_SETTINGS,
+      severity: "error",
+      message: "compaction.content: expected an object",
+    },
+    {
+      file: SETTINGS,
+      severity: "error",
+      message: "compaction.content.toolArgumentMaxChars: expected a safe integer >= 256",
+    },
+    {
+      file: SETTINGS,
+      severity: "error",
+      message: "compaction.content.pruneToolResults: expected a boolean",
+    },
+  ]);
+  assert.deepEqual(readJson(local, SETTINGS), global);
+  assert.deepEqual(readJson(local, PROJECT_SETTINGS), project);
+
+  await api.patchSettings(LOCAL, "project", { compaction: { content: null } } as NekSettingsPatch, {
+    revision: read.revision,
+    cwd: PROJECT,
+  });
+  let globalRead = await api.readSettings(LOCAL, "global");
+  await api.patchSettings(
+    LOCAL,
+    "global",
+    { compaction: { content: { toolArgumentMaxChars: null } } } as NekSettingsPatch,
+    { revision: globalRead.revision },
+  );
+  globalRead = await api.readSettings(LOCAL, "global");
+  assert.equal(globalRead.effective.compaction?.content?.toolArgumentMaxChars, 2000);
+  assert.equal(
+    globalRead.diagnostics.length,
+    1,
+    "a pre-existing null must not block an unrelated repair",
+  );
+  await api.patchSettings(
+    LOCAL,
+    "global",
+    { compaction: { content: { pruneToolResults: null } } } as NekSettingsPatch,
+    { revision: globalRead.revision },
+  );
+  assert.deepEqual((await api.readSettings(LOCAL, "global")).diagnostics, []);
+  assert.deepEqual(readJson(local, SETTINGS), { compaction: { content: {} } });
+});
+
+test("SR-4 rejects non-safe or negative tokens and invalid addressable model overrides", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  const { revision } = await api.readSettings(LOCAL, "global");
+  for (const [compaction, field] of [
+    [{ reserveTokens: -1 }, "reserveTokens"],
+    [{ keepRecentTokens: 1.5 }, "keepRecentTokens"],
+    [{ reserveTokens: Number.MAX_SAFE_INTEGER + 1 }, "reserveTokens"],
+    [{ modelOverrides: { "openrouter/org/model": [] } }, "modelOverrides.openrouter/org/model"],
+    [
+      { modelOverrides: { "provider/a.b": { keepRecentTokens: "0" } } },
+      "modelOverrides.provider/a.b.keepRecentTokens",
+    ],
+  ] as const) {
+    const error = await expectNekError(
+      () => api.patchSettings(LOCAL, "global", { compaction } as NekSettingsPatch, { revision }),
+      "validation",
+    );
+    assert.match(error.fieldErrors?.[`compaction.${field}`] ?? "", /safe integer|object/);
+  }
+  assert.equal(local.files.has(SETTINGS), false);
+});
+
+test("SR-4 addresses model overrides by exact key and does not validate unused content or map shape", async (t) => {
+  const { api, local } = createHarness();
+  t.after(() => api.dispose());
+  let { revision } = await api.readSettings(LOCAL, "global");
+  const compaction = {
+    reserveTokens: 0,
+    keepRecentTokens: Number.MAX_SAFE_INTEGER,
+    modelOverrides: {
+      "openrouter/org/model": {
+        reserveTokens: 0,
+        keepRecentTokens: 0,
+        content: { toolResultMaxChars: 0 },
+        extra: "keep",
+      },
+      "not-a-model-key": 19,
+    },
+  };
+  ({ revision } = await api.patchSettings(LOCAL, "global", { compaction } as NekSettingsPatch, {
+    revision,
+  }));
+  assert.deepEqual(readJson(local, SETTINGS), { compaction });
+  await api.patchSettings(
+    LOCAL,
+    "global",
+    { compaction: { modelOverrides: false } } as unknown as NekSettingsPatch,
+    { revision },
+  );
+  assert.deepEqual(readJson(local, SETTINGS), {
+    compaction: { ...compaction, modelOverrides: false },
+  });
+});

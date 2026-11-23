@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NEK_WEB_SEARCH_PROVIDERS } from "@zcode/shared/nek-protocol";
+import { NEK_WEB_SEARCH_PROVIDERS, nekSettingsIssues } from "@zcode/shared/nek-protocol";
 
 /**
  * nek 配置文件的 zod 镜像。
@@ -117,16 +117,6 @@ export type NekModelOverride = z.infer<typeof nekModelOverrideSchema>;
 // settings.json（nek core/settings-manager.ts）
 // ============================================================================
 
-export const nekCompactionSettingsSchema = loose({
-  model: z.string().optional(),
-  thinkingLevel: nekThinkingLevelSchema.optional(),
-  enabled: z.boolean().optional(),
-  reserveTokens: z.number().optional(),
-  keepRecentTokens: z.number().optional(),
-  content: nekOpaqueJsonSchema.optional(),
-  modelOverrides: z.record(z.string(), nekOpaqueJsonSchema).optional(),
-});
-
 export const nekRetrySettingsSchema = loose({
   enabled: z.boolean().optional(),
   timeoutMs: z.number().optional(),
@@ -159,7 +149,7 @@ export const nekSettingsFileSchema = loose({
   /** 模型循环列表：`provider/id`、裸 id，可带 `:thinking` 后缀。 */
   enabledModels: z.array(z.string()).optional(),
   defaultTools: z.array(z.string()).optional(),
-  compaction: nekCompactionSettingsSchema.optional(),
+  compaction: nekOpaqueJsonSchema.optional(),
   retry: nekRetrySettingsSchema.optional(),
   branchSummary: nekOpaqueJsonSchema.optional(),
   transport: z.string().optional(),
@@ -188,10 +178,13 @@ export const nekSettingsFileSchema = loose({
   skills: z.array(z.string()).optional(),
   prompts: z.array(z.string()).optional(),
   themes: z.array(z.string()).optional(),
+}).superRefine((settings, context) => {
+  for (const issue of nekSettingsIssues(settings)) {
+    context.addIssue({ code: "custom", ...issue });
+  }
 });
 
 export type NekSettingsFile = z.infer<typeof nekSettingsFileSchema>;
-export type NekCompactionSettings = z.infer<typeof nekCompactionSettingsSchema>;
 
 // ============================================================================
 // mcp.json（nek extensions/mcp/config.ts）
