@@ -254,22 +254,6 @@ export function loadHostProcessEnvFromLocalFiles(): Record<string, string> {
   return applySelectedZCodeEnvLinks(merged);
 }
 
-export function resolveZCodeEndpointEnvBaseOrigin(
-  localEnv: LocalRuntimeEnv = {},
-): string | undefined {
-  const buildEnv = readProductEndpointEnv();
-  // main 进程临时验证更新服务时不会重新写 .env，命令行传入的 endpoint 必须优先于本地文件。
-  return (
-    process.env["ZCODE_BASE_URL"]?.trim() ||
-    process.env["ZCODE_ENDPOINT_ORIGIN"]?.trim() ||
-    localEnv.ZCODE_BASE_URL?.trim() ||
-    localEnv.ZCODE_ENDPOINT_ORIGIN?.trim() ||
-    buildEnv.ZCODE_BASE_URL?.trim() ||
-    buildEnv.ZCODE_ENDPOINT_ORIGIN?.trim() ||
-    undefined
-  );
-}
-
 function readDefinedProcessEnv(): Record<string, string> {
   const values: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {

@@ -1,18 +1,20 @@
-import { DesktopCommandIds, type DesktopCommandId, type Locale } from "@zcode/shared";
-import { app, dialog, shell } from "electron";
+import { DesktopCommandIds, ZCODE_ENV, type DesktopCommandId, type Locale } from "@zcode/shared";
+import { app, dialog, Menu, shell } from "electron";
 import { afterEach, expect, it, vi } from "vitest";
 import { resolveGithubReleasesUrl } from "../../scripts/desktop-product-identity.mjs";
+import { rebuildApplicationMenu } from "./desktopApplicationMenu.js";
 import { executeDesktopCommand } from "./desktopCommandHandlers.js";
 
 vi.mock("electron", () => ({
-  app: { relaunch: vi.fn(), exit: vi.fn() },
+  app: { name: "nekcode-preview", isPackaged: true, relaunch: vi.fn(), exit: vi.fn() },
   BrowserWindow: { getFocusedWindow: () => null, getAllWindows: () => [] },
   dialog: { showMessageBox: vi.fn() },
+  Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
   shell: { openExternal: vi.fn() },
 }));
-vi.mock("@zcode/services/node", () => ({}));
+vi.mock("@zcode/services/node", () => ({ readZCodeStdioTapDevState: () => ({ visible: false }) }));
 vi.mock("./about.js", () => ({}));
-vi.mock("./autoUpdater.js", () => ({}));
+vi.mock("./autoUpdater.js", () => ({ setAutoUpdaterMenuLocale: vi.fn() }));
 vi.mock("./exportLogs.js", () => ({}));
 vi.mock("./resourceManagerWindow.js", () => ({}));
 
@@ -21,9 +23,8 @@ function createCommandOptions(command: DesktopCommandId, locale: Locale) {
     command,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     updateZCodeStdioTapDevMenuState: vi.fn(),
-    onZCodeEndpointChanged: vi.fn(),
     onRelaunchApp: vi.fn(),
-    settingService: { get: vi.fn(async () => ({})), update: vi.fn() },
+    settingService: { update: vi.fn() },
     credentialsDir: "unused-test-path",
     currentApplicationLocale: locale,
   };
@@ -44,7 +45,7 @@ it.each(["zh-CN", "en-US"] as const)(
     expect(shell.openExternal).toHaveBeenCalledExactlyOnceWith(
       "https://github.com/deepdarkpaw/nekcode-gui/releases",
     );
-    expect(options.settingService.get).not.toHaveBeenCalled();
+    expect(options.settingService.update).not.toHaveBeenCalled();
   },
 );
 
@@ -95,4 +96,18 @@ it.each([
   });
   expect(app.relaunch).not.toHaveBeenCalled();
   expect(app.exit).not.toHaveBeenCalled();
+});
+
+it("ZR-4 test builds no longer offer the upstream endpoint override", () => {
+  expect(ZCODE_ENV).toBe("test");
+  rebuildApplicationMenu({
+    currentApplicationLocale: "en-US",
+    executeDesktopCommand: vi.fn(),
+  });
+
+  const [template] = vi.mocked(Menu.buildFromTemplate).mock.calls[0]!;
+  const help = template.find((item) => item.label === "Help");
+  const labels = Array.isArray(help?.submenu) ? help.submenu.map((item) => item.label) : [];
+  expect(labels).toContain("What's new");
+  expect(labels).not.toContain("nekcode Endpoint");
 });

@@ -2,7 +2,6 @@
 import { z } from "zod";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { wslUserSchema } from "./wslUserValidation.js";
-import { normalizeZCodeEndpointOrigin } from "./zcodeEndpoint.js";
 import { providerFamilyConnectionSelectionSettingsSchema } from "./provider-family-connection-selection.js";
 
 /** 引导职业枚举；单独导出供 onboarding 记录回填 settings 时做窄化校验。 */
@@ -111,38 +110,6 @@ const appWorkspaceSessionEntrySchema = z.discriminatedUnion("kind", [
     lastConnectionError: z.string().optional(),
   }),
 ]);
-
-const zcodeEndpointOriginSchema = z.preprocess((value) => {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  try {
-    return normalizeZCodeEndpointOrigin(trimmed);
-  } catch {
-    return undefined;
-  }
-}, z.string().optional());
-
-function sanitizeZCodeEndpointOrigin(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
-  }
-  const raw = value as Record<string, unknown>;
-  if (!("zcodeEndpointOrigin" in raw)) {
-    return value;
-  }
-  const parsed = zcodeEndpointOriginSchema.safeParse(raw.zcodeEndpointOrigin);
-  if (parsed.success && typeof parsed.data === "string") {
-    return { ...raw, zcodeEndpointOrigin: parsed.data };
-  }
-  const { zcodeEndpointOrigin: _zcodeEndpointOrigin, ...next } = raw;
-  // 非生产 endpoint override 是开发辅助字段，坏值只丢弃该字段，不能拖垮整个 settings 读取。
-  return next;
-}
 
 function sanitizeDesktopWindowSize(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -429,7 +396,6 @@ const appSettingsObjectSchema = z.object({
   autoDownloadAndInstallUpdates: z.boolean().default(false),
   skippedElectronUpdateVersions: skippedElectronUpdateVersionsSchema,
   settingsSyncFirstRunPromptHandled: z.boolean().optional(),
-  zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
 });
 
 export const appSettingsSchema = z.preprocess(
@@ -437,9 +403,7 @@ export const appSettingsSchema = z.preprocess(
     sanitizeDesktopWindowSize(
       migrateMessageStreamShowReasoningDefault(
         migrateCloseToTrayOnWindowsDefault(
-          migrateLegacyLocalePreference(
-            sanitizeZCodeEndpointOrigin(migrateLegacyWorkspaceSession(value)),
-          ),
+          migrateLegacyLocalePreference(migrateLegacyWorkspaceSession(value)),
         ),
       ),
     ),
@@ -504,5 +468,4 @@ export const appSettingsPatchSchema = z.object({
     .partialRecord(electronReleaseChannelSchema, nonEmptyStringSchema)
     .optional(),
   settingsSyncFirstRunPromptHandled: z.boolean().optional(),
-  zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
 });

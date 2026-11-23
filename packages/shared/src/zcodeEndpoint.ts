@@ -100,9 +100,8 @@ export function normalizeZCodeEndpointOrigin(value: string): string {
 export function resolveZCodeEndpointOrigin(options?: {
   env?: ZCodeEnv;
   envBaseOrigin?: string | null;
-  overrideOrigin?: string | null;
 }): string {
-  const origin = options?.overrideOrigin?.trim() || options?.envBaseOrigin?.trim();
+  const origin = options?.envBaseOrigin?.trim();
   return origin ? normalizeZCodeEndpointOrigin(origin) : DEFAULT_ZCODE_ENDPOINT_ORIGIN;
 }
 
@@ -115,13 +114,11 @@ export function resolveRuntimeZCodeEnv(
 
 export function resolveRuntimeZCodeEndpointOrigin(
   env: RuntimeZCodeEndpointEnv = readProductEndpointEnv(),
-  options?: { overrideOrigin?: string | null },
 ): string {
   return resolveZCodeEndpointOrigin({
     envBaseOrigin:
       readRuntimeEnvValue(env, "ZCODE_BASE_URL") ??
       readRuntimeEnvValue(env, "ZCODE_ENDPOINT_ORIGIN"),
-    overrideOrigin: options?.overrideOrigin,
   });
 }
 
