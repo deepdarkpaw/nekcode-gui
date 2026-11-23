@@ -114,12 +114,12 @@ function pickKnown(
   known: ReadonlySet<string>,
 ): { value: Record<string, unknown>; extra: Record<string, unknown> } {
   const value: Record<string, unknown> = {};
-  const extra: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = Object.create(null);
   for (const [key, entry] of Object.entries(raw)) {
     if (known.has(key)) value[key] = entry;
     else extra[key] = entry;
   }
-  return { value, extra };
+  return { value, extra: { ...extra } };
 }
 
 export function modelToView(raw: Record<string, unknown>): NekModelConfig {
@@ -149,7 +149,7 @@ export function providerToView(id: string, raw: Record<string, unknown>): NekPro
 /** 模型视图 → 写回 models.json 的值（保留 `extra` 里的未知字段）。 */
 export function modelWriteToValue(model: NekModelConfig): Record<string, unknown> {
   const { extra = {}, ...known } = model;
-  const value: Record<string, unknown> = {};
+  const value: Record<string, unknown> = Object.create(null);
   for (const [key, entry] of Object.entries(known)) {
     if (entry !== undefined && entry !== null) value[key] = entry;
   }
@@ -173,7 +173,7 @@ export function providerWriteToValue(
   write: NekProviderWrite,
   existing: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const value: Record<string, unknown> = {};
+  const value: Record<string, unknown> = Object.create(null);
   const source = write as unknown as Record<string, unknown>;
   for (const [key, entry] of Object.entries(source)) {
     // `id` 是键名（不是字段），`extra` 摊平到末尾，`overridesBuiltin` 是读取视图的派生标记。
@@ -221,11 +221,11 @@ export function providerEdits(
   if (!existing) return [{ pointer: ["providers", providerId], value }];
   const edits: NekJsoncEdit[] = [];
   for (const [key, next] of Object.entries(value)) {
-    if (sameJson(existing[key], next)) continue;
+    if (Object.hasOwn(existing, key) && sameJson(existing[key], next)) continue;
     edits.push({ pointer: ["providers", providerId, key], value: next });
   }
   for (const key of Object.keys(existing)) {
-    if (key in value) continue;
+    if (Object.hasOwn(value, key)) continue;
     edits.push({ pointer: ["providers", providerId, key], value: undefined });
   }
   return edits;
@@ -268,14 +268,15 @@ function readProviders(
   path: string,
   data: Record<string, unknown>,
 ): Record<string, Record<string, unknown>> {
-  const raw = data.providers;
-  if (raw === undefined) return {};
+  // An ID is a JSON key, not a property inherited from Object.prototype.
+  const providers: NekModelsSnapshot["providers"] = Object.create(null);
+  const raw = Object.hasOwn(data, "providers") ? data.providers : undefined;
+  if (raw === undefined) return providers;
   if (!isPlainObject(raw)) {
     throw validationError(`${path}: "providers" must be an object`, {
       providers: "must be an object",
     });
   }
-  const providers: Record<string, Record<string, unknown>> = {};
   for (const [id, value] of Object.entries(raw)) {
     if (isPlainObject(value)) providers[id] = value;
   }

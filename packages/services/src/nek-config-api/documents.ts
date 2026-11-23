@@ -6,7 +6,7 @@
  * 2. 写入前比对读取时拿到的 revision，被外部改过就抛 `conflict`；
  * 3. 解析失败不落盘：宁可报错也不写一个 nek 读不了的文件。
  */
-import { applyEdits, modify, parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
+import { applyEdits, getNodeValue, modify, parseTree, printParseErrorCode } from "jsonc-parser";
 import type { ParseError } from "jsonc-parser";
 import { parse as parseYaml } from "yaml";
 import type { NekConfigDiagnostic } from "@zcode/shared/nek-protocol";
@@ -78,10 +78,9 @@ export function parseJsonMapping(path: string, text: string): Record<string, unk
   return parsed;
 }
 
-/** models.json 允许 `//` 注释（nek 用 `stripJsonComments` 读），这里允许注释与尾逗号。 */
-export function parseJsoncMapping(path: string, text: string): Record<string, unknown> {
+function parseJsoncObjectTree(path: string, text: string) {
   const errors: ParseError[] = [];
-  const parsed: unknown = parseJsonc(stripBom(text), errors, {
+  const tree = parseTree(stripBom(text), errors, {
     allowTrailingComma: true,
     disallowComments: false,
   });
@@ -90,9 +89,17 @@ export function parseJsoncMapping(path: string, text: string): Record<string, un
     const detail = first ? printParseErrorCode(first.error) : "invalid JSON";
     throw validationError(`${path}: ${detail}`, { [path]: detail });
   }
-  if (parsed === undefined || parsed === null) return {};
-  if (!isPlainObject(parsed)) throw validationError(`${path}: expected a JSON object`);
-  return parsed;
+  if (!tree || tree.type === "null") return undefined;
+  if (tree.type !== "object") throw validationError(`${path}: expected a JSON object`);
+  return tree;
+}
+
+/** models.json keeps JSONC comments and trailing commas, and every key is literal data. */
+export function parseJsoncMapping(path: string, text: string): Record<string, unknown> {
+  const tree = parseJsoncObjectTree(path, text);
+  // Unlike parse(), getNodeValue() builds null-prototype maps. Clone to keep the plain
+  // document shape used by callers; structuredClone copies own keys without setters.
+  return tree ? (structuredClone(getNodeValue(tree)) as Record<string, unknown>) : {};
 }
 
 export function parseYamlMapping(path: string, text: string): Record<string, unknown> {
@@ -120,12 +127,12 @@ export function applyJsoncEdit(
   pointer: Array<string | number>,
   value: unknown,
 ): string {
-  parseJsoncMapping(path, text);
+  parseJsoncObjectTree(path, text);
   const next = applyEdits(
     text,
     modify(text, pointer, value, { formattingOptions: JSON_FORMATTING }),
   );
-  parseJsoncMapping(path, next);
+  parseJsoncObjectTree(path, next);
   return next;
 }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
+import { readModelsSnapshot } from "../src/nek-config-api/modelsDocument.js";
 import {
   AGENT_DIR,
   LOCAL,
@@ -16,7 +17,7 @@ const provider = {
   models: [{ id: "vendor/model" }],
 };
 
-for (const id of ["CPA", "My_Proxy", "vendor.ai", "中转", "My Proxy", "constructor"]) {
+for (const id of ["CPA", "My_Proxy", "vendor.ai", "中转", "My Proxy"]) {
   test(`NM-1 creates and renames a provider to ${id} without changing its ID`, async (t) => {
     const { api, local } = createHarness();
     t.after(() => api.dispose());
@@ -29,6 +30,64 @@ for (const id of ["CPA", "My_Proxy", "vendor.ai", "中转", "My Proxy", "constru
     assert.deepEqual(readJson(local, MODELS_PATH), { providers: { [id]: provider } });
   });
 }
+
+for (const id of ["__proto__", "constructor", "prototype"]) {
+  test(`NM-1 ${id} is a literal provider key through create, edit, rename and delete`, async (t) => {
+    const { api, local } = createHarness();
+    t.after(() => api.dispose());
+    const initial = await api.readModelsConfig(LOCAL);
+    const created = await api.saveProvider(LOCAL, { ...provider, id }, { ...initial, isNew: true });
+    assert.equal((await api.readModelsConfig(LOCAL)).providers[0]?.id, id);
+    const changed = { ...provider, name: "Edited" };
+    const edited = await api.saveProvider(LOCAL, { ...changed, id }, { ...created, isNew: false });
+    const renamed = await api.renameProvider(LOCAL, id, "temporary", edited);
+    assert.equal((await api.readModelsConfig(LOCAL)).providers[0]?.id, "temporary");
+    const restored = await api.renameProvider(LOCAL, "temporary", id, renamed);
+    const snapshot = await readModelsSnapshot(local, MODELS_PATH);
+    assert.equal(Object.getPrototypeOf(snapshot.providers), null);
+    assert.deepEqual(Object.keys(snapshot.providers), [id]);
+    assert.deepEqual(snapshot.providers[id], changed);
+    const raw: unknown = JSON.parse(local.files.get(MODELS_PATH)!);
+    assert.deepEqual(raw, { providers: { [id]: changed } });
+    await api.deleteProvider(LOCAL, id, restored);
+    assert.deepEqual((await api.readModelsConfig(LOCAL)).providers, []);
+  });
+}
+
+test("NM-1 keeps escaped JSONC keys and nested special keys as data without inheriting fields", async (t) => {
+  const id = "__proto__";
+  const extra = {
+    [id]: { apiKey: "fixture-only", nmOwnOnly: true },
+    constructor: { prototype: { nmOwnOnly: true } },
+    prototype: { marker: "metadata" },
+  };
+  const raw = `{
+    // Keep comments and trailing commas.
+    "__proto__": {"nmOwnOnly": true},
+    "providers": {"\\u005f_proto__": ${JSON.stringify({ ...provider, ...extra })},},
+  }`;
+  const { api, local } = createHarness({ localFiles: { [MODELS_PATH]: raw } });
+  t.after(() => api.dispose());
+  const snapshot = await readModelsSnapshot(local, MODELS_PATH);
+  assert.equal(Object.getPrototypeOf(snapshot.data), Object.prototype);
+  assert.equal(Object.hasOwn(snapshot.data, id), true);
+  assert.equal(snapshot.data.nmOwnOnly, undefined);
+  assert.equal(Object.hasOwn(Object.prototype, "nmOwnOnly"), false);
+  const view = await api.readModelsConfig(LOCAL);
+  assert.equal(view.providers[0]?.id, id);
+  assert.deepEqual(view.providers[0]?.apiKey, { kind: "none" });
+  assert.deepEqual(view.providers[0]?.extra, extra);
+  await api.saveProvider(
+    LOCAL,
+    { ...provider, id, name: "Changed", extra: view.providers[0]?.extra },
+    { ...view, isNew: false },
+  );
+  assert.match(local.files.get(MODELS_PATH)!, /Keep comments and trailing commas/u);
+  const after = (await api.readModelsConfig(LOCAL)).providers[0];
+  assert.equal(after?.name, "Changed");
+  assert.deepEqual(after?.extra, extra);
+  assert.equal(Object.hasOwn(Object.prototype, "nmOwnOnly"), false);
+});
 
 test("NM-1 rejects only non-referenceable IDs at create and rename boundaries", async (t) => {
   const { api } = createHarness();
