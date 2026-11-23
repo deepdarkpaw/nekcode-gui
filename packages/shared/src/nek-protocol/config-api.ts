@@ -17,6 +17,7 @@ import type {
   NekConfigScope,
   NekConfigTarget,
   NekConfigTargetInfo,
+  NekInstructionsView,
   NekCopyPreview,
   NekCopyResult,
   NekCopyResolution,
@@ -248,12 +249,13 @@ export interface INekConfigApi extends INekResourceConfigApi {
     target: NekConfigTarget,
     scope: NekConfigScope,
     cwd?: string,
-  ): Promise<NekConfigRevision & { path: string; content: string }>;
+  ): Promise<NekInstructionsView>;
   writeInstructions(
     target: NekConfigTarget,
     scope: NekConfigScope,
     content: string,
-    options: { revision: string; cwd?: string },
+    /** The file selected at read time. Never write a new winner using the old file's draft. */
+    options: { path: string; revision: string; cwd?: string },
   ): Promise<NekConfigRevision>;
   listExtensions(
     target: NekConfigTarget,

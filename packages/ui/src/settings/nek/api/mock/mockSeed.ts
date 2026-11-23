@@ -225,6 +225,7 @@ function baseMachine(
     presets: [],
     instructions: mockFile(`${agentDir}/AGENTS.md`, ""),
     projectInstructions: new Map(),
+    otherInstructionFiles: new Map(),
     auth: new Map([
       [
         "anthropic",

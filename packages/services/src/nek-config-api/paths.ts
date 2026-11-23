@@ -2,7 +2,7 @@
  * 目标机器上各配置文件的位置。
  *
  * 与 nek 一致：全局配置在 agent 目录（`~/.nek/agent`），项目配置在 `<cwd>/.nek`，
- * 只有 `AGENTS.md` 在项目根目录。
+ * 项目的指令文件在工作目录本身。
  */
 import { join, posix, win32 } from "node:path";
 import { isAgentPresetFileName, type NekConfigScope } from "@zcode/shared/nek-protocol";
@@ -41,15 +41,17 @@ export function nekYamlPath(layout: NekConfigLayout, scope: NekConfigScope, cwd?
     : join(projectConfigDir(requireCwd(scope, cwd)), "nek.yaml");
 }
 
-/** 指令文件：全局是 `<agentDir>/AGENTS.md`，项目是 `<cwd>/AGENTS.md`。 */
-export function instructionsPath(
+/** Instruction files are looked up in agentDir/cwd, not in the project's `.nek` directory. */
+export function instructionsDir(
   layout: NekConfigLayout,
   scope: NekConfigScope,
   cwd?: string,
 ): string {
-  return scope === "global"
-    ? join(layout.agentDir, "AGENTS.md")
-    : join(requireCwd(scope, cwd), "AGENTS.md");
+  const paths = targetPaths(layout.agentDir);
+  const dir = scope === "global" ? layout.agentDir : requireCwd(scope, cwd);
+  if (!paths.isAbsolute(dir))
+    throw validationError(`Instructions require an absolute directory: ${dir}`);
+  return paths.normalize(dir);
 }
 
 /** Match the target's paths even when the settings host and nek run on different OSes. */

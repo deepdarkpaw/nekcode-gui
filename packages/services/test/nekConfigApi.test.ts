@@ -1141,6 +1141,7 @@ test("instructions and resources reflect the agent dir", async () => {
   const instructions = await harness.api.readInstructions(LOCAL, "global");
   assert.equal(instructions.content, "global rules\n");
   const write = await harness.api.writeInstructions(LOCAL, "global", "new rules\n", {
+    path: instructions.path,
     revision: instructions.revision,
   });
   assert.ok(write.revision.length > 0);
@@ -1148,6 +1149,7 @@ test("instructions and resources reflect the agent dir", async () => {
   await expectNekError(
     async () =>
       await harness.api.writeInstructions(LOCAL, "global", "other\n", {
+        path: instructions.path,
         revision: instructions.revision,
       }),
     "conflict",

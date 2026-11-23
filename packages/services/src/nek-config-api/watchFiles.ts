@@ -5,6 +5,7 @@
  * 否则 agent 目录的噪声会让设置页不断重载。
  */
 import { join } from "node:path";
+import { NEK_INSTRUCTION_FILE_NAMES } from "@zcode/shared/nek-protocol";
 
 export const CONFIG_FILE_NAMES: readonly string[] = [
   "models.json",
@@ -13,7 +14,7 @@ export const CONFIG_FILE_NAMES: readonly string[] = [
   "trust.json",
   "mcp.json",
   "nek.yaml",
-  "AGENTS.md",
+  ...NEK_INSTRUCTION_FILE_NAMES,
 ];
 
 export function baselineConfigFiles(dir: string): string[] {

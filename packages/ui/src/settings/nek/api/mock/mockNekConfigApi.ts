@@ -311,20 +311,14 @@ export class MockNekConfigApi extends MockNekConfigApiBase implements INekConfig
     );
 
   readInstructions: INekConfigApi["readInstructions"] = (target, scope, cwd) =>
-    this.call("readInstructions", () => {
-      const file = settings.instructionsFile(this.machineOf(target), scope, cwd);
-      return { path: file.path, revision: file.revision, content: file.value };
-    });
+    this.call("readInstructions", () =>
+      settings.readInstructions(this.machineOf(target), scope, cwd),
+    );
 
   writeInstructions: INekConfigApi["writeInstructions"] = (target, scope, content, options) =>
-    this.write(target, "writeInstructions", (machine, touch) => {
-      const file = settings.instructionsFile(machine, scope, options.cwd);
-      if (file.revision !== options.revision) {
-        throw mockError("conflict", `${file.path} was modified externally`);
-      }
-      file.value = content;
-      return touch(file);
-    });
+    this.write(target, "writeInstructions", (machine, touch) =>
+      settings.writeInstructions(machine, scope, content, options, touch),
+    );
 
   listExtensions: INekConfigApi["listExtensions"] = (target) =>
     this.call("listExtensions", () => settings.extensions(this.machineOf(target)));

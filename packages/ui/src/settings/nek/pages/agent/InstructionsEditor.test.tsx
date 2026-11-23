@@ -12,7 +12,8 @@ import {
 } from "../../test/nekTestUtils.js";
 
 const LOCAL = { kind: "local" } as const;
-const TITLE = "全局 AGENTS.md";
+const TITLE = "指令";
+const ACCESSIBLE_TITLE = /^指令 · /u;
 const ORIGINAL = "# Workspace instructions\n\nPreserve user intent.\n中文指令也必须完整显示。\n";
 let env: NekTestEnv;
 
@@ -24,11 +25,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 function input(): HTMLTextAreaElement {
-  return screen.getByRole("textbox", { name: TITLE }) as HTMLTextAreaElement;
+  return screen.getByRole("textbox", { name: ACCESSIBLE_TITLE }) as HTMLTextAreaElement;
 }
 async function showEditor() {
   render(<InstructionsEditor scope="global" title={TITLE} />, { wrapper: env.wrapper });
-  await screen.findByRole("textbox", { name: TITLE });
+  await screen.findByRole("textbox", { name: ACCESSIBLE_TITLE });
 }
 function saveButton(): HTMLButtonElement {
   return screen.getByRole("button", { name: /^保存/ }) as HTMLButtonElement;
@@ -248,8 +249,75 @@ it("IN-4: a late read from the previous target cannot replace the new target's d
       path: "/local/AGENTS.md",
       revision: "late-local",
       content: "late local document",
+      filename: "AGENTS.md",
+      ignored: [],
+      ancestors: [],
+      diagnostics: [],
     });
   });
   expect(input().value).toBe("remote document");
   expect(saveButton().disabled).toBe(true);
+});
+
+it("AC-7 shows the actual instruction filename, ignored candidates and openable ancestors", async () => {
+  const machine = env.config.machines.get("local")!;
+  const cwd = "/work/project";
+  const override = `${cwd}/AGENTS.override.md`;
+  const parent = "/work/CLAUDE.MD";
+  machine.projectInstructions.set(cwd, {
+    path: override,
+    revision: "override",
+    value: "active text",
+  });
+  machine.otherInstructionFiles.set(`${cwd}/CLAUDE.md`, {
+    path: `${cwd}/CLAUDE.md`,
+    revision: "ignored",
+    value: "ignored text",
+  });
+  machine.otherInstructionFiles.set(parent, {
+    path: parent,
+    revision: "parent",
+    value: "parent text",
+  });
+  const open = vi.spyOn(env.host, "openPath");
+  render(<InstructionsEditor scope="project" title="项目指令" cwd={cwd} />, {
+    wrapper: env.wrapper,
+  });
+  expect(
+    await screen.findByRole("heading", { name: "项目指令 · AGENTS.override.md" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole<HTMLTextAreaElement>("textbox", { name: "项目指令 · AGENTS.override.md" })
+      .value,
+  ).toBe("active text");
+  expect(
+    screen.getByText(
+      (_, node) =>
+        node?.textContent === "AGENTS.override.md 生效；nek 忽略同一目录下的 CLAUDE.md。",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText(parent)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+  expect(open).toHaveBeenCalledWith(LOCAL, parent);
+});
+
+it("AC-7 keeps but never saves a draft into a newly selected override file", async () => {
+  const machine = env.config.machines.get("local")!;
+  const override = `${machine.agentDir}/AGENTS.override.md`;
+  const write = vi.spyOn(env.config, "writeInstructions");
+  await showEditor();
+  fireEvent.change(input(), { target: { value: "original-file draft" } });
+  machine.otherInstructionFiles.set(override, {
+    path: override,
+    revision: "override",
+    value: "new winner",
+  });
+  await changedOutside("unexpected edit");
+  await screen.findByText("配置已在外部修改");
+  fireEvent.click(screen.getByRole("button", { name: "保留我的修改" }));
+  await screen.findByRole("heading", { name: "指令 · AGENTS.override.md" });
+  expect(input().value).toBe("original-file draft");
+  expect(saveButton().disabled).toBe(true);
+  expect(screen.getByText(/生效文件已切换/u)).toBeTruthy();
+  expect(write).not.toHaveBeenCalled();
 });

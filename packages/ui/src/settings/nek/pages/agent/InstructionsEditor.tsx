@@ -1,9 +1,10 @@
 /**
- * AGENTS.md 编辑器：显式保存（Ctrl/⌘+S 或按钮），可还原；有未保存改动时登记 dirty，
+ * 指令文件编辑器：显式保存（Ctrl/⌘+S 或按钮），可还原；有未保存改动时登记 dirty，
  * 外部修改改为显示横幅而不是覆盖草稿；"重新载入"会丢弃草稿。
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { NekConfigScope } from "@zcode/shared/nek-protocol";
+import type { NekConfigScope, NekInstructionsView } from "@zcode/shared/nek-protocol";
+import { ActionTooltip } from "@/components/ui/action-tooltip.js";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingSection } from "@/components/ui/setting-fields.js";
@@ -14,7 +15,8 @@ import { formatActionBindingLabel } from "@/shortcuts/actionBinding.js";
 import { useNekSettingsContext } from "../../api/NekSettingsContext.js";
 import { useNekInstructionsDoc } from "../../api/settingsDocs.js";
 import { useNekDirtyRegistration, useOnDocumentReset } from "../../api/useNekDocument.js";
-import { DocumentBanners, DocumentGate } from "../../components/DocumentStatus.js";
+import { DiagnosticsList, DocumentBanners, DocumentGate } from "../../components/DocumentStatus.js";
+import { AgentFileOpenButton } from "./AgentFileOpenButton.js";
 
 interface InstructionsEditorProps {
   scope: NekConfigScope;
@@ -33,14 +35,23 @@ function InstructionsEditorImpl({ scope, cwd, title }: InstructionsEditorProps) 
   const { intl } = useZCodeIntl();
   const doc = useNekInstructionsDoc(scope, cwd);
   const saved = doc.data?.content ?? "";
-  // undefined 表示未编辑：异步读取与 clean watch 直接显示文档，不创建虚假的空草稿。
-  const [draft, setDraft] = useState<string>();
-  const value = draft ?? saved;
-  const dirty = value !== saved;
+  const path = doc.data?.path;
+  const heading = doc.data ? `${title} · ${doc.data.filename}` : title;
+  // No draft until the user types. Keep its file identity if a watch changes the winner.
+  const [draft, setDraft] = useState<{ path: string; content: string }>();
+  const value = draft?.content ?? saved;
+  const fileChanged = draft && draft.path !== path;
+  const dirty = Boolean(draft && (fileChanged || value !== saved));
+  const changedReason = fileChanged
+    ? intl.formatMessage({ id: "settings.nek.instructions.fileChanged" }, { path: draft.path })
+    : undefined;
+  const noChanges = intl.formatMessage({ id: "settings.nek.instructions.noChanges" });
   useEffect(() => {
-    // 正文只由真实读回确认；失败或保存期间的新编辑不能被早先的成功结果清掉。
-    setDraft((current) => (current === saved ? undefined : current));
-  }, [saved]);
+    // Only confirmed content from the original file can clear the draft.
+    setDraft((current) =>
+      current?.path === path && current?.content === saved ? undefined : current,
+    );
+  }, [path, saved]);
   useOnDocumentReset(doc.resetToken, () => setDraft(undefined));
   useNekDirtyRegistration([doc], dirty);
   const saveButtonRef = useRef<HTMLDivElement>(null);
@@ -55,47 +66,105 @@ function InstructionsEditorImpl({ scope, cwd, title }: InstructionsEditorProps) 
 
   return (
     <SettingSection
-      title={title}
-      description={doc.data ? <span className="font-mono">{doc.data.path}</span> : undefined}
+      title={heading}
+      description={path ? <span className="break-all font-mono">{path}</span> : undefined}
     >
       <DocumentBanners documents={[doc]} />
       <DocumentGate documents={[doc]}>
-        {() => (
-          <div className="flex flex-col gap-2">
-            <Textarea
-              aria-label={title}
-              value={value}
-              className="min-h-48 font-mono"
-              onChange={(event) =>
-                setDraft(event.target.value === saved ? undefined : event.target.value)
-              }
-              onKeyDown={handleKeyDown}
-            />
-            <div className="flex items-center justify-end gap-2">
-              {dirty ? (
-                <span className="mr-auto text-ui-sm text-foreground-subtle">
-                  {intl.formatMessage({ id: "settings.nek.instructions.unsaved" })}
-                </span>
+        {() =>
+          doc.data && (
+            <div className="flex flex-col gap-2">
+              <InstructionFileSources data={doc.data} />
+              {changedReason ? (
+                <p role="status" className="break-words text-ui-sm text-warning">
+                  {changedReason}
+                </p>
               ) : null}
-              <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(undefined)}>
-                {intl.formatMessage({ id: "settings.nek.instructions.revert" })}
-              </Button>
-              <div ref={saveButtonRef}>
-                <AsyncButton
-                  variant="secondary"
-                  disabled={!dirty}
-                  disabledReason={intl.formatMessage({ id: "settings.nek.instructions.noChanges" })}
-                  shortcut={formatActionBindingLabel("CmdOrCtrl+s")}
-                  label={intl.formatMessage({ id: "settings.nek.instructions.save" })}
-                  onClick={() => doc.save(value)}
+              <Textarea
+                aria-label={heading}
+                value={value}
+                className="min-h-48 font-mono"
+                onChange={(event) => {
+                  const content = event.target.value;
+                  if (path)
+                    setDraft(
+                      !fileChanged && content === saved
+                        ? undefined
+                        : { path: draft?.path ?? path, content },
+                    );
+                }}
+                onKeyDown={handleKeyDown}
+              />
+              <div className="flex items-center justify-end gap-2">
+                {dirty ? (
+                  <span className="mr-auto text-ui-sm text-foreground-subtle">
+                    {intl.formatMessage({ id: "settings.nek.instructions.unsaved" })}
+                  </span>
+                ) : null}
+                <ActionTooltip
+                  label={intl.formatMessage({ id: "settings.nek.instructions.revert" })}
+                  disabledReason={!dirty ? noChanges : undefined}
                 >
-                  {intl.formatMessage({ id: "settings.nek.instructions.save" })}
-                </AsyncButton>
+                  <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(undefined)}>
+                    {intl.formatMessage({ id: "settings.nek.instructions.revert" })}
+                  </Button>
+                </ActionTooltip>
+                <div ref={saveButtonRef}>
+                  <AsyncButton
+                    variant="secondary"
+                    disabled={!dirty || Boolean(fileChanged)}
+                    disabledReason={changedReason ?? noChanges}
+                    shortcut={formatActionBindingLabel("CmdOrCtrl+s")}
+                    label={intl.formatMessage({ id: "settings.nek.instructions.save" })}
+                    onClick={() => doc.save(value, draft!.path)}
+                  >
+                    {intl.formatMessage({ id: "settings.nek.instructions.save" })}
+                  </AsyncButton>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
       </DocumentGate>
     </SettingSection>
+  );
+}
+
+function InstructionFileSources({ data }: { data: NekInstructionsView }) {
+  const { intl } = useZCodeIntl();
+  return (
+    <>
+      <DiagnosticsList diagnostics={data.diagnostics} />
+      {data.ignored.length ? (
+        <p className="break-words text-ui-sm text-foreground-subtle">
+          {intl.formatMessage(
+            { id: "settings.nek.instructions.ignored" },
+            {
+              active: <code className="font-mono">{data.filename}</code>,
+              ignored: (
+                <code className="font-mono">
+                  {data.ignored.map((file) => file.filename).join(", ")}
+                </code>
+              ),
+            },
+          )}
+        </p>
+      ) : null}
+      {data.ancestors.length ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-ui-sm font-medium">
+            {intl.formatMessage({ id: "settings.nek.instructions.ancestors" })}
+          </p>
+          <ul className="divide-y divide-border rounded-xl border border-card-border bg-card">
+            {data.ancestors.map((file) => (
+              <li key={file.path} className="flex items-center justify-between gap-2 px-3 py-1">
+                <code className="min-w-0 break-all text-ui-sm">{file.path}</code>
+                <AgentFileOpenButton path={file.path} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
   );
 }

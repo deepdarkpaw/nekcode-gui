@@ -3322,7 +3322,7 @@ const enUS: Record<string, string> = {
   "settings.nek.agent.preset.error.nameFormat":
     "This name cannot be used as a preset filename. Avoid path separators, invalid filename characters and reserved device names.",
   "settings.nek.agent.preset.error.descriptionRequired": "Enter a description",
-  "settings.nek.agent.instructions": "Global AGENTS.md",
+  "settings.nek.agent.instructions": "Global instructions",
   "settings.nek.agent.extensions": "Global extensions folder",
   "settings.nek.agent.extensionsHint": "View extension files in the nek configuration directory.",
   "settings.nek.section.skills": "Skills",
@@ -3373,6 +3373,11 @@ const enUS: Record<string, string> = {
   "settings.nek.instructions.revert": "Revert",
   "settings.nek.instructions.unsaved": "Unsaved changes",
   "settings.nek.instructions.noChanges": "No changes",
+  "settings.nek.instructions.ignored":
+    "{active} is active; nek ignores {ignored} in this directory.",
+  "settings.nek.instructions.ancestors": "Also loaded from parent directories (read-only here)",
+  "settings.nek.instructions.fileChanged":
+    "The active file changed. This draft belongs to {path}. Copy any text you want to keep, then revert the draft.",
   "settings.nek.project.pageDescription": "Project configuration for the current workspace {cwd}.",
   "settings.nek.project.noWorkspace": "No workspace is open",
   "settings.nek.project.noWorkspaceHint":
@@ -3407,7 +3412,7 @@ const enUS: Record<string, string> = {
     "Projects can only override enabled, exposure and per-tool exposure of global servers.",
   "settings.nek.project.noMcp": "This project has no MCP overrides.",
   "settings.nek.project.presets": "Project subagents",
-  "settings.nek.project.instructions": "Project AGENTS.md",
+  "settings.nek.project.instructions": "Project instructions",
   "settings.nek.hosts.pageDescription":
     "Each host uses its own ~/.nek/agent. Once connected, switch the configuration target on other pages to edit it.",
   "settings.nek.hosts.add": "Add host",

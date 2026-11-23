@@ -309,6 +309,29 @@ export interface NekAgentPresetsView extends NekConfigRevision {
   diagnostics: NekConfigDiagnostic[];
 }
 
+/** nek v0.5.1: core/resource-loader.ts, loadContextFileFromDir (in priority order). */
+export const NEK_INSTRUCTION_FILE_NAMES = [
+  "AGENTS.override.md",
+  "AGENTS.md",
+  "AGENTS.MD",
+  "CLAUDE.md",
+  "CLAUDE.MD",
+] as const;
+
+export interface NekInstructionFile {
+  path: string;
+  filename: string;
+}
+
+export interface NekInstructionsView extends NekConfigRevision, NekInstructionFile {
+  content: string;
+  /** Other candidates present in the same directory, ignored in favor of the active file. */
+  ignored: NekInstructionFile[];
+  /** Additional project instructions, in nek's outermost-to-innermost load order. */
+  ancestors: NekInstructionFile[];
+  diagnostics: NekConfigDiagnostic[];
+}
+
 // ============================================================================
 // 账号登录
 // ============================================================================

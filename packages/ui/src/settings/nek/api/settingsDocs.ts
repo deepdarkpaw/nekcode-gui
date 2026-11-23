@@ -1,5 +1,5 @@
 /**
- * settings.json / nek.yaml / 指令文件（AGENTS.md）的文档 hooks。
+ * settings.json / nek.yaml / 指令文件的文档 hooks。
  */
 import { useCallback, useMemo } from "react";
 import type {
@@ -10,11 +10,14 @@ import type {
   NekYamlPatch,
   NekYamlReadResult,
   NekYamlView,
-  NekConfigRevision,
+  NekInstructionsView,
 } from "@zcode/shared/nek-protocol";
+import { NEK_INSTRUCTION_FILE_NAMES } from "@zcode/shared/nek-protocol";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { applySettingsPatch, mergeDeep } from "../lib/settingsPatch.js";
 import { useNekSettingsContext } from "./NekSettingsContext.js";
-import { useNekDocument, type NekDocument } from "./useNekDocument.js";
+import { NekConfigApiError } from "./nekErrors.js";
+import { normalizeConfigPath, useNekDocument, type NekDocument } from "./useNekDocument.js";
 
 export interface NekSettingsDocument extends NekDocument<NekSettingsReadResult> {
   scope: NekConfigScope;
@@ -100,10 +103,12 @@ export function yamlValue<K extends keyof NekYamlView, F extends keyof NekYamlVi
   return (value ?? data.defaults[section][field]) as NekYamlView[K][F];
 }
 
-type InstructionsData = NekConfigRevision & { path: string; content: string };
+const INSTRUCTION_NAMES = new Set<string>(
+  NEK_INSTRUCTION_FILE_NAMES.map((name) => name.toLowerCase()),
+);
 
-export interface NekInstructionsDocument extends NekDocument<InstructionsData> {
-  save: (content: string) => Promise<void>;
+export interface NekInstructionsDocument extends NekDocument<NekInstructionsView> {
+  save: (content: string, path: string) => Promise<void>;
 }
 
 export function useNekInstructionsDoc(
@@ -111,20 +116,40 @@ export function useNekInstructionsDoc(
   cwd?: string,
 ): NekInstructionsDocument {
   const { config, target } = useNekSettingsContext();
-  const doc = useNekDocument<InstructionsData>({
+  const { intl } = useZCodeIntl();
+  const doc = useNekDocument<NekInstructionsView>({
     load: (api, current) => api.readInstructions(current, scope, cwd),
     deps: [scope, cwd],
     enabled: scope === "global" || Boolean(cwd),
+    matchesFile: (file, data) => {
+      const path = normalizeConfigPath(file);
+      const activePath = normalizeConfigPath(data.path);
+      const slash = path.lastIndexOf("/");
+      return (
+        path.slice(0, slash) === activePath.slice(0, activePath.lastIndexOf("/")) &&
+        INSTRUCTION_NAMES.has(path.slice(slash + 1))
+      );
+    },
   });
   const { mutate } = doc;
   const save = useCallback(
-    (content: string) =>
+    (content: string, path: string) =>
       mutate({
-        // 待保存正文由 InstructionsEditor 的草稿持有，文档只在写后真实读取时更新。
-        write: (data) =>
-          config.writeInstructions(target, scope, content, { revision: data.revision, cwd }),
+        // Saving or keeping a draft must never redirect it to a different winning file.
+        write: (data) => {
+          if (data.path !== path)
+            throw new NekConfigApiError(
+              "validation",
+              intl.formatMessage({ id: "settings.nek.instructions.fileChanged" }, { path }),
+            );
+          return config.writeInstructions(target, scope, content, {
+            path,
+            revision: data.revision,
+            cwd,
+          });
+        },
       }),
-    [config, target, scope, cwd, mutate],
+    [config, target, scope, cwd, mutate, intl],
   );
   return useMemo(() => ({ ...doc, save }), [doc, save]);
 }

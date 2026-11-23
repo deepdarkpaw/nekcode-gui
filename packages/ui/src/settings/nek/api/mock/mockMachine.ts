@@ -44,6 +44,7 @@ export interface MockMachine {
   brokenPresets: NekConfigDiagnostic[];
   instructions: MockFile<string>;
   projectInstructions: Map<string, MockFile<string>>;
+  otherInstructionFiles: Map<string, MockFile<string>>;
   auth: Map<string, NekAuthProviderStatus>;
   trust: Map<string, boolean | null>;
   mcpAuth: Map<string, boolean>;

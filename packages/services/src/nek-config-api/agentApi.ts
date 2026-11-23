@@ -1,13 +1,6 @@
 /** Agent 预设、指令文件与约定的扩展目录。技能、模板只由 nek RPC 发现。 */
-import type {
-  INekConfigApi,
-  NekConfigRevision,
-  NekConfigScope,
-  NekConfigTarget,
-} from "@zcode/shared/nek-protocol";
-import { readTextDocument, writeTextDocument } from "./documents.js";
-import { conflict } from "./errors.js";
-import { instructionsPath } from "./paths.js";
+import type { INekConfigApi } from "@zcode/shared/nek-protocol";
+import { readInstructionsDocument, writeInstructionsDocument } from "./instructionsDocument.js";
 import { resourcePaths } from "./resourceFiles.js";
 import {
   deleteAgentPreset,
@@ -21,17 +14,8 @@ export interface NekAgentGroup {
   listAgentPresets: INekConfigApi["listAgentPresets"];
   saveAgentPreset: INekConfigApi["saveAgentPreset"];
   deleteAgentPreset: INekConfigApi["deleteAgentPreset"];
-  readInstructions: (
-    target: NekConfigTarget,
-    scope: NekConfigScope,
-    cwd?: string,
-  ) => Promise<NekConfigRevision & { path: string; content: string }>;
-  writeInstructions: (
-    target: NekConfigTarget,
-    scope: NekConfigScope,
-    content: string,
-    options: { revision: string; cwd?: string },
-  ) => Promise<NekConfigRevision>;
+  readInstructions: INekConfigApi["readInstructions"];
+  writeInstructions: INekConfigApi["writeInstructions"];
   listExtensions: INekConfigApi["listExtensions"];
 }
 
@@ -94,24 +78,32 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
     },
 
     readInstructions: async (target, scope, cwd) => {
-      const context = runtime.target(target);
-      const path = instructionsPath(context.layout, scope, cwd);
-      const document = await readTextDocument(context.executor, path);
-      return {
-        path,
-        revision: document.revision,
-        content: document.content ?? "",
-      };
+      const { executor, layout } = runtime.target(target);
+      return await readInstructionsDocument({
+        executor,
+        ...layout,
+        scope,
+        cwd,
+        logger: runtime.logger,
+        local: target.kind === "local",
+      });
     },
 
     writeInstructions: async (target, scope, content, options) => {
-      const context = runtime.target(target);
-      const path = instructionsPath(context.layout, scope, options.cwd);
-      const document = await readTextDocument(context.executor, path);
-      if (document.revision !== options.revision) throw conflict(path);
-      const revision = await writeTextDocument(context.executor, path, content);
-      runtime.publishWrite(target, [{ path, revision }]);
-      return { revision };
+      const { executor, layout } = runtime.target(target);
+      const result = await writeInstructionsDocument({
+        executor,
+        ...layout,
+        content,
+        scope,
+        cwd: options.cwd,
+        expected: options,
+        logger: runtime.logger,
+      });
+      runtime.publishWrite(target, [result], {
+        cwd: scope === "project" ? options.cwd : undefined,
+      });
+      return { revision: result.revision };
     },
 
     listExtensions: async (target) => {

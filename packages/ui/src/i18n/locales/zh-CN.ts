@@ -3131,7 +3131,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.agent.preset.error.nameFormat":
     "此名称不能用作预设文件名，请避开路径分隔符、文件名禁用字符和系统保留名。",
   "settings.nek.agent.preset.error.descriptionRequired": "请填写描述",
-  "settings.nek.agent.instructions": "全局 AGENTS.md",
+  "settings.nek.agent.instructions": "全局指令",
   "settings.nek.agent.extensions": "全局扩展目录",
   "settings.nek.agent.extensionsHint": "查看配置目录下的扩展文件。",
   "settings.nek.section.skills": "技能",
@@ -3175,6 +3175,10 @@ const zhCN: Record<string, string> = {
   "settings.nek.instructions.revert": "还原",
   "settings.nek.instructions.unsaved": "有未保存的修改",
   "settings.nek.instructions.noChanges": "没有修改",
+  "settings.nek.instructions.ignored": "{active} 生效；nek 忽略同一目录下的 {ignored}。",
+  "settings.nek.instructions.ancestors": "同时加载的上级目录指令（此处只读）",
+  "settings.nek.instructions.fileChanged":
+    "生效文件已切换。草稿属于 {path}，请先复制需要的内容，再还原草稿。",
   "settings.nek.project.pageDescription": "当前工作区 {cwd} 的项目级配置。",
   "settings.nek.project.noWorkspace": "没有打开的工作区",
   "settings.nek.project.noWorkspaceHint":
@@ -3206,7 +3210,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.project.mcpHint": "项目只能覆盖全局服务器的启用、暴露方式与逐工具暴露。",
   "settings.nek.project.noMcp": "该项目没有 MCP 覆盖。",
   "settings.nek.project.presets": "项目子代理",
-  "settings.nek.project.instructions": "项目 AGENTS.md",
+  "settings.nek.project.instructions": "项目指令",
   "settings.nek.hosts.pageDescription":
     "每台主机使用自己的 ~/.nek/agent 配置。连接后可在其他页面切换配置目标编辑它。",
   "settings.nek.hosts.add": "添加主机",
