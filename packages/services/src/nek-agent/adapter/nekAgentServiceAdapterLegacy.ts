@@ -300,11 +300,6 @@ export function createNekLegacyMethods(
     },
     // nek 的帧按 workspace 广播，没有按连接限流的投递队列：saturated/drained 无事可做；
     // closed 表示该连接已断开，作废它进行中的附件上传。
-    async setConnectionFlowStateV4(input) {
-      if (input.state !== "closed") return;
-      const connection = readTrustedZCodeAgentV4Connection(input);
-      if (connection) await target.attachments.closeConnection(connection.connectionId);
-    },
     async conversationRowsRangeV4(input) {
       const { sessionKey } = await target.ensureNekSessionBinding(input, input.sessionId);
       return nekConversationRowsRange(target.service.conversationSnapshot(sessionKey), input);

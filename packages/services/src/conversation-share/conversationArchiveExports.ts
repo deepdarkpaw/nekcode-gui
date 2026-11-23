@@ -8,8 +8,9 @@ import { ConversationShareServiceError } from "./conversationShare.js";
 
 const IDLE_MS = 10 * 60 * 1000;
 interface Entry {
-  owner: symbol;
+  owner: symbol | string;
   bytes?: Buffer;
+  closed?: boolean;
   expiresAt: number;
   timer?: ReturnType<typeof setTimeout>;
 }
@@ -20,9 +21,10 @@ export class ConversationArchiveExports {
   constructor(private readonly now: () => number = Date.now) {}
 
   async create(
-    owner: symbol,
-    title: string,
-    build: () => Promise<Buffer>,
+    owner: symbol | string,
+    title: string | (() => string),
+    build: (assertCurrent: () => void) => Promise<Buffer>,
+    format: "nekcode" | "jsonl" = "nekcode",
   ): Promise<ConversationArchiveExport> {
     for (const [id, entry] of this.entries) {
       if (entry.bytes && entry.expiresAt <= this.now()) this.remove(id);
@@ -37,7 +39,11 @@ export class ConversationArchiveExports {
     const entry: Entry = { owner, expiresAt: Infinity };
     this.entries.set(id, entry);
     try {
-      const bytes = await build();
+      const assertCurrent = () => {
+        if (entry.closed) throw new Error("fault.taskArchive.cancelled");
+      };
+      const bytes = await build(assertCurrent);
+      assertCurrent();
       if (bytes.length === 0 || bytes.length > CONVERSATION_ARCHIVE_LIMITS.archiveBytes) {
         throw new ConversationShareServiceError(
           "limit_exceeded",
@@ -47,17 +53,19 @@ export class ConversationArchiveExports {
       entry.bytes = bytes;
       this.touch(id, entry);
       // Windows 保留名、路径分隔符和控制字符不能直接成为保存文件名。
-      const name =
-        title
-          .normalize("NFKC")
-          .replace(/[<>:"/\\|?*\p{Cc}]/gu, "-")
-          .replace(/[. ]+$/u, "")
-          .slice(0, 96)
-          .replace(/[. ]+$/u, "") || "conversation";
+      const name = (typeof title === "string" ? title : title())
+        .normalize("NFKC")
+        .replace(/[<>:"/\\|?*\p{Cc}]/gu, "-")
+        .replace(/[. ]+$/u, "")
+        .slice(0, 96)
+        .replace(/[. ]+$/u, "");
       return {
         archiveId: id,
         byteLength: bytes.length,
-        suggestedName: `conversation-${name}.nekcode`,
+        suggestedName:
+          format === "jsonl"
+            ? `task-${name || "nek"}.jsonl`
+            : `conversation-${name || "conversation"}.nekcode`,
       };
     } catch (error) {
       this.remove(id);
@@ -65,7 +73,7 @@ export class ConversationArchiveExports {
     }
   }
 
-  read(owner: symbol, id: string, offset: number): string {
+  read(owner: symbol | string, id: string, offset: number): string {
     const entry = this.entries.get(id);
     if (!entry || entry.owner !== owner || !entry.bytes || entry.expiresAt <= this.now()) {
       if (entry?.owner === owner && entry.bytes && entry.expiresAt <= this.now()) this.remove(id);
@@ -83,8 +91,17 @@ export class ConversationArchiveExports {
       .toString("base64");
   }
 
-  release(owner: symbol, id: string): void {
+  release(owner: symbol | string, id: string): void {
     if (this.entries.get(id)?.owner === owner) this.remove(id);
+  }
+
+  /** Keep a closing generator's slot reserved until its file operation settles. */
+  closeOwner(owner?: string): void {
+    for (const [id, entry] of this.entries) {
+      if (owner !== undefined && owner !== entry.owner) continue;
+      if (entry.bytes) this.remove(id);
+      else entry.closed = true;
+    }
   }
 
   private touch(id: string, entry: Entry): void {

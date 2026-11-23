@@ -17,6 +17,8 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { getZCodeDataRootDir } from "../../paths.js";
 import { NekAttachmentStaging } from "./nekAttachmentStaging.js";
+import { createNekTaskArchive } from "./nekTaskArchive.js";
+import { readTrustedZCodeAgentV4Connection } from "../../zcode-agent/zcodeAgentConnectionScope.js";
 import { NekSessionBindings } from "./nekSessionBindings.js";
 import { NekSessionIndexSyncer } from "../index/nekSessionIndexSyncer.js";
 import { MemoryNekSessionIndexStorage } from "../index/nekSessionIndexStorage.js";
@@ -88,7 +90,6 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   declare readonly onDynamicSessionEvent: IZCodeAgentService["onDynamicSessionEvent"];
   declare readonly helloConversationV4: IZCodeAgentService["helloConversationV4"];
   declare readonly initializeConversationV4: IZCodeAgentService["initializeConversationV4"];
-  declare readonly setConnectionFlowStateV4: IZCodeAgentService["setConnectionFlowStateV4"];
   declare readonly conversationHistoryPageV4: IZCodeAgentService["conversationHistoryPageV4"];
   declare readonly conversationHistoryDirectoryV4: IZCodeAgentService["conversationHistoryDirectoryV4"];
   declare readonly conversationRowsRangeV4: IZCodeAgentService["conversationRowsRangeV4"];
@@ -133,6 +134,7 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
   private readonly status: NekAgentStatusChannel;
   private readonly bindings: NekSessionBindings;
   private readonly conversations: NekConversationSubscriptions;
+  private readonly taskArchive: ReturnType<typeof createNekTaskArchive>;
   private disposed = false;
 
   constructor(options: NekAgentServiceAdapterOptions) {
@@ -157,6 +159,13 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     this.conversations = new NekConversationSubscriptions(this.service, (target, sessionId) =>
       this.ensureNekSessionBinding(target, sessionId, true),
     );
+    this.taskArchive = createNekTaskArchive({
+      service: this.service,
+      ensureBinding: (target, sessionId) => this.ensureNekSessionBinding(target, sessionId),
+      stagingDir:
+        options.taskArchiveStagingDir ?? join(getZCodeDataRootDir(), "tmp", "nek-task-archive"),
+      logger: this.logger,
+    });
     this.topics = new NekAgentServiceTopics(
       this.service,
       (target) => this.resolveSessionKey(target),
@@ -364,9 +373,23 @@ export class NekAgentServiceAdapter implements IZCodeAgentService, NekAgentServi
     );
   }
 
+  readonly nekTaskArchive: IZCodeAgentService["nekTaskArchive"] = (input) =>
+    this.taskArchive.run(input);
+
+  readonly setConnectionFlowStateV4: IZCodeAgentService["setConnectionFlowStateV4"] = async (
+    input,
+  ) => {
+    if (input.state !== "closed") return;
+    const connection = readTrustedZCodeAgentV4Connection(input);
+    if (!connection) return;
+    this.taskArchive.closeConnection(input, connection.connectionId);
+    await this.attachments.closeConnection(connection.connectionId);
+  };
+
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.taskArchive.dispose();
     this.bindings.dispose();
     this.conversations.dispose();
     this.interactions.dispose();

@@ -4,10 +4,11 @@ import { ConversationShareServiceError } from "./conversationShare.js";
 
 const IDLE_MS = 600_000;
 interface Transfer {
-  owner: symbol;
+  owner: symbol | string;
   bytes: Buffer;
   received: number;
   consuming: boolean;
+  closed?: boolean;
   expiresAt: number;
   timer?: ReturnType<typeof setTimeout>;
 }
@@ -17,7 +18,7 @@ export class ConversationArchiveImports {
   private readonly transfers = new Map<string, Transfer>();
   constructor(private readonly now: () => number = Date.now) {}
 
-  begin(owner: symbol, byteLength: number): string {
+  begin(owner: symbol | string, byteLength: number): string {
     for (const [id, entry] of this.transfers) {
       if (!entry.consuming && entry.expiresAt <= this.now()) this.remove(id);
     }
@@ -46,7 +47,7 @@ export class ConversationArchiveImports {
     return id;
   }
 
-  append(owner: symbol, id: string, offset: number, encoded: string): void {
+  append(owner: symbol | string, id: string, offset: number, encoded: string): void {
     const entry = this.get(owner, id);
     if (
       entry.consuming ||
@@ -74,24 +75,39 @@ export class ConversationArchiveImports {
     this.touch(id, entry);
   }
 
-  async consume<T>(owner: symbol, id: string, run: (bytes: Buffer) => Promise<T>): Promise<T> {
+  async consume<T>(
+    owner: symbol | string,
+    id: string,
+    run: (bytes: Buffer, assertCurrent: () => void) => Promise<T>,
+  ): Promise<T> {
     const entry = this.get(owner, id);
     if (entry.consuming || entry.received !== entry.bytes.length) this.invalid();
     entry.consuming = true;
     if (entry.timer) clearTimeout(entry.timer);
     try {
-      return await run(entry.bytes);
+      return await run(entry.bytes, () => {
+        if (entry.closed) throw new Error("fault.taskArchive.cancelled");
+      });
     } finally {
       this.remove(id);
     }
   }
 
-  release(owner: symbol, id: string): void {
+  release(owner: symbol | string, id: string): void {
     const entry = this.transfers.get(id);
     if (entry?.owner === owner && !entry.consuming) this.remove(id);
   }
 
-  private get(owner: symbol, id: string): Transfer {
+  /** A closed connection cannot start an import even if the temporary input is still being written. */
+  closeOwner(owner?: string): void {
+    for (const [id, entry] of this.transfers) {
+      if (owner !== undefined && owner !== entry.owner) continue;
+      if (entry.consuming) entry.closed = true;
+      else this.remove(id);
+    }
+  }
+
+  private get(owner: symbol | string, id: string): Transfer {
     const entry = this.transfers.get(id);
     if (!entry || entry.owner !== owner || (!entry.consuming && entry.expiresAt <= this.now())) {
       if (entry?.owner === owner && !entry.consuming) this.remove(id);

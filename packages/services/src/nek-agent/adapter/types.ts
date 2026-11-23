@@ -19,6 +19,8 @@ export interface NekAgentServiceAdapterOptions extends NekAgentServiceOptions {
   maxV4Subscriptions?: number;
   /** 粘贴图片的上传暂存根目录；缺省为 GUI 数据目录下的 `tmp/nek-attachments`。 */
   attachmentStagingDir?: string;
+  /** Host-local native archive files (only during CLI calls). */
+  taskArchiveStagingDir?: string;
 }
 
 export interface NekWorkspaceTarget {

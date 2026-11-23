@@ -16,3 +16,4 @@ export * from "./model-runtime.js";
 export * from "./thinking-levels.js";
 export * from "./settings-rules.js";
 export * from "./builtin-slash-commands.js";
+export * from "./task-archive.js";

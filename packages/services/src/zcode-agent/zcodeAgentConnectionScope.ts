@@ -816,6 +816,23 @@ export function createZCodeAgentConnectionScope(
       assertReady();
       return result;
     },
+    async nekTaskArchive(params) {
+      // Archive import can run from a draft before a conversation subscription/handshake.
+      assertOpen();
+      const connection = forwardedConnection(params);
+      if (connection.clientMode !== "desktop-continuous" || flowClosed)
+        throw new Error("fault.taskArchive.unavailable");
+      if (params.action === "beginImport" || params.action === "export") {
+        const key = flowRouteKey(params, connection.connectionId);
+        if (!attachmentFlowRoutes.has(key) && attachmentFlowRoutes.size >= 128)
+          throw new Error("fault.taskArchive.tooManyTargets");
+        // Register before the RPC: disconnect must revoke an in-flight reservation too.
+        attachmentFlowRoutes.set(key, { key, target: workspaceTarget(params), connection });
+      }
+      const result = await base.nekTaskArchive(withTrustedConnection(params, connection));
+      assertOpen();
+      return result;
+    },
     async attachmentBeginV4(params) {
       assertReady();
       const forwarded = forwardedConnection(params);

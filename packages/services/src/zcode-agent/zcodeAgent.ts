@@ -78,6 +78,8 @@ import type {
   NekSessionStats,
   NekStatusFrame,
   NekStatusQueue,
+  NekTaskArchiveRequest,
+  NekTaskArchiveResult,
   NekHistoryStatusSnapshot as NekStatusSnapshot,
   NekSubagentRecord,
 } from "@zcode/shared/nek-protocol";
@@ -597,6 +599,8 @@ export interface IZCodeAgentService {
   ): Promise<V4ConversationFileRewindPreviewResult>;
   sendConversationCommandV4(params: ZCodeAgentConversationCommandParams): Promise<CommandAck>;
   queryConversationCommandsV4(params: ZCodeAgentCommandsQueryParams): Promise<CommandsQueryResult>;
+  /** Read/write a bounded nek JSONL transfer on this attachment's execution host. */
+  nekTaskArchive(params: NekTaskArchiveRequest): Promise<NekTaskArchiveResult>;
   attachmentBeginV4(params: ZCodeAgentAttachmentBeginParams): Promise<V4AttachmentBeginResult>;
   attachmentChunkV4(params: ZCodeAgentAttachmentChunkParams): Promise<V4AttachmentChunkResult>;
   attachmentCommitV4(params: ZCodeAgentAttachmentTerminalParams): Promise<V4AttachmentCommitResult>;
