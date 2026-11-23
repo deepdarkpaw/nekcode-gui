@@ -19,8 +19,8 @@ export function confirmDesktopQuit(options: {
     title: isZh ? `退出 ${appName}` : `Quit ${appName}`,
     message: isZh ? `确认退出 ${appName}？` : `Are you sure you want to quit ${appName}?`,
     detail: isZh
-      ? `正在进行的会话：${runningSessionCount} 个，退出后会被中断。`
-      : `In-progress sessions: ${runningSessionCount}. They will be interrupted after quitting.`,
+      ? `正在运行的任务：${runningSessionCount} 个，退出后会被中断。`
+      : `Running tasks: ${runningSessionCount}. They will be interrupted if you quit.`,
     icon,
   };
   const response = parentWindow

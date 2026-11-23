@@ -13,7 +13,7 @@ it.each([
     appName: "nekcode",
     title: "退出 nekcode",
     message: "确认退出 nekcode？",
-    detail: "正在进行的会话：2 个，退出后会被中断。",
+    detail: "正在运行的任务：2 个，退出后会被中断。",
     buttons: ["退出", "取消"],
   },
   {
@@ -21,7 +21,7 @@ it.each([
     appName: "nekcode-preview",
     title: "Quit nekcode-preview",
     message: "Are you sure you want to quit nekcode-preview?",
-    detail: "In-progress sessions: 2. They will be interrupted after quitting.",
+    detail: "Running tasks: 2. They will be interrupted if you quit.",
     buttons: ["Quit", "Cancel"],
   },
 ] as const)("ZR-1 quit confirmation uses the runtime app name in $locale", (entry) => {
