@@ -76,7 +76,14 @@ try {
       await divider.waitFor();
       assert.equal(
         await divider.innerText(),
-        locale === "zh-CN" ? "导入的对话" : "Imported conversation",
+        locale === "zh-CN" ? "从旧归档导入的任务记录" : "Task history from a legacy archive",
+      );
+      const unsupported = page.locator('[data-conversation-share-unsupported-notice="true"]');
+      assert.equal(
+        await unsupported.innerText(),
+        locale === "zh-CN"
+          ? "部分任务记录无法在当前版本中显示。"
+          : "Some task history cannot be displayed in this version.",
       );
       assert.equal(await divider.evaluate((element) => element.tagName), "DIV");
       assert.equal(

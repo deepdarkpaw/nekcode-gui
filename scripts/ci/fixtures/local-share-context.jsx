@@ -40,7 +40,7 @@ createRoot(document.getElementById("root")).render(
   <PlatformProvider platform={platform}>
     <ZCodeIntlProvider initialLocale={locale}>
       <main className="mx-auto w-full max-w-3xl p-4 text-ui-base text-foreground bg-background">
-        <ConversationShareImportNotice rows={rows} locale={locale} />
+        <ConversationShareImportNotice rows={rows} locale={locale} unsupportedRowCount={1} />
         <label htmlFor="message">{locale === "zh-CN" ? "消息" : "Message"}</label>
         <textarea id="message" className="w-full border" />
       </main>

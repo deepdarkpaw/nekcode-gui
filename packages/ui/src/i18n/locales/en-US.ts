@@ -397,7 +397,7 @@ const enUS: Record<string, string> = {
     "This file requires a newer version. Update the app to import it.",
   "conversationShare.import.reopened": "Opened the previously imported conversation: {title}",
   "conversationShare.import.source": "Imported conversation: {title}",
-  "conversationShare.import.dividerLabel": "Imported conversation",
+  "conversationShare.import.dividerLabel": "Task history from a legacy archive",
   "conversationShare.import.fallbackRemoteWorkspace":
     "Opened “{title}” locally. File import is not yet available for the current remote workspace.",
 

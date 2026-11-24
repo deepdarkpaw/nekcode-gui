@@ -3,6 +3,7 @@ import enUS from "./locales/en-US.js";
 import zhCN from "./locales/zh-CN.js";
 
 const LOCALES = { "zh-CN": zhCN, "en-US": enUS };
+const LEGACY_TASK_HISTORY_LABEL = "conversationShare.import.dividerLabel";
 
 const TASK_LABELS = {
   "taskList.newTask": ["新建任务", "New task"],
@@ -17,6 +18,11 @@ const TASK_LABELS = {
   "chat.turnNavigator.label": ["任务问题导航", "Task query map"],
   "shortcuts.action.app.session.new": ["新建任务", "New task"],
   "notification.completed": ["任务已完成", "Task completed"],
+  "taskArchive.menu": ["任务选项", "Task options"],
+  "taskArchive.import": ["从 JSONL 导入任务…", "Import task from JSONL…"],
+  "taskArchive.export": ["导出任务", "Export task"],
+  "taskArchive.imported": ["任务已导入并打开", "Task imported and opened"],
+  [LEGACY_TASK_HISTORY_LABEL]: ["从旧归档导入的任务记录", "Task history from a legacy archive"],
 };
 
 /** These sessions are connection/terminal lifetimes, not the app's work object. */
@@ -62,11 +68,14 @@ it("TT-3 ships the same message keys in both languages", () => {
   expect(Object.keys(zhCN).sort()).toEqual(Object.keys(enUS).sort());
 });
 
-it("TT-4 guards product copy but exempts connection sessions, protocols, and archive-owned copy", () => {
+it("TT-4 guards visible task and native archive copy, not technical or retired share terms", () => {
   const violations: string[] = [];
   for (const [locale, messages] of Object.entries(LOCALES)) {
     for (const [key, value] of Object.entries(messages)) {
-      if (NON_TASK_SESSIONS.has(key) || key.startsWith("conversationShare.")) continue;
+      // The retired sharing controls are no longer reachable. Old imported task history is still rendered.
+      const retiredShareCopy =
+        key.startsWith("conversationShare.") && key !== LEGACY_TASK_HISTORY_LABEL;
+      if (NON_TASK_SESSIONS.has(key) || retiredShareCopy) continue;
       const prose = visibleProse(value);
       if (OLD_TASK_TERMS.test(prose) || /\bSubAgents?\b/u.test(prose)) {
         violations.push(`${locale} ${key}: ${value}`);

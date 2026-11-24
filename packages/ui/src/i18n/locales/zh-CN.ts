@@ -357,7 +357,7 @@ const zhCN: Record<string, string> = {
   "conversationShare.import.unsupportedVersion": "此文件由更新版本创建，请升级后导入。",
   "conversationShare.import.reopened": "已打开之前导入的对话：{title}",
   "conversationShare.import.source": "已导入对话：{title}",
-  "conversationShare.import.dividerLabel": "导入的对话",
+  "conversationShare.import.dividerLabel": "从旧归档导入的任务记录",
   "conversationShare.import.fallbackRemoteWorkspace":
     "已在本地打开「{title}」。当前远程工作区暂不支持文件导入。",
 

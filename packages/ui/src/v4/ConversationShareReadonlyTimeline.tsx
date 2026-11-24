@@ -1014,7 +1014,7 @@ export function ConversationShareReadonlyTimeline({
           artifactPreview: "下载文件",
           markerCompact: "上下文已压缩",
           markerModelChange: "模型已切换",
-          unsupportedRows: "部分内容需要更新 ZCode 查看",
+          unsupportedRows: "部分任务记录无法在当前版本中显示。",
         }
       : {
           history: "Reasoning",
@@ -1024,7 +1024,7 @@ export function ConversationShareReadonlyTimeline({
           artifactPreview: "Download file",
           markerCompact: "Context compacted",
           markerModelChange: "Model switched",
-          unsupportedRows: "Some content requires a newer version of ZCode",
+          unsupportedRows: "Some task history cannot be displayed in this version.",
         };
   const artifactOpenContext = useMemo<ArtifactOpenContextValue | null>(() => {
     if (
