@@ -3,7 +3,6 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { build } from "esbuild";
 import { chromium } from "playwright-core";
 
@@ -16,13 +15,12 @@ const { outputFiles } = await build({
   format: "esm",
   jsx: "automatic",
   alias: { "@": resolve(root, "packages/ui/src") },
-  outdir: resolve(tmpdir(), "zcodium-import-browser-fixture"),
+  outdir: resolve(root, ".tmp/task-archive-import-fixture"),
   loader: { ".css": "empty", ".png": "dataurl" },
   define: { "process.env.NODE_ENV": '"production"' },
 });
 const script = outputFiles.find((file) => file.path.endsWith(".js")).contents;
 let css = "";
-// CI 可只跑行为检查；本地人工视觉走查使用真实桌面构建的样式。
 if (process.env.ZCODE_TEST_RENDERER_ASSETS) {
   const directory = process.env.ZCODE_TEST_RENDERER_ASSETS;
   const file = (await readdir(directory)).find((name) => /^styles-.*\.css$/.test(name));
@@ -33,25 +31,21 @@ const server = createServer((request, response) => {
   if (request.url === "/fixture.js") {
     response.setHeader("Content-Type", "text/javascript");
     response.end(script);
-    return;
-  }
-  if (request.url === "/styles.css") {
+  } else if (request.url === "/styles.css") {
     response.setHeader("Content-Type", "text/css");
     response.end(css);
-    return;
+  } else if (request.url?.startsWith("/assets/")) {
+    response.writeHead(404).end();
+  } else {
+    response.setHeader("Content-Type", "text/html");
+    response.end(
+      '<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/styles.css"><div id="root"></div><script type="module" src="/fixture.js"></script>',
+    );
   }
-  if (request.url?.startsWith("/assets/")) {
-    response.writeHead(404);
-    response.end();
-    return;
-  }
-  response.setHeader("Content-Type", "text/html");
-  response.end(
-    '<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/styles.css"><div id="root"></div><script type="module" src="/fixture.js"></script>',
-  );
 });
 server.listen(0, "127.0.0.1");
 await once(server, "listening");
+const url = `http://127.0.0.1:${server.address().port}/`;
 let browser;
 try {
   browser = await chromium.launch({
@@ -59,154 +53,196 @@ try {
     executablePath: process.env.ZCODE_TEST_CHROMIUM_EXECUTABLE || undefined,
   });
   const page = await browser.newPage();
-  // busy 由 React 在 file input 清理后的一次提交中解除（见 useConversationArchiveImport.ts
-  // 的 finally / cancel 分支），input 从 DOM 移除是同步的、早于该提交。
-  // 因此等待 UI 可观察状态（菜单按钮 enabled），而不是把 input 移除当作解锁信号；
-  // waitForFunction 保留默认超时，避免回归时无限等待。
-  const waitForMenuEnabled = (label) =>
-    page.waitForFunction((name) => {
-      const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.getAttribute("aria-label") === name,
-      );
-      return Boolean(button && !button.disabled);
-    }, label);
-  const errors = [],
-    requests = [];
-  page.on("pageerror", (error) => {
-    errors.push(error.message);
-    console.error(error.stack);
-  });
+  const errors = [];
+  const external = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/*", (route) => {
     if (new URL(route.request().url()).hostname === "127.0.0.1") return route.continue();
-    requests.push(route.request().url());
+    external.push(route.request().url());
     return route.abort();
   });
-
+  const calls = () => page.evaluate(() => window.archiveCalls);
+  // File input is removed before the control releases its busy state; wait on the actual button.
+  const waitEnabled = (label) =>
+    page.waitForFunction(
+      (name) =>
+        [...document.querySelectorAll("button")].some(
+          (button) => button.getAttribute("aria-label") === name && !button.disabled,
+        ),
+      label,
+    );
+  const choose = async (menu, action, { keyboard = false } = {}) => {
+    if (keyboard) await menu.press("Enter");
+    else await menu.click();
+    const chooser = page.waitForEvent("filechooser");
+    if (keyboard) await action.press("Enter");
+    else await action.click();
+    return await chooser;
+  };
+  const setFile = async (chooser, outcome = "success") =>
+    chooser.setFiles({
+      name: outcome === "legacy" ? "previous.nekcode" : "native.JSONL",
+      mimeType: "application/octet-stream",
+      buffer:
+        outcome === "legacy"
+          ? Buffer.from([80, 75, 3, 4])
+          : Buffer.from((await calls()).nativeText),
+    });
+  const screenshot = async (name) => {
+    if (process.env.ZCODE_TEST_SCREENSHOT_DIR) {
+      await page.screenshot({
+        path: resolve(process.env.ZCODE_TEST_SCREENSHOT_DIR, name),
+        animations: "disabled",
+      });
+    }
+  };
   for (const locale of ["zh-CN", "en-US"]) {
-    const menuName = locale === "zh-CN" ? "对话选项" : "Conversation options";
-    const actionName = locale === "zh-CN" ? "从文件导入…" : "Import from file…";
-    const retryName = locale === "zh-CN" ? "重试" : "Retry";
+    const zh = locale === "zh-CN";
+    const menuName = zh ? "任务选项" : "Task options";
+    const menu = page.getByRole("button", { name: menuName });
+    const action = page.getByRole("menuitem", {
+      name: zh ? "从 JSONL 导入任务…" : "Import task from JSONL…",
+    });
+    const retry = page.getByRole("button", { name: zh ? "重试" : "Retry", exact: true });
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 850 });
-      for (const outcome of ["success", "failure", "corrupt", "unavailable"]) {
+      const theme = width === 1280 ? "dark" : "light";
+      for (const outcome of [
+        "success",
+        "failure",
+        "corrupt",
+        "legacy",
+        "unknown",
+        "disconnected",
+        "unavailable",
+      ]) {
+        const target = width === 1280 || outcome === "disconnected" ? "1" : "0";
         await page.goto(
-          `http://127.0.0.1:${server.address().port}/?locale=${locale}&outcome=${outcome}&theme=${width === 1280 ? "dark" : "light"}`,
+          `${url}?locale=${locale}&outcome=${outcome}&theme=${theme}&remote=${target}`,
         );
         if (outcome === "unavailable") {
-          await page.waitForTimeout(100);
-          assert.equal(await page.getByRole("button", { name: menuName }).count(), 0);
+          await page.getByRole("button", { name: zh ? /^新建任务/u : /^New task/u }).waitFor();
+          assert.equal(await menu.count(), 0);
           continue;
         }
-        const menu = page.getByRole("button", { name: menuName });
-        await menu.waitFor();
-        // Both actions are genuine keyboard controls; cancel leaves no busy state or transfer.
-        await menu.focus();
-        await page.keyboard.press("Enter");
-        await page.getByRole("menuitem", { name: actionName }).waitFor();
-        if (process.env.ZCODE_TEST_SCREENSHOT_DIR) {
-          await page.waitForTimeout(300);
-          await page.screenshot({
-            path: resolve(
-              process.env.ZCODE_TEST_SCREENSHOT_DIR,
-              `import-menu-${locale}-${width}.png`,
-            ),
-          });
-        }
-        const firstPicker = page.waitForEvent("filechooser");
-        await page.getByRole("menuitem", { name: actionName }).press("Enter");
-        await firstPicker;
-        await page
-          .locator('input[type="file"]')
-          .evaluate((element) => element.dispatchEvent(new Event("cancel")));
-        await page.waitForFunction(() => !document.querySelector('input[type="file"]'));
-        assert.equal((await page.evaluate(() => window.importCalls)).begins, 0);
-        await waitForMenuEnabled(menuName);
-        const selectFile = async () => {
+        if (outcome === "disconnected") {
           await menu.click();
-          const chooser = page.waitForEvent("filechooser");
-          await page.getByRole("menuitem", { name: actionName }).click();
-          await (
-            await chooser
-          ).setFiles({
-            name: "conversation.nekcode",
-            mimeType: "application/octet-stream",
-            buffer: Buffer.from([80, 75, 0, 255, 42]),
-          });
-        };
-        await selectFile();
-        await page.waitForFunction(() => window.importCalls.releases === 1);
-        if (outcome === "corrupt") {
-          assert.equal(await page.getByRole("button", { name: retryName, exact: true }).count(), 0);
-          assert.equal((await page.evaluate(() => window.importCalls)).opens.length, 0);
+          await action.click();
+          await page
+            .getByText(zh ? "当前项目不可用。" : "The current project is unavailable.", {
+              exact: false,
+            })
+            .waitFor();
+          assert.equal((await calls()).actions.length, 0);
+          continue;
+        }
+        if (outcome === "success") {
+          await menu.press("Enter");
+          await action.waitFor();
+          await screenshot(`NA-import-menu-${locale}-${theme}.png`);
+          const picker = page.waitForEvent("filechooser");
+          await action.press("Enter");
+          await picker;
+          await page
+            .locator('input[type="file"]')
+            .evaluate((element) => element.dispatchEvent(new Event("cancel")));
+          await waitEnabled(menuName);
+          assert.equal((await calls()).actions.length, 0);
+        }
+        await setFile(await choose(menu, action), outcome);
+        if (outcome === "legacy" || outcome === "corrupt" || outcome === "unknown") {
+          const text =
+            outcome === "legacy"
+              ? /旧版 \.nekcode|Legacy \.nekcode/u
+              : outcome === "corrupt"
+                ? /无效|不是有效|not a valid/u
+                : /无法确认导入|Could not confirm the import/u;
+          await page.getByText(text).waitFor();
+          await waitEnabled(menuName);
+          const { actions, opened } = await calls();
+          assert.equal(await retry.count(), 0);
+          assert.deepEqual(opened, []);
+          assert.deepEqual(
+            actions.map((entry) => entry.action),
+            outcome === "legacy" ? [] : ["beginImport", "appendImport", "import", "release"],
+          );
           continue;
         }
         if (outcome === "failure") {
-          const retry = page.getByRole("button", { name: retryName, exact: true });
           await retry.waitFor();
-          if (process.env.ZCODE_TEST_SCREENSHOT_DIR) {
-            await page.waitForTimeout(300);
-            await page.screenshot({
-              path: resolve(
-                process.env.ZCODE_TEST_SCREENSHOT_DIR,
-                `import-retry-${locale}-${width}.png`,
-              ),
-            });
-          }
+          await screenshot(`NA-import-retry-${locale}-${theme}.png`);
+          assert.ok((await calls()).actions.every((entry) => entry.action !== "import"));
+          const next = page.waitForEvent("filechooser");
           await retry.click();
+          await setFile(await next);
         }
-        await page
-          .getByRole("status")
-          .filter({
-            hasText: locale === "zh-CN" ? "已打开导入的会话" : "Imported conversation opened",
-          })
-          .waitFor();
-        await selectFile();
-        await page.waitForFunction(
-          (count) => window.importCalls.releases === count,
-          outcome === "failure" ? 3 : 2,
+        await page.getByTestId("opened-native-task").waitFor();
+        await waitEnabled(menuName);
+        const result = await calls();
+        assert.equal(result.opened.length, 1);
+        assert.equal(result.uploaded, result.nativeText);
+        assert.equal(result.actions.filter((entry) => entry.action === "import").length, 1);
+        assert.equal(
+          result.actions.filter((entry) => entry.action === "release").length,
+          outcome === "failure" ? 2 : 1,
         );
-        const calls = await page.evaluate(() => window.importCalls);
-        assert.equal(calls.opens.length, 2);
-        assert.equal(calls.begins, calls.imports);
-        assert.deepEqual(calls.bytes, [80, 75, 0, 255, 42]);
-        assert.equal(calls.target.targetWorkspacePath, "/fixture/workspace");
+        for (const entry of result.actions) {
+          assert.equal(entry.host, target === "1" ? "ssh-A" : "local");
+          assert.equal(entry.workspacePath, "/fixture/workspace");
+          assert.equal(
+            entry.workspaceIdentity,
+            target === "1" ? "ssh-fixture:/fixture/workspace" : undefined,
+          );
+        }
         assert.equal(await page.locator('input[type="file"]').count(), 0);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       }
     }
   }
 
-  // A disconnected Host can finish late; its completion must neither open a tab nor unlock the new operation.
-  await page.goto(`http://127.0.0.1:${server.address().port}/?locale=en-US&outcome=switch`);
-  const switchMenu = page.getByRole("button", { name: "Conversation options" });
-  const startPending = async () => {
-    await switchMenu.click();
-    const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("menuitem", { name: "Import from file…" }).click();
-    await (
-      await chooser
-    ).setFiles({
-      name: "conversation.nekcode",
-      mimeType: "application/octet-stream",
-      buffer: Buffer.from([80, 75, 42]),
+  const switchMenu = page.getByRole("button", { name: "Task options" });
+  const switchAction = page.getByRole("menuitem", { name: "Import task from JSONL…" });
+  for (const outcome of ["upload-switch", "switch"]) {
+    await page.goto(`${url}?locale=en-US&remote=1&outcome=${outcome}`);
+    await setFile(await choose(switchMenu, switchAction));
+    await page.waitForFunction(() => window.archiveCalls.pending.length === 1);
+    await page.evaluate(() => {
+      window.replaceArchiveHost();
+      window.archiveCalls.pending[0]();
     });
-  };
-  await startPending();
-  await page.waitForFunction(() => window.pendingImportResolvers.length === 1);
-  await page.evaluate(() => window.replaceImportHost());
-  await startPending();
-  await page.waitForFunction(() => window.pendingImportResolvers.length === 2);
-  await page.getByText("Creating the conversation…", { exact: true }).waitFor();
-  await page.evaluate(() => window.pendingImportResolvers[0]());
-  await page.waitForFunction(() => window.importCalls.releases === 1);
-  assert.equal(await switchMenu.isDisabled(), true);
-  assert.equal((await page.evaluate(() => window.importCalls)).opens.length, 0);
-  await page.evaluate(() => window.pendingImportResolvers[1]());
-  await page.waitForFunction(() => window.importCalls.opens.length === 1);
-  await waitForMenuEnabled("Conversation options");
+    await waitEnabled("Task options");
+    assert.deepEqual((await calls()).opened, []);
+    assert.deepEqual(
+      (await calls()).actions.map((entry) => [entry.host, entry.action]),
+      [
+        ["ssh-A", "beginImport"],
+        ["ssh-A", "appendImport"],
+        ...(outcome === "switch" ? [["ssh-A", "import"]] : []),
+        ["ssh-A", "release"],
+      ],
+    );
+    await setFile(await choose(switchMenu, switchAction));
+    await page.waitForFunction(() => window.archiveCalls.pending.length === 2);
+    await page.evaluate(() => window.archiveCalls.pending[1]());
+    assert.match(await page.getByTestId("opened-native-task").innerText(), /^imported-ssh-B-/u);
+  }
+
+  await page.goto(`${url}?locale=en-US&draft=1`);
+  const slash = page.getByRole("textbox", { name: "Slash command" });
+  await slash.fill("/import archive.jsonl");
+  await slash.press("Enter");
+  await page.getByText("/import does not take arguments.", { exact: false }).waitFor();
+  assert.equal((await calls()).actions.length, 0);
+  await slash.fill("/import");
+  const slashPicker = page.waitForEvent("filechooser");
+  await slash.press("Enter");
+  await setFile(await slashPicker);
+  await page.getByTestId("opened-native-task").waitFor();
+  assert.equal((await calls()).slash.status, "sent");
   assert.deepEqual(errors, []);
-  assert.deepEqual(requests, []);
+  assert.deepEqual(external, []);
   console.log(
-    "Conversation import walkthrough passed: keyboard, picker cancel, success, retry, duplicate, corrupt file, capability gating, stale Host completion; zh/en narrow/wide; no external requests.",
+    "NA import browser smoke passed: zh/en, narrow/light and wide/dark, local/SSH routes, keyboard/picker cancel, retry before commit, legacy/corrupt files, unknown commit, host change and /import (31 cases; no external requests).",
   );
 } catch (error) {
   for (const context of browser?.contexts() ?? [])

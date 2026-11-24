@@ -27,6 +27,7 @@
       ]
     },
     "packages/ui": {
+      "entry": ["test/fixtures/task-archive.jsx"],
       "vitest": {
         "config": ["vitest.config.ts"],
         "entry": ["src/**/*.test.{ts,tsx}"]

@@ -128,16 +128,23 @@ try {
       assert.equal(await trigger.getAttribute("aria-label"), zh ? "偏好设置" : "Preferences");
       assert.equal(await page.getByText("Retired account", { exact: true }).count(), 0);
       assert.equal(await page.locator("footer img").count(), 0);
-      const exportTrigger = page.getByTestId("conversation-share-trigger");
+      const exportTrigger = page.getByTestId("task-archive-export-trigger");
+      assert.equal(await exportTrigger.getAttribute("aria-label"), zh ? "导出任务" : "Export task");
       await exportTrigger.click();
-      assert.equal(await exportTrigger.getAttribute("aria-pressed"), "true");
-      await exportTrigger.click();
-      assert.equal(await exportTrigger.getAttribute("aria-pressed"), "false");
+      assert.ok(
+        await page.evaluate(() =>
+          window.preferencesFixture.calls.includes("export:/fixture:fixture-task"),
+        ),
+      );
       await page.evaluate(() => window.preferencesFixture.setTaskId(null));
       await exportTrigger.waitFor({ state: "hidden" });
       await page.evaluate(() => window.preferencesFixture.setTaskId("fixture-other-task"));
-      await exportTrigger.waitFor();
-      assert.equal(await exportTrigger.getAttribute("aria-pressed"), "false");
+      await exportTrigger.click();
+      assert.ok(
+        await page.evaluate(() =>
+          window.preferencesFixture.calls.includes("export:/fixture:fixture-other-task"),
+        ),
+      );
       await trigger.focus();
       await page.keyboard.press("Enter");
       await page.getByRole("menu").first().waitFor();

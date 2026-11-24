@@ -5,6 +5,7 @@ import { WorkspaceSidebarFooter } from "../../../packages/ui/src/WorkspaceSideba
 import { WorkspaceHeaderActionSection } from "../../../packages/ui/src/WorkspaceHeaderSections/WorkspaceHeaderActionSection.js";
 import { ServiceProvider } from "../../../packages/ui/src/hooks/useServices.js";
 import { PlatformProvider } from "../../../packages/ui/src/hooks/usePlatform.js";
+import { ConversationImportProvider } from "../../../packages/ui/src/hooks/useConversationImport.js";
 import { StoreProvider, useZCodeStore } from "../../../packages/ui/src/store/StoreProvider.js";
 import { ZCodeIntlProvider, useZCodeIntl } from "../../../packages/ui/src/i18n/IntlProvider.js";
 import { TooltipProvider } from "../../../packages/ui/src/components/ui/tooltip.js";
@@ -102,6 +103,16 @@ function Fixture() {
   const [mounted, setMounted] = useState(true);
   const [taskId, setTaskId] = useState("fixture-task");
   fixture.setTaskId = setTaskId;
+  const archive = {
+    available: false,
+    canExport: true,
+    busy: false,
+    open: () => false,
+    exportTask: (target, id) => {
+      fixture.calls.push(`export:${target.workspacePath}:${id}`);
+      return true;
+    },
+  };
   fixture.unmount = () => setMounted(false);
   useEffect(() => {
     setUser({
@@ -113,16 +124,18 @@ function Fixture() {
   }, [setTheme, setUser]);
   return (
     <main className="flex min-h-dvh flex-col bg-background text-foreground">
-      <WorkspaceHeaderActionSection
-        activeTaskId={taskId}
-        workspaceAbsPath="/fixture"
-        isDesktop={params.get("platform") !== "web"}
-        isTerminalOpen={false}
-        isSidePaneOpen
-        hideHelpMenu
-        onToggleTerminal={() => {}}
-        onToggleSidePane={() => {}}
-      />
+      <ConversationImportProvider value={archive}>
+        <WorkspaceHeaderActionSection
+          activeTaskId={taskId}
+          workspaceAbsPath="/fixture"
+          isDesktop={params.get("platform") !== "web"}
+          isTerminalOpen={false}
+          isSidePaneOpen
+          hideHelpMenu
+          onToggleTerminal={() => {}}
+          onToggleSidePane={() => {}}
+        />
+      </ConversationImportProvider>
       <div className="flex-1 p-4">Workspace</div>
       {mounted ? (
         <div className="w-full max-w-80 border-t border-border bg-sidebar">

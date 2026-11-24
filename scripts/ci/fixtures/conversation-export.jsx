@@ -5,6 +5,7 @@ import { ConversationShareSuccessDock } from "../../../packages/ui/src/v4/Conver
 import { saveConversationExport } from "../../../packages/ui/src/lib/saveConversationExport.js";
 import { ZCodeIntlProvider } from "../../../packages/ui/src/i18n/IntlProvider.js";
 import { PlatformProvider } from "../../../packages/ui/src/hooks/usePlatform.js";
+import { mountTaskArchiveFixture } from "../../../packages/ui/test/fixtures/task-archive.jsx";
 
 /** 浏览器下载：只确认下载请求已交给浏览器（原 Web 端实现，fixture 内联）。 */
 function saveBrowserFile(request) {
@@ -99,10 +100,15 @@ function Fixture() {
     </main>
   );
 }
-createRoot(document.getElementById("root")).render(
-  <PlatformProvider platform={platform}>
-    <ZCodeIntlProvider initialLocale={locale}>
-      <Fixture />
-    </ZCodeIntlProvider>
-  </PlatformProvider>,
-);
+if (params.get("native") === "1") {
+  mountTaskArchiveFixture(saveBrowserFile);
+} else {
+  // The standalone historical share UI fixture still covers the legacy save helper consumers.
+  createRoot(document.getElementById("root")).render(
+    <PlatformProvider platform={platform}>
+      <ZCodeIntlProvider initialLocale={locale}>
+        <Fixture />
+      </ZCodeIntlProvider>
+    </PlatformProvider>,
+  );
+}
