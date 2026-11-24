@@ -5,6 +5,7 @@
 import { useMemo } from "react";
 import type { IServiceAccessor } from "@zcode/services";
 import type { ZCodeProvider, ZCodeTaskMeta } from "@zcode/shared";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { buildSessionMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";
@@ -50,9 +51,9 @@ function compareSessionTasks(
   return left.title.localeCompare(right.title);
 }
 
-function getSessionLabel(task: ZCodeTaskMeta): string {
+function getSessionLabel(task: ZCodeTaskMeta, untitledTaskLabel: string): string {
   const title = task.title.replace(/^#sess_[a-zA-Z0-9._-]+\s*/, "").trim();
-  return title || "Untitled session";
+  return title || untitledTaskLabel;
 }
 
 function getWorkspaceLabel(task: ZCodeTaskMeta): string {
@@ -60,16 +61,21 @@ function getWorkspaceLabel(task: ZCodeTaskMeta): string {
   return raw.split(/[\\/]/).filter(Boolean).at(-1) ?? raw;
 }
 
-function mapTaskToMentionItem(task: ZCodeTaskMeta, provider: ZCodeProvider): SessionMentionItem {
+function mapTaskToMentionItem(
+  task: ZCodeTaskMeta,
+  provider: ZCodeProvider,
+  untitledTaskLabel: string,
+): SessionMentionItem {
   const sessionId = task.taskId;
   const itemProvider = task.provider ?? provider;
+  const label = getSessionLabel(task, untitledTaskLabel);
   return {
     id: `session:${task.taskId}`,
     category: "sessions",
-    label: getSessionLabel(task),
+    label,
     description: getWorkspaceLabel(task),
     value: sessionId,
-    markdown: buildSessionMentionMarkdown(sessionId, getSessionLabel(task)),
+    markdown: buildSessionMentionMarkdown(sessionId, label),
     keywords: [
       task.title,
       task.taskId,
@@ -88,7 +94,8 @@ function collectSessionMentionItems(
   options: {
     workspacePath?: string;
     workspaceIdentity?: string;
-  } = {},
+    untitledTaskLabel: string;
+  },
 ): SessionMentionItem[] {
   const currentWorkspaceKey = options.workspacePath
     ? buildTaskWorkspaceKey(options.workspacePath, options.workspaceIdentity)
@@ -107,7 +114,7 @@ function collectSessionMentionItems(
 
   return [...taskBySessionId.values()]
     .sort((left, right) => compareSessionTasks(left, right, currentWorkspaceKey))
-    .map((task) => mapTaskToMentionItem(task, provider));
+    .map((task) => mapTaskToMentionItem(task, provider, options.untitledTaskLabel));
 }
 
 function limitSessionMentionItemsPerWorkspace(items: SessionMentionItem[]): SessionMentionItem[] {
@@ -196,6 +203,8 @@ export function useSessionsMentionProvider(
   emptyText: string,
   title: string,
 ): MentionCategoryResult {
+  const { intl } = useZCodeIntl();
+  const untitledTaskLabel = intl.formatMessage({ id: "taskList.untitled" });
   const baseServices = useBaseWorkspaceServices();
   const tabs = useTabStore((state) => state.tabs);
   const workspaceTabs = useMemo(() => tabs.filter(isWorkspaceTab), [tabs]);
@@ -265,8 +274,9 @@ export function useSessionsMentionProvider(
       collectSessionMentionItems(indexMetas, provider, {
         workspacePath,
         workspaceIdentity,
+        untitledTaskLabel,
       }),
-    [indexMetas, provider, workspaceIdentity, workspacePath],
+    [indexMetas, provider, untitledTaskLabel, workspaceIdentity, workspacePath],
   );
 
   const items = useMemo(() => {
