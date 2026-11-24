@@ -58,7 +58,11 @@ export function createNekTaskArchive(ports: Ports) {
     assertCurrent: () => void,
   ): Promise<NekTaskArchiveResult> {
     checkNekTaskArchiveInput(bytes);
-    if (!(await stat(cwd)).isDirectory()) throw new Error("fault.taskArchive.targetUnavailable");
+    // Missing/inaccessible workspaces are a definite preflight failure, not an uncertain CLI commit.
+    const workspace = await stat(cwd).catch((error: unknown) => {
+      throw new Error("fault.taskArchive.targetUnavailable", { cause: error });
+    });
+    if (!workspace.isDirectory()) throw new Error("fault.taskArchive.targetUnavailable");
     return await withNekTaskArchiveFile(
       ports.stagingDir,
       async (inputPath) => {

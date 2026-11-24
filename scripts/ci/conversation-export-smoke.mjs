@@ -253,7 +253,9 @@ try {
   await dialog.getByRole("button", { name: /Continue to export/u }).click();
   await page.waitForFunction(() => window.archiveCalls.pending.length === 1);
   await page.evaluate(() => {
-    window.switchArchiveTask();
+    // A → B → A in a single browser turn must still retire A's original export.
+    window.switchArchiveTask("other-task");
+    window.switchArchiveTask("fixture-task");
     window.archiveCalls.pending[0]();
   });
   await page.getByText(/The task or project changed/u).waitFor();

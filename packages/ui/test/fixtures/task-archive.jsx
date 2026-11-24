@@ -153,8 +153,8 @@ export function mountTaskArchiveFixture(saveBrowserFile) {
       if (remote) tabs.getState().addTab(path, { workspaceIdentity: identity, remoteSessionId });
       const store = useZCodeSessionStore;
       store.getState().setActiveTaskId(path, taskId, target.workspaceIdentity);
-      window.switchArchiveTask = () =>
-        store.getState().setActiveTaskId(path, "other-task", target.workspaceIdentity);
+      window.switchArchiveTask = (id) =>
+        store.getState().setActiveTaskId(path, id, target.workspaceIdentity);
       return store.subscribe((state) => {
         // Read the captured workspace bucket, not whatever happens to be active in another tab.
         const id = state.getWorkspaceState(path, target.workspaceIdentity).activeTaskId;

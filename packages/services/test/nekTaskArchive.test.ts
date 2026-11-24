@@ -118,10 +118,15 @@ async function fixture(t: TestContext) {
     await rm(root, { force: true, recursive: true });
   });
   const call = first.service.nekTaskArchive;
-  async function upload(data: Buffer) {
-    const result = await call({ ...target, action: "beginImport", byteLength: data.byteLength });
+  async function upload(data: Buffer, workspacePath = target.workspacePath) {
+    const result = await call({
+      ...target,
+      workspacePath,
+      action: "beginImport",
+      byteLength: data.byteLength,
+    });
     assert.equal(result.action, "beginImport");
-    const transfer = { ...target, archiveId: result.archiveId };
+    const transfer = { ...target, workspacePath, archiveId: result.archiveId };
     for (let offset = 0; offset < data.length; offset += CONVERSATION_ARCHIVE_CHUNK_BYTES) {
       await call({
         ...transfer,
@@ -237,6 +242,14 @@ test("NA-4/7 rejects legacy, malformed, empty/metadata-only and oversized input 
     /taskArchive.limitExceeded/u,
   );
   assert.deepEqual(f.calls, []);
+});
+
+test("NA-7 vanished target is rejected before CLI import and is not an uncertain commit", async (t) => {
+  const f = await fixture(t);
+  const transfer = await f.upload(f.bytes, join(f.target.workspacePath, "missing"));
+  await assert.rejects(f.call({ ...transfer, action: "import" }), /taskArchive.targetUnavailable/u);
+  assert.deepEqual(f.calls, []);
+  await assert.rejects(f.call({ ...transfer, action: "import" }), /transfer is unavailable/u);
 });
 
 test("NA-7 export rejects locked or empty tasks without calling nek export", async (t) => {
