@@ -5,11 +5,12 @@ import {
   type DecodedHistoryEvent,
 } from "../nekHistoryStreamDecoder.js";
 import type { NekRpcProcess } from "../nekRpcProcess.js";
+import { prepareHistoryPage } from "./nekHistoryAnchors.js";
 import type { NekSessionRecord } from "./types.js";
 import {
   historyResult,
   HISTORY_RPC_MAX_BYTES,
-  HISTORY_PAGE_MAX_BYTES,
+  historyTargetQuery,
   requireHistoryPages,
 } from "./nekHistoryRpc.js";
 
@@ -360,17 +361,9 @@ export class NekHistoryStreamSession {
           event.ref.aroundEntryId !== event.entryId
         )
           throw new NekHistoryStreamError("LOCATOR", "foreign or malformed persisted locator");
+        const signal = this.reads.signal;
         const page = historyResult(
-          await this.process.client.call(
-            {
-              type: "read_history_page",
-              view: "target",
-              aroundEntryId: event.entryId,
-              turnLimit: 1,
-              maxBytes: HISTORY_PAGE_MAX_BYTES,
-            },
-            { signal: this.reads.signal },
-          ),
+          await this.process.client.call(historyTargetQuery(event.entryId), { signal }),
         );
         if (!this.current(generation)) return;
         if (page.view !== "target" || page.sessionId !== this.record.sessionId)
@@ -378,7 +371,13 @@ export class NekHistoryStreamSession {
             "LOCATOR",
             "CLI must return a target page for this session; update nek",
           );
-        this.record.projector!.applyHistoryTarget(page, event.entryId);
+        const prepared = await prepareHistoryPage(
+          page,
+          (command) => this.process.client.call(command, { signal }),
+          () => this.record.projector!.historyAnchors(),
+        );
+        if (!this.current(generation)) return;
+        this.record.projector!.applyHistoryTarget(prepared, event.entryId);
         const expected = this.expectedPlanSession;
         if (
           expected?.adopted &&

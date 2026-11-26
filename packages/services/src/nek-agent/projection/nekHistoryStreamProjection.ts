@@ -1,5 +1,4 @@
 import type {
-  NekHistoryPage,
   NekHistoryTurn,
   NekHistoryStreamOmission,
   NekRpcEvent,
@@ -11,7 +10,7 @@ import { closeTurn, ensureTurn } from "./nekLiveTurn.js";
 import { applyAssistantErrorMarker } from "./nekLiveMessages.js";
 import { settleFailedAssistantResponse } from "./nekSettledWork.js";
 import { applyCompactionEnd } from "./nekLiveMarkers.js";
-import { projectHistory } from "./nekHistoryProjection.js";
+import { projectHistory, type ProjectableHistoryPage } from "./nekHistoryProjection.js";
 import { validateHistoryDisplay } from "./nekHistoryDisplay.js";
 import { withNekModelSelection } from "./nekProjectionSnapshot.js";
 import { advanceHistorySelection } from "./nekSelectionMarkers.js";
@@ -166,7 +165,7 @@ export class NekHistoryStreamProjection {
 
   target(
     source: NekHistoryLiveSource,
-    page: NekHistoryPage,
+    page: ProjectableHistoryPage,
     entryId: string,
     ctx: NekLiveContext,
   ): NekHistoryTurn | undefined {
@@ -216,6 +215,7 @@ export class NekHistoryStreamProjection {
       entries: [target],
       targetEntryId: target.id,
       seed: source.selection,
+      originAnchors: page.originAnchors,
       anchors: ctx.historyAnchors?.() ?? oldRows,
     });
     if (assistantKey)

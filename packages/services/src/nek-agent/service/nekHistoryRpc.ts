@@ -7,6 +7,16 @@ export const HISTORY_RPC_MAX_BYTES = 1024 * 1024;
  * projected rows are about 0.7-1.0x of the source page; text-only turns reach ~1.0x.
  */
 export const HISTORY_PAGE_MAX_BYTES = 12 * 1024 * 1024;
+/** Read just a committed entry and its owning header, not its entire turn. */
+export function historyTargetQuery(aroundEntryId: string) {
+  return {
+    type: "read_history_page",
+    view: "target",
+    turnLimit: 1,
+    aroundEntryId,
+    maxBytes: HISTORY_PAGE_MAX_BYTES,
+  } as const;
+}
 /** Projected page bound, below the 16 MB host window that also receives the initial page. */
 export const HISTORY_RENDER_MAX_BYTES = 15 * 1024 * 1024;
 export function requireHistoryPages(info: Pick<NekGuiInfo, "capabilities">): void {

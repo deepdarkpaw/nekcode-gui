@@ -1,7 +1,7 @@
 import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { NekHistoryServiceBase } from "./nekHistoryService.js";
 import { measureNekOpenRequest, nekOpenDurationMs } from "./nekSessionOpenTiming.js";
-import { verifyHistorySpawnAnchors } from "./nekHistoryAnchors.js";
+import { prepareHistoryPage } from "./nekHistoryAnchors.js";
 import {
   historyResult,
   requireHistoryPages,
@@ -93,17 +93,12 @@ export abstract class NekAgentSessionResumeBase extends NekHistoryServiceBase {
           ),
         );
         this.assertAlive();
-        await verifyHistorySpawnAnchors(page.entries, (subagentId) =>
-          control.client.call({
-            type: "read_history_subagent",
-            sessionPath: input.sessionPath,
-            subagentId,
-            observationCursor: page.observationCursor,
-          }),
+        const prepared = await prepareHistoryPage(page, (command) =>
+          control.client.call({ ...command, sessionPath: input.sessionPath }),
         );
         this.assertAlive();
         try {
-          const result = this.openLockedHistory(snapshot, page, input.cwd);
+          const result = this.openLockedHistory(snapshot, prepared, input.cwd);
           return {
             ...result,
             openTiming: { ...openTiming, cliSessionRestoreMs: nekOpenDurationMs(restoreStartedAt) },

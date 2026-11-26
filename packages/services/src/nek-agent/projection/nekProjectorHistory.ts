@@ -20,7 +20,11 @@ import {
   reconcileHistoryAppend,
   type NekHistoryLiveSource,
 } from "./nekHistoryLive.js";
-import { historyMetadata, projectHistory } from "./nekHistoryProjection.js";
+import {
+  historyMetadata,
+  projectHistory,
+  type ProjectableHistoryPage,
+} from "./nekHistoryProjection.js";
 import { preserveObservedTiming } from "./nekObservedTiming.js";
 import { advanceHistorySelection } from "./nekSelectionMarkers.js";
 import {
@@ -39,7 +43,7 @@ import {
 } from "../service/nekHistoryRpc.js";
 
 export interface NekHistorySnapshotInput {
-  page: NekHistoryPage;
+  page: ProjectableHistoryPage;
   metadata: NekHistoryMetadata;
   state?: NekRpcSessionState;
   stats?: NekSessionStats;
@@ -88,7 +92,7 @@ export class NekProjectorHistory {
     return this.stream.event(event, omissions, key, ctx);
   }
 
-  applyTarget(page: NekHistoryPage, entryId: string, ctx: NekLiveContext): void {
+  applyTarget(page: ProjectableHistoryPage, entryId: string, ctx: NekLiveContext): void {
     if (!this.source) throw new Error("history source is not bootstrapped");
     const turn = this.stream.target(this.source, page, entryId, ctx);
     if (!turn || !this.metadata) return;
@@ -139,6 +143,7 @@ export class NekProjectorHistory {
       turns: page.turns,
       entries: page.entries,
       seed: page.seed,
+      originAnchors: page.originAnchors,
       nekState,
       anchors: compatible
         ? [

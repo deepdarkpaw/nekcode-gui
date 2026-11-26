@@ -1,4 +1,4 @@
-import { verifyHistorySpawnAnchors } from "./nekHistoryAnchors.js";
+import { prepareHistoryPage } from "./nekHistoryAnchors.js";
 import {
   historyResult,
   requireHistoryPages,
@@ -124,16 +124,11 @@ export async function reloadSessionSnapshot(
     );
     assertSnapshotTarget(record, process);
     if ((record.stateEpoch ?? 0) !== epoch) continue;
-    const page = historyResult(pageResult);
-    await verifyHistorySpawnAnchors(
-      page.entries,
-      (subagentId) =>
-        process.client.call({
-          type: "read_history_subagent",
-          subagentId,
-          observationCursor: page.observationCursor,
-        }),
-      record.projector?.acceptsHistoryPage(page) ? record.projector.historyAnchors() : [],
+    const source = historyResult(pageResult);
+    const page = await prepareHistoryPage(
+      source,
+      (command) => process.client.call(command),
+      () => (record.projector?.acceptsHistoryPage(source) ? record.projector.historyAnchors() : []),
     );
     const metadata = historyResult(
       await measureNekOpenRequest(openTiming, () =>

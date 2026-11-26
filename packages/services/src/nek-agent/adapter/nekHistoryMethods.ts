@@ -4,7 +4,7 @@ import type {
   ZCodeAgentConversationHistoryTarget,
 } from "../../zcode-agent/zcodeAgent.js";
 import { historyMetadata, projectHistory } from "../projection/nekHistoryProjection.js";
-import { verifyHistorySpawnAnchors } from "../service/nekHistoryAnchors.js";
+import { prepareHistoryPage } from "../service/nekHistoryAnchors.js";
 import {
   boundHistoryResult,
   historyResultBytes,
@@ -86,24 +86,12 @@ async function readProjectedPage(
       "history branch changed; rebuild the bounded snapshot before reading this target",
     );
   const scope = input.subagentId ? `${page.sessionId}\0${page.branchRevision}` : page.sessionId;
-  const anchors = context.projector.historyAnchors(scope);
-  await verifyHistorySpawnAnchors(
-    page.entries,
-    (subagentId) =>
-      context.read({
-        type: "read_history_subagent",
-        subagentId,
-        observationCursor: page.observationCursor,
-      }),
-    anchors,
-  );
-  const rows = projectHistory({
-    sessionId: page.sessionId,
-    turns: page.turns,
-    entries: page.entries,
-    seed: page.seed,
-    anchors,
-  });
+  const anchors =
+    input.subagentId || context.projector.acceptsHistoryPage(page)
+      ? context.projector.historyAnchors(scope)
+      : [];
+  const prepared = await prepareHistoryPage(page, context.read, () => anchors);
+  const rows = projectHistory({ ...prepared, anchors });
   const result = {
     rows: input.subagentId ? rows : preserveLive(rows, context),
     history: historyMetadata(page),

@@ -255,6 +255,18 @@ export class ConversationHistoryWindow {
     if (!snapshot.history) return snapshot;
     let rows = snapshot.rows.window;
     let turns = snapshot.history.turns;
+    // An await/resume can update an older child. Its anchor is not a loaded body page.
+    // Preserve updates in already loaded (including live) turns; do not render a phantom turn.
+    if (rows.some((row) => row.kind === "subagent")) {
+      const loaded = new Set(turns.map((turn) => turn.turnId));
+      for (const row of rows) if (row.kind === "turnHeader") loaded.add(row.turnId);
+      const outside = (row: ConversationRow) =>
+        !loaded.has(row.turnId) &&
+        (row.kind === "subagent" ||
+          (row.kind === "toolCall" &&
+            ["subagent", "await", "stop_subagent"].includes(row.toolName)));
+      if (rows.some(outside)) rows = rows.filter((row) => !outside(row));
+    }
     let bytes = rows.reduce((total, row) => total + this.size(row), 0);
     const exceeds = () =>
       this.pages.length > HISTORY_WINDOW_LIMITS.pages ||

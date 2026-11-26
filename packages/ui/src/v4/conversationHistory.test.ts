@@ -55,6 +55,36 @@ function page(start: number, end: number, total = 70): V4ConversationHistoryPage
     },
   };
 }
+it("does not treat an off-page child update as a loaded turn; paging its owner in displays it once", () => {
+  const window = new ConversationHistoryWindow();
+  const tail = page(6, 26, 26);
+  const child: ConversationRow = {
+    kind: "subagent",
+    rowId: 54,
+    entityId: "subagent:child",
+    turnId: "turn:5",
+    createdAt: 1,
+    createdAtSeq: 54,
+    subagentType: "explorer",
+    status: "success",
+    summaryText: "inspect",
+    childSessionId: "child",
+    parentToolCallId: "spawn",
+    startedAt: 1,
+  };
+  const opened = window.reset(snapshot({ ...tail, rows: [child, ...tail.rows] }));
+  expect(opened.rows.window.some((row) => row.kind === "subagent")).toBe(false);
+  expect(window.pageOptions(opened, "older")).toEqual({ beforeCursor: "before:6" });
+  const earlier = page(0, 6, 26);
+  const merged = window.mergePage(
+    opened,
+    { ...earlier, rows: [...earlier.rows, child] },
+    "older",
+    new Set(),
+  );
+  expect(merged.rows.window.filter((row) => row.kind === "subagent")).toEqual([child]);
+});
+
 function snapshot(result = page(50, 70)): ConversationSnapshot {
   return {
     protocolVersion: 1,

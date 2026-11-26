@@ -17,7 +17,11 @@ import { validateHistoryDisplay } from "./nekHistoryDisplay.js";
 import { nekPlanArtifactEntity } from "./nekPlanArtifact.js";
 import { extractSubagentsFromToolResult } from "./nekSubagentRecords.js";
 import { buildTurnHeaderRow, toEpochMs } from "./nekRows.js";
-import { HISTORY_ROW_STRIDE as STRIDE, historyRowId } from "./nekHistoryIdentity.js";
+import {
+  HISTORY_ROW_STRIDE as STRIDE,
+  historyChildRowId,
+  historyRowId,
+} from "./nekHistoryIdentity.js";
 export { historyRowId } from "./nekHistoryIdentity.js";
 
 const historyTurn = (turn: Omit<NekHistoryTurn, "header">): ConversationHistoryTurn => ({
@@ -99,7 +103,7 @@ function identityLayout(
       // A resumed child is not a new spawn. Known anchors always win.
       for (const { record } of records)
         if (!ids.has(`subagent:${record.id}`))
-          ids.set(`subagent:${record.id}`, historyRowId(pos, STRIDE - 4));
+          ids.set(`subagent:${record.id}`, historyChildRowId(pos));
     }
   }
   return (entity: string): number => {
@@ -112,6 +116,11 @@ function identityLayout(
   };
 }
 
+/** Host-only input: bounded original row identities, never extra page membership or navigation cursors. */
+export type ProjectableHistoryPage = NekHistoryPage & {
+  originAnchors?: readonly ConversationRow[];
+};
+
 /** Request-local projection of complete display entries. Target reads reuse admitted live anchors. */
 export function projectHistory(input: {
   sessionId: string;
@@ -122,9 +131,10 @@ export function projectHistory(input: {
   /** Live target projection: a repeated non-user header is context, not a new selection fact. */
   targetEntryId?: string;
   anchors?: readonly ConversationRow[];
+  originAnchors?: readonly ConversationRow[];
 }): ConversationRow[] {
   const result = new Map<number, ConversationRow>();
-  const anchors = [...(input.anchors ?? [])];
+  const anchors = [...(input.anchors ?? []), ...(input.originAnchors ?? [])];
   let selection = {
     provider: input.seed?.model?.provider,
     model: input.seed?.model?.modelId,

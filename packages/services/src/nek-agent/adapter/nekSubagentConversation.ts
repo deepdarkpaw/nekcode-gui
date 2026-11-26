@@ -1,6 +1,6 @@
 import type { IZCodeAgentService } from "../../zcode-agent/zcodeAgent.js";
 import { historyMetadata, projectHistory } from "../projection/nekHistoryProjection.js";
-import { verifyHistorySpawnAnchors } from "../service/nekHistoryAnchors.js";
+import { prepareHistoryPage } from "../service/nekHistoryAnchors.js";
 import { boundHistoryResult } from "../service/nekHistoryRpc.js";
 import type { NekAgentServiceAdapterLegacyTarget } from "./nekAgentServiceAdapterLegacySupport.js";
 
@@ -23,16 +23,7 @@ export function createNekSubagentConversationReader(
       });
       const scope = `${page.sessionId}\0${page.branchRevision}`;
       const anchors = context.projector.historyAnchors(scope);
-      await verifyHistorySpawnAnchors(
-        page.entries,
-        (subagentId) =>
-          context.read({
-            type: "read_history_subagent",
-            subagentId,
-            observationCursor: page.observationCursor,
-          }),
-        anchors,
-      );
+      const prepared = await prepareHistoryPage(page, context.read, () => anchors);
       const record = context.child!;
       const status = record.status;
       if (
@@ -42,13 +33,7 @@ export function createNekSubagentConversationReader(
         status !== "aborted"
       )
         throw new Error("nek child history has no authoritative status");
-      const rows = projectHistory({
-        sessionId: page.sessionId,
-        turns: page.turns,
-        entries: page.entries,
-        seed: page.seed,
-        anchors,
-      });
+      const rows = projectHistory({ ...prepared, anchors });
       const last = rows.findLast((row) => row.kind === "turnHeader");
       if (last?.kind === "turnHeader")
         last.state =

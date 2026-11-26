@@ -3,10 +3,10 @@ import type { ConversationOpenTiming } from "@zcode/shared/zcode-protocol-v4";
 import { measureNekOpenBootstrap, measureNekOpenRequest } from "./nekSessionOpenTiming.js";
 import type {
   NekHistoryMetadata,
-  NekHistoryPage,
   NekInteractionScope,
   NekRpcEvent,
 } from "@zcode/shared/nek-protocol";
+import type { ProjectableHistoryPage } from "../projection/nekHistoryProjection.js";
 import type { NekConversationProjector } from "../nekConversationProjector.js";
 import type { NekRpcClientOptions, NekRpcProcessExit } from "../nekRpcClient.js";
 import type { NekProcessPool, NekProcessPoolEvent } from "../nekProcessPool.js";
@@ -325,7 +325,7 @@ export abstract class NekAgentServiceRuntimeBase {
    */
   protected openLockedHistory(
     snapshot: NekHistoryMetadata,
-    page: NekHistoryPage,
+    page: ProjectableHistoryPage,
     cwd?: string,
   ): NekSessionResult {
     const existing = this.byPath.get(snapshot.session.path);

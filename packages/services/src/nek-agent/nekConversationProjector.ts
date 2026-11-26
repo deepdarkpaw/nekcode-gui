@@ -14,7 +14,6 @@ import type {
 } from "@zcode/shared/nek-protocol";
 import type {
   NekBashResult,
-  NekHistoryPage,
   NekHistorySummaryPage,
   NekHistoryStreamOmission,
 } from "@zcode/shared/nek-protocol";
@@ -248,7 +247,7 @@ export class NekConversationProjector {
     return this.history.accepts(page);
   }
 
-  applyHistoryTarget(page: NekHistoryPage, entryId: string): void {
+  applyHistoryTarget(page: NekHistorySnapshotInput["page"], entryId: string): void {
     this.history.applyTarget(page, entryId, this.live);
     this.scheduleFlush();
   }
