@@ -54,6 +54,6 @@ export function getRemoteConnectionDirectoryFailureState(params: {
   // 目录步骤继续持有旧 sessionId 时只能拿到空 services，并永久显示“加载中”。
   return {
     connectedSessionId: null,
-    step: "settings",
+    step: "hosts",
   };
 }

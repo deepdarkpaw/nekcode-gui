@@ -29,6 +29,11 @@ export function getRemoteWizardStepCopy(
   kind: RemoteTarget["kind"],
 ) {
   switch (step) {
+    case "hosts":
+      return {
+        title: intl.formatMessage({ id: "remote.hostPicker.title" }),
+        description: intl.formatMessage({ id: "remote.hostPicker.description" }),
+      };
     case "kind":
       return {
         title: intl.formatMessage({ id: "remote.kindStepTitle" }),

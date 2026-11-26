@@ -6,6 +6,8 @@ export interface SSHConnectOptions {
   port?: number;
   username: string;
   sshConfigAlias?: string;
+  /** Reference to a desktop host profile; its secret is resolved only in main. */
+  savedHostId?: string;
   password?: string;
   privateKeyPath?: string;
   privateKeyPassphrase?: string;

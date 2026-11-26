@@ -166,6 +166,7 @@ export interface SSHRemoteTargetSnapshot {
   username: string;
   /** 用户建立连接时选择的 SSH config Host alias，仅用于 UI 展示。 */
   sshConfigAlias?: string;
+  savedHostId?: string;
   privateKeyPath?: string;
   resourcePackages?: RemoteResourcePackageSelection;
   /**

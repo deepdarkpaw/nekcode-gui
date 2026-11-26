@@ -28,6 +28,22 @@ import {
   shouldResetRemoteConnectionOnOpen,
 } from "@/lib/remoteConnectionDialogState.js";
 import { logger } from "@/logger.js";
+import {
+  RemoteHostPicker,
+  savedHostChoice,
+  type HostChoice,
+} from "@/remote-connection/RemoteHostPicker.js";
+import { useNekHostApi } from "@/settings/nek/api/NekSettingsContext.js";
+import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import {
+  createRemoteTargetFromSnapshot,
+  formatRemoteWorkspaceTargetSubtitle,
+  readRemoteWorkspaceCredentials,
+} from "@/lib/remoteWorkspaceHistory.js";
+
+type ConnectIntent =
+  | { source: "existing"; choice: HostChoice }
+  | { source: "new"; target: RemoteTarget };
 
 import {
   RemoteConnectionConnectingStep,
@@ -89,10 +105,19 @@ export function RemoteConnectionDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
-  const [currentStep, setCurrentStep] = useState<RemoteWizardStep>("kind");
+  const [currentStep, setCurrentStep] = useState<RemoteWizardStep>("hosts");
+  const hostApi = useNekHostApi();
+  const { credentialService } = useBaseWorkspaceServices();
+  const activeRequest = useRef<string | null>(null);
+  useEffect(
+    () => () => {
+      activeRequest.current = null;
+    },
+    [],
+  );
   const [connectedSessionId, setConnectedSessionId] = useState<string | null>(null);
   const [connectingRequestId, setConnectingRequestId] = useState<string | null>(null);
-  const [pendingRemoteTarget, setPendingRemoteTarget] = useState<RemoteTarget | null>(null);
+  const [intent, setIntent] = useState<ConnectIntent | null>(null);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
   const selectingDirectoryRef = useRef(false);
   const { connectionLogs, resetConnectionLogs } = useRemoteConnectionLogs(connectingRequestId);
@@ -136,7 +161,8 @@ export function RemoteConnectionDialog({
     currentRuntimeOptionsLoading,
     currentRuntimeOptionsError,
   } = useRemoteConnectionForm({
-    open,
+    open: open && (currentStep === "hosts" || currentStep === "kind" || currentStep === "settings"),
+    browsingHosts: currentStep === "hosts",
     isWindowsDesktop,
     preferredKind,
     preferredWslDistro,
@@ -199,6 +225,7 @@ export function RemoteConnectionDialog({
 
   const closeDialog = useCallback(
     (options?: { preserveSession?: boolean }) => {
+      activeRequest.current = null;
       const sessionId = connectedSessionId;
       if (!options?.preserveSession && sessionId) {
         void handleCancelSession(sessionId);
@@ -210,9 +237,9 @@ export function RemoteConnectionDialog({
       setLoading(false);
       resetDirectorySelectionState();
       resetConnectionLogs();
-      setCurrentStep("kind");
+      setCurrentStep("hosts");
       setConnectedSessionId(null);
-      setPendingRemoteTarget(null);
+      setIntent(null);
       updateConnectingRequestId(null);
       applyOpenState(false);
     },
@@ -253,6 +280,7 @@ export function RemoteConnectionDialog({
   }, [confirmDialog, connectedSessionId, currentStep, intl, loading]);
 
   const handleCloseRequest = useCallback(async () => {
+    if (selectingDirectoryRef.current) return;
     const confirmed = await confirmRemoteFlowDiscard();
     if (!confirmed) {
       return;
@@ -260,37 +288,59 @@ export function RemoteConnectionDialog({
     closeDialog();
   }, [closeDialog, confirmRemoteFlowDiscard]);
 
-  const startRemoteConnection = async (target: RemoteTarget) => {
-    const nextTarget = withDefaultRemoteResourcePackages(target);
-
-    if (loading) {
-      // React 还没来得及把按钮置 disabled 时，快速重复点击会启动多个 SSH host process。
-      // 这里在事件入口再做一次并发保护，避免同一个 dialog 产生多条部署流并把上传进度混在一起。
-      return;
-    }
-
-    setPendingRemoteTarget(nextTarget);
-    setLoading(true);
+  const startRemoteConnection = async (input: ConnectIntent) => {
+    if (activeRequest.current !== null) return;
     const requestId = createUuid();
+    activeRequest.current = requestId;
+    setIntent(input);
+    setLoading(true);
     updateConnectingRequestId(requestId);
     resetFeedback();
     resetConnectionLogs();
     setCurrentStep("connecting");
 
     try {
-      const sessionId = await onConnect(nextTarget, requestId);
+      let choice: HostChoice;
+      if (input.source === "new") {
+        const target = input.target;
+        const alias =
+          (target.kind === "ssh" && target.sshConfigAlias) ||
+          formatRemoteWorkspaceTargetSubtitle(target);
+        choice = savedHostChoice(await hostApi.saveHost({ alias, target }));
+        if (activeRequest.current !== requestId) return;
+        // Retries reuse the newly saved profile, not the password form or a second save.
+        setIntent({ source: "existing", choice });
+      } else {
+        choice = input.choice;
+      }
+      const target = choice.history
+        ? createRemoteTargetFromSnapshot(
+            choice.history,
+            await readRemoteWorkspaceCredentials(choice.history, credentialService.load),
+          )
+        : choice.target;
+      if (activeRequest.current !== requestId) return;
+      const sessionId = await onConnect(withDefaultRemoteResourcePackages(target), requestId);
+      if (activeRequest.current !== requestId) {
+        await handleCancelSession(sessionId);
+        return;
+      }
       const completionState = getRemoteConnectionCompletionDialogState("success");
       setConnectedSessionId(sessionId);
       setCurrentStep(completionState.step);
       applyOpenState(completionState.open);
     } catch (connectError) {
+      if (activeRequest.current !== requestId) return;
       const completionState = getRemoteConnectionCompletionDialogState("error");
       const errorMessage = getErrorMessage(connectError);
       setError(errorMessage);
       setCurrentStep(completionState.step);
       applyOpenState(completionState.open);
     } finally {
-      setLoading(false);
+      if (activeRequest.current === requestId) {
+        activeRequest.current = null;
+        setLoading(false);
+      }
     }
   };
 
@@ -323,19 +373,8 @@ export function RemoteConnectionDialog({
       return;
     }
 
-    resetFeedback();
-    setPendingRemoteTarget(nextTarget);
-    await startRemoteConnection(nextTarget);
+    await startRemoteConnection({ source: "new", target: nextTarget });
   };
-
-  const handleStartPendingRemoteConnection = useCallback(() => {
-    if (!pendingRemoteTarget) {
-      void handleConnect();
-      return;
-    }
-
-    void startRemoteConnection(pendingRemoteTarget);
-  }, [handleConnect, pendingRemoteTarget, startRemoteConnection]);
 
   const handleBackToConnection = useCallback(async () => {
     if (!connectedSessionId) {
@@ -348,7 +387,8 @@ export function RemoteConnectionDialog({
       setConnectedSessionId(null);
       updateConnectingRequestId(null);
       resetConnectionLogs();
-      setCurrentStep("settings");
+      setCurrentStep("hosts");
+      setIntent(null);
     } catch (sessionError) {
       setError(getErrorMessage(sessionError));
     }
@@ -368,9 +408,9 @@ export function RemoteConnectionDialog({
       try {
         await onSelectProject(connectedSessionId, path, localWorkspacePath);
         resetConnectionLogs();
-        setCurrentStep("kind");
+        setCurrentStep("hosts");
         setConnectedSessionId(null);
-        setPendingRemoteTarget(null);
+        setIntent(null);
         updateConnectingRequestId(null);
         applyOpenState(false);
       } catch (selectionError) {
@@ -405,8 +445,8 @@ export function RemoteConnectionDialog({
       if (shouldResetRemoteConnectionOnOpen(flowSnapshot)) {
         resetFeedback();
         resetConnectionLogs();
-        setCurrentStep("kind");
-        setPendingRemoteTarget(null);
+        setCurrentStep("hosts");
+        setIntent(null);
       }
       applyOpenState(true);
       return;
@@ -415,7 +455,9 @@ export function RemoteConnectionDialog({
     void handleCloseRequest();
   };
 
-  const stepCopy = getRemoteWizardStepCopy(intl, currentStep, kind);
+  const knownHost = intent?.source === "existing" ? intent.choice : undefined;
+  const stepCopy = getRemoteWizardStepCopy(intl, currentStep, knownHost?.target.kind ?? kind);
+  const configuring = currentStep === "settings" || currentStep === "kind";
 
   return (
     <>
@@ -428,8 +470,8 @@ export function RemoteConnectionDialog({
             if (shouldResetRemoteConnectionOnOpen(flowSnapshot)) {
               resetFeedback();
               resetConnectionLogs();
-              setCurrentStep("kind");
-              setPendingRemoteTarget(null);
+              setCurrentStep("hosts");
+              setIntent(null);
             }
             applyOpenState(true);
           }}
@@ -442,19 +484,27 @@ export function RemoteConnectionDialog({
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           showCloseButton={false}
-          className="h-[calc(100dvh-1rem)] max-h-168 w-[calc(100vw-1rem)] max-w-4xl overflow-hidden rounded-2xl p-0 md:h-[calc(100vh-6rem)]"
+          className={
+            currentStep === "hosts"
+              ? "h-[min(26rem,calc(100dvh-2rem))] w-full max-w-lg overflow-hidden rounded-2xl p-0"
+              : "h-[calc(100dvh-1rem)] max-h-168 w-[calc(100vw-1rem)] max-w-4xl overflow-hidden rounded-2xl p-0 md:h-[calc(100vh-6rem)]"
+          }
         >
           <div
             data-testid={TID_SSH_DIALOG}
             className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row"
           >
-            <RemoteConnectionWizardSidebar currentStep={currentStep} />
+            {configuring && <RemoteConnectionWizardSidebar currentStep={currentStep} />}
 
             <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 sm:gap-4 sm:p-6">
               <DialogHeader className="space-y-2">
                 <RemoteConnectionWizardHeader
                   title={stepCopy.title}
-                  description={stepCopy.description}
+                  description={
+                    knownHost
+                      ? `${knownHost.label} · ${stepCopy.description}`
+                      : stepCopy.description
+                  }
                   onMinimize={
                     flowActive
                       ? () => {
@@ -484,12 +534,29 @@ export function RemoteConnectionDialog({
               ) : null}
 
               <div className="w-full min-h-0 flex-1">
+                {currentStep === "hosts" && open && (
+                  <RemoteHostPicker
+                    history={remoteWorkspaceSessions}
+                    aliases={sshConfigAliases}
+                    aliasError={sshConfigAliasesError}
+                    loadingAliases={sshConfigAliasesLoading}
+                    windows={isWindowsDesktop}
+                    onChoose={(choice) =>
+                      void startRemoteConnection({ source: "existing", choice })
+                    }
+                    onNew={() => {
+                      resetFeedback();
+                      setIntent(null);
+                      setCurrentStep("kind");
+                    }}
+                  />
+                )}
                 {currentStep === "kind" ? (
                   <RemoteConnectionKindStep
                     kind={kind}
                     availableKinds={availableKinds}
                     onKindChange={setKind}
-                    onCancel={() => closeDialog()}
+                    onCancel={() => setCurrentStep("hosts")}
                     onNext={() => {
                       resetFeedback();
                       setCurrentStep("settings");
@@ -560,16 +627,18 @@ export function RemoteConnectionDialog({
                         }
 
                         if (loading) {
+                          activeRequest.current = null;
                           await cancelPendingRemoteConnection(connectingRequestId ?? undefined);
                           setLoading(false);
                         }
                         resetFeedback();
                         updateConnectingRequestId(null);
-                        setCurrentStep("settings");
+                        setCurrentStep(intent?.source === "new" ? "settings" : "hosts");
+                        setIntent(null);
                       })();
                     }}
                     onRetry={() => {
-                      handleStartPendingRemoteConnection();
+                      if (intent) void startRemoteConnection(intent);
                     }}
                   />
                 ) : null}

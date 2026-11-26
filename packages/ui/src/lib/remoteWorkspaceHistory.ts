@@ -185,6 +185,7 @@ function createRemoteTargetSnapshot(
         host: target.host,
         port: target.port,
         username: target.username,
+        ...(target.savedHostId ? { savedHostId: target.savedHostId } : {}),
         ...(target.sshConfigAlias?.trim() ? { sshConfigAlias: target.sshConfigAlias.trim() } : {}),
         privateKeyPath: target.privateKeyPath,
         passwordCredentialKey:
@@ -230,6 +231,7 @@ export function createRemoteTargetFromSnapshot(
         host: snapshot.host,
         port: snapshot.port,
         username: snapshot.username,
+        ...(snapshot.savedHostId ? { savedHostId: snapshot.savedHostId } : {}),
         ...(snapshot.sshConfigAlias ? { sshConfigAlias: snapshot.sshConfigAlias } : {}),
         ...(snapshot.privateKeyPath ? { privateKeyPath: snapshot.privateKeyPath } : {}),
         ...(credentials.password ? { password: credentials.password } : {}),
@@ -249,6 +251,21 @@ export function createRemoteTargetFromSnapshot(
         container: snapshot.container,
       };
   }
+}
+
+export async function readRemoteWorkspaceCredentials(
+  snapshot: RemoteTargetSnapshot,
+  load: (key: string) => Promise<string | null>,
+) {
+  const [password, privateKeyPassphrase] = await Promise.all([
+    snapshot.kind === "ssh" && snapshot.passwordCredentialKey
+      ? load(snapshot.passwordCredentialKey)
+      : null,
+    snapshot.kind === "ssh" && snapshot.privateKeyPassphraseCredentialKey
+      ? load(snapshot.privateKeyPassphraseCredentialKey)
+      : null,
+  ]);
+  return { password, privateKeyPassphrase };
 }
 
 function upsertRemoteWorkspaceSessionEntries(

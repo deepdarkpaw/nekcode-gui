@@ -132,3 +132,9 @@ export function buildSshRemoteHostKey(target: SshRemoteHostKeyTarget): string {
     normalizePrivateKeyPath(target.privateKeyPath),
   ]);
 }
+
+/** Aliases may route through different jump hosts. Do not change persisted fingerprint keys. */
+export function buildSshConnectionKey(target: SshRemoteHostKeyTarget): string {
+  const key = buildSshRemoteHostKey(target);
+  return target.sshConfigAlias ? JSON.stringify([key, target.sshConfigAlias]) : key;
+}

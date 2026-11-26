@@ -7,6 +7,7 @@ import {
   buildRemoteWorkspaceSessionMutation,
   buildRemoteWorkspaceIdentity,
   createRemoteTargetFromSnapshot,
+  readRemoteWorkspaceCredentials,
   resolveRemoteWorkspaceSessionIdentity,
 } from "@/lib/remoteWorkspaceHistory.js";
 import { logger } from "@/logger.js";
@@ -118,16 +119,9 @@ export async function reconnectRemoteWorkspaceHistoryEntry({
   let resolvedWorkspacePath = sessionEntry.workspacePath;
   let resolvedWorkspaceIdentity = fallbackWorkspaceIdentity;
   try {
-    const sshCredentials = options?.sshCredentialsOverride ?? {
-      password:
-        sessionEntry.target.kind === "ssh" && sessionEntry.target.passwordCredentialKey
-          ? await loadCredential(sessionEntry.target.passwordCredentialKey)
-          : null,
-      privateKeyPassphrase:
-        sessionEntry.target.kind === "ssh" && sessionEntry.target.privateKeyPassphraseCredentialKey
-          ? await loadCredential(sessionEntry.target.privateKeyPassphraseCredentialKey)
-          : null,
-    };
+    const sshCredentials =
+      options?.sshCredentialsOverride ??
+      (await readRemoteWorkspaceCredentials(sessionEntry.target, loadCredential));
     reconnectTarget = createRemoteTargetFromSnapshot(sessionEntry.target, sshCredentials);
     const sessionId = await connectRemoteWorkspaceTarget(reconnectTarget, options?.requestId, {
       workspacePath: sessionEntry.workspacePath,

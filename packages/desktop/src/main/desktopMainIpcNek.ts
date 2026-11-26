@@ -7,6 +7,9 @@ import {
 } from "@zcode/shared";
 import { createNekConfigHostBridge } from "./desktopMainIpcNekBridge.js";
 import { createNekIpcHostRouter } from "./desktopMainIpcNekRouter.js";
+import { SavedRemoteHostCredentials } from "./savedRemoteHostCredentials.js";
+import { desktopRemoteCredentialStore } from "./desktopCredentialBridge.js";
+import type { RemoteTarget } from "@zcode/shared";
 import { desktopRemoteInteraction } from "./desktopRemoteReconnect.js";
 
 interface IpcSuccess {
@@ -58,7 +61,7 @@ function eventChannel(scope: "config" | "settings-host" | "remote-interaction"):
 }
 
 /** Main-side registration for all settings, onboarding and remote interaction IPC. */
-export function registerNekIpcHandlers(options: IpcLogger): void {
+export function registerNekIpcHandlers(options: IpcLogger) {
   const remote = desktopRemoteInteraction;
   const bridgePromise = createNekConfigHostBridge(options);
   const routerPromise = bridgePromise.then((bridge) => createNekIpcHostRouter(bridge, remote));
@@ -87,4 +90,7 @@ export function registerNekIpcHandlers(options: IpcLogger): void {
       }
     });
   }
+  const credentials = new SavedRemoteHostCredentials(desktopRemoteCredentialStore);
+  return async (target: Extract<RemoteTarget, { kind: "ssh" }>) =>
+    credentials.workspaceTarget(target, await (await bridgePromise).hostApi.listHosts());
 }

@@ -121,7 +121,9 @@ export async function deployServer(
     signal,
   });
   try {
-    const { manifest } = await source.getSnapshot();
+    // A ready remote needs only the trusted manifest, never the local archive payloads.
+    const manifest = await source.getManifest();
+    if (options?.force) await source.getSnapshot();
     const assets = remoteInstallAssets(manifest);
     // 窗口内连接可合并，但多个窗口或桌面实例仍共享同一远端安装根。
     const lock = await acquireRemoteDeployLock(backend, {

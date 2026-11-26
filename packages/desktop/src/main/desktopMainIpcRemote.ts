@@ -50,6 +50,9 @@ export function registerRemoteIpcHandlers(options: {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
+  resolveSavedWorkspaceTarget: (
+    target: Extract<RemoteTarget, { kind: "ssh" }>,
+  ) => Promise<RemoteTarget>;
   createRemoteWorkspaceSession: (
     win: BrowserWindow,
     target: RemoteTarget,
@@ -180,7 +183,9 @@ export function registerRemoteIpcHandlers(options: {
 
       const sessionId = await options.createRemoteWorkspaceSession(
         win,
-        result.data,
+        result.data.kind === "ssh" && result.data.savedHostId
+          ? await options.resolveSavedWorkspaceTarget(result.data)
+          : result.data,
         requestId,
         workspacePath ? { workspacePath, workspaceIdentity } : undefined,
       );

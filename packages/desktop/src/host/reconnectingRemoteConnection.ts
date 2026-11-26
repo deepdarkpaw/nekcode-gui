@@ -1,4 +1,4 @@
-import { buildSshRemoteHostKey, type RemoteTarget } from "@zcode/shared";
+import { buildSshConnectionKey, type RemoteTarget } from "@zcode/shared";
 import type { RemoteConnectionStatusEvent } from "@zcode/shared/nek-protocol";
 import {
   RemoteReconnectStateMachine,
@@ -24,7 +24,7 @@ export async function createReconnectingRemoteConnection<TServices, TCapabilitie
   clock?: ReconnectClock;
 }): Promise<WindowRemoteConnectionHandle<TServices, TCapabilities>> {
   if (options.target.kind !== "ssh") return options.connect(options.signal);
-  const connectionId = buildSshRemoteHostKey(options.target);
+  const connectionId = buildSshConnectionKey(options.target);
   let current = await options.connect(options.signal);
   let available = true;
   let disposed = false;

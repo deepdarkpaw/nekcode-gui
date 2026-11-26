@@ -229,8 +229,9 @@ test("a damaged desktop bundle fails before any deployment command", options, as
     join(fixture.options.outputDirectory, fixture.manifest.components[0].artifactPath),
     "corrupt",
   );
+  assert.equal(await fixture.deploy(), false, "ready remote does not open unused desktop archives");
   await assert.rejects(fixture.deploy({ force: true }), /SHA256 mismatch/);
-  assert.equal(fixture.commands.length, commandCount);
+  assert.equal(fixture.commands.length, commandCount + 2);
   assert.deepEqual(await readFile(fixture.installed("zcode-server.cjs")), before);
 });
 

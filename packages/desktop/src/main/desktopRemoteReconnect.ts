@@ -1,5 +1,5 @@
 import {
-  buildSshRemoteHostKey,
+  buildSshConnectionKey,
   remoteDesktopMessageSchema,
   type RemoteTarget,
 } from "@zcode/shared";
@@ -26,7 +26,7 @@ export function createDesktopRemoteReconnect(options: {
   return {
     bind(sessionId: string, target: RemoteTarget, child: { postMessage(message: unknown): void }) {
       if (target.kind !== "ssh") return () => undefined;
-      const physicalId = buildSshRemoteHostKey(target);
+      const physicalId = buildSshConnectionKey(target);
       const detach = desktopRemoteInteraction.attachReconnectAdapter(sessionId, {
         retryNow: () =>
           child.postMessage({

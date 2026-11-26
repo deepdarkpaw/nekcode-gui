@@ -62,7 +62,7 @@ export function contentForPath(id, path) {
   if (id === "node-runtime" && path === "node")
     return `#!/bin/sh\nexec ${quotePosixShellArg(posixPath(process.execPath))} "$@"\n`;
   if (id === "server-bundle")
-    return `// skill-sync mcp-sync plugin-sync __zcode_rpc_nested_uint8array_v1 exportMarketplaceSourceArchive importMarketplaceSourceArchive\nrequire("fs").writeSync(1, ${JSON.stringify(version)});`;
+    return `// __zcode_rpc_nested_uint8array_v1\nrequire("fs").writeSync(1, ${JSON.stringify(version)});`;
   return "fixture";
 }
 

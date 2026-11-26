@@ -1,14 +1,8 @@
 import { REMOTE_NODE_PATH, REMOTE_SERVER_PATH } from "./remoteAssetDeployDecision.js";
 import { quotePosixPathArg, quotePosixShellArg } from "./posixShell.js";
 
-const REQUIRED_SERVER_BUNDLE_MARKERS = [
-  "skill-sync",
-  "mcp-sync",
-  "plugin-sync",
-  "__zcode_rpc_nested_uint8array_v1",
-  "exportMarketplaceSourceArchive",
-  "importMarketplaceSourceArchive",
-];
+// Check the live RPC wire format, not features removed from the shipped gui-server.
+const REQUIRED_SERVER_BUNDLE_MARKERS = ["__zcode_rpc_nested_uint8array_v1"];
 
 /** 在同一远端探测脚本中验证启动版本和能力标记，不在 JS host 读取远端 bundle。 */
 export function buildServerBundleDeployCheck(appVersion: string): string {

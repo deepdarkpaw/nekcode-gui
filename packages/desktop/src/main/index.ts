@@ -1442,8 +1442,10 @@ app.whenReady().then(async () => {
     setShortcutRecordingActive,
   });
 
+  const resolveSavedWorkspaceTarget = registerNekIpcHandlers(logger);
   registerRemoteIpcHandlers({
     logger,
+    resolveSavedWorkspaceTarget,
     createRemoteWorkspaceSession: remoteSessionManager.createRemoteWorkspaceSession,
     disposeRemoteWorkspaceSession: remoteSessionManager.disposeRemoteWorkspaceSession,
     cancelPendingRemoteWorkspaceSessionsForWindow:
@@ -1455,7 +1457,6 @@ app.whenReady().then(async () => {
     listAvailableDockerContainers,
     listSSHConfigAliases,
   });
-  registerNekIpcHandlers(logger);
   registerDesktopStabilityMonitors(logger);
   registerDesktopResourceTelemetry(logger);
   registerDesktopNetworkTelemetry();

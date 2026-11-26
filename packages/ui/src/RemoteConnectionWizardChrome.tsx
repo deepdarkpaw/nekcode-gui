@@ -4,7 +4,7 @@ import { DialogDescription, DialogTitle } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
-export type RemoteWizardStep = "kind" | "settings" | "connecting" | "directory";
+export type RemoteWizardStep = "hosts" | "kind" | "settings" | "connecting" | "directory";
 
 interface WizardStepMeta {
   key: RemoteWizardStep;

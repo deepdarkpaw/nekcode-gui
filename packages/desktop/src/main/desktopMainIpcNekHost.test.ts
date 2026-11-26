@@ -24,6 +24,7 @@ vi.mock("electron", () => ({
     },
   },
 }));
+import { SavedRemoteHostCredentials } from "./savedRemoteHostCredentials.js";
 import { NekRemoteConfigConnectionRegistry } from "./desktopMainIpcNekConfig.js";
 import { NekSettingsHostService, trustedHttpUrl } from "./desktopMainIpcNekHost.js";
 import {
@@ -112,6 +113,26 @@ test("saved SSH credentials use safeStorage and are restored only at connection 
 
     const hosts = await service.listHosts();
     assert.equal(hosts[0]?.authMethod, "password");
+    const credentials = new SavedRemoteHostCredentials(credentialStore);
+    const request = {
+      kind: "ssh",
+      host: "remote.test",
+      username: "alice",
+      savedHostId: hosts[0]!.connectionId,
+    } as const;
+    assert.deepEqual(await credentials.workspaceTarget(request, hosts), {
+      ...request,
+      password: "never-on-disk",
+    });
+    await assert.rejects(
+      credentials.workspaceTarget({ ...request, sshConfigAlias: "other" }, hosts),
+      /destination changed/,
+    );
+    await assert.rejects(
+      credentials.workspaceTarget({ ...request, host: "other.test" }, hosts),
+      /destination changed/,
+    );
+    await assert.rejects(credentials.workspaceTarget(request, []), /no longer exists/);
     await service.connectHost(hosts[0]!.connectionId);
     assert.deepEqual(connectedTarget, {
       kind: "ssh",

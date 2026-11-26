@@ -170,6 +170,7 @@ function collectSshReconnectGroup(params: {
   if (params.selected.target.kind !== "ssh") {
     return [params.selected];
   }
+  const { savedHostId: selectedHostId, sshConfigAlias: selectedAlias } = params.selected.target;
   const remoteHostKey = buildSshRemoteHostKey(params.selected.target);
   const disconnectedWorkspaceKeys = new Set(
     params.tabs.flatMap((tab) => {
@@ -182,6 +183,8 @@ function collectSshReconnectGroup(params: {
   const reconnectGroup = params.sessions.filter(
     (entry) =>
       entry.target.kind === "ssh" &&
+      entry.target.savedHostId === selectedHostId &&
+      entry.target.sshConfigAlias === selectedAlias &&
       buildSshRemoteHostKey(entry.target) === remoteHostKey &&
       disconnectedWorkspaceKeys.has(buildWorkspaceSessionKey(entry)),
   );

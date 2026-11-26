@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 所有 transport 生命周期共享同一个 registry 状态机，必须原子演进。 */
 import {
-  buildSshRemoteHostKey,
+  buildSshConnectionKey,
   stripRemoteTargetSecrets,
   type RemoteTarget,
   type WindowHostAttachmentScope,
@@ -113,7 +113,7 @@ function normalizeWslSegment(value: string | undefined): string {
 function buildConnectionKey(target: RemoteTarget, remoteSessionId: string): string {
   switch (target.kind) {
     case "ssh":
-      return `ssh:${buildSshRemoteHostKey(target)}`;
+      return `ssh:${buildSshConnectionKey(target)}`;
     case "wsl":
       return `wsl:${normalizeWslSegment(target.distro)}\0${normalizeWslSegment(target.user)}`;
     case "docker":

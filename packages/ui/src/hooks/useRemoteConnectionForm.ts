@@ -30,11 +30,13 @@ function buildAvailableKinds(options: { isWindowsDesktop: boolean }): RemoteKind
 
 export function useRemoteConnectionForm({
   open,
+  browsingHosts = false,
   isWindowsDesktop,
   preferredKind,
   preferredWslDistro,
 }: {
   open: boolean;
+  browsingHosts?: boolean;
   isWindowsDesktop: boolean;
   preferredKind?: RemoteKind;
   preferredWslDistro?: string;
@@ -166,7 +168,7 @@ export function useRemoteConnectionForm({
   );
 
   useEffect(() => {
-    if (!open || kind !== "ssh" || sshConfigAliasesLoaded) {
+    if (!open || (!browsingHosts && kind !== "ssh") || sshConfigAliasesLoaded) {
       return;
     }
 
@@ -201,7 +203,7 @@ export function useRemoteConnectionForm({
     return () => {
       cancelled = true;
     };
-  }, [kind, open, platform, sshConfigAliasesLoaded]);
+  }, [browsingHosts, kind, open, platform, sshConfigAliasesLoaded]);
 
   useEffect(() => {
     if (!selectedSshConfigAlias) {
@@ -216,7 +218,7 @@ export function useRemoteConnectionForm({
   }, [selectedSshConfigAlias, sshConfigAliases]);
 
   useEffect(() => {
-    if (!open || kind !== "wsl" || !isWindowsDesktop || wslOptionsLoaded) {
+    if (!open || browsingHosts || kind !== "wsl" || !isWindowsDesktop || wslOptionsLoaded) {
       return;
     }
 
@@ -251,15 +253,15 @@ export function useRemoteConnectionForm({
     return () => {
       cancelled = true;
     };
-  }, [isWindowsDesktop, kind, open, platform, wslOptionsLoaded]);
+  }, [browsingHosts, isWindowsDesktop, kind, open, platform, wslOptionsLoaded]);
 
   useEffect(() => {
-    if (!open || kind !== "docker" || dockerOptionsLoaded) {
+    if (!open || browsingHosts || kind !== "docker" || dockerOptionsLoaded) {
       return;
     }
 
     refreshDockerContainers({ clearContainersOnError: true });
-  }, [dockerOptionsLoaded, kind, open, refreshDockerContainers]);
+  }, [browsingHosts, dockerOptionsLoaded, kind, open, refreshDockerContainers]);
 
   const setHost = (value: string) => {
     if (!applyingSshAliasRef.current && selectedSshConfigAlias && value !== host) {

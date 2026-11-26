@@ -1,4 +1,4 @@
-import { buildSshRemoteHostKey, type RemoteTarget } from "@zcode/shared";
+import { buildSshConnectionKey, type RemoteTarget } from "@zcode/shared";
 import type { NekRemoteHost } from "@zcode/shared/nek-protocol";
 import type { RemoteCredentialSafeStorage } from "./remoteCredentialSafeStorage.js";
 
@@ -24,7 +24,7 @@ export class SavedRemoteHostCredentials {
   async save(connectionId: string, target: RemoteTarget, previous?: RemoteTarget): Promise<void> {
     if (target.kind !== "ssh") return this.delete(connectionId);
     const sameIdentity =
-      previous?.kind === "ssh" && buildSshRemoteHostKey(target) === buildSshRemoteHostKey(previous);
+      previous?.kind === "ssh" && buildSshConnectionKey(target) === buildSshConnectionKey(previous);
     const old = sameIdentity ? await this.store.getCredential(this.key(connectionId)) : undefined;
     // 留空编辑沿用已保存的密钥口令 / 密码；换认证方式时不带入另一种秘密。
     const kept =
@@ -63,6 +63,29 @@ export class SavedRemoteHostCredentials {
         ? { privateKeyPassphrase: stored.privateKeyPassphrase }
         : {}),
     };
+  }
+
+  /** Main-only: bind the secret to the authoritative profile, never to renderer-supplied routing. */
+  async workspaceTarget(
+    request: Extract<RemoteTarget, { kind: "ssh" }>,
+    hosts: NekRemoteHost[],
+  ): Promise<RemoteTarget> {
+    const host = hosts.find((item) => item.connectionId === request.savedHostId);
+    if (!host || host.target.kind !== "ssh") throw new Error("Saved SSH host no longer exists");
+    const target = host.target;
+    if (
+      target.host !== request.host ||
+      target.username !== request.username ||
+      (target.port ?? 22) !== (request.port ?? 22) ||
+      target.sshConfigAlias !== request.sshConfigAlias
+    ) {
+      throw new Error("Saved SSH destination changed; select the host again");
+    }
+    const restored = await this.restore(host.connectionId, target);
+    if (restored.kind !== "ssh" || (host.authMethod === "password" && !restored.password)) {
+      throw new Error("Saved SSH password is unavailable; edit the host in Settings");
+    }
+    return { ...restored, savedHostId: host.connectionId };
   }
 
   async delete(connectionId: string): Promise<void> {

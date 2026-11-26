@@ -32,9 +32,11 @@ async function containedFile(directory: string, path: string): Promise<string> {
 
 /** One deployment owns the manifest snapshot and its temporary, verified extraction. */
 export class BundledRemoteSource {
-  private manifestPromise:
-    | Promise<{ manifest: BundledRemoteManifest; archiveSizes: ReadonlyMap<string, number> }>
-    | undefined;
+  private manifestPromise?: Promise<BundledRemoteManifest>;
+  private snapshotPromise?: Promise<{
+    manifest: BundledRemoteManifest;
+    archiveSizes: ReadonlyMap<string, number>;
+  }>;
   private directoryPromise: Promise<string> | undefined;
   private disposed = false;
 
@@ -60,13 +62,13 @@ export class BundledRemoteSource {
   }
 
   async getManifest(): Promise<BundledRemoteManifest> {
-    return (await this.getSnapshot()).manifest;
+    this.assertActive();
+    return (this.manifestPromise ??= this.readManifest());
   }
 
   async getSnapshot() {
     this.assertActive();
-    this.manifestPromise ??= this.readManifest();
-    return this.manifestPromise;
+    return (this.snapshotPromise ??= this.verifyArchives());
   }
 
   private async verifyArchive(component: Component, chunks?: Buffer[]): Promise<number> {
@@ -99,8 +101,11 @@ export class BundledRemoteSource {
     for await (const chunk of stream) contents += chunk;
     if (Buffer.byteLength(contents, "utf8") > MAX_MANIFEST_BYTES)
       throw new Error("Bundled remote manifest too large");
-    const manifest = parseBundledRemoteManifest(JSON.parse(contents), this.options.appVersion);
-    // 即使远端已就绪也检查完整安装包；流式哈希同时取得下载的可信大小。
+    return parseBundledRemoteManifest(JSON.parse(contents), this.options.appVersion);
+  }
+
+  private async verifyArchives() {
+    const manifest = await this.getManifest();
     const archiveSizes = new Map<string, number>();
     for (const component of manifest.components) {
       archiveSizes.set(component.id, await this.verifyArchive(component));

@@ -76,6 +76,7 @@ export const sshConnectOptionsSchema = z.object({
   port: z.number().int().positive().max(65535).optional(),
   username: nonEmptyStringSchema,
   sshConfigAlias: nonEmptyStringSchema.optional(),
+  savedHostId: nonEmptyStringSchema.optional(),
   password: z.string().optional(),
   privateKeyPath: z.string().optional(),
   privateKeyPassphrase: z.string().optional(),

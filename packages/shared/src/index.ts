@@ -59,7 +59,7 @@ export type {
 } from "./remoteTarget.js";
 export type { RemoteWorkspaceConnectTrigger } from "./remoteTarget.js";
 export { stripRemoteTargetSecrets } from "./remoteTarget.js";
-export { buildSshRemoteHostKey } from "./remoteSshHostKey.js";
+export { buildSshConnectionKey, buildSshRemoteHostKey } from "./remoteSshHostKey.js";
 export { buildRemoteEnvironmentKey } from "./remoteEnvironmentKey.js";
 export type {
   ShortcutChannel,

@@ -110,7 +110,7 @@ export function RemoteConnectionKindStep({
           className="h-10 min-w-0 px-5"
           onClick={onCancel}
         >
-          {intl.formatMessage({ id: "common.cancel" })}
+          {intl.formatMessage({ id: "common.back" })}
         </Button>
         <Button type="button" size="lg" className="h-10 min-w-0 px-5" onClick={onNext}>
           {intl.formatMessage({ id: "common.next" })}

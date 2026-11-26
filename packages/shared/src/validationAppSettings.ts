@@ -72,6 +72,7 @@ const remoteWorkspaceTargetSchema = z.discriminatedUnion("kind", [
     port: z.number().int().positive().max(65535).optional(),
     username: nonEmptyStringSchema,
     sshConfigAlias: nonEmptyStringSchema.optional(),
+    savedHostId: nonEmptyStringSchema.optional(),
     privateKeyPath: z.string().optional(),
     resourcePackages: z
       .object({
