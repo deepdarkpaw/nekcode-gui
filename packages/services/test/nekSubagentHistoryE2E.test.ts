@@ -25,6 +25,7 @@ for (const background of [false, true])
       await mkdir(cwd);
       const calls: string[] = [];
       const failures: string[] = [];
+      const childGate = Promise.withResolvers<void>();
       const server = createServer(async (request, response) => {
         try {
           let body = "";
@@ -44,7 +45,8 @@ for (const background of [false, true])
             !lastUser.includes("CONTINUE_ONLY") &&
             !messages.some((m) => m.role === "tool");
           calls.push(child ? "child" : delegate ? "spawn" : "answer");
-          if (child) await new Promise((done) => setTimeout(done, 200));
+          if (child && !background) await childGate.promise;
+          else if (child) await new Promise((done) => setTimeout(done, 200));
           const delta = delegate
             ? {
                 role: "assistant",
@@ -166,6 +168,35 @@ for (const background of [false, true])
             sessionKey: key,
             message: "Delegate one fixture task.",
           });
+          if (!background) {
+            try {
+              await wait(
+                () =>
+                  calls.includes("child") &&
+                  events.some((e) => e.type === "extension_event" && e.name === "nek.subagent"),
+              );
+              const progress = events.find(
+                (e) => e.type === "extension_event" && e.name === "nek.subagent",
+              );
+              assert.ok(progress?.type === "extension_event");
+              const preview = await adapter.getSubagentConversation({
+                ...target,
+                sessionId: opened.sessionId,
+                id: (progress.payload as { id: string }).id,
+              });
+              assert.equal(preview.status, "running");
+              assert.ok(
+                preview.rows.some(
+                  (row) => row.kind === "userInput" && row.text.includes("CHILD_ONLY"),
+                ),
+              );
+              assert.ok(
+                !events.some((e) => e.type === "tool_execution_end" && e.toolName === "subagent"),
+              );
+            } finally {
+              childGate.resolve();
+            }
+          }
           await wait(
             () =>
               events.some((event) => event.type === "agent_settled") &&
@@ -246,6 +277,7 @@ for (const background of [false, true])
           subscription.dispose();
         }
       } finally {
+        childGate.resolve();
         await adapter?.dispose();
         if (previous === undefined) delete process.env.NEK_CODING_AGENT_DIR;
         else process.env.NEK_CODING_AGENT_DIR = previous;

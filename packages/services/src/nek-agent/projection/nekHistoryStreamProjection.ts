@@ -297,6 +297,7 @@ export class NekHistoryStreamProjection {
       else ctx.store.bindEntityAlias(alias, entity);
     }
     const entry = validateHistoryDisplay(target.entry);
+    if (entry.type === "message" && entry.message.role === "user") ctx.hasUserInput = true;
     if (entry.type === "message" && entry.message.role === "assistant") {
       const assistant = entry.message as NekAssistantMessage;
       settleFailedAssistantResponse(

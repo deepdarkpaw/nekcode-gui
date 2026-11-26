@@ -89,23 +89,27 @@ test("history reconstructs from prior entries, never from the final get_state mo
   ]);
   const snapshot = projectEntries({ sessionId: state.sessionId, entries, state });
   const markers = snapshot.rows.filter((row) => row.kind === "timelineMarker");
-  assert.equal(markers.length, 3);
-  assert.equal(markers[0]?.marker.type, "modelChange");
-  assert.ok(markers[0] && !("fromModel" in markers[0].marker));
-  assert.deepEqual(markers[1]?.marker, {
-    type: "modelChange",
-    fromProvider: "mock",
-    fromModel: "first",
-    toProvider: "mock",
-    toModel: "second",
-    toThought: "off",
-  });
+  assert.deepEqual(
+    markers,
+    [],
+    "draft selection facts update config without creating history rows",
+  );
   assert.equal(snapshot.config.model, "second");
   assert.equal(snapshot.config.thought, "high");
 });
 
 test("live entries and restored history retain the same actual changes", () => {
-  const initialEntries = chain([model("m1"), thought("t1", "off")]);
+  const initialEntries = chain([
+    model("m1"),
+    thought("t1", "off"),
+    {
+      type: "message",
+      id: "u1",
+      parentId: null,
+      timestamp: new Date(1).toISOString(),
+      message: { role: "user", content: "hello", timestamp: 1 },
+    },
+  ]);
   const projector = new NekConversationProjector({ sessionId: state.sessionId });
   try {
     projector.loadSnapshot({ entries: initialEntries });
@@ -114,12 +118,12 @@ test("live entries and restored history retain the same actual changes", () => {
       model("m2"),
       thought("t2", "off"),
       thought("t3", "high"),
-    ]).slice(2)) {
+    ]).slice(initialEntries.length)) {
       projector.handleEvent({ type: "entry_appended", entry });
     }
     const rows = projector.snapshot().rows.window.filter((row) => row.kind === "timelineMarker");
-    assert.equal(rows.length, 2);
-    assert.equal(rows[1]?.marker.type === "modelChange" && rows[1].marker.toThought, "high");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.marker.type === "modelChange" && rows[0].marker.toThought, "high");
   } finally {
     projector.dispose();
   }

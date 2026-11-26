@@ -211,7 +211,7 @@ export function projectHistory(input: {
     anchors.push(
       ...projected.rows.filter((row) => row.kind === "toolCall" || row.kind === "subagent"),
     );
-    if (!projected.rows.some((row) => row.kind === "turnHeader")) {
+    if (projected.rows.length > 0 && !projected.rows.some((row) => row.kind === "turnHeader")) {
       const row = buildTurnHeaderRow(
         {
           rowId: historyRowId(turn.header.position, 0),

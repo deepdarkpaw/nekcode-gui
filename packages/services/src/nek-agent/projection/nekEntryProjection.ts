@@ -70,13 +70,12 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
   const initialTurn = input.historyLayout?.turnId ?? "turn-0";
   let turn: TurnContext = { turnId: initialTurn, entityId: initialTurn, startedAt: 0 };
   let turnOpen = false;
+  // Each bounded history turn includes its user header; entries are processed in source order.
+  let hasUserInput = false;
   let lastActivityAt: number | undefined;
   let lastStopReason: string | undefined;
   let title = input.title ?? "";
   let mode = input.nekState?.mode ?? "agent";
-  let provider = input.state?.model?.provider ?? "";
-  let model = input.state?.model?.id ?? "";
-  let thought: string = input.state?.thinkingLevel ?? "";
   let selectionCursor = input.historyLayout?.selection ?? {};
 
   // 同一 entityId 可能被先后投影两次（例如 toolCall 内容块与对应的 toolResult）：
@@ -121,13 +120,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
       case "thinking_level_change": {
         const { next, marker } = projectSelectionEntry(selectionCursor, entry);
         selectionCursor = next;
-        if (entry.type === "model_change") {
-          provider = entry.provider;
-          model = entry.modelId;
-        } else {
-          thought = entry.thinkingLevel;
-        }
-        if (marker) {
+        if (hasUserInput && marker) {
           const rowId = allocator.resolve(`entry:${entry.id}`);
           push(
             buildTimelineMarkerRow(
@@ -180,6 +173,7 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
       case "message": {
         const message = entry.message;
         if (message.role === "user") {
+          hasUserInput = true;
           startTurn(message);
           const rowId = allocator.resolve(`entry:${entry.id}:user`);
           push(
@@ -415,7 +409,13 @@ export function projectEntries(input: NekSnapshotInput): NekProjectedSnapshot {
     nextRowId: allocator.nextId,
     title,
     config: {
-      ...buildConfigState(input.state, provider, model, thought, mode),
+      ...buildConfigState(
+        input.state,
+        selectionCursor.provider ?? input.state?.model?.provider ?? "",
+        selectionCursor.model ?? input.state?.model?.id ?? "",
+        selectionCursor.thought ?? input.state?.thinkingLevel ?? "",
+        mode,
+      ),
       nekReadyPlan: readyNekPlan(input.nekState),
     },
     usage,

@@ -31,6 +31,8 @@ export interface NekLiveTurn {
 export interface NekLiveContext {
   store: NekProjectionStore;
   now: () => number;
+  /** Branch-local boundary, independent of the current (possibly evicted) row window. */
+  hasUserInput: boolean;
   historyPages?: boolean;
   historyAnchors?: () => readonly ConversationRow[];
   turn?: NekLiveTurn;
@@ -66,6 +68,7 @@ export function createNekLiveContext(
   return {
     store,
     now,
+    hasUserInput: false,
     ...(header?.kind === "turnHeader" && header.entityId && header.state === "running"
       ? {
           turn: {

@@ -168,7 +168,7 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
     case "thinking_level_change": {
       const config = ctx.store.state.config;
       const { marker } = projectSelectionEntry(config, entry);
-      if (marker) {
+      if (ctx.hasUserInput && marker) {
         const entityId = `entry:${entry.id}`;
         const rowId = ctx.store.allocate(entityId);
         ctx.store.add(
@@ -242,6 +242,7 @@ export function applyAppendedEntry(ctx: NekLiveContext, entry: NekSessionEntry |
       return;
     }
     case "message": {
+      if (entry.message.role === "user") ctx.hasUserInput = true;
       if (entry.message.role === "assistant") {
         applyAssistantErrorMarker(ctx, entry.message);
       }

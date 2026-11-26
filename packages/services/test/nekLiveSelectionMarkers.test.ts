@@ -72,17 +72,46 @@ function setup(initial: NekSessionEntry[]) {
   return { projector, append, load };
 }
 
-test("LCM1: same-model rebinding on every round does not repeat the initial using marker", () => {
+test("draft switches stay out of live and reopened history; the last choice seeds the first real switch", () => {
+  const h = setup([]);
+  try {
+    h.append(model("m0", "first"));
+    h.append(thought("t0", "off"));
+    h.append(model("m1", "second"));
+    h.append(thought("t1", "high"));
+    assert.deepEqual(markers(h.projector), []);
+    assert.equal(h.projector.snapshot().config.thought, "high");
+    h.append(user("u0"));
+    h.append(model("m2", "third"));
+    const expected = [
+      {
+        type: "modelChange",
+        fromProvider: "mock",
+        fromModel: "second",
+        toProvider: "mock",
+        toModel: "third",
+        toThought: "high",
+      },
+    ];
+    assert.deepEqual(markers(h.projector), expected);
+    h.load();
+    assert.deepEqual(markers(h.projector), expected);
+  } finally {
+    h.projector.dispose();
+  }
+});
+
+test("LCM1: same-model rebinding on every round does not repeat a draft marker", () => {
   const h = setup([model("m0", "first"), thought("t0", "off"), user("u0")]);
   try {
-    assert.equal(markers(h.projector).length, 1);
+    assert.equal(markers(h.projector).length, 0);
     for (let turn = 1; turn <= 5; turn++) {
       h.append(model(`m${turn}`, "first"));
       h.append(user(`u${turn}`));
     }
-    assert.equal(markers(h.projector).length, 1);
+    assert.equal(markers(h.projector).length, 0);
     h.load();
-    assert.equal(markers(h.projector).length, 1, "reopening must show the same history");
+    assert.equal(markers(h.projector).length, 0, "reopening must show the same history");
   } finally {
     h.projector.dispose();
   }
@@ -121,7 +150,7 @@ test("LCM2/LCM3: ordered target selection preserves A -> B -> A and real thinkin
     h.append(thought("t3", "high"));
     h.append(model("m3", "first"));
     const changes = markers(h.projector);
-    assert.deepEqual(changes.slice(1), [
+    assert.deepEqual(changes, [
       {
         type: "modelChange",
         fromProvider: "mock",

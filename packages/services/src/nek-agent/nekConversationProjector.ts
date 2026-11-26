@@ -197,7 +197,7 @@ export class NekConversationProjector {
         this.store.state.control.projectTrusted,
       ),
     });
-    this.live = this.history.createLiveContext(this.store, this.now);
+    this.live = this.history.createLiveContext(this.store, this.now, projected.rows);
     // 快照本身就包含全部行，所以不再额外发增量帧。
     this.emitSnapshotToAll();
   }

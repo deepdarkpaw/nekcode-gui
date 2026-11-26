@@ -47,6 +47,7 @@ export function applyMessageStart(ctx: NekLiveContext, message: NekAgentMessage 
     return;
   }
   if (message.role === "user") {
+    ctx.hasUserInput = true;
     const timestamp = toEpochMs(message.timestamp);
     // nek emits this only after consuming the input (and interrupting await). Match replay's
     // user boundary: later assistant/tool work must not continue the old wait's visual turn.

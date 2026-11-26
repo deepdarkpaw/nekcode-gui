@@ -64,9 +64,17 @@ export class NekProjectorHistory {
     ];
   }
 
-  createLiveContext(store: NekProjectionStore, now: () => number): NekLiveContext {
+  createLiveContext(
+    store: NekProjectionStore,
+    now: () => number,
+    branchRows?: readonly ConversationRow[],
+  ): NekLiveContext {
     const live = createNekLiveContext(store, now);
     live.historyPages = this.metadata !== undefined;
+    live.hasUserInput =
+      branchRows?.some((row) => row.kind === "userInput") ??
+      this.metadata?.turns.some((turn) => turn.userEntryId !== null) ??
+      false;
     live.historyAnchors = () => this.historyAnchors(store);
     return live;
   }
@@ -319,6 +327,7 @@ export class NekProjectorHistory {
     );
     for (const [alias, entity] of this.source.aliases) ctx.store.bindEntityAlias(alias, entity);
     if (event.entry.message.role === "user") {
+      ctx.hasUserInput = true;
       this.metadata = {
         ...this.metadata,
         totalTurns: this.metadata.totalTurns + 1,
