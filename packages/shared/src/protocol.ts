@@ -271,6 +271,8 @@ export interface ResourceUsageSnapshot {
 }
 
 export interface AppSettings {
+  /** GUI Git action preference on this machine. The model catalog still belongs to nek. */
+  gitCommitMessageModel?: { providerId: string; modelId: string } | null;
   recentProjects: string[]; // 最近项目列表，最多保留 10 个
   locale: Locale; // 界面语言
   /**

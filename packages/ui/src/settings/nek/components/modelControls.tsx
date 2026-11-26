@@ -32,7 +32,7 @@ export function ModelSelect({
 }: {
   id?: string;
   value: string | undefined;
-  models: readonly NekCatalogModel[];
+  models: readonly Pick<NekCatalogModel, "provider" | "id" | "name">[];
   onChange: (value: string | undefined) => void;
   unsetLabel?: string;
   disabled?: boolean;

@@ -164,7 +164,7 @@ export class GitCommitMessageGenerator {
         throw error;
       }
       throw new GitCommitMessageGenerationError(
-        "模型请求失败。",
+        `模型请求失败：${error instanceof Error ? error.message : String(error)}`,
         "request-failed",
         error instanceof Error ? error.message : String(error),
       );

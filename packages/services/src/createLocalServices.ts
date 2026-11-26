@@ -32,6 +32,10 @@ import { createFileService } from "./file/fileService.js";
 import { createMediaPreviewService } from "./media-preview/mediaPreview.js";
 import type { WorkspaceFileSearchFilter } from "./file/workspaceFileMentionFilter.js";
 import { createGitService } from "./git/gitService.js";
+import {
+  createNekCommitMessageRuntime,
+  selectGitMessageModel,
+} from "./git/nekCommitMessageRuntime.js";
 import { GitCommitMessageGenerator } from "./git/gitCommitMessageGenerator.js";
 import { createGitCheckpointService } from "./git/gitCheckpointService.js";
 import { createSystemService } from "./system/systemService.js";
@@ -141,27 +145,15 @@ export function createLocalServices(options: CreateLocalServicesOptions): Servic
   const gitCommitMessageGenerator = new GitCommitMessageGenerator({
     currentModelProvider: {
       async readCurrentModel(params) {
-        return (
-          (
-            await modelSelectionService.getView({
-              selection: null,
-              workspacePath: params.workspacePath,
-            })
-          ).preferredSelection ?? null
-        );
-      },
-    },
-    textGenerator: {
-      async generateText(params) {
-        return await zcodeAgentService.generateWorkspaceText({
+        const override = (await settingService.get()).gitCommitMessageModel ?? null;
+        const view = await modelSelectionService.getView({
+          selection: override,
           workspacePath: params.workspacePath,
-          ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
-          selection: params.selection,
-          prompt: params.prompt,
-          querySource: params.querySource,
         });
+        return selectGitMessageModel(view, override);
       },
     },
+    textGenerator: createNekCommitMessageRuntime(options.guiRuntimeConfig),
     logger: createServiceLogger("git-commit-message"),
   });
   const fileService = createFileService({
@@ -186,7 +178,13 @@ export function createLocalServices(options: CreateLocalServicesOptions): Servic
         createLocalMediaPreviewUrl: buildLocalMediaPreviewUrl,
       }),
     )
-    .register(IGitService, createGitService({ commitMessageGenerator: gitCommitMessageGenerator }))
+    .register(
+      IGitService,
+      createGitService({
+        settings: settingService,
+        commitMessageGenerator: gitCommitMessageGenerator,
+      }),
+    )
     .register(IGitCheckpointService, createGitCheckpointService())
     .register(ISystemService, createSystemService())
     .register(ITerminalService, createTerminalService({ settingService }))

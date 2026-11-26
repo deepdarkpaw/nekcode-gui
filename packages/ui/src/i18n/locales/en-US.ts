@@ -702,8 +702,10 @@ const enUS: Record<string, string> = {
   "git.actionMenu.commitDialog.error.noChanges": "There are no changes available to commit.",
   "git.actionMenu.commitDialog.error.messageRequired":
     "Enter or generate a commit message before committing.",
+  "git.commitModel.label": "Commit message model",
+  "git.commitModel.default": "Use workspace default",
   "git.actionMenu.commitDialog.error.generateFailed":
-    "Commit message generation failed. Try again or enter one manually.",
+    "Could not generate a commit message: {error}. Retry or enter a message manually.",
   "git.actionMenu.commitDialog.error.requestFailed": "Commit failed: {error}",
   "git.actionMenu.commitDialog.error.pushAfterCommitFailed": "Committed, but push failed: {error}",
   "git.actionMenu.commitDialog.toast.success": "Committed the current changes",

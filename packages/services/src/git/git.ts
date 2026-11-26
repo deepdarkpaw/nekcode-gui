@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   GitBranchMutationResult,
   GitBranchComparison,
   GitCommitGraphRequest,
@@ -43,6 +44,10 @@ export interface IGitService {
   stagePaths(params: GitPathMutationRequest): Promise<void>;
   unstagePaths(params: GitPathMutationRequest): Promise<void>;
   discardPaths(params: GitDiscardPathsRequest): Promise<void>;
+  getCommitMessageModel(): Promise<NonNullable<AppSettings["gitCommitMessageModel"]> | null>;
+  setCommitMessageModel(
+    selection: NonNullable<AppSettings["gitCommitMessageModel"]> | null,
+  ): Promise<void>;
   generateCommitMessage(
     params: GitGenerateCommitMessageRequest,
   ): Promise<GitGenerateCommitMessageResult>;

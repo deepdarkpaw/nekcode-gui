@@ -641,7 +641,10 @@ const zhCN: Record<string, string> = {
     "当前没有可用的 Git 提交身份，请先配置 user.name 和 user.email。",
   "git.actionMenu.commitDialog.error.noChanges": "当前没有可提交的更改。",
   "git.actionMenu.commitDialog.error.messageRequired": "请先输入或生成提交消息。",
-  "git.actionMenu.commitDialog.error.generateFailed": "生成提交消息失败，请重试或手动填写。",
+  "git.commitModel.label": "提交消息模型",
+  "git.commitModel.default": "跟随工作区默认模型",
+  "git.actionMenu.commitDialog.error.generateFailed":
+    "生成提交消息失败：{error}。可以重试或手动填写。",
   "git.actionMenu.commitDialog.error.requestFailed": "提交失败：{error}",
   "git.actionMenu.commitDialog.error.pushAfterCommitFailed": "已提交，但推送失败：{error}",
   "git.actionMenu.commitDialog.toast.success": "已提交当前更改",

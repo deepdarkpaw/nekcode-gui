@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import type { GitBranchComparison, GitFileChange, GitChangeSectionId } from "@zcode/shared";
 import { isPathInWorkspaceScope, normalizeGitPath, toWorkspaceRelativeGitPath } from "./config.js";
 import { filterCommitMessageFilesByCurrentSession } from "./commitMessageFileScope.js";
+import type { ISettingService } from "../setting/setting.js";
 import type { IGitService } from "./git.js";
 import type { GitCommitMessageGenerator } from "./gitCommitMessageGenerator.js";
 import {
@@ -169,6 +170,7 @@ function getCommitMessageDiffQueries(
 
 export function createGitService(options?: {
   repo?: GitCliRepo;
+  settings?: Pick<ISettingService, "get" | "update">;
   commitMessageGenerator?: GitCommitMessageGenerator;
 }): IGitService {
   const repo = options?.repo ?? createGitCliRepo();
@@ -251,6 +253,14 @@ export function createGitService(options?: {
       await repo.discard(params.workspacePath, params.paths, params.staged ?? false);
     },
 
+    async getCommitMessageModel() {
+      if (!options?.settings) throw new Error("Git preferences unavailable");
+      return (await options.settings.get()).gitCommitMessageModel ?? null;
+    },
+    async setCommitMessageModel(selection) {
+      if (!options?.settings) throw new Error("Git preferences unavailable");
+      await options.settings.update({ gitCommitMessageModel: selection });
+    },
     async generateCommitMessage(params) {
       if (!options?.commitMessageGenerator) {
         throw new Error("Commit message generation is not available.");

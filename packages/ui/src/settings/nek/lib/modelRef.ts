@@ -45,10 +45,10 @@ export function supportedThinkingLevels(model: NekCatalogModel | undefined): Nek
 }
 
 /** 按服务商分组（保持首次出现顺序）。 */
-export function groupModelsByProvider(
-  models: readonly NekCatalogModel[],
-): Array<{ provider: string; models: NekCatalogModel[] }> {
-  const groups = new Map<string, NekCatalogModel[]>();
+export function groupModelsByProvider<T extends { provider: string }>(
+  models: readonly T[],
+): Array<{ provider: string; models: T[] }> {
+  const groups = new Map<string, T[]>();
   for (const model of models) {
     const list = groups.get(model.provider) ?? [];
     list.push(model);

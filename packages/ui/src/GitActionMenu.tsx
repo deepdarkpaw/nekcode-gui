@@ -34,6 +34,7 @@ import {
   getGitBranchCommitTotals,
   resolveGitBranchTriggerLabel,
 } from "@/git-branch-switcher/display.js";
+import { GitCommitModelField } from "@/GitCommitModelField.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
 import { hasGitCommitIdentity } from "@/git-branch-switcher/switchAssist.js";
 import {
@@ -213,7 +214,8 @@ function GitCommitDialog({
   const numberFormatter = new Intl.NumberFormat(locale);
   const hasIdentity = hasGitCommitIdentity(state?.identity ?? null);
   const messageReady = message.trim().length > 0;
-  const actionPending = mutationPending || generationPending;
+  const [savingModel, setSavingModel] = useState(false);
+  const actionPending = mutationPending || generationPending || savingModel;
   const selectedFiles = state ? getCommitDialogFiles(state, includeUnstaged) : [];
   const stagePaths = state ? getCommitDialogStagePaths(state, includeUnstaged) : [];
   const dirtyFileCount = state ? getCommitDialogStagePaths(state, true).length : 0;
@@ -479,6 +481,12 @@ function GitCommitDialog({
               </div>
             </div>
 
+            <GitCommitModelField
+              key={workspacePath}
+              workspacePath={workspacePath}
+              disabled={actionPending}
+              onSaving={setSavingModel}
+            />
             <div className="px-2.5 pb-2">
               <button
                 type="button"
@@ -1060,9 +1068,12 @@ export function GitActionMenu({
         error: message,
       });
       setCommitError(
-        intl.formatMessage({
-          id: "git.actionMenu.commitDialog.error.generateFailed",
-        }),
+        intl.formatMessage(
+          {
+            id: "git.actionMenu.commitDialog.error.generateFailed",
+          },
+          { error: message },
+        ),
       );
     } finally {
       setCommitMessageGenerationPending(false);
@@ -1146,9 +1157,12 @@ export function GitActionMenu({
             error: message,
           });
           setCommitError(
-            intl.formatMessage({
-              id: "git.actionMenu.commitDialog.error.generateFailed",
-            }),
+            intl.formatMessage(
+              {
+                id: "git.actionMenu.commitDialog.error.generateFailed",
+              },
+              { error: message },
+            ),
           );
           return;
         } finally {
