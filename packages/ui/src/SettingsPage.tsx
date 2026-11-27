@@ -13,7 +13,9 @@ import type {
   IntegratedTerminalShellOption,
   IntegratedTerminalShellSelection,
   Locale,
+  RemoteWorkspaceSessionEntry,
 } from "@zcode/shared";
+import type { NekConfigTarget } from "@zcode/shared/nek-protocol";
 import {
   TID_SETTINGS_BACK_BUTTON,
   TID_SETTINGS_PAGE,
@@ -112,6 +114,8 @@ export function SettingsPage({
   isMacDesktop,
   windowsWindowControlsRightPaddingPx: _windowsWindowControlsRightPaddingPx,
   captionWorkspacePath,
+  remoteWorkspaceSessions,
+  onOpenRemoteProject,
   onBack,
 }: {
   isDesktop?: boolean;
@@ -119,6 +123,8 @@ export function SettingsPage({
   isMacDesktop?: boolean;
   windowsWindowControlsRightPaddingPx?: number;
   captionWorkspacePath?: string | null;
+  remoteWorkspaceSessions?: RemoteWorkspaceSessionEntry[];
+  onOpenRemoteProject?: (workspaceKey: string) => Promise<void>;
   onBack?: () => void;
   onCreateTask?: (request?: CreateTaskRequest) => void;
   onOpenWorkspace?: () => void;
@@ -176,17 +182,17 @@ export function SettingsPage({
   );
   const workspaceConfig = useSettingsWorkspaceBinding(projectCwd, activeWorkspaceTab);
   // 模型范围读写只把活动工作区的项目路径交给同一台机器上的 nek（见 useModelScopeCwd）。
-  const activeRemoteTab = activeWorkspaceIdentity
-    ? workspaceTabs.find((tab) => tab.workspaceIdentity === activeWorkspaceIdentity)
-    : workspaceTabs.find(
-        (tab) => tab.workspacePath === projectCwd && (tab.remoteSessionId || tab.remoteTarget),
-      );
-  const activeRemoteTarget = activeRemoteTab?.remoteTarget;
+  const activeRemoteTarget = activeWorkspaceTab?.remoteTarget;
   const projectEnvironmentKey = activeRemoteTarget
     ? buildRemoteEnvironmentKey(activeRemoteTarget)
-    : activeWorkspaceIdentity || activeRemoteTab
+    : activeWorkspaceIdentity || activeWorkspaceTab?.remoteSessionId
       ? null
       : undefined;
+  const projectKey = activeWorkspaceIdentity ?? projectCwd ?? "";
+  const [targetOverride, setTargetOverride] = useState<{
+    projectKey: string;
+    target: NekConfigTarget;
+  }>();
   const selectDirectory = useSelectDirectory();
   const services = useServices();
   const localHostServices = useBaseWorkspaceServices();
@@ -734,11 +740,26 @@ export function SettingsPage({
                       <div className="space-y-8">
                         {isNekSettingsSectionId(activeSection) ? (
                           <NekSettingsSection
-                            key={`${activeSection}:${settingsSectionNavigationVersion}`}
+                            key={JSON.stringify([
+                              activeSection,
+                              settingsSectionNavigationVersion,
+                              projectKey,
+                            ])}
                             sectionId={activeSection}
                             projectCwd={projectCwd}
                             projectEnvironmentKey={projectEnvironmentKey}
+                            projectRemoteTarget={activeRemoteTarget}
                             workspace={workspaceConfig}
+                            selectedTarget={
+                              targetOverride?.projectKey === projectKey
+                                ? targetOverride.target
+                                : undefined
+                            }
+                            onSelectTarget={(target) =>
+                              setTargetOverride(target ? { projectKey, target } : undefined)
+                            }
+                            remoteWorkspaceSessions={remoteWorkspaceSessions}
+                            onOpenRemoteProject={onOpenRemoteProject}
                             isWindowsDesktop={Boolean(isWindowsDesktop)}
                           />
                         ) : activeSection === "general" ? (

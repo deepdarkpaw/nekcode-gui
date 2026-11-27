@@ -3764,6 +3764,38 @@ const enUS: Record<string, string> = {
   "settings.nek.advanced.reloadRun": "Reload",
   "settings.nek.advanced.reloadResult":
     "Reloaded {reloaded} tasks; {deferred} will reload after the current turn",
+  "settings.nek.hostProjects.currentHost": "Current project's host",
+  "settings.nek.hostProjects.unknownHost": "Current remote host",
+  "settings.nek.hostProjects.unsavedTitle": "The current project's host is not saved",
+  "settings.nek.hostProjects.unsavedDescription":
+    "Save this host to manage its nek configuration and copy settings from this computer.",
+  "settings.nek.hostProjects.saveHost": "Add as host",
+  "settings.nek.hostProjects.projects": "Projects on this host",
+  "settings.nek.hostProjects.noProjects": "No projects have been opened on this host.",
+  "settings.nek.hostProjects.workspaceConnections": "Workspace connections: {count}",
+  "settings.nek.hostProjects.settingsConnection": "Settings connection: {state}",
+  "settings.nek.hostProjects.connectSettings": "Connect for settings",
+  "settings.nek.hostProjects.disconnectSettings": "Disconnect settings",
+  "settings.nek.hostProjects.reloadHost": "Reload running tasks",
+  "settings.nek.hostProjects.reloadConfig": "Reload nek configuration",
+  "settings.nek.hostProjects.hostSettings": "Host settings…",
+  "settings.nek.hostProjects.copyFromLocal": "Copy configuration from local…",
+  "settings.nek.hostProjects.reloadDisconnected":
+    "This project is disconnected. Reconnect before reloading configuration.",
+  "settings.nek.hostProjects.reloadFailed": "{host}: {failed} processes failed to reload: {reason}",
+  "settings.nek.hostProjects.reloadAnnounced":
+    "{host}: Reload requested. Task results will be reported separately.",
+  "settings.nek.hostProjects.reloadCounts":
+    "{host}: {reloaded} tasks reloaded, {deferred} will apply the changes after their current turn.",
+  "settings.nek.hostProjects.reloadNone": "{host}: No tasks to reload on this connection.",
+  "settings.nek.hostProjects.sshAliases": "SSH aliases available to add",
+  "settings.nek.hostProjects.sshAliasesDescription":
+    "From ~/.ssh/config. Adding an alias does not connect to the host.",
+  "settings.nek.hostProjects.completeAlias": "Complete and add",
+  "settings.nek.hostProjects.unresolved":
+    "This project does not match a single saved host, or its saved destination has changed. Check the address before selecting a host.",
+  "settings.nek.hostProjects.preparingCopy":
+    "Connecting to the host to prepare the configuration copy…",
   "settings.nek.reload.failed": "{count} nek processes could not reload: {reason}",
   "settings.nek.reload.retry": "Retry",
   "settings.nek.reload.recovered": "All nek processes reloaded",

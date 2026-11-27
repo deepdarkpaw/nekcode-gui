@@ -4,7 +4,9 @@ import {
   nekIpcRequestSchema,
   type NekIpcError,
   type NekIpcRequest,
+  withSavedRemoteHostId,
 } from "@zcode/shared";
+import type { NekRemoteHost } from "@zcode/shared/nek-protocol";
 import { createNekConfigHostBridge } from "./desktopMainIpcNekBridge.js";
 import { createNekIpcHostRouter } from "./desktopMainIpcNekRouter.js";
 import { SavedRemoteHostCredentials } from "./savedRemoteHostCredentials.js";
@@ -61,7 +63,10 @@ function eventChannel(scope: "config" | "settings-host" | "remote-interaction"):
 }
 
 /** Main-side registration for all settings, onboarding and remote interaction IPC. */
-export function registerNekIpcHandlers(options: IpcLogger) {
+export function registerNekIpcHandlers(
+  options: IpcLogger,
+  addWorkspaceStatus: (hosts: NekRemoteHost[]) => NekRemoteHost[],
+) {
   const remote = desktopRemoteInteraction;
   const bridgePromise = createNekConfigHostBridge(options);
   const routerPromise = bridgePromise.then((bridge) => createNekIpcHostRouter(bridge, remote));
@@ -79,6 +84,16 @@ export function registerNekIpcHandlers(options: IpcLogger) {
       const sender = BrowserWindow.fromWebContents(event.sender)?.webContents ?? event.sender;
       try {
         const request = parseRequest(rawRequest);
+        if (
+          scope === "settings-host" &&
+          request.operation === "invoke" &&
+          request.method === "listHosts"
+        ) {
+          return {
+            ok: true,
+            value: addWorkspaceStatus(await (await bridgePromise).hostApi.listHosts()),
+          };
+        }
         const router = await routerPromise;
         const value = await router.dispatch(scope, request, (payload) => {
           if (!sender.isDestroyed()) sender.send(eventChannel(scope), payload);
@@ -91,6 +106,12 @@ export function registerNekIpcHandlers(options: IpcLogger) {
     });
   }
   const credentials = new SavedRemoteHostCredentials(desktopRemoteCredentialStore);
-  return async (target: Extract<RemoteTarget, { kind: "ssh" }>) =>
-    credentials.workspaceTarget(target, await (await bridgePromise).hostApi.listHosts());
+  return async (target: Extract<RemoteTarget, { kind: "ssh" }>) => {
+    const hosts = await (await bridgePromise).hostApi.listHosts();
+    // Existing profile choices use their encrypted credentials. Legacy connections keep the
+    // route and credentials that the caller used, even when they acquire a saved host identity.
+    return target.savedHostId
+      ? credentials.workspaceTarget(target, hosts)
+      : withSavedRemoteHostId(target, hosts);
+  };
 }

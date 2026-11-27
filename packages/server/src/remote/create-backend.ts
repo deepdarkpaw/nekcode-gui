@@ -20,12 +20,21 @@ export async function createRemoteBackend(
 ): Promise<IRemoteBackend> {
   switch (target.kind) {
     case "ssh": {
-      const { SSHBackend } = await import("./ssh-backend.js");
       const config = await computeSshConfigHostFromFile(target.sshConfigAlias ?? target.host, {
         filePath: options.sshConfigPath,
         username: target.username || undefined,
         port: target.port,
       });
+      // Never let a changed ssh_config silently retarget a saved workspace or settings connection.
+      if (
+        target.savedHostId &&
+        (config.hostName.toLowerCase() !== target.host.trim().toLowerCase() ||
+          config.port !== (target.port ?? 22))
+      ) {
+        throw new Error(
+          "Saved SSH destination changed in SSH config; verify the host and add it again",
+        );
+      }
       const privateKeyPath = target.privateKeyPath ?? config.identityFiles[0];
       let privateKey: string | Buffer | undefined;
       if (privateKeyPath) {
@@ -40,6 +49,7 @@ export async function createRemoteBackend(
         askPassphrase: options.askPassphrase,
       });
 
+      const { SSHBackend } = await import("./ssh-backend.js");
       return new SSHBackend({
         host: config.hostName,
         port: config.port,

@@ -32,7 +32,7 @@ export function NekPageFrame({
   children: ReactNode;
 }) {
   const { intl } = useZCodeIntl();
-  const { isMock, targetInfo, fixedTarget } = useNekSettingsContext();
+  const { isMock, targetInfo, fixedTarget, projectTarget } = useNekSettingsContext();
   return (
     <div data-slot="nek-settings-page" className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -58,7 +58,7 @@ export function NekPageFrame({
             </span>
           ) : null}
           {actions}
-          {usesTarget && !fixedTarget ? <TargetSwitcher /> : null}
+          {usesTarget && (!fixedTarget || projectTarget) ? <TargetSwitcher /> : null}
         </div>
       </div>
       <DocumentBanners documents={documents} />

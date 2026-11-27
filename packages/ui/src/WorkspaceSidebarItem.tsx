@@ -56,6 +56,7 @@ import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSe
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import { ReconnectingRemoteWorkspaceLogTooltip } from "@/WorkspaceSidebar/ReconnectingRemoteWorkspaceLogTooltip.js";
+import { WorkspaceHostMenuItems } from "@/WorkspaceSidebar/WorkspaceHostMenuItems.js";
 import { cn } from "@/components/lib/utils.js";
 import {
   TID_WORKSPACE_CLOSE,
@@ -241,6 +242,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
+  const workspaceReloadBusy = useRef(false);
   const [isHoverNone] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -892,6 +894,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                           </DropdownMenuTrigger>
                         </ControlHintTooltip>
                         <DropdownMenuContent align="end" onClick={handleActionMenuClick}>
+                          <WorkspaceHostMenuItems tab={tab} busy={workspaceReloadBusy} />
                           <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
                             onMouseDown={(event) => {

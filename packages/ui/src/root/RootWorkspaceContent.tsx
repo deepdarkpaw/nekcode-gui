@@ -6,7 +6,7 @@ import { ServiceProvider } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 import { WorkspaceSettingsLayer } from "@/root/WorkspaceSettingsLayer.js";
 import type { AppProps } from "@/app-shell/types.js";
-import type { RootProps } from "@/root/types.js";
+import type { RootProps, WorkspaceSettingsLayerProps } from "@/root/types.js";
 import type { IServiceAccessor } from "@zcode/services";
 
 const StableWorkspaceApp = memo(App);
@@ -31,6 +31,7 @@ interface RootWorkspaceContentProps {
   handleCreateScratchWorkspace: AppProps["onCreateScratchWorkspace"];
   remoteConnectionInProgress?: AppProps["remoteConnectionInProgress"];
   remoteWorkspaceSessions: NonNullable<AppProps["remoteWorkspaceSessions"]>;
+  onOpenRemoteProject?: WorkspaceSettingsLayerProps["onOpenRemoteProject"];
   allowRemoteWorkspace: NonNullable<RootProps["allowRemoteWorkspace"]>;
   handleBackFromSettings: () => void;
   reconnectingRemoteWorkspaceKeys: AppProps["reconnectingRemoteWorkspaceKeys"];
@@ -64,6 +65,7 @@ export function RootWorkspaceContent({
   handleCreateScratchWorkspace,
   remoteConnectionInProgress,
   remoteWorkspaceSessions,
+  onOpenRemoteProject,
   allowRemoteWorkspace,
   handleBackFromSettings,
   reconnectingRemoteWorkspaceKeys,
@@ -177,6 +179,8 @@ export function RootWorkspaceContent({
             isWindowsDesktop={isWindowsDesktop}
             windowsWindowControlsRightPaddingPx={windowsWindowControlsRightPaddingPx}
             captionWorkspacePath={activeWorkspacePath}
+            remoteWorkspaceSessions={remoteWorkspaceSessions}
+            onOpenRemoteProject={onOpenRemoteProject}
             onBack={activeWorkspacePath ? handleBackFromSettings : undefined}
             onCreateTask={handleCreateTask}
             onOpenWorkspace={handleOpenWorkspace}

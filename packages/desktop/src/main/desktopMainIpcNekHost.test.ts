@@ -134,12 +134,18 @@ test("saved SSH credentials use safeStorage and are restored only at connection 
     );
     await assert.rejects(credentials.workspaceTarget(request, []), /no longer exists/);
     await service.connectHost(hosts[0]!.connectionId);
-    assert.deepEqual(connectedTarget, {
-      kind: "ssh",
-      host: "remote.test",
-      username: "alice",
-      password: "never-on-disk",
+    assert.deepEqual(connectedTarget, { ...request, password: "never-on-disk" });
+    const moved = await service.saveHost({
+      connectionId: request.savedHostId,
+      alias: "dev-box",
+      target: { kind: "ssh", host: "other.test", username: "alice" },
     });
+    assert.notEqual(moved.connectionId, request.savedHostId);
+    assert.equal(service.configExecutor(request.savedHostId), undefined);
+    await assert.rejects(
+      credentials.workspaceTarget(request, await service.listHosts()),
+      /no longer exists/,
+    );
   } finally {
     service.dispose();
     await fs.rm(directory, { recursive: true, force: true });

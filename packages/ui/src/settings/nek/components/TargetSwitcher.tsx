@@ -37,11 +37,27 @@ function TargetIcon({
 export function TargetSwitcher() {
   const { intl } = useZCodeIntl();
   const host = useNekHostApi();
-  const { targets, targetKey, targetInfo, setTarget, refreshTargets } = useNekTarget();
+  const {
+    targets,
+    targetKey,
+    targetInfo,
+    projectTarget,
+    workspaceInfo,
+    setTarget,
+    refreshTargets,
+  } = useNekTarget();
   const [connecting, setConnecting] = useState<string | null>(null);
+  const projectKey = projectTarget && targetKeyOf(projectTarget);
+  const workspaceKey = workspaceInfo && targetKeyOf(workspaceInfo.target);
+  const choices = workspaceInfo ? [workspaceInfo, ...targets.list] : targets.list;
 
   const choose = async (info: NekConfigTargetInfo) => {
-    if (info.connected || info.target.kind === "local") {
+    if (connecting) return;
+    if (
+      info.connected ||
+      info.target.kind === "local" ||
+      targetKeyOf(info.target) === workspaceKey
+    ) {
       setTarget(info.target);
       return;
     }
@@ -82,7 +98,9 @@ export function TargetSwitcher() {
         >
           <TargetIcon info={targetInfo} className="size-4" />
           <span className="truncate font-medium">{label}</span>
-          {targetInfo?.hostname ? (
+          {targetInfo?.hostname &&
+          targetInfo.hostname !== label &&
+          !label.includes(targetInfo.hostname) ? (
             <span
               title={intl.formatMessage(
                 { id: "settings.nek.target.hostname" },
@@ -109,9 +127,10 @@ export function TargetSwitcher() {
           {intl.formatMessage({ id: "settings.nek.target.menuTitle" })}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {targets.list.map((info) => {
-          const key = targetKeyOf(info.target);
-          const disconnected = !info.connected;
+        {choices.map((entry) => {
+          const key = targetKeyOf(entry.target);
+          const info = key === targetKey ? (targetInfo ?? entry) : entry;
+          const disconnected = !info.connected && key !== workspaceKey;
           const isConnecting =
             info.target.kind === "remote" && connecting === info.target.connectionId;
           return (
@@ -128,6 +147,11 @@ export function TargetSwitcher() {
               <TargetIcon info={info} className="size-4" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{info.label}</span>
+                {key === projectKey ? (
+                  <span className="text-ui-xs text-foreground-subtle">
+                    {intl.formatMessage({ id: "settings.nek.hostProjects.currentHost" })}
+                  </span>
+                ) : null}
                 <span className="truncate font-mono text-ui-xs text-foreground-subtlest">
                   {info.hostname}
                   {info.detail ? ` · ${info.detail}` : ""}

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { IPlatformService, RemoteWorkspaceSessionEntry } from "@zcode/shared";
-import { stripRemoteTargetSecrets } from "@zcode/shared";
+import { inheritConnectedSavedHostId, stripRemoteTargetSecrets } from "@zcode/shared";
 import type { IServiceAccessor } from "@zcode/services";
 import { toast } from "@/components/ui/toast.js";
 import {
@@ -14,6 +14,7 @@ import { logger } from "@/logger.js";
 import {
   bindRemoteWorkspaceIdentity,
   bindRemoteWorkspacePath,
+  getRemoteWorkspaceSession,
 } from "@/store/remoteWorkspaceSessionStore.js";
 import { refreshRemotePinnedTasksForSession } from "@/store/remotePinnedTaskStore.js";
 import { refreshRemoteTimelineTasksForSession } from "@/store/remoteTimelineTaskStore.js";
@@ -128,6 +129,10 @@ export async function reconnectRemoteWorkspaceHistoryEntry({
       workspaceIdentity: fallbackWorkspaceIdentity,
       connectTrigger: "reconnect",
     });
+    reconnectTarget = inheritConnectedSavedHostId(
+      reconnectTarget,
+      getRemoteWorkspaceSession(sessionId)?.target,
+    );
     if (reconnectTarget.kind === "ssh") {
       // Host ready 与 provider/task 等 workspace 初始化必须分阶段通知。
       // sibling 从此刻即可复用 initiator credential 创建 attachment，无需等待或重复读取凭据。
