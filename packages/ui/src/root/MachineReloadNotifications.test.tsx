@@ -33,18 +33,24 @@ function owner() {
     retry,
   };
 }
-function attach(service: INekWorkspaceConfigService) {
-  useRemoteWorkspaceSessionStore
-    .getState()
-    .registerSession({
-      sessionId: "connection",
-      target: { kind: "ssh", host: "remote", port: 22, username: "test", sshConfigAlias: "devbox" },
-      services: { nekWorkspaceConfigService: service } as IServiceAccessor,
-    });
+function attach(service: INekWorkspaceConfigService, sessionId = "connection") {
+  useRemoteWorkspaceSessionStore.getState().registerSession({
+    sessionId,
+    target: {
+      kind: "ssh",
+      host: "remote",
+      port: 22,
+      username: "test",
+      sshConfigAlias: "devbox",
+      savedHostId: "saved-host",
+    },
+    services: { nekWorkspaceConfigService: service } as IServiceAccessor,
+  });
 }
 afterEach(() => {
   cleanup();
   useRemoteWorkspaceSessionStore.getState().unregisterSession("connection");
+  useRemoteWorkspaceSessionStore.getState().unregisterSession("second-project");
   vi.clearAllMocks();
 });
 
@@ -86,4 +92,19 @@ it("observes the host without Settings, separates announced/applied, and fences 
   expect(base.retry).not.toHaveBeenCalled();
   expect(next.retry).not.toHaveBeenCalled();
   expect(toast).toHaveBeenCalledTimes(3);
+});
+
+it("keeps one listener for projects sharing an SSH host and transfers it when a project closes", () => {
+  const first = owner(),
+    second = owner();
+  attach(first.service);
+  attach(second.service, "second-project");
+  render(<MachineReloadNotifications />, { wrapper: createNekTestEnv().wrapper });
+  first.send({ trigger: "manual" });
+  second.send({ trigger: "manual" });
+  expect(toast).toHaveBeenCalledTimes(1);
+  act(() => useRemoteWorkspaceSessionStore.getState().unregisterSession("connection"));
+  first.send({ trigger: "manual" });
+  second.send({ trigger: "manual" });
+  expect(toast).toHaveBeenCalledTimes(2);
 });

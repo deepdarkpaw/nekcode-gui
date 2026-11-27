@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { INekWorkspaceConfigService } from "@zcode/services";
+import { buildSshConnectionKey } from "@zcode/shared";
 import type { NekConfigTarget } from "@zcode/shared/nek-protocol";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatRemoteWorkspaceTargetSubtitle } from "@/lib/remoteWorkspaceHistory.js";
@@ -61,6 +62,7 @@ export function MachineReloadNotifications({ local }: { local?: INekWorkspaceCon
   const { targets } = useNekTarget();
   const sessions = useRemoteWorkspaceSessionStore((state) => state.sessionsById);
   const seen = new Set([local]);
+  const seenHostRoutes = new Set<string>();
   return (
     <>
       {targets.list
@@ -82,6 +84,13 @@ export function MachineReloadNotifications({ local }: { local?: INekWorkspaceCon
       {Object.values(sessions).map(({ sessionId, services, target }) => {
         const service = services.nekWorkspaceConfigService;
         if (!service || seen.has(service)) return null;
+        // Each project has its own renderer port, but saved SSH projects on the same
+        // connection share a gui-server. One listener is enough until that port retires.
+        if (target?.kind === "ssh" && target.savedHostId) {
+          const route = JSON.stringify([target.savedHostId, buildSshConnectionKey(target)]);
+          if (seenHostRoutes.has(route)) return null;
+          seenHostRoutes.add(route);
+        }
         seen.add(service);
         const label =
           target?.kind === "ssh" && target.sshConfigAlias
