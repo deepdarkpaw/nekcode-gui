@@ -61,6 +61,7 @@ export type { RemoteWorkspaceConnectTrigger } from "./remoteTarget.js";
 export { stripRemoteTargetSecrets } from "./remoteTarget.js";
 export { buildSshConnectionKey, buildSshRemoteHostKey } from "./remoteSshHostKey.js";
 export { buildRemoteEnvironmentKey } from "./remoteEnvironmentKey.js";
+export { matchSavedRemoteHost, withSavedRemoteHostId } from "./remoteHostMatching.js";
 export type {
   ShortcutChannel,
   ShortcutCommandEntry,
