@@ -21,6 +21,7 @@ import {
   emptyHello,
   legacySessionInfo,
   legacySnapshotFromResult,
+  legacyWorkspaceRef,
   type LegacyCompactResult,
   type LegacyMethods,
   type LegacyModeResult,
@@ -181,7 +182,7 @@ export function createNekLegacyMethods(
     },
     async readWorkspacePresentation(input) {
       return {
-        workspace: { workspacePath: input.workspacePath, workspaceKey: workspaceKey(input) },
+        workspace: legacyWorkspaceRef(input),
         mode: "agent",
         slashCommands: [],
       };

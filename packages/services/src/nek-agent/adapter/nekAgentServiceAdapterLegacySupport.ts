@@ -60,6 +60,16 @@ function phaseToStatus(phase: NekSessionResult["phase"]): LegacySnapshot["sessio
   return "idle";
 }
 
+/** 列表导入与快照用同一 workspace ref；仅有派生 key 会让 SSH 目录被按本机路径过滤。 */
+export function legacyWorkspaceRef(target: NekWorkspaceTarget): LegacySessionInfo["workspace"] {
+  return {
+    workspacePath: target.workspacePath,
+    ...(target.workspaceIdentity ? { workspaceIdentity: target.workspaceIdentity } : {}),
+    ...(target.remoteSessionId ? { remoteSessionId: target.remoteSessionId } : {}),
+    workspaceKey: workspaceKey(target),
+  };
+}
+
 export function legacySnapshotFromResult(
   input: NekWorkspaceTarget,
   result: NekSessionResult,
@@ -71,12 +81,7 @@ export function legacySnapshotFromResult(
     protocol: { name: "ZCode Protocol", version: 1 },
     session: {
       sessionId: result.sessionId,
-      workspace: {
-        workspacePath: input.workspacePath,
-        ...(input.workspaceIdentity ? { workspaceIdentity: input.workspaceIdentity } : {}),
-        ...(input.remoteSessionId ? { remoteSessionId: input.remoteSessionId } : {}),
-        workspaceKey: workspaceKey(input),
-      },
+      workspace: legacyWorkspaceRef(input),
       sessionKind: "interactive",
       title: "",
       titleSource: "default",
@@ -126,7 +131,7 @@ export function legacySessionInfo(
   const createdAt = Date.parse(summary.createdAt);
   return {
     sessionId: summary.id,
-    workspace: { workspacePath: target.workspacePath, workspaceKey: workspaceKey(target) },
+    workspace: legacyWorkspaceRef(target),
     sessionKind: "interactive",
     title: summary.name ?? summary.firstMessage ?? "",
     titleSource: summary.name ? "custom" : "default",

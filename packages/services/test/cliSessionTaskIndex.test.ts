@@ -152,6 +152,36 @@ test("the task service exposes the import and announces new rows on the workspac
   });
 });
 
+test("SSH catalog import seeds and announces rows for the requested host, not just its cwd", async () => {
+  await withIndex(async ({ h, repo }) => {
+    const remote = { ...target, workspaceIdentity: "remote:ssh:host-a:22:user:/project" };
+    const other = { ...target, workspaceIdentity: "remote:ssh:host-b:22:user:/project" };
+    const syncer = createZCodeTaskIndexSyncer({ agentService: h.adapter, taskIndexRepo: repo });
+    const service = createZCodeTaskServiceAdapter({
+      zcodeAgentService: h.adapter,
+      taskIndexRepo: repo,
+      taskIndexSyncer: syncer,
+    });
+    const events: ZCodeWorkspaceEvent[] = [];
+    service.onDynamicWorkspaceEvent(remote)((event) => events.push(event));
+    try {
+      assert.deepEqual(await service.importAgentSessions(remote), { inserted: 1 });
+      const rows = await service.listTasks(remote);
+      assert.deepEqual(
+        rows.map((row) => [row.taskId, row.workspaceIdentity]),
+        [[sessionId, remote.workspaceIdentity]],
+      );
+      assert.deepEqual(await service.listTasks(other), []);
+      assert.deepEqual(await service.listTasks(target), []);
+      assert.equal(taskCreatedCount(events), 1);
+      assert.deepEqual(await service.importAgentSessions(remote), { inserted: 0 });
+      assert.equal(h.sessions.length, 0, "listing a remote CLI session must not open it");
+    } finally {
+      syncer.disposeAll();
+    }
+  });
+});
+
 test("the first sessions-index snapshot seeds CLI sessions and tells the sidebar to reload", async () => {
   await withIndex(async ({ h, repo, extraSessions }) => {
     const syncer = createZCodeTaskIndexSyncer({ agentService: h.adapter, taskIndexRepo: repo });
