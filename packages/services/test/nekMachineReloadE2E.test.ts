@@ -167,6 +167,8 @@ test(
         (owner, i) => owner.agentService.service.getSession(tasks[i]!.sessionKey)?.processId,
       );
     const before = pids();
+    assert.ok(before.every((pid) => typeof pid === "number" && pid > 0));
+    assert.notEqual(before[0], before[1]);
     const events = owners.map((owner) => {
       const log: NekSessionReloadOutcome[] = [];
       const stop = owner.configApi.onReloadResult(local, (outcome) => {
@@ -206,6 +208,11 @@ test(
           events[1]!.some((e) => e.trigger === "write" && e.deferred === 1),
       );
       await until("idle MCP updated", () => mcpLoaded(0));
+      assert.equal(
+        await mcpLoaded(1),
+        false,
+        "the running turn keeps its original MCP configuration",
+      );
     } finally {
       releaseTurn.resolve();
       await prompt;
