@@ -271,9 +271,9 @@ export interface INekConfigApi extends INekResourceConfigApi {
 
   // ---- 校验与重载 ----
   validate(target: NekConfigTarget, cwd?: string): Promise<NekConfigDiagnostic[]>;
-  /** 写入后自动调用，也供手动重载使用。cwd 限定该 workspace 的会话，加上共享控制进程。 */
+  /** Broadcast to the target machine; cwd limits task reloads. Counts are for this owner only. */
   reloadRunningSessions(target: NekConfigTarget, cwd?: string): Promise<NekSessionReloadOutcome>;
-  /** 写入后的自动 reload 结果（含进程级失败）；返回取消订阅函数。 */
+  /** Automatic and externally announced reload outcomes (including failures); returns unsubscribe. */
   onReloadResult(
     target: NekConfigTarget,
     listener: (result: NekSessionReloadOutcome) => void,

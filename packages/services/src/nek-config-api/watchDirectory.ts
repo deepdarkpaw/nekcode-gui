@@ -1,11 +1,12 @@
 /** Native observation of a directory plus its parent/nearest existing ancestor. */
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, relative, sep } from "node:path";
 
 export function createDirectoryWatch(
   path: string,
   changed: () => void,
   failed: (error: unknown) => void,
+  file?: string,
 ): { refresh(): void; error(): unknown; dispose(): void } {
   let watchers: FSWatcher[] = [];
   let lastError: unknown;
@@ -24,8 +25,10 @@ export function createDirectoryWatch(
     while (!existsSync(ancestor) && dirname(ancestor) !== ancestor) ancestor = dirname(ancestor);
     for (const directory of new Set([ancestor, ...(existsSync(path) ? [path] : [])])) {
       try {
-        const watcher = watch(directory, { persistent: false }, () => {
+        const name = directory === path ? file : relative(directory, path).split(sep)[0];
+        const watcher = watch(directory, { persistent: false }, (_event, changedName) => {
           if (disposed || current !== generation) return;
+          if (file && changedName && changedName !== name) return;
           // A parent event may mean the child's inode was replaced; re-arm before the next edit.
           refresh();
           changed();

@@ -160,7 +160,7 @@ export function createYamlGroup(runtime: NekConfigRuntime): NekYamlGroup {
       validatePatch(record);
       const merged = applySettingsPatch(current, record);
       const revision = await writeTextDocument(context.executor, path, stringifyYaml(merged));
-      runtime.publishWrite(target, [{ path, revision }]);
+      await runtime.publishWrite(target, [{ path, revision }]);
       return { revision };
     },
   };

@@ -325,7 +325,7 @@ test("ML2: global auth invalidation refreshes control even when models.json cont
   try {
     await (await runtime.control(LOCAL)).call({ type: "get_available_models" });
     assert.equal(reloads, 0);
-    runtime.publishWrite(LOCAL, [
+    await runtime.publishWrite(LOCAL, [
       { path: `${executor.agentDir()}/auth.json`, revision: "auth-changed" },
     ]);
     await runtime.refreshModelControl(LOCAL);

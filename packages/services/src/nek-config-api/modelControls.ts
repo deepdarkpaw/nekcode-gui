@@ -88,10 +88,12 @@ export class NekModelControls {
   async refresh(target: NekConfigTarget, context?: NekModelReadContext): Promise<NekReloadOutcome> {
     const result = await this.refreshContent(target, context);
     return {
-      reloaded: result.changed && !result.deferred ? 1 : 0,
-      deferred: Number(result.deferred),
+      reloaded: 0,
+      deferred: 0,
       diagnostics: result.diagnostics,
-      failures: [],
+      failures: result.deferred
+        ? [{ sessionKey: "control", message: "nek control reload was deferred; retry" }]
+        : [],
     };
   }
 

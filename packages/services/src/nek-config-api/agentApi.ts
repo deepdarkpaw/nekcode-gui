@@ -57,7 +57,9 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
       });
       const written = [{ path: result.path, revision: result.revision }];
       if (result.removedPath) written.push({ path: result.removedPath, revision: "absent" });
-      runtime.publishWrite(target, written, { cwd: scope === "project" ? options.cwd : undefined });
+      await runtime.publishWrite(target, written, {
+        cwd: scope === "project" ? options.cwd : undefined,
+      });
       return { revision: presetFileRevision(result.path, result.revision) };
     },
 
@@ -71,7 +73,7 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
         expectedRevision: options.revision,
         cwd: options.cwd,
       });
-      runtime.publishWrite(target, [result], {
+      await runtime.publishWrite(target, [result], {
         cwd: scope === "project" ? options.cwd : undefined,
       });
       return { revision: result.revision };
@@ -100,7 +102,7 @@ export function createAgentGroup(runtime: NekConfigRuntime): NekAgentGroup {
         expected: options,
         logger: runtime.logger,
       });
-      runtime.publishWrite(target, [result], {
+      await runtime.publishWrite(target, [result], {
         cwd: scope === "project" ? options.cwd : undefined,
       });
       return { revision: result.revision };

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { readdir, readFile, rename, stat, unlink, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
@@ -132,30 +132,20 @@ export async function assertRevision(
 export function createNodeNekConfigFs(): NekConfigFs {
   const lock: NekConfigLock = {
     run: (path, critical) => {
-      const exists = existsSync(path);
-      const release = exists ? acquireLockSyncWithRetry(path) : undefined;
-      let wrote: string | undefined;
+      // The lock directory needs its parent even on the very first settings write.
+      mkdirSync(dirname(path), { recursive: true });
+      const release = acquireLockSyncWithRetry(path);
       try {
-        const current = exists ? readFileSync(path, "utf-8") : undefined;
-        const next = critical(current);
-        if (next !== undefined) {
-          if (!release) {
-            // 文件还不存在：先拿到锁再创建（与 nek 的顺序一致）。
-            const late = acquireLockSyncWithRetry(path);
-            try {
-              mkdirSync(dirname(path), { recursive: true });
-              writeFileSync(path, next, "utf-8");
-            } finally {
-              late();
-            }
-          } else {
-            writeFileSync(path, next, "utf-8");
-          }
-          wrote = next;
+        let current: string | undefined;
+        try {
+          current = readFileSync(path, "utf-8");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
-        void wrote;
+        const next = critical(current);
+        if (next !== undefined) writeFileSync(path, next, "utf-8");
       } finally {
-        release?.();
+        release();
       }
     },
   };

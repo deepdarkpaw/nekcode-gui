@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
-import { NekConfigApi } from "../src/nek-config-api/index.js";
+import { createLocalNekConfigHostExecutor, NekConfigApi } from "../src/nek-config-api/index.js";
+import {
+  announcementPath,
+  writeReloadAnnouncement,
+} from "../src/nek-config-api/reloadAnnouncements.js";
 import {
   createRemoteNekConfigHostExecutor,
   detectRemoteConfigRuntime,
@@ -191,6 +198,71 @@ test("remote executor holds the remote lock around the settings read-modify-writ
     .filter((command) => command.startsWith(`'${NEK_INFO.node.path}'`))
     .map((command) => base64PayloadOf(command)[0]);
   assert.deepEqual(operations.slice(0, 5), ["write", "lock", "read", "write", "unlock"]);
+});
+
+test("remote metadata retries a stale comparison without holding a lock over SSH", async (t) => {
+  const base = resolve(".tmp", "nek-reload-tests");
+  await mkdir(base, { recursive: true });
+  const root = await mkdtemp(join(base, "remote-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5 }));
+  const local = createLocalNekConfigHostExecutor({ home: root });
+  const journal = announcementPath(local.agentDir());
+  const operations: string[] = [];
+  const connection: NekRemoteConfigConnection = {
+    async exec(command) {
+      const [operation] = base64PayloadOf(command);
+      operations.push(operation!);
+      if (operation === "metadataCompareWrite" && operations.length === 2) {
+        // Another owner commits after the remote read but before its remote compare/write.
+        await writeReloadAnnouncement(local, journal, "local", [
+          { trigger: "login", files: ["auth.json"] },
+        ]);
+      }
+      const [, flag, script, payload] = posixWords(command);
+      const child = spawn(process.execPath, [flag!, script!, payload!], { windowsHide: true });
+      child.stdin.end();
+      return {
+        stdin: child.stdin,
+        stdout: child.stdout,
+        stderr: child.stderr,
+        onClose(listener) {
+          const close = (code: number | null) => listener(code ?? 1);
+          child.on("close", close);
+          return { dispose: () => child.off("close", close) };
+        },
+      };
+    },
+  };
+  const remote = createRemoteNekConfigHostExecutor({
+    id: "remote:box",
+    runtime: {
+      home: root,
+      agentDir: local.agentDir(),
+      node: NEK_INFO.node.path,
+      launchArgs: [],
+      platform: process.platform,
+    },
+    connection,
+  });
+  await writeReloadAnnouncement(remote, journal, "remote", [
+    { trigger: "manual", files: [], cwd: "/remote/project" },
+  ]);
+  assert.deepEqual(operations, [
+    "metadataRead",
+    "metadataCompareWrite",
+    "metadataRead",
+    "metadataCompareWrite",
+  ]);
+  const text = await readFile(journal, "utf8");
+  const latest = JSON.parse(text);
+  assert.equal(latest.trigger, "manual");
+  assert.equal(latest.cwd, "/remote/project");
+  assert.equal(latest.previous[0]?.trigger, "login");
+  await assert.rejects(
+    () => remote.lock!.runLocked(journal, () => "ignored", { maxBytes: 4 }),
+    /exceeds/i,
+  );
+  assert.equal(await readFile(journal, "utf8"), text);
 });
 
 test("remote executor exposes remote command failures", async () => {

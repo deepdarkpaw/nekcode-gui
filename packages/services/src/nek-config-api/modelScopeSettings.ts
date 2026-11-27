@@ -71,7 +71,7 @@ export function createSaveModelScope(runtime: NekConfigRuntime): INekConfigApi["
       // 项目里的 [] 必须保留，删除键会重新继承全局范围。
       patch: { enabledModels: patterns },
     });
-    runtime.publishWrite(target, [result]);
+    await runtime.publishWrite(target, [result]);
     return { revision: result.revision };
   };
 }

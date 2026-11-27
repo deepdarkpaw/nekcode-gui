@@ -155,7 +155,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
       edits,
       options,
     );
-    runtime.publishWrite(target, written);
+    await runtime.publishWrite(target, written);
     return { revision };
   };
 
@@ -251,7 +251,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
         }
       } catch (error) {
         // 部分成功必须说清楚：models.json 已经改名，后续文件需要重新载入后再处理。
-        runtime.publishWrite(target, written);
+        await runtime.publishWrite(target, written);
         const normalized = asNekConfigError(error);
         throw new NekConfigError(
           "io",
@@ -259,7 +259,7 @@ export function createModelsGroup(runtime: NekConfigRuntime): NekModelsGroup {
           normalized.fieldErrors,
         );
       }
-      runtime.publishWrite(target, written);
+      await runtime.publishWrite(target, written);
       return { revision };
     },
 

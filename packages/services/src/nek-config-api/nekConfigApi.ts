@@ -61,6 +61,9 @@ export class NekConfigApi implements INekConfigApi {
   /** Host-only production wiring: binds live CLI writers to this config owner. */
   modelRuntime: NekConfigRuntime["modelRuntime"] = (target) => this.runtime.modelRuntime(target);
 
+  observeAnnouncements: NekConfigRuntime["observeAnnouncements"] = (target) =>
+    this.runtime.observeAnnouncements(target);
+
   /** Facts use content-fenced control admission rather than a second watcher epoch owner. */
   readonly ownsModelRuntimeFreshness = true;
 
@@ -163,7 +166,7 @@ export class NekConfigApi implements INekConfigApi {
 
   validate: INekConfigApi["validate"] = (...args) => this.control.validate(...args);
   reloadRunningSessions: INekConfigApi["reloadRunningSessions"] = async (target, cwd) =>
-    await this.runtime.reload(target, cwd);
+    await this.runtime.reloadRunningSessions(target, cwd);
   onReloadResult: INekConfigApi["onReloadResult"] = (target, listener) =>
     this.runtime.onReloadResult(target, listener);
 
