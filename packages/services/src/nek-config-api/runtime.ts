@@ -4,10 +4,9 @@
  * 每个功能模块（models / settings / mcp / …）都只拿这一个运行时，避免它们各自
  * 去猜目标、进程与通知的细节。
  */
-import { basename, dirname, relative, normalize } from "node:path";
+import { randomUUID } from "node:crypto";
 import type {
   NekModelReadContext,
-  NekConfigDiagnostic,
   NekConfigTarget,
   NekConfigTargetInfo,
   NekRpcCommandOfType,
@@ -24,13 +23,23 @@ import { NekLoginManager } from "./login.js";
 import { NekWatchHub } from "./watch.js";
 import type { NekWatchChange } from "./watch.js";
 import { agentsDir, projectConfigDir } from "./paths.js";
+import { emptyReloadOutcome, reloadChangesForWrite, reloadLiveSessions } from "./reloadSessions.js";
 import { NekLiveModelRuntimes } from "./liveModelRuntimes.js";
 import { NekModelControls } from "./modelControls.js";
+import {
+  announcementPath,
+  observeReloadAnnouncements,
+  writeReloadAnnouncement,
+  type ReloadChange,
+  type ReloadTrigger,
+} from "./reloadAnnouncements.js";
 
 /** 目标机器上一个正在运行的 nek 会话进程。 */
 export interface NekConfigSessionHandle {
   sessionKey: string;
   cwd?: string;
+  /** Recheck the captured process identity before dispatching after another session's await. */
+  isLive?: () => boolean;
   /** 回合正在运行：reload 会被推迟到回合结束后。 */
   busy: boolean;
   /** Content-deduped path for models-only write notifications. */
@@ -129,6 +138,8 @@ export class NekConfigRuntime {
   private readonly watchHub: NekWatchHub;
   private readonly reloadListeners = new Map<string, Set<(result: NekReloadOutcome) => void>>();
   private readonly autoReload: boolean;
+  private readonly origin = randomUUID();
+  private stopAnnouncements?: () => void;
   private readonly modelControls: NekModelControls;
   private readonly liveModels = new NekLiveModelRuntimes({
     watch: (target, listener) => this.watch(target, listener),
@@ -163,6 +174,7 @@ export class NekConfigRuntime {
     this.login = new NekLoginManager({
       control: (target, context) => this.control(target, context),
       abort: (target) => this.abortControl(target),
+      onAuthChanged: (target) => this.publishAuthChange(target),
       forwardPorts: options.forwardLoginPorts,
       logger: options.logger,
     });
@@ -200,10 +212,6 @@ export class NekConfigRuntime {
     read?: NekModelReadContext,
   ): Promise<NekReloadOutcome> {
     return this.modelControls.refresh(target, read);
-  }
-
-  hasControl(target: NekConfigTarget): boolean {
-    return this.modelControls.has(target);
   }
 
   /** 目标机器上正在运行的会话进程（MCP 状态、reload 用）。 */
@@ -250,46 +258,116 @@ export class NekConfigRuntime {
     );
   }
 
-  /** 写盘后的通知：先推 watch 事件，再触发一次重载。 */
-  publishWrite(
+  /** Persist the notification before acknowledging a write; live results arrive separately. */
+  async publishWrite(
     target: NekConfigTarget,
     files: ReadonlyArray<{ path: string; revision: string }>,
     scope?: { cwd?: string },
-  ): void {
-    const key = targetKeyOf(target);
+  ): Promise<void> {
+    if (!files.length) return;
     this.watchHub.publish(
-      key,
+      targetKeyOf(target),
       files.map((file) => ({ file: file.path, revision: file.revision })),
     );
-    if (!this.autoReload) return;
-    const agentDir = this.target(target).layout.agentDir;
-    const workspaces = new Set(files.map((file) => workspaceOfWrite(agentDir, file.path)));
-    const cwd = scope ? scope.cwd : workspaces.size === 1 ? [...workspaces][0] : undefined;
-    this.reloadAfterWrite(
-      target,
-      cwd,
-      files.every((file) => basename(file.path) === "models.json"),
+    await this.publishAutomatic(target, "write", ({ layout }) =>
+      reloadChangesForWrite(layout.agentDir, files, scope),
     );
   }
 
-  reloadAfterWrite(target: NekConfigTarget, cwd?: string, modelsOnly = false): void {
-    if (!this.autoReload) return;
-    void this.reload(target, cwd, modelsOnly, !cwd)
-      .then((result) => this.emitReloadResult(target, result))
-      .catch((error: unknown) => {
-        this.options.logger?.warn("automatic reload after a config write failed", error);
-        this.emitReloadResult(target, {
-          reloaded: 0,
-          deferred: 0,
-          diagnostics: [],
-          failures: [
-            {
-              sessionKey: "runtime",
-              message: error instanceof Error ? error.message : String(error),
-            },
-          ],
-        });
-      });
+  private async publishAuthChange(target: NekConfigTarget): Promise<void> {
+    // The auth RPC has already updated this runtime's control process. Never write credentials here.
+    await this.publishAutomatic(target, "login", () => [
+      { trigger: "login", files: ["auth.json"] },
+    ]);
+  }
+
+  private async publishAutomatic(
+    target: NekConfigTarget,
+    trigger: ReloadTrigger,
+    prepare: (context: NekTargetContext) => ReloadChange[],
+  ): Promise<void> {
+    if (!this.autoReload || this.disposed) return;
+    try {
+      const context = this.target(target);
+      const changes = prepare(context);
+      const outcome = await this.announce(context, changes, trigger);
+      // Config and announcement are already on disk. An RPC result must not turn that write into
+      // a failed save/login (or prompt a caller to replay a credential mutation).
+      void this.reload(context, changes, trigger === "write", outcome).then(() =>
+        this.emitReloadResult(target, outcome),
+      );
+    } catch (error) {
+      const outcome = emptyReloadOutcome(trigger);
+      this.reportAnnouncementFailure(outcome, error);
+      this.emitReloadResult(target, outcome);
+    }
+  }
+
+  /** The settings owner only publishes. Desktop host and gui-server opt into local observation. */
+  observeAnnouncements(target: Extract<NekConfigTarget, { kind: "local" }>): void {
+    if (this.stopAnnouncements) return;
+    const context = this.target(target);
+    this.stopAnnouncements = observeReloadAnnouncements({
+      executor: context.executor,
+      agentDir: context.layout.agentDir,
+      origin: this.origin,
+      debounceMs: this.options.config?.watchDebounceMs,
+      pollSeconds: this.options.config?.remoteConfigPollSeconds,
+      receive: async (changes) => {
+        const pending = this.autoReload
+          ? changes
+          : changes.filter(({ trigger }) => trigger === "manual");
+        if (!pending.length || !this.sessionsOf(target).length) return;
+        const outcomes = await this.reload(context, pending, false);
+        for (const outcome of outcomes) this.emitReloadResult(target, outcome);
+      },
+      fail: (message) => {
+        this.logger?.warn("nek config reload observation failed", message);
+        if (!this.sessionsOf(target).length) return;
+        const outcome = emptyReloadOutcome();
+        outcome.failures.push({ sessionKey: "announcement", message });
+        this.emitReloadResult(target, outcome);
+      },
+    });
+  }
+
+  /** Deliver to this owner and notify the rest of the target machine, not other machines. */
+  async reloadRunningSessions(target: NekConfigTarget, cwd?: string): Promise<NekReloadOutcome> {
+    const context = this.target(target);
+    const changes: ReloadChange[] = [{ trigger: "manual", cwd, files: [] }];
+    const outcome = await this.announce(context, changes, "manual");
+    await this.reload(context, changes, true, outcome);
+    return outcome;
+  }
+
+  private async announce(
+    context: NekTargetContext,
+    changes: readonly ReloadChange[],
+    trigger: ReloadTrigger,
+  ): Promise<NekReloadOutcome> {
+    const outcome = emptyReloadOutcome(trigger);
+    try {
+      await writeReloadAnnouncement(
+        context.executor,
+        announcementPath(context.layout.agentDir),
+        this.origin,
+        changes,
+      );
+      outcome.announced = true;
+    } catch (error) {
+      this.reportAnnouncementFailure(outcome, error);
+    }
+    return outcome;
+  }
+
+  private reportAnnouncementFailure(outcome: NekReloadOutcome, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger?.warn("nek config reload announcement failed", error);
+    outcome.announced = false;
+    outcome.failures.push({
+      sessionKey: "announcement",
+      message: `Could not notify this machine's tasks: ${message}. Retry Reload.`,
+    });
   }
 
   onReloadResult(
@@ -306,48 +384,32 @@ export class NekConfigRuntime {
     };
   }
 
-  /** 对目标机器上所有 nek 进程发 reload。回合正在跑的计入 deferred。 */
-  async reload(
-    target: NekConfigTarget,
-    cwd?: string,
-    modelsOnly = false,
-    includeControl = true,
-  ): Promise<NekReloadOutcome> {
-    this.target(target);
-    const diagnostics: NekConfigDiagnostic[] = [];
-    const failures: NekReloadOutcome["failures"] = [];
-    let reloaded = 0;
-    let deferred = 0;
-    const sessions = this.sessionsOf(target);
-    for (const session of sessions) {
-      if (cwd && (!session.cwd || normalize(session.cwd) !== normalize(cwd))) continue;
-      const outcome = await this.reloadOne(session.sessionKey, session.busy, () =>
-        modelsOnly && session.refreshModels
-          ? session.refreshModels()
-          : session.call({ type: "reload" }),
-      );
-      reloaded += outcome.reloaded;
-      deferred += outcome.deferred;
-      diagnostics.push(...outcome.diagnostics);
-      failures.push(...outcome.failures);
-    }
-    if (includeControl && this.hasControl(target)) {
-      const outcome = await this.reloadOne("control", false, async () => {
-        const control = await this.control(target);
-        return await (modelsOnly
-          ? this.modelControls.refreshContent(target)
-          : control.call({ type: "reload" }));
-      });
-      reloaded += outcome.reloaded;
-      deferred += outcome.deferred;
-      diagnostics.push(...outcome.diagnostics);
-      failures.push(...outcome.failures);
-    }
-    return { reloaded, deferred, diagnostics, failures };
+  private reload(
+    context: NekTargetContext,
+    changes: readonly ReloadChange[],
+    includeControl: boolean,
+    direct?: NekReloadOutcome,
+  ): Promise<NekReloadOutcome[]> {
+    const { target, layout, executor } = context;
+    return reloadLiveSessions({
+      agentDir: layout.agentDir,
+      changes,
+      direct,
+      current: () => !this.disposed && this.options.hosts.executor(target) === executor,
+      sessions: () => this.sessionsOf(target),
+      control: includeControl
+        ? async (modelsOnly) => {
+            if (!this.modelControls.has(target)) return;
+            if (modelsOnly) return await this.modelControls.refreshContent(target, {});
+            return await (await this.control(target)).call({ type: "reload" }, {});
+          }
+        : undefined,
+    });
   }
 
   dispose(): void {
     this.disposed = true;
+    this.stopAnnouncements?.();
     this.modelControls.dispose();
     this.liveModels.owner.dispose();
     this.watchHub.dispose();
@@ -358,35 +420,6 @@ export class NekConfigRuntime {
   // --------------------------------------------------------------------------
   // 内部
   // --------------------------------------------------------------------------
-
-  private async reloadOne(
-    label: string,
-    busy: boolean,
-    call: () => Promise<NekReloadResult & { changed?: boolean }>,
-  ): Promise<NekReloadOutcome> {
-    try {
-      const result = await call();
-      const queued = result.deferred || busy;
-      return {
-        reloaded: queued || result.changed === false ? 0 : 1,
-        deferred: queued ? 1 : 0,
-        diagnostics: result.diagnostics,
-        failures: [],
-      };
-    } catch (error) {
-      return {
-        reloaded: 0,
-        deferred: 0,
-        diagnostics: [],
-        failures: [
-          {
-            sessionKey: label,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        ],
-      };
-    }
-  }
 
   private watchDirs(
     context: NekTargetContext,
@@ -417,16 +450,4 @@ export class NekConfigRuntime {
       }
     }
   }
-}
-
-/** Global writes affect all sessions; project files affect only their owning workspace. */
-function workspaceOfWrite(agentDir: string, file: string): string | undefined {
-  const path = relative(agentDir, file);
-  if (path && !path.startsWith("..")) return undefined;
-  let directory = dirname(file);
-  while (dirname(directory) !== directory) {
-    if (basename(directory) === ".nek") return dirname(directory);
-    directory = dirname(directory);
-  }
-  return dirname(file);
 }

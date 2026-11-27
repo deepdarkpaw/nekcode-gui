@@ -80,6 +80,8 @@ test("MR3: no sessions means no spawning; missing/empty models do not trigger pe
   const h = runtimeHarness();
   try {
     assert.deepEqual(await h.configApi.reloadRunningSessions(LOCAL), {
+      trigger: "manual",
+      announced: true,
       reloaded: 0,
       deferred: 0,
       diagnostics: [],

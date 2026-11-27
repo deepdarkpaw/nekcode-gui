@@ -132,7 +132,7 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
       const settings = project
         ? paths.join(project, ".nek", "settings.json")
         : paths.join(anchor, "settings.json");
-      runtime.publishWrite(target, [{ path: settings, revision: "resource-settings" }], {
+      await runtime.publishWrite(target, [{ path: settings, revision: "resource-settings" }], {
         cwd: project,
       });
       return result;
@@ -183,7 +183,7 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
       await checkResourceFile(context.executor, cwd ?? context.layout.agentDir, path, true);
       checkTarget(runtime, context);
       await context.executor.writeResourceFile(path, markdown, true);
-      runtime.publishWrite(target, [{ path, revision: "resource-created" }], { cwd });
+      await runtime.publishWrite(target, [{ path, revision: "resource-created" }], { cwd });
     },
     async readPromptTemplate(target, input) {
       if (input.resourceType !== "prompts") throw validationError("Expected a prompt template");
@@ -202,7 +202,9 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
       if (current.content === input.content) return;
       checkTarget(runtime, context);
       await context.executor.writeResourceFile(entry.path, input.content, false);
-      runtime.publishWrite(target, [{ path: entry.path, revision: "resource-edited" }], { cwd });
+      await runtime.publishWrite(target, [{ path: entry.path, revision: "resource-edited" }], {
+        cwd,
+      });
     },
     async deleteResource(target, input) {
       const context = runtime.target(target);
@@ -210,7 +212,7 @@ export function createResourcesGroup(runtime: NekConfigRuntime): INekResourceCon
       checkTarget(runtime, context);
       // 仅删除入口文件，不连带删除技能目录里用户的脚本和资源。
       await context.executor.remove(entry.path);
-      runtime.publishWrite(target, [{ path: entry.path, revision: "absent" }], { cwd });
+      await runtime.publishWrite(target, [{ path: entry.path, revision: "absent" }], { cwd });
     },
   };
 }

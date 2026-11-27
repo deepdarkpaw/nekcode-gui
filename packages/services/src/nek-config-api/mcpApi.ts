@@ -105,7 +105,7 @@ export function createMcpGroup(runtime: NekConfigRuntime): NekMcpGroup {
       path,
       serializeMcpServers(servers, document.root),
     );
-    runtime.publishWrite(target, [{ path, revision }]);
+    await runtime.publishWrite(target, [{ path, revision }]);
     return { revision };
   };
 

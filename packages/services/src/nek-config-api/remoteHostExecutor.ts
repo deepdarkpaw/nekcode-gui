@@ -9,13 +9,14 @@
  * `nek gui-info`（运行 nek 的那份 Node，版本有保证），home / agentDir 在与 nek 进程相同的
  * `sh -l` 环境里探测。不在 PATH 上猜 Node：系统自带的旧 Node（例如 v12）跑不了配置脚本。
  */
+import { createHash } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import type { NekGuiInfo } from "@zcode/shared/nek-protocol";
 import type { NekRpcProcessHandle } from "../nek-agent/nekRpcClient.js";
 import type { NekConfigHostExecutor, NekHostDirEntry, NekHostLock } from "./hostExecutor.js";
 import type { NekHostStat } from "./revision.js";
+import { runRemoteConfigCommand } from "./remoteHostCommand.js";
 
-const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const LOCK_TIMEOUT_MS = 15_000;
 /** 与 `proper-lockfile` 的 stale 默认值一致：超过 10 s 没被 touch 的锁可以抢占。 */
 const LOCK_STALE_MS = 10_000;
@@ -57,14 +58,6 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
-function appendOutput(buffer: { value: string }, chunk: unknown): void {
-  const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
-  buffer.value += text;
-  if (Buffer.byteLength(buffer.value, "utf8") > MAX_OUTPUT_BYTES) {
-    throw new Error("远端配置操作输出超过 4 MB 上限");
-  }
-}
-
 /**
  * 远端目录探测（纯 shell）：输出 `$HOME` 与 `$NEK_CODING_AGENT_DIR` 两行。
  * 与 {@link createRemoteNekConfigHostExecutor} 启动 nek 用同一个 `sh -l` 环境，两边的 agentDir 一致。
@@ -74,7 +67,7 @@ const REMOTE_PROBE_SCRIPT = 'printf "%s\\n" "${HOME-}" "${NEK_CODING_AGENT_DIR-}
 const REMOTE_SCRIPT = String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
-const { randomUUID } = require("node:crypto");
+const { createHash, randomUUID } = require("node:crypto");
 const [operation, ...values] = JSON.parse(Buffer.from(process.argv[1], "base64").toString("utf8"));
 const write = (value) => process.stdout.write(JSON.stringify({ ok: true, value }));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -98,10 +91,10 @@ async function acquire(target, timeoutMs) {
         throw statError;
       }
       if (age > ${LOCK_STALE_MS}) {
-        try { fs.rmdirSync(directory); } catch {} 
+        try { fs.rmdirSync(directory); } catch (error) { if (!ignoredMissing(error)) throw error; }
         continue;
       }
-      if (Date.now() > deadline) throw new Error("远端 settings 锁等待超时：" + target);
+      if (Date.now() > deadline) throw new Error("远端配置锁等待超时：" + target);
       await sleep(50);
     }
   }
@@ -109,6 +102,27 @@ async function acquire(target, timeoutMs) {
 
 function release(target) {
   try { fs.rmdirSync(lockPath(target)); } catch (error) { if (!ignoredMissing(error)) throw error; }
+}
+
+function readBounded(target, maxBytes, metadata = false) {
+  if (metadata && !fs.lstatSync(target).isFile()) throw new Error("Reload journal is not a regular file");
+  const file = fs.openSync(target, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      const count = fs.readSync(file, buffer, size, buffer.length - size, size);
+      if (count === 0) break;
+      size += count;
+    }
+    if (size > maxBytes) throw new Error("Resource exceeds " + (maxBytes / 1024) + " KB: " + target);
+    return buffer.subarray(0, size);
+  } finally { fs.closeSync(file); }
+}
+
+function readMetadata(target, maxBytes) {
+  try { return readBounded(target, maxBytes, true); }
+  catch (error) { if (ignoredMissing(error)) return null; throw error; }
 }
 
 (async () => {
@@ -135,20 +149,31 @@ function release(target) {
         write(info.isDirectory() ? "directory" : info.isFile() ? "file" : "other");
       } catch (error) { if (ignoredMissing(error)) write(null); else throw error; }
     } else if (operation === "resourceRead") {
-      const [target, limit] = values;
+      write({ content: readBounded(values[0], Number(values[1])).toString("utf8") });
+    } else if (operation === "metadataRead") {
+      write(readMetadata(values[0], Number(values[1]))?.toString("base64") ?? null);
+    } else if (operation === "metadataCompareWrite") {
+      const [target, limit, expected, encoded] = values;
       const maxBytes = Number(limit);
-      const file = fs.openSync(target, "r");
+      const bytes = Buffer.from(encoded, "base64");
+      if (bytes.length > maxBytes) throw new Error("Broadcast metadata size exceeded");
+      await acquire(target, ${LOCK_TIMEOUT_MS});
       try {
-        const buffer = Buffer.alloc(maxBytes + 1);
-        let size = 0;
-        while (size < buffer.length) {
-          const count = fs.readSync(file, buffer, size, buffer.length - size, size);
-          if (count === 0) break;
-          size += count;
+        const current = readMetadata(target, maxBytes);
+        const revision = current ? createHash("sha256").update(current).digest("hex") : "missing";
+        if (revision !== expected) {
+          write(false);
+          return;
         }
-        if (size > maxBytes) throw new Error("Resource exceeds " + (maxBytes / 1024) + " KB: " + target);
-        write({ content: buffer.toString("utf8", 0, size) });
-      } finally { fs.closeSync(file); }
+        const temporary = target + "." + randomUUID() + ".tmp";
+        try {
+          fs.writeFileSync(temporary, bytes, { flag: "wx", mode: 0o600 });
+          fs.renameSync(temporary, target);
+        } finally {
+          try { fs.unlinkSync(temporary); } catch (error) { if (!ignoredMissing(error)) throw error; }
+        }
+        write(true);
+      } finally { release(target); }
     } else if (operation === "resourceWrite") {
       const [target, content, createOnly] = values;
       const temporary = target + "." + randomUUID() + ".tmp";
@@ -188,50 +213,6 @@ function release(target) {
   }
 })();`;
 
-async function runCommand(
-  connection: NekRemoteConfigConnection,
-  command: string,
-): Promise<{ stdout: string; stderr: string; code: number }> {
-  const stream = await connection.exec(command);
-  const stdout = { value: "" };
-  const stderr = { value: "" };
-  let outputError: Error | undefined;
-  const collect = (buffer: { value: string }, chunk: unknown): void => {
-    if (outputError) return;
-    try {
-      appendOutput(buffer, chunk);
-    } catch (error) {
-      outputError = error instanceof Error ? error : new Error(String(error));
-    }
-  };
-  stream.stdout.on("data", (chunk) => collect(stdout, chunk));
-  stream.stderr.on("data", (chunk) => collect(stderr, chunk));
-  // ssh2 可能先报退出码、后派发最后一段输出；读完两路输出再解析 JSON。
-  const [code] = await Promise.all([
-    new Promise<number>((resolve) => stream.onClose(resolve)),
-    waitForEnd(stream.stdout),
-    waitForEnd(stream.stderr),
-  ]);
-  if (outputError) throw outputError;
-  return { stdout: stdout.value, stderr: stderr.value, code };
-}
-
-function waitForEnd(stream: NodeJS.ReadableStream): Promise<void> {
-  const state = stream as NodeJS.ReadableStream & { readableEnded?: boolean; destroyed?: boolean };
-  if (state.readableEnded || state.destroyed) return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => {
-      stream.off("end", done);
-      stream.off("close", done);
-      stream.off("error", done);
-      resolve();
-    };
-    stream.on("end", done);
-    stream.on("close", done);
-    stream.on("error", done);
-  });
-}
-
 /**
  * 远端配置运行时：Node 与启动参数来自已检测通过的 `gui-info`，home / agentDir 由 shell 探测。
  * Node 不能在 PATH 上另找——那可能是系统的旧版本，跟运行 nek 的不是同一份。
@@ -240,7 +221,10 @@ export async function detectRemoteConfigRuntime(
   connection: NekRemoteConfigConnection,
   nek: Pick<NekGuiInfo, "node" | "launch" | "platform">,
 ): Promise<NekRemoteConfigRuntime> {
-  const result = await runCommand(connection, `sh -lc ${shellQuote(REMOTE_PROBE_SCRIPT)}`);
+  const result = await runRemoteConfigCommand(
+    connection,
+    `sh -lc ${shellQuote(REMOTE_PROBE_SCRIPT)}`,
+  );
   if (result.code !== 0) {
     throw new Error(result.stderr || `远端环境探测失败，退出码 ${result.code}`);
   }
@@ -268,7 +252,7 @@ async function runJson(
   values: string[] = [],
 ): Promise<unknown> {
   const payload = Buffer.from(JSON.stringify([operation, ...values]), "utf8").toString("base64");
-  const result = await runCommand(
+  const result = await runRemoteConfigCommand(
     connection,
     `${shellQuote(node)} -e ${shellQuote(REMOTE_SCRIPT)} ${shellQuote(payload)}`,
   );
@@ -342,19 +326,36 @@ export function createRemoteNekConfigHostExecutor(
 
   const lock: NekHostLock = {
     runLocked: async (path, critical, atomic) => {
+      if (atomic) {
+        // Never hold the target's lock across SSH round trips. The actual compare + replace
+        // happens in one remote process, so delayed/disconnected writers cannot unlock a successor.
+        const limit = String(atomic.maxBytes);
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const encoded = await run("metadataRead", path, limit);
+          if (encoded !== null && typeof encoded !== "string")
+            throw new Error("Invalid remote reload journal response");
+          const current = encoded === null ? undefined : Buffer.from(encoded, "base64");
+          const next = critical(current?.toString("utf8"));
+          if (next === undefined) return;
+          if (Buffer.byteLength(next) > atomic.maxBytes)
+            throw new Error("Broadcast metadata size exceeded");
+          const expected = current ? createHash("sha256").update(current).digest("hex") : "missing";
+          const committed = await run(
+            "metadataCompareWrite",
+            path,
+            limit,
+            expected,
+            Buffer.from(next).toString("base64"),
+          );
+          if (committed === true) return;
+          if (committed !== false) throw new Error("Invalid remote reload journal commit response");
+        }
+        throw new Error("Remote reload journal kept changing; retry Reload");
+      }
       await run("lock", path, String(LOCK_TIMEOUT_MS));
       let failure: unknown;
       try {
-        let current: string | null;
-        if (atomic) {
-          const info = asStat(await run("stat", path));
-          current = info
-            ? asContent(await run("resourceRead", path, String(atomic.maxBytes)))
-            : null;
-        } else current = await readFile(path);
-        const next = critical(current ?? undefined);
-        if (atomic && next !== undefined && Buffer.byteLength(next) > atomic.maxBytes)
-          throw new Error("Broadcast metadata size exceeded");
+        const next = critical((await readFile(path)) ?? undefined);
         if (next !== undefined) await writeFileAtomic(path, next);
       } catch (error) {
         failure = error;

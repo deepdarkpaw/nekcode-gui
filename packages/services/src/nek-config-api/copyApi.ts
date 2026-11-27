@@ -290,7 +290,8 @@ export function createCopyGroup(runtime: NekConfigRuntime): NekCopyGroup {
         });
       }
     }
-    if (written.length > 0) runtime.publishWrite(to, written);
+    // Login-only copies publish through runToCompletion's successful auth_login path.
+    if (written.length > 0) await runtime.publishWrite(to, written);
     return { items: results };
   };
 

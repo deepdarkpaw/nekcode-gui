@@ -105,11 +105,13 @@ export class NekLiveModelRuntimes {
       .map((writer) => ({
         sessionKey: writer.handle.sessionKey,
         cwd: writer.handle.cwd,
+        isLive: () =>
+          this.targets.get(key)?.writers.has(writer) === true && writer.handle.isWritable(),
         busy: false,
-        refreshModels: () => writer.refresh(),
+        refreshModels: () => writer.refresh({}),
         call: ((command) =>
           command.type === "reload"
-            ? writer.reload()
+            ? writer.reload({})
             : writer.handle.call(command)) as NekConfigSessionHandle["call"],
       }));
   }

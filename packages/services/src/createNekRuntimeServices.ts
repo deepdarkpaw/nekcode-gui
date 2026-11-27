@@ -21,6 +21,7 @@ export function createNekRuntimeServices(
     ...configOptions,
     config: nekConfigApiConfigFromRuntime(options.agent?.runtimeConfig ?? {}, configOptions.config),
   });
+  configApi.observeAnnouncements({ kind: "local" });
   const agentService = createNekAgentServiceAdapter({
     ...options.agent,
     modelRuntime: configApi.modelRuntime({ kind: "local" }),

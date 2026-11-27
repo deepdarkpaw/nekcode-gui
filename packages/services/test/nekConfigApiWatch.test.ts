@@ -153,7 +153,9 @@ test("MW-R1: scoped reload reaches its workspace plus control, never another wor
   await harness.api.getAuthStatus(LOCAL);
   const result = await harness.api.reloadRunningSessions(LOCAL, "/a");
   assert.deepEqual(calls, ["a"]);
-  assert.equal(result.reloaded, 2);
+  assert.equal(result.reloaded, 1, "control is never counted as a task");
+  assert.equal(result.announced, true);
+  assert.equal(result.trigger, "manual");
   assert.equal(harness.control.commands.filter((command) => command.type === "reload").length, 1);
   harness.api.dispose();
 });

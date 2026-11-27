@@ -80,7 +80,7 @@ export async function writeModelsAndScope(
     return { revision, written };
   } catch (error) {
     if (!written.length) throw error;
-    runtime.publishWrite(target, written);
+    await runtime.publishWrite(target, written);
     throw ioError(
       `Model settings were saved in ${written.map(({ path }) => path).join(", ")}, but the model save did not complete: ${asNekConfigError(error).message}. Reload the configuration and retry.`,
     );

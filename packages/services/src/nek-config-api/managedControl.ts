@@ -113,8 +113,8 @@ export async function openManagedControl(input: {
 
 function reloadOutcome(result: NekReloadResult): NekReloadOutcome {
   return {
-    reloaded: result.deferred ? 0 : 1,
-    deferred: result.deferred ? 1 : 0,
+    reloaded: 0,
+    deferred: 0,
     diagnostics: result.diagnostics,
     failures: [],
   };

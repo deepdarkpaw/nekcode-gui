@@ -126,7 +126,7 @@ export function createSettingsGroup(runtime: NekConfigRuntime): NekSettingsGroup
             capabilities,
           ),
       });
-      runtime.publishWrite(target, [patched]);
+      await runtime.publishWrite(target, [patched]);
       return { revision: patched.revision };
     },
   };

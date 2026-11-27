@@ -74,6 +74,8 @@ export interface NekLoginManagerOptions {
   control: (target: NekConfigTarget, context?: NekModelReadContext) => Promise<NekControlClient>;
   /** 登录在没有待答复提示时被取消：终止控制进程以中断 nek 侧的流程。 */
   abort?: (target: NekConfigTarget) => Promise<void>;
+  /** Publish only after nek successfully persisted a credential change. */
+  onAuthChanged?: (target: NekConfigTarget) => Promise<void>;
   /** 远程目标需要端口转发时由 host 提供；调用方拥有并释放返回的 lease。 */
   forwardPorts?: (target: NekConfigTarget, ports: number[]) => Promise<NekLoginPortForward>;
   logger?: { warn: (...args: unknown[]) => void };
@@ -103,6 +105,7 @@ export class NekLoginManager {
   async logout(target: NekConfigTarget, provider: string): Promise<void> {
     const control = await this.options.control(target);
     await control.call({ type: "auth_logout", provider });
+    await this.options.onAuthChanged?.(target);
   }
 
   /** 开始登录：立刻返回 `loginId`，nek 侧的 `auth_login` 在后台跑完。 */
@@ -144,7 +147,8 @@ export class NekLoginManager {
     }
     void control
       .call({ type: "auth_login", provider, method: "oauth" })
-      .then(() => {
+      .then(async () => {
+        await this.options.onAuthChanged?.(target);
         this.finish(run, { type: "done", provider });
       })
       .catch((error: unknown) => {
@@ -214,22 +218,29 @@ export class NekLoginManager {
   async runToCompletion(target: NekConfigTarget, provider: string): Promise<void> {
     const session = await this.start(target, provider);
     await new Promise<void>((resolve, reject) => {
-      const detach = this.subscribe(session.loginId, (event) => {
+      let detach: (() => void) | undefined;
+      let settled = false;
+      const finish = () => {
+        settled = true;
+        detach?.();
+      };
+      detach = this.subscribe(session.loginId, (event) => {
+        if (settled) return;
         if (event.type === "done") {
-          detach();
+          finish();
           resolve();
         } else if (event.type === "failed") {
-          detach();
+          finish();
           reject(
             validationError(`login ${provider} failed: ${event.message}`, {
               provider: "login failed",
             }),
           );
         } else if (event.type === "cancelled") {
-          detach();
+          finish();
           reject(validationError(`login ${provider} was cancelled`, { provider: "cancelled" }));
         } else if (event.type === "prompt") {
-          detach();
+          finish();
           void this.cancel(session.loginId);
           reject(
             validationError(
@@ -239,6 +250,7 @@ export class NekLoginManager {
           );
         }
       });
+      if (settled) detach();
     });
   }
 

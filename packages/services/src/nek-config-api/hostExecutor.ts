@@ -26,6 +26,7 @@ import {
 import { homedir } from "node:os";
 import lockfile from "proper-lockfile";
 import { dirname, join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { NekRpcProcessHandle } from "../nek-agent/nekRpcClient.js";
 import { NekLocator } from "../nek-agent/nekLocator.js";
 import { spawnNekProcess } from "../nek-agent/nekProcessLauncher.js";
@@ -150,14 +151,20 @@ async function updateAtomicMetadata(
   maxBytes: number,
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
+  let compromised: Error | undefined;
   const release = await lockfile.lock(path, {
     realpath: false,
-    retries: { retries: 100, minTimeout: 20, maxTimeout: 100 },
+    // Cover the 10-second stale lease if the last writer exited without releasing it.
+    retries: { retries: 140, minTimeout: 20, maxTimeout: 100 },
+    onCompromised: (error) => {
+      compromised = error;
+    },
   });
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     let current: string | undefined;
     try {
+      if (!(await lstat(path)).isFile()) throw new Error("Reload journal is not a regular file");
       current = await readBoundedResource(path, maxBytes);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -166,12 +173,38 @@ async function updateAtomicMetadata(
     if (next === undefined) return;
     if (Buffer.byteLength(next) > maxBytes) throw new Error("Broadcast metadata size exceeded");
     await writeFile(temporary, next, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    await rename(temporary, path);
-  } finally {
-    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") throw error;
+    await replaceMetadata(temporary, path, () => {
+      if (compromised) throw compromised;
     });
-    await release();
+  } finally {
+    try {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    } finally {
+      await release();
+    }
+  }
+}
+
+/** Windows cannot always atomically replace a destination still open in another owner. */
+async function replaceMetadata(from: string, to: string, assertLocked: () => void): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    assertLocked();
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform !== "win32" ||
+        attempt >= 5 ||
+        (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")
+      )
+        throw error;
+      // Retry the same atomic commit while still holding its writer lock, never unlink the destination.
+      await delay(20 * (attempt + 1));
+    }
   }
 }
 
@@ -398,10 +431,16 @@ export function createMemoryNekConfigHostExecutor(
       return await options.spawn(args);
     },
     lock: {
-      runLocked: (path, critical) => {
+      runLocked: (path, critical, atomic) => {
         // 单线程 + 同步回调：与 proper-lockfile 的同步临界区同语义。
-        const next = critical(files.get(path));
-        if (next !== undefined) setFile(path, next);
+        const current = files.get(path);
+        if (atomic && current !== undefined && Buffer.byteLength(current) > atomic.maxBytes)
+          throw new Error("Broadcast metadata size exceeded");
+        const next = critical(current);
+        if (next === undefined) return;
+        if (atomic && Buffer.byteLength(next) > atomic.maxBytes)
+          throw new Error("Broadcast metadata size exceeded");
+        setFile(path, next);
       },
     },
   };
