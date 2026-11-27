@@ -183,7 +183,7 @@ export function registerRemoteIpcHandlers(options: {
 
       const sessionId = await options.createRemoteWorkspaceSession(
         win,
-        result.data.kind === "ssh" && result.data.savedHostId
+        result.data.kind === "ssh"
           ? await options.resolveSavedWorkspaceTarget(result.data)
           : result.data,
         requestId,

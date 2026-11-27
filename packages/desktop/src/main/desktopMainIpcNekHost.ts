@@ -16,7 +16,7 @@ import type {
   NekRemoteHost as NekRemoteHostRecord,
   NekUpdateCheck,
 } from "@zcode/shared/nek-protocol";
-import { stripRemoteTargetSecrets } from "@zcode/shared";
+import { sameRemoteHostDestination, stripRemoteTargetSecrets } from "@zcode/shared";
 import { NEK_GUI_PROTOCOL_VERSION } from "@zcode/shared/nek-protocol";
 import {
   NekLocator,
@@ -129,27 +129,34 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     target: NekRemoteHost["target"];
   }): Promise<NekRemoteHost> {
     const hosts = await this.readHosts();
-    const connectionId = input.connectionId ?? randomUUID();
-    const current = hosts.find((host) => host.connectionId === connectionId);
+    const current = hosts.find((host) => host.connectionId === input.connectionId);
+    // A profile id cannot be retargeted while a renderer holds it as a config destination.
+    const previous =
+      current && sameRemoteHostDestination(current.target, input.target) ? current : undefined;
+    const connectionId = previous?.connectionId ?? randomUUID();
     const next: StoredHost = {
       connectionId,
       alias: input.alias.trim(),
       target: stripRemoteTargetSecrets(input.target),
       authMethod: savedHostAuthMethod(input.target),
-      fingerprints: current?.fingerprints ?? [],
+      fingerprints: previous?.fingerprints ?? [],
     };
     if (
-      current &&
+      previous &&
       input.target.kind === "ssh" &&
       !input.target.privateKeyPath &&
       input.target.password === undefined
     )
-      next.authMethod = current.authMethod;
-    await this.credentials.save(connectionId, input.target, current?.target);
-    const index = hosts.findIndex((host) => host.connectionId === connectionId);
-    if (index === -1) hosts.push(next);
-    else hosts[index] = next;
-    await this.persistHosts(hosts);
+      next.authMethod = previous.authMethod;
+    await this.credentials.save(connectionId, input.target, previous?.target);
+    const nextHosts = current
+      ? hosts.map((host) => (host === current ? next : host))
+      : [...hosts, next];
+    if (current && !previous) {
+      await this.disconnectRemote(current.connectionId);
+      await this.credentials.delete(current.connectionId);
+    }
+    await this.persistHosts(nextHosts);
     this.emitHostsChanged();
     return this.toRemoteHost(next);
   }
@@ -164,14 +171,24 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     this.emitHostsChanged();
   }
 
+  private async pinnedTarget(host: StoredHost): Promise<NekRemoteHost["target"]> {
+    const target = await this.credentials.restore(host.connectionId, host.target);
+    return target.kind === "ssh" ? { ...target, savedHostId: host.connectionId } : target;
+  }
+
   /** 建立配置读写用的远端连接；主机密钥由 SSH backend 的 known-hosts 存储负责，不伪造指纹。 */
   async connectHost(connectionId: string): Promise<void> {
     const host = await this.requireHost(connectionId);
-    await this.remoteConfigs.connect(
-      connectionId,
-      await this.credentials.restore(host.connectionId, host.target),
-    );
+    const target = await this.pinnedTarget(host);
+    if (!(await this.readHosts()).includes(host))
+      throw new Error("Saved host changed; try connecting again");
+    const connection = this.remoteConfigs.connect(connectionId, target);
     this.emitHostsChanged();
+    try {
+      await connection;
+    } finally {
+      this.emitHostsChanged();
+    }
   }
 
   async disconnectHost(connectionId: string): Promise<void> {
@@ -200,9 +217,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     const startedAt = Date.now();
     let backend: IRemoteBackend | undefined;
     try {
-      backend = await createRemoteBackend(
-        await this.credentials.restore(host.connectionId, host.target),
-      );
+      backend = await createRemoteBackend(await this.pinnedTarget(host));
       const detected = await detectRemoteNek(backend);
       if (detected.status !== "ready")
         return { ok: false, message: detected.error ?? detected.status };
@@ -220,9 +235,7 @@ export class NekSettingsHostService implements INekSettingsHostApi {
     onLog: LogListener,
   ): Promise<NekInstallResult> {
     const host = await this.requireHost(connectionId);
-    const backend = await createRemoteBackend(
-      await this.credentials.restore(host.connectionId, host.target),
-    );
+    const backend = await createRemoteBackend(await this.pinnedTarget(host));
     try {
       return mapInstallResult(await installRemoteNek(backend, { ...options, onLog }));
     } finally {
@@ -419,7 +432,11 @@ export class NekSettingsHostService implements INekSettingsHostApi {
       target: host.target,
       authMethod: host.authMethod ?? savedHostAuthMethod(host.target),
       fingerprints: host.fingerprints,
-      state: this.remoteConfigs.has(host.connectionId) ? "connected" : "disconnected",
+      state: this.remoteConfigs.has(host.connectionId)
+        ? "connected"
+        : this.remoteConfigs.isConnecting(host.connectionId)
+          ? "connecting"
+          : "disconnected",
       nek: this.remoteConfigs.has(host.connectionId)
         ? {
             state: "ready",

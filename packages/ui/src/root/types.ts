@@ -39,6 +39,8 @@ export interface RootProps {
 }
 
 export interface WorkspaceSettingsLayerProps {
+  remoteWorkspaceSessions?: import("@zcode/shared").RemoteWorkspaceSessionEntry[];
+  onOpenRemoteProject?: (workspaceKey: string) => Promise<void>;
   workspaceScopedServices?: IServiceAccessor;
   isDesktop?: boolean;
   isMacDesktop?: boolean;

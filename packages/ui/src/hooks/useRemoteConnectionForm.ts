@@ -6,6 +6,7 @@ import type {
   WSLDistro,
 } from "@zcode/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { useSshConfigAliases } from "@/hooks/useSshConfigAliases.js";
 import {
   loadRemoteConnectionDockerOptions,
   resolveDockerContainerSelectionAfterRefresh,
@@ -54,10 +55,11 @@ export function useRemoteConnectionForm({
   const [wslUser, setWslUser] = useState("");
   const [dockerContainer, setDockerContainer] = useState("");
   const [manualDockerContainer, setManualDockerContainer] = useState("");
-  const [sshConfigAliases, setSshConfigAliases] = useState<SSHConfigAliasOption[]>([]);
-  const [sshConfigAliasesLoading, setSshConfigAliasesLoading] = useState(false);
-  const [sshConfigAliasesLoaded, setSshConfigAliasesLoaded] = useState(false);
-  const [sshConfigAliasesError, setSshConfigAliasesError] = useState("");
+  const {
+    aliases: sshConfigAliases,
+    loading: sshConfigAliasesLoading,
+    error: sshConfigAliasesError,
+  } = useSshConfigAliases(open && (browsingHosts || kind === "ssh"));
   const [selectedSshConfigAlias, setSelectedSshConfigAlias] = useState<string | null>(null);
   const [dockerAvailable, setDockerAvailable] = useState<boolean | null>(null);
   const [wslDistros, setWslDistros] = useState<WSLDistro[]>([]);
@@ -92,10 +94,6 @@ export function useRemoteConnectionForm({
       return;
     }
 
-    setSshConfigAliases([]);
-    setSshConfigAliasesLoading(false);
-    setSshConfigAliasesLoaded(false);
-    setSshConfigAliasesError("");
     setSelectedSshConfigAlias(null);
     setWslOptionsLoaded(false);
     setWslOptionsLoading(false);
@@ -166,56 +164,6 @@ export function useRemoteConnectionForm({
     },
     [platform],
   );
-
-  useEffect(() => {
-    if (!open || (!browsingHosts && kind !== "ssh") || sshConfigAliasesLoaded) {
-      return;
-    }
-
-    let cancelled = false;
-    setSshConfigAliasesLoading(true);
-    setSshConfigAliasesError("");
-
-    void (async () => {
-      try {
-        const aliases = await platform.listSSHConfigAliases();
-        if (cancelled) {
-          return;
-        }
-
-        setSshConfigAliases(aliases);
-        setSshConfigAliasesLoaded(true);
-      } catch (runtimeError) {
-        if (cancelled) {
-          return;
-        }
-
-        setSshConfigAliases([]);
-        setSshConfigAliasesLoaded(true);
-        setSshConfigAliasesError(String(runtimeError));
-      } finally {
-        if (!cancelled) {
-          setSshConfigAliasesLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [browsingHosts, kind, open, platform, sshConfigAliasesLoaded]);
-
-  useEffect(() => {
-    if (!selectedSshConfigAlias) {
-      return;
-    }
-
-    if (sshConfigAliases.some((option) => option.alias === selectedSshConfigAlias)) {
-      return;
-    }
-
-    setSelectedSshConfigAlias(null);
-  }, [selectedSshConfigAlias, sshConfigAliases]);
 
   useEffect(() => {
     if (!open || browsingHosts || kind !== "wsl" || !isWindowsDesktop || wslOptionsLoaded) {

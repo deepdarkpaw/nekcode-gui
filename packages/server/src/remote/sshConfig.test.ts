@@ -1,4 +1,8 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createRemoteBackend } from "./create-backend.js";
 import { computeSshConfigHost, connectSshProxyJump, listSshConfigHosts } from "./sshConfig.js";
 
 const configText = `
@@ -30,6 +34,30 @@ describe("ssh config", () => {
     expect(app.proxyJump).toEqual(["jump-a", "jump-b"]);
     expect(app.identitiesOnly).toBe(true);
     expect(listSshConfigHosts(configText)).toEqual(["jump-a", "jump-b", "app"]);
+  });
+
+  it("rejects saved alias destinations that were edited in SSH config", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "nek-ssh-route-"));
+    const sshConfigPath = join(sandbox, "config");
+    try {
+      await writeFile(sshConfigPath, "Host build\n  HostName replacement.example\n  Port 2200\n");
+      for (const host of ["original.example", "replacement.example"]) {
+        await expect(
+          createRemoteBackend(
+            {
+              kind: "ssh",
+              host,
+              username: "ci",
+              sshConfigAlias: "build",
+              savedHostId: "saved",
+            },
+            { sshConfigPath },
+          ),
+        ).rejects.toThrow("Saved SSH destination changed");
+      }
+    } finally {
+      await rm(sandbox, { recursive: true, force: true });
+    }
   });
 
   it("将每一跳 forwardOut 得到的 socket 传给下一跳", async () => {

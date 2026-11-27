@@ -1,4 +1,4 @@
-import { buildSshConnectionKey, type RemoteTarget } from "@zcode/shared";
+import { buildSshConnectionKey, sameSshHostDestination, type RemoteTarget } from "@zcode/shared";
 import type { NekRemoteHost } from "@zcode/shared/nek-protocol";
 import type { RemoteCredentialSafeStorage } from "./remoteCredentialSafeStorage.js";
 
@@ -73,12 +73,7 @@ export class SavedRemoteHostCredentials {
     const host = hosts.find((item) => item.connectionId === request.savedHostId);
     if (!host || host.target.kind !== "ssh") throw new Error("Saved SSH host no longer exists");
     const target = host.target;
-    if (
-      target.host !== request.host ||
-      target.username !== request.username ||
-      (target.port ?? 22) !== (request.port ?? 22) ||
-      target.sshConfigAlias !== request.sshConfigAlias
-    ) {
+    if (!sameSshHostDestination(target, request)) {
       throw new Error("Saved SSH destination changed; select the host again");
     }
     const restored = await this.restore(host.connectionId, target);

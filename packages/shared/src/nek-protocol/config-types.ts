@@ -454,6 +454,8 @@ export interface NekRemoteHost {
   authMethod: "agent" | "privateKey" | "password";
   fingerprints: NekHostFingerprint[];
   state: "connected" | "connecting" | "disconnected" | "failed";
+  /** Open logical workspace connections across desktop windows, separate from settings SSH. */
+  workspaceConnections?: number;
   error?: string;
   nek: NekConfigTargetInfo["nek"];
 }

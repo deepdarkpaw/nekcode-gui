@@ -1442,7 +1442,10 @@ app.whenReady().then(async () => {
     setShortcutRecordingActive,
   });
 
-  const resolveSavedWorkspaceTarget = registerNekIpcHandlers(logger);
+  const resolveSavedWorkspaceTarget = registerNekIpcHandlers(
+    logger,
+    remoteSessionManager.addWorkspaceConnectionStatus,
+  );
   registerRemoteIpcHandlers({
     logger,
     resolveSavedWorkspaceTarget,

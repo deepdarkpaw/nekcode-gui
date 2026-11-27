@@ -8,11 +8,13 @@ import {
   HostResponseTypes,
   hostResponseMessageSchema,
   InternalChannels,
+  matchSavedRemoteHost,
   PlatformChannels,
   resolveWorkspaceKey,
   type RemoteTarget,
   type WindowHostRemoteWorkspaceDescriptor,
 } from "@zcode/shared";
+import type { NekRemoteHost } from "@zcode/shared/nek-protocol";
 import type { RemoteAssetDirs } from "./desktopRuntimeEnv.js";
 import { createDesktopRemoteReconnect } from "./desktopRemoteReconnect.js";
 import { emitRemoteConnectionLog as emitConnectionLog } from "./desktopRemoteConnectionLog.js";
@@ -754,7 +756,21 @@ export function createRemoteWorkspaceSessionManager(options: {
     );
   }
 
+  function addWorkspaceConnectionStatus(hosts: NekRemoteHost[]): NekRemoteHost[] {
+    const counts = new Map<string, number>();
+    for (const route of routesBySessionId.values()) {
+      if (route.attachmentState !== "attachable") continue;
+      const host = matchSavedRemoteHost(route.descriptor.target, hosts);
+      if (host) counts.set(host.connectionId, (counts.get(host.connectionId) ?? 0) + 1);
+    }
+    return hosts.map((host) => ({
+      ...host,
+      workspaceConnections: counts.get(host.connectionId) ?? 0,
+    }));
+  }
+
   return {
+    addWorkspaceConnectionStatus,
     createRemoteWorkspaceSession,
     attachRemoteWorkspaceSessionHost,
     bindRemoteWorkspaceSessionContext,

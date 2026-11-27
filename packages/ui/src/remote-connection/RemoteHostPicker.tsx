@@ -16,6 +16,18 @@ import { getErrorMessage } from "@/lib/errorMessage.js";
 
 export type HostChoice = { label: string; target: RemoteTarget; history?: RemoteTargetSnapshot };
 
+export function sshConfigAliasTarget(option: SSHConfigAliasOption): RemoteTarget | undefined {
+  if (!option.username?.trim()) return undefined;
+  return {
+    kind: "ssh",
+    sshConfigAlias: option.alias,
+    host: option.host?.trim() || option.alias,
+    username: option.username.trim(),
+    port: option.port,
+    privateKeyPath: option.privateKeyPath,
+  };
+}
+
 export function savedHostChoice(host: NekRemoteHost): HostChoice {
   const target = host.target;
   return {
@@ -53,15 +65,8 @@ export function remoteHostChoices(
     });
   }
   for (const alias of aliases) {
-    if (!alias.username) continue; // Incomplete entries can still be selected in the new-host form.
-    const target: RemoteTarget = {
-      kind: "ssh",
-      sshConfigAlias: alias.alias,
-      host: alias.host || alias.alias,
-      username: alias.username,
-      port: alias.port,
-      privateKeyPath: alias.privateKeyPath,
-    };
+    const target = sshConfigAliasTarget(alias);
+    if (!target) continue; // Incomplete entries can still be selected in the new-host form.
     if (!seen.has(route(target))) choices.push({ label: alias.alias, target });
     seen.add(route(target));
   }

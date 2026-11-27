@@ -34,6 +34,7 @@ interface RemoteConfigConnectionRegistryOptions {
  */
 export class NekRemoteConfigConnectionRegistry {
   private readonly connections = new Map<string, ConnectedRemote>();
+  private readonly connecting = new Map<string, Promise<void>>();
   private readonly createBackend: typeof createRemoteBackend;
   private readonly detectNek: typeof detectRemoteNek;
   private readonly detectConfigRuntime: typeof detectRemoteConfigRuntime;
@@ -44,8 +45,28 @@ export class NekRemoteConfigConnectionRegistry {
     this.detectConfigRuntime = options.detectConfigRuntime ?? detectRemoteConfigRuntime;
   }
 
-  async connect(connectionId: string, target: NekRemoteHost["target"]): Promise<void> {
-    await this.disconnect(connectionId);
+  connect(connectionId: string, target: NekRemoteHost["target"]): Promise<void> {
+    if (this.connections.has(connectionId)) return Promise.resolve();
+    const current = this.connecting.get(connectionId);
+    if (current) return current;
+    const attempt: Promise<void> = Promise.resolve()
+      .then(() => this.establish(connectionId, target, attempt))
+      .finally(() => {
+        if (this.connecting.get(connectionId) === attempt) this.connecting.delete(connectionId);
+      });
+    this.connecting.set(connectionId, attempt);
+    return attempt;
+  }
+
+  isConnecting(connectionId: string): boolean {
+    return this.connecting.has(connectionId);
+  }
+
+  private async establish(
+    connectionId: string,
+    target: NekRemoteHost["target"],
+    attempt: Promise<void>,
+  ): Promise<void> {
     const backend = await this.createBackend(target);
     try {
       const detected = await this.detectNek(backend);
@@ -59,6 +80,8 @@ export class NekRemoteConfigConnectionRegistry {
         runtime,
         connection: backend,
       });
+      if (this.connecting.get(connectionId) !== attempt)
+        throw new Error("Remote settings connection was cancelled");
       this.connections.set(connectionId, {
         backend,
         executor,
@@ -72,6 +95,7 @@ export class NekRemoteConfigConnectionRegistry {
   }
 
   async disconnect(connectionId: string): Promise<void> {
+    this.connecting.delete(connectionId);
     const connected = this.connections.get(connectionId);
     if (!connected) return;
     this.connections.delete(connectionId);
@@ -132,6 +156,7 @@ export class NekRemoteConfigConnectionRegistry {
   }
 
   async dispose(): Promise<void> {
+    this.connecting.clear();
     const pending = Array.from(this.connections.keys(), async (connectionId) => {
       await this.disconnect(connectionId);
     });

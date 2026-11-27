@@ -3,7 +3,7 @@
  * 支持手填与从 ~/.ssh/config 选择），外加别名。编辑时密码留空表示保持已保存的密码。
  */
 import { useEffect, useId, useState } from "react";
-import type { RemoteTarget } from "@zcode/shared";
+import type { RemoteTarget, SSHConfigAliasOption } from "@zcode/shared";
 import { Input } from "@/components/ui/input.js";
 import { useRemoteConnectionForm } from "@/hooks/useRemoteConnectionForm.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -19,11 +19,15 @@ type Form = ReturnType<typeof useRemoteConnectionForm>;
 function prefill(form: Form, target: RemoteTarget): void {
   form.setKind(target.kind);
   if (target.kind === "ssh") {
-    form.setHost(target.host);
-    form.setPort(target.port ? String(target.port) : "22");
-    form.setUsername(target.username);
-    form.setSshAuthMethod(target.privateKeyPath ? "privateKey" : "password");
-    form.setPrivateKeyPath(target.privateKeyPath ?? "");
+    if (target.sshConfigAlias) {
+      form.applySshConfigAlias({ ...target, alias: target.sshConfigAlias });
+    } else {
+      form.setHost(target.host);
+      form.setPort(target.port ? String(target.port) : "22");
+      form.setUsername(target.username);
+      form.setSshAuthMethod(target.privateKeyPath ? "privateKey" : "password");
+      form.setPrivateKeyPath(target.privateKeyPath ?? "");
+    }
   } else if (target.kind === "wsl") {
     form.setWslDistro(target.distro ?? "");
     form.setWslUser(target.user ?? "");
@@ -39,7 +43,10 @@ function buildTarget(
   editing: boolean,
 ) {
   const keepPassword =
-    editing && form.kind === "ssh" && form.sshAuthMethod === "password" && form.password === "";
+    (editing || !!form.selectedSshConfigAlias) &&
+    form.kind === "ssh" &&
+    form.sshAuthMethod === "password" &&
+    form.password === "";
   const result = buildRemoteTarget(intl, {
     ...form,
     password: keepPassword ? "kept" : form.password,
@@ -55,12 +62,16 @@ export function HostEditDialog({
   open,
   onOpenChange,
   host,
+  initialTarget,
+  initialAlias,
   isWindowsDesktop,
   onSave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   host?: NekRemoteHost;
+  initialTarget?: RemoteTarget;
+  initialAlias?: SSHConfigAliasOption;
   isWindowsDesktop: boolean;
   onSave: (alias: string, target: RemoteTarget) => Promise<void>;
 }) {
@@ -72,11 +83,22 @@ export function HostEditDialog({
   const [touched, setTouched] = useState(false);
   useEffect(() => {
     if (!open) return;
-    setAlias(host?.alias ?? "");
+    const target = host?.target ?? initialTarget;
+    const proposedAlias =
+      target?.kind === "ssh"
+        ? (target.sshConfigAlias ?? target.host)
+        : target?.kind === "wsl"
+          ? target.distro
+          : target?.container;
+    setAlias(host?.alias ?? initialAlias?.alias ?? proposedAlias ?? "");
     setTouched(false);
-    if (host) prefill(form, host.target);
-    // 只在打开时预填；form 每次渲染都是新对象。
-  }, [open, host]);
+    if (target) prefill(form, target);
+    if (initialAlias) {
+      form.setKind("ssh");
+      form.applySshConfigAlias(initialAlias);
+    }
+    // Each dialog instance receives a stable snapshot; host status updates must not reset edits.
+  }, [open, host, initialAlias, initialTarget]);
   const built = buildTarget(form, intl, Boolean(host));
   const aliasError = alias.trim() === "" ? t("settings.nek.hosts.error.aliasRequired") : undefined;
   return (

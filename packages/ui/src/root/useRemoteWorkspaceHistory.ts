@@ -7,7 +7,12 @@ import type {
   RemoteSessionClosedEvent,
   RemoteWorkspaceSessionEntry,
 } from "@zcode/shared";
-import { buildSshRemoteHostKey, createUuid, stripRemoteTargetSecrets } from "@zcode/shared";
+import {
+  buildSshRemoteHostKey,
+  createUuid,
+  inheritConnectedSavedHostId,
+  stripRemoteTargetSecrets,
+} from "@zcode/shared";
 import type { IServiceAccessor } from "@zcode/services";
 import {
   bindRemoteWorkspaceIdentity,
@@ -519,13 +524,14 @@ async function selectRemoteWorkspaceProjectFromDialog({
   if (!remoteSession) {
     throw new Error(loadingMessage);
   }
-  const remoteTarget = connectionTarget ?? remoteSession.target;
-  if (!remoteTarget) {
+  const requestedTarget = connectionTarget ?? remoteSession.target;
+  if (!requestedTarget) {
     // 手机 web relay 复用 remote session store 只做服务路由，没有本地可重连 target。
     // 远程历史的选目录/持久化流程必须有 target，缺失时直接阻断，避免把无 target 的桥接 session 写进历史。
     throw new Error(`远程 workspace session 缺少连接目标: ${sessionId}`);
   }
 
+  const remoteTarget = inheritConnectedSavedHostId(requestedTarget, remoteSession.target);
   const canonicalPath = await resolveRemoteWorkspaceCanonicalPath(sessionId, path);
   const workspaceIdentity = buildRemoteWorkspaceIdentity(canonicalPath, remoteTarget);
   const existingWorkspaceTab = getWorkspaceTabs().find(

@@ -337,6 +337,7 @@ function RootInner({
     handleSelectRemoteProject,
     handleConnectRemote,
     handleReconnectRemoteWorkspace,
+    handleOpenRemoteWorkspaceFromHistory,
     handleRemoteWorkspaceTabsClosed,
   } = useRemoteWorkspaceHistory({
     intl,
@@ -721,6 +722,8 @@ function RootInner({
     isMacDesktop,
     isWindowsDesktop,
     captionWorkspacePath: activeWorkspacePath,
+    remoteWorkspaceSessions,
+    onOpenRemoteProject: allowRemoteWorkspace ? handleOpenRemoteWorkspaceFromHistory : undefined,
     onBack: activeWorkspacePath ? handleBackFromSettings : undefined,
     onCreateTask: handleCreateTask,
     onOpenWorkspace: handleOpenWorkspace,
@@ -845,6 +848,7 @@ function RootInner({
               handleCreateScratchWorkspace={handleCreateScratchWorkspace}
               remoteConnectionInProgress={remoteConnectionInProgress}
               remoteWorkspaceSessions={remoteWorkspaceSessions}
+              onOpenRemoteProject={settingsLayerProps.onOpenRemoteProject}
               allowRemoteWorkspace={allowRemoteWorkspace}
               handleBackFromSettings={handleBackFromSettings}
               reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
