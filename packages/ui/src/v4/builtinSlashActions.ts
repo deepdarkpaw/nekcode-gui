@@ -119,7 +119,7 @@ async function compact(args: string, ports: SlashActionPorts): Promise<SlashOutc
 }
 
 async function reload(ports: SlashActionPorts): Promise<SlashOutcome> {
-  const { reloaded, deferred, diagnostics, failures } = await ports.reload();
+  const { reloaded, deferred, diagnostics, failures, announced } = await ports.reload();
   const diagnosticsError = diagnostics.find((item) => item.severity === "error");
   if (failures.length > 0) {
     return blocked("settings.nek.reload.failed", {
@@ -130,8 +130,14 @@ async function reload(ports: SlashActionPorts): Promise<SlashOutcome> {
   if (diagnosticsError)
     return blocked("chat.slash.reloadConfigError", { reason: diagnosticsError.message });
   const warning = diagnostics[0];
-  return warning
-    ? sentWithNotice("chat.slash.reloadWarning", { reloaded, deferred, reason: warning.message })
+  if (warning)
+    return sentWithNotice("chat.slash.reloadWarning", {
+      reloaded,
+      deferred,
+      reason: warning.message,
+    });
+  return announced && reloaded === 0 && deferred === 0
+    ? sentWithNotice("settings.nek.machineReload.requested")
     : sentWithNotice("settings.nek.advanced.reloadResult", { reloaded, deferred });
 }
 

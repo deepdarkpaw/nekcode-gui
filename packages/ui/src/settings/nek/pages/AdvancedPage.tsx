@@ -4,7 +4,11 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { RefreshCwIcon } from "lucide-react";
-import { parseNekTimeoutMs, type NekSettingsView } from "@zcode/shared/nek-protocol";
+import {
+  parseNekTimeoutMs,
+  type NekSettingsView,
+  type NekSessionReloadOutcome,
+} from "@zcode/shared/nek-protocol";
 import { AsyncButton } from "@/components/ui/async-button.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -286,10 +290,16 @@ function MaintenanceSection() {
     intl.formatMessage({ id }, values);
   const api = useNekConfigApi();
   const { target, targetInfo } = useNekTarget();
-  const [reloadResult, setReloadResult] = useState<string | null>(null);
-  const [reloadFailures, setReloadFailures] = useState<
-    Array<{ sessionKey: string; message: string }>
-  >([]);
+  const [outcome, setOutcome] = useState<NekSessionReloadOutcome | null>(null);
+  const reloadFailures = outcome?.failures ?? [];
+  const summary = outcome
+    ? t(
+        outcome.announced && !outcome.reloaded && !outcome.deferred
+          ? "settings.nek.machineReload.announced"
+          : "settings.nek.machineReload.counts",
+        { host: targetInfo?.label ?? "", reloaded: outcome.reloaded, deferred: outcome.deferred },
+      )
+    : t("settings.nek.advanced.reloadHint");
   const agentDir = targetInfo?.nek.state === "ready" ? targetInfo.nek.agentDir : undefined;
   return (
     <SettingSection title={t("settings.nek.advanced.maintenance")}>
@@ -299,27 +309,16 @@ function MaintenanceSection() {
       >
         {agentDir ? <OpenDirectoryButton target={target} path={agentDir} /> : null}
       </SettingRow>
-      <SettingRow
-        label={t("settings.nek.advanced.reload")}
-        description={reloadResult ?? t("settings.nek.advanced.reloadHint")}
-      >
+      <SettingRow label={t("settings.nek.advanced.reload")} description={summary}>
         <AsyncButton
           variant="outline"
           icon={<RefreshCwIcon />}
-          onClick={async () => {
-            const result = await api.reloadRunningSessions(target);
-            setReloadResult(
-              t("settings.nek.advanced.reloadResult", {
-                reloaded: result.reloaded,
-                deferred: result.deferred,
-              }),
-            );
-            setReloadFailures(result.failures);
-          }}
+          onClick={async () => setOutcome(await api.reloadRunningSessions(target))}
         >
           {t("settings.nek.advanced.reloadRun")}
         </AsyncButton>
       </SettingRow>
+      <DiagnosticsList diagnostics={outcome?.diagnostics} />
       {reloadFailures.length > 0 ? (
         <div role="alert" className="flex flex-col gap-1 rounded-lg bg-warning/10 px-3 py-2">
           <p className="text-ui-sm font-medium text-warning">
@@ -344,6 +343,7 @@ function MaintenanceSection() {
 export function AdvancedPage() {
   const { intl } = useZCodeIntl();
   const settings = useNekSettingsDoc();
+  const { targetKey } = useNekTarget();
   return (
     <NekPageFrame
       usesTarget
@@ -357,7 +357,7 @@ export function AdvancedPage() {
             <NetworkSection settings={settings} />
             <BehaviorSection settings={settings} />
             <RawJsonSection settings={settings} />
-            <MaintenanceSection />
+            <MaintenanceSection key={targetKey} />
           </div>
         )}
       </DocumentGate>

@@ -187,7 +187,9 @@ export function CopyToHostDialog({
       >
         <DialogHeader className="pr-8">
           <DialogTitle>{t("settings.nek.copy.title", { host: hostLabel })}</DialogTitle>
-          <DialogDescription>{t("settings.nek.copy.description")}</DialogDescription>
+          <DialogDescription>
+            {t("settings.nek.copy.description")} {t("settings.nek.machineReload.copyHint")}
+          </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
           {error ? (

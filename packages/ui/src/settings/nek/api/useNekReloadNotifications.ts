@@ -1,67 +1,76 @@
-/**
- * 写盘后的自动 reload 结果通知。
- *
- * 为什么需要它：写盘成功只说明文件写对了；`reload` 还要让目标机器上的 nek 进程重新读配置。
- * 进程起不来、RPC 超时这类**进程级失败**不该静默吞掉（否则用户以为新配置已生效），
- * 所以以 toast 提示并提供"重试"；配置内容本身的问题仍在各页面的 DiagnosticsList 里显示。
- */
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { NekSessionReloadOutcome } from "@zcode/shared/nek-protocol";
-import { toast } from "@/components/ui/toast.js";
+import { dismissToast, toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useNekConfigApi, useNekTarget } from "./NekSettingsContext.js";
 import { toNekConfigApiError } from "./nekErrors.js";
 
-const RELOAD_TOAST_MS = 8000;
+export interface ReloadEndpoint {
+  subscribe(listener: (result: NekSessionReloadOutcome) => void): () => void;
+  retry(): Promise<NekSessionReloadOutcome>;
+}
 
-export function useNekReloadNotifications(): void {
-  const api = useNekConfigApi();
-  const { target, targetKey } = useNekTarget();
+/** A retry belongs to the exact connection that reported the failure, never the current tab. */
+export function useNekReloadNotifications(endpoint: ReloadEndpoint, host: string, key: string) {
   const { intl } = useZCodeIntl();
-  const targetRef = useRef(target);
-  targetRef.current = target;
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
-
   useEffect(() => {
+    let active = true;
+    let retrying = false;
+    let warningId: number | undefined;
     const t = (id: string, values?: Record<string, string | number>) =>
-      intlRef.current.formatMessage({ id }, values);
-    const activeTarget = targetRef.current;
-    const report = (outcome: NekSessionReloadOutcome) => {
-      if (outcome.failures.length === 0) {
-        if (outcome.deferred > 0)
-          toast(t("settings.nek.resources.reloadDeferred"), {
-            variant: "info",
-            dedupeKey: `nek-reload-deferred:${targetKey}`,
-          });
-        return false;
-      }
-      toast(
-        t("settings.nek.reload.failed", {
-          count: outcome.failures.length,
-          reason: outcome.failures[0]?.message ?? "",
-        }),
-        {
-          variant: "warning",
-          durationMs: RELOAD_TOAST_MS,
-          dedupeKey: "nek-reload-failure",
-          actionLabel: t("settings.nek.reload.retry"),
-          onAction: () => {
-            void api
-              .reloadRunningSessions(activeTarget)
-              .then((retried) => {
-                if (!report(retried)) {
-                  toast(t("settings.nek.reload.recovered"), { variant: "info" });
-                }
-              })
-              .catch((error: unknown) => {
-                toast(toNekConfigApiError(error).message, { variant: "warning" });
-              });
-          },
-        },
-      );
-      return true;
+      intl.formatMessage({ id }, { host, ...values });
+    const clearWarning = () => {
+      if (warningId !== undefined) dismissToast(warningId);
+      warningId = undefined;
     };
-    return api.onReloadResult(targetRef.current, report);
-  }, [api, targetKey]);
+    const warn = (reason: string) => {
+      clearWarning();
+      warningId = toast(t("settings.nek.machineReload.failed", { reason }), {
+        variant: "warning",
+        durationMs: 0,
+        dedupeKey: `nek-reload-failure:${key}`,
+        actionLabel: t("settings.nek.reload.retry"),
+        onAction: () => {
+          if (!active || retrying) return;
+          retrying = true;
+          void endpoint
+            .retry()
+            .then(
+              (outcome) => report(outcome, true),
+              (error: unknown) => {
+                if (active) warn(toNekConfigApiError(error).message);
+              },
+            )
+            .finally(() => {
+              retrying = false;
+            });
+        },
+      });
+    };
+    const report = (outcome: NekSessionReloadOutcome, retried = false) => {
+      if (!active) return;
+      const failure =
+        outcome.failures[0] ?? outcome.diagnostics.find((d) => d.severity === "error");
+      if (failure) return warn(failure.message);
+      if (retried) clearWarning();
+      const { reloaded, deferred } = outcome;
+      const message =
+        deferred > 0 || (outcome.trigger === "manual" && reloaded > 0)
+          ? t("settings.nek.machineReload.counts", { reloaded, deferred })
+          : retried
+            ? t(
+                outcome.announced
+                  ? "settings.nek.machineReload.announced"
+                  : "settings.nek.machineReload.counts",
+                { reloaded, deferred },
+              )
+            : null;
+      if (message) toast(message, { variant: "info", dedupeKey: `nek-reload-result:${key}` });
+    };
+    const stop = endpoint.subscribe(report);
+    return () => {
+      active = false;
+      stop();
+      clearWarning();
+    };
+  }, [endpoint, host, key, intl]);
 }

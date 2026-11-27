@@ -3507,7 +3507,17 @@ const zhCN: Record<string, string> = {
   "settings.nek.advanced.configDir": "配置目录",
   "settings.nek.advanced.reload": "重新载入运行中的任务",
   "settings.nek.advanced.reloadHint":
-    "写入配置后会自动重新载入；正在运行的回合将于本轮结束后生效。",
+    "让这台主机上已打开的任务重新读取配置。无需重启 SSH；正在执行的任务在本轮结束后应用。",
+  "settings.nek.machineReload.announced":
+    "已向 {host} 发出配置重载通知。已打开的任务会报告执行结果。",
+  "settings.nek.machineReload.counts":
+    "{host}：已重载 {reloaded} 个任务，{deferred} 个将在本轮结束后生效。",
+  "settings.nek.machineReload.failed": "{host} 的配置重载失败：{reason}",
+  "settings.nek.machineReload.local": "本机",
+  "settings.nek.machineReload.remote": "远端主机",
+  "settings.nek.machineReload.requested": "已通知当前主机重新载入配置。",
+  "settings.nek.machineReload.copyHint":
+    "复制会写入目标主机的配置，并请求已打开的任务重新载入；不会中断正在执行的回合。",
   "settings.nek.advanced.reloadRun": "重新载入",
   "settings.nek.advanced.reloadResult":
     "已重新载入 {reloaded} 个任务，{deferred} 个将于本轮结束后生效",

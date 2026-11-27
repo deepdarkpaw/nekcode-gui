@@ -46,6 +46,7 @@ import { NekOnboardingModal } from "@/onboarding/NekOnboardingModal.js";
 import { NekRemotePromptHost } from "@/remote/nek/NekRemotePromptHost.js";
 import { RpcSubscriptionFaultNotifier } from "@/RpcSubscriptionFaultNotifier.js";
 import { NekSettingsProvider } from "@/settings/nek/api/NekSettingsContext.js";
+import { MachineReloadNotifications } from "@/root/MachineReloadNotifications.js";
 import { resolveNekSettingsApis } from "@/settings/nek/api/registry.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { useRemoteWorkspaceHistory } from "@/root/useRemoteWorkspaceHistory.js";
@@ -107,6 +108,7 @@ export function Root(props: RootProps) {
                     enabled={props.assistantCodeCommentCardsEnabled}
                   >
                     <NekSettingsProvider apis={nekApis}>
+                      <MachineReloadNotifications local={props.services.nekWorkspaceConfigService} />
                       <RootInner {...props} />
                     </NekSettingsProvider>
                   </AssistantCodeCommentFeatureProvider>

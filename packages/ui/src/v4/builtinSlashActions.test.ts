@@ -164,6 +164,19 @@ describe("builtin GUI slash actions", () => {
       notice: { id: "settings.nek.advanced.reloadResult", values: { reloaded: 2, deferred: 1 } },
     });
     expect(working.calls).toEqual([["reload"]]);
+    const announced = fixture({
+      reload: async () => ({
+        announced: true,
+        reloaded: 0,
+        deferred: 0,
+        diagnostics: [],
+        failures: [],
+      }),
+    });
+    expect(await announced.execute("reload")).toMatchObject({
+      status: "sent",
+      notice: { id: "settings.nek.machineReload.requested" },
+    });
     const failed = fixture({
       reload: async () => ({
         reloaded: 0,

@@ -3750,7 +3750,17 @@ const enUS: Record<string, string> = {
   "settings.nek.advanced.configDir": "Configuration folder",
   "settings.nek.advanced.reload": "Reload running tasks",
   "settings.nek.advanced.reloadHint":
-    "Tasks reload automatically after a configuration write. Running tasks pick up changes after the current turn.",
+    "Ask open tasks on this host to read their configuration again. No SSH restart is needed; busy tasks apply changes after the current turn.",
+  "settings.nek.machineReload.announced":
+    "Reload requested on {host}. Open tasks will report their results.",
+  "settings.nek.machineReload.counts":
+    "{host}: {reloaded} tasks reloaded; {deferred} will apply changes after the current turn.",
+  "settings.nek.machineReload.failed": "Could not reload configuration on {host}: {reason}",
+  "settings.nek.machineReload.local": "This computer",
+  "settings.nek.machineReload.remote": "Remote host",
+  "settings.nek.machineReload.requested": "A configuration reload was requested on this host.",
+  "settings.nek.machineReload.copyHint":
+    "Copy writes the destination host’s configuration and requests a reload in its open tasks without interrupting a running turn.",
   "settings.nek.advanced.reloadRun": "Reload",
   "settings.nek.advanced.reloadResult":
     "Reloaded {reloaded} tasks; {deferred} will reload after the current turn",

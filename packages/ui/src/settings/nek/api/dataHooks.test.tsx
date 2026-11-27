@@ -16,7 +16,7 @@ import { useNekTarget } from "./NekSettingsContext.js";
 import { useNekLogin } from "./useNekLogin.js";
 import { useNekQuery } from "./useNekQuery.js";
 import { useNekAgentPresetsDoc } from "./mcpDocs.js";
-import { useNekReloadNotifications } from "./useNekReloadNotifications.js";
+import { MachineReloadNotifications } from "@/root/MachineReloadNotifications.js";
 import {
   createNekTestEnv,
   flushNek,
@@ -314,11 +314,8 @@ describe("v2 contract wiring", () => {
   });
 
   it("toasts a reload failure after a write and offers a retry", async () => {
-    function Notifier() {
-      useNekReloadNotifications();
-      return null;
-    }
-    render(<Notifier />, { wrapper: env.wrapper });
+    render(<MachineReloadNotifications />, { wrapper: env.wrapper });
+    await flushNek();
     await act(async () => {
       env.config.simulateReloadResult(LOCAL, {
         failures: [{ sessionKey: "session-7", message: "stdin closed" }],
@@ -329,6 +326,6 @@ describe("v2 contract wiring", () => {
     await act(async () => {
       fireEvent.click(retry);
     });
-    expect(await screen.findByText("所有 nek 进程已重新载入")).toBeDefined();
+    expect(await screen.findByText(/已重载 1 个任务，1 个将在本轮结束后生效/)).toBeDefined();
   });
 });
