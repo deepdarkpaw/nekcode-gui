@@ -27,6 +27,8 @@ export function useNekReloadNotifications(endpoint: ReloadEndpoint, host: string
       warningId = toast(t("settings.nek.machineReload.failed", { reason }), {
         variant: "warning",
         durationMs: 0,
+        dismissible: true,
+        dismissLabel: t("common.close"),
         dedupeKey: `nek-reload-failure:${key}`,
         actionLabel: t("settings.nek.reload.retry"),
         onAction: () => {
