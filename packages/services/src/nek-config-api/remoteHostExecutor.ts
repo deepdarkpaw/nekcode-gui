@@ -341,11 +341,20 @@ export function createRemoteNekConfigHostExecutor(
     asContent(await run("read", path));
 
   const lock: NekHostLock = {
-    runLocked: async (path, critical) => {
+    runLocked: async (path, critical, atomic) => {
       await run("lock", path, String(LOCK_TIMEOUT_MS));
       let failure: unknown;
       try {
-        const next = critical((await readFile(path)) ?? undefined);
+        let current: string | null;
+        if (atomic) {
+          const info = asStat(await run("stat", path));
+          current = info
+            ? asContent(await run("resourceRead", path, String(atomic.maxBytes)))
+            : null;
+        } else current = await readFile(path);
+        const next = critical(current ?? undefined);
+        if (atomic && next !== undefined && Buffer.byteLength(next) > atomic.maxBytes)
+          throw new Error("Broadcast metadata size exceeded");
         if (next !== undefined) await writeFileAtomic(path, next);
       } catch (error) {
         failure = error;

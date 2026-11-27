@@ -24,6 +24,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
+import lockfile from "proper-lockfile";
 import { dirname, join, resolve } from "node:path";
 import type { NekRpcProcessHandle } from "../nek-agent/nekRpcClient.js";
 import { NekLocator } from "../nek-agent/nekLocator.js";
@@ -46,6 +47,8 @@ export interface NekHostLock {
   runLocked: (
     path: string,
     critical: (current: string | undefined) => string | undefined,
+    /** Opt-in bounded atomic read/modify/rename (including first creation), for broadcast metadata. */
+    atomic?: { maxBytes: number },
   ) => Promise<void> | void;
 }
 
@@ -140,6 +143,38 @@ async function writeResourceFile(
   }
 }
 
+/** Lock before reading even on first creation; unique staging files and rename keep readers atomic. */
+async function updateAtomicMetadata(
+  path: string,
+  critical: (current: string | undefined) => string | undefined,
+  maxBytes: number,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const release = await lockfile.lock(path, {
+    realpath: false,
+    retries: { retries: 100, minTimeout: 20, maxTimeout: 100 },
+  });
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    let current: string | undefined;
+    try {
+      current = await readBoundedResource(path, maxBytes);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const next = critical(current);
+    if (next === undefined) return;
+    if (Buffer.byteLength(next) > maxBytes) throw new Error("Broadcast metadata size exceeded");
+    await writeFile(temporary, next, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    await release();
+  }
+}
+
 /** 本机执行器：Node fs + `nek gui-info` 定位的启动器。 */
 export function createLocalNekConfigHostExecutor(
   options: LocalNekConfigHostExecutorOptions = {},
@@ -226,8 +261,9 @@ export function createLocalNekConfigHostExecutor(
     },
     spawnNek,
     lock: {
-      runLocked: (path, critical) => {
-        lock.run(path, critical);
+      runLocked: (path, critical, atomic) => {
+        if (!atomic) return lock.run(path, critical);
+        return updateAtomicMetadata(path, critical, atomic.maxBytes);
       },
     },
   };

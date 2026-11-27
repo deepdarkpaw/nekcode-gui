@@ -430,6 +430,11 @@ export interface NekBuiltinTool {
  * 但必须显示给用户并可重试，所以和"配置诊断"分开。
  */
 export interface NekSessionReloadOutcome {
+  /** Cause of an automatic or explicitly requested reload. */
+  trigger?: "write" | "login" | "manual";
+  /** The machine-local announcement was persisted; this is not an acknowledgement from other owners. */
+  announced?: boolean;
+  /** Successfully reloaded tasks only; control processes never contribute to task counts. */
   reloaded: number;
   /** 当前回合未结束，已排队到回合结束后生效。 */
   deferred: number;
