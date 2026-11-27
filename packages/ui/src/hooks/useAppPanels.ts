@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IPlatformService } from "@zcode/shared";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
+import { withCodeViewerWorkspace } from "@/lib/codeViewerSource.js";
 // 保活：side pane terminal 跨 workspace 会话上移到模块级 registry。
 // 关闭 terminal tab 时必须显式 release，杀掉 PTY，避免常驻 registry 造成孤儿进程。
 import { sidePaneTerminalSessionRegistry } from "@/terminal/sidePaneTerminalSessionRegistry.js";
@@ -275,7 +276,12 @@ export function useAppPanels(options: {
     (source: CodeViewerSource) => {
       revealSidePaneForCurrentOwner();
       commitOpenedSidePaneState((current) => {
-        const next = openCodeViewerSidePane(current, source, sidePaneOwnerIdRef.current);
+        const scopedSource = withCodeViewerWorkspace(source, {
+          workspacePath: workspaceAbsPath,
+          workspaceIdentity,
+          workspaceRemoteSessionId: workspaceRemoteSessionId ?? undefined,
+        });
+        const next = openCodeViewerSidePane(current, scopedSource, sidePaneOwnerIdRef.current);
         const activeTab = getActiveSidePaneTab(next);
         const activePath =
           activeTab?.type === "code-viewer" ? (activeTab.source.path ?? "none") : "none";
@@ -285,7 +291,13 @@ export function useAppPanels(options: {
         return next;
       });
     },
-    [commitOpenedSidePaneState, revealSidePaneForCurrentOwner, workspaceAbsPath],
+    [
+      commitOpenedSidePaneState,
+      revealSidePaneForCurrentOwner,
+      workspaceAbsPath,
+      workspaceIdentity,
+      workspaceRemoteSessionId,
+    ],
   );
 
   const handleOpenBrowserUrl = useCallback(

@@ -39,7 +39,6 @@ import {
   type MediaCodeViewerSource,
 } from "@/lib/codeViewer.js";
 import type { PdfViewerSource } from "@/components/ui/pdf-viewer.js";
-import { normalizeCodeViewerSource } from "@/lib/codeViewerSource.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
 import { getPathLeaf } from "@/lib/path.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
@@ -378,7 +377,7 @@ function buildCodeViewerBreadcrumb(
 }
 
 export function PreviewPane({
-  source: rawSource,
+  source,
   workspacePath,
   onOpenBrowserUrl,
   onOpenCodeViewer,
@@ -397,10 +396,6 @@ export function PreviewPane({
   const { intl } = useZCodeIntl();
   const theme = useZCodeStore((state) => state.theme);
   const codePreviewSettings = useZCodeStore((state) => state.codePreviewSettings);
-  const source = useMemo(
-    () => (rawSource ? normalizeCodeViewerSource(rawSource) : null),
-    [rawSource],
-  );
   const sourceWorkspacePath = source?.workspacePath ?? workspacePath;
   const matchedOpenContext = useWorkspaceOpenInEditorTarget({
     workspacePath: sourceWorkspacePath,

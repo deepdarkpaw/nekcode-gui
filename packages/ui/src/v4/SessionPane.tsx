@@ -60,6 +60,7 @@ import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
+import { withCodeViewerWorkspace } from "@/lib/codeViewerSource.js";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import { buildChatSessionScrollMemoryKey } from "@/lib/chatSessionScrollMemory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
@@ -455,7 +456,7 @@ export function SessionPane({
   onRefreshGit,
   onOpenGitReview,
   onOpenBrowserUrl,
-    onOpenCodeViewer,
+  onOpenCodeViewer: openCodeViewer,
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
@@ -1841,6 +1842,15 @@ export function SessionPane({
     dispatch: dispatchCommand,
     onOpenSession: onSessionCreated,
   });
+  const onOpenCodeViewer = useMemo(() => {
+    if (!openCodeViewer) return undefined;
+    const scope = {
+      workspacePath,
+      workspaceIdentity,
+      workspaceRemoteSessionId: remoteSessionId ?? undefined,
+    };
+    return (source: CodeViewerSource) => openCodeViewer(withCodeViewerWorkspace(source, scope));
+  }, [openCodeViewer, workspacePath, workspaceIdentity, remoteSessionId]);
   const rowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       workspacePath,
@@ -1861,7 +1871,7 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       onNavigateToRow: handleNavigateToRow,
       onOpenBrowserUrl,
-            onOpenCodeViewer,
+      onOpenCodeViewer,
       onOpenFileLink,
       onOpenSubagentSession: onOpenSubagentSession ? handleOpenSubagentSession : undefined,
       onOpenPlanDetail: onOpenPlanDetail ? handleOpenPlanDetail : undefined,
@@ -1892,7 +1902,7 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       handleNavigateToRow,
       onOpenBrowserUrl,
-            onOpenCodeViewer,
+      onOpenCodeViewer,
       onOpenFileLink,
       onOpenSubagentSession,
       handleOpenSubagentSession,
