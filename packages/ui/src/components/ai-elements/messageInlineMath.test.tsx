@@ -18,21 +18,28 @@ function message(text: string, streaming = false) {
 }
 
 it.each([false, true])("renders TeX in prose and table cells (streaming=%s)", (streaming) => {
-  const { container } = render(message(String.raw`增益 \(g_0\approx \ln(G_0)/L\)，长度 $L$。
+  const { container } = render(
+    message(
+      String.raw`增益 \(g_0\approx \ln(G_0)/L\)，长度 $L$。
 
 | 量 | 含义 |
 | --- | --- |
-| \(E_{\rm in}\) | 输入能量 |`, streaming));
+| \(E_{\rm in}\) | 输入能量 |`,
+      streaming,
+    ),
+  );
   expect(container.querySelectorAll("p .katex")).toHaveLength(2);
   expect(container.querySelector("td .katex annotation")?.textContent).toBe(String.raw`E_{\rm in}`);
 });
 
 it("does not interpret plain parentheses, code or escaped delimiters as math", () => {
-  const { container } = render(message([
-    String.raw`(L) 与 \\(x\\)，价格 $5 到 $10。`,
-    "`\\(y\\)`",
-    "```text\n\\(z\\)\n```",
-  ].join("\n\n")));
+  const { container } = render(
+    message(
+      [String.raw`(L) 与 \\(x\\)，价格 $5 到 $10。`, "`\\(y\\)`", "```text\n\\(z\\)\n```"].join(
+        "\n\n",
+      ),
+    ),
+  );
   expect(container.querySelector(".katex")).toBeNull();
   expect(container.textContent).toContain(String.raw`\(y\)`);
 });
