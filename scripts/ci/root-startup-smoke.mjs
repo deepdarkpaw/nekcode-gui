@@ -107,6 +107,7 @@ try {
       `/fixture/${mode === "empty" ? "default" : mode}`,
     );
     assert.equal(await page.evaluate(() => window.startupFixture.modelReads), 1);
+    assert.equal(await page.evaluate(() => window.startupFixture.reloadListeners), 1);
     assert.equal(
       await page.evaluate(() => window.startupFixture.directoryCreates),
       1,
@@ -191,6 +192,7 @@ try {
     window.startupFixture.resolveModels();
   });
   assert.deepEqual(await page.evaluate(() => window.startupFixture.platformListeners), {});
+  assert.equal(await page.evaluate(() => window.startupFixture.reloadListeners), 0);
   assert.deepEqual(requests, []);
   assert.deepEqual(errors, []);
   console.log(

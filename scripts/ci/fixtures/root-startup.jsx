@@ -3,6 +3,16 @@ import { createRoot } from "react-dom/client";
 import { Root } from "../../../packages/ui/src/Root.js";
 import { ZCodeIntlProvider } from "../../../packages/ui/src/i18n/IntlProvider.js";
 
+import {
+  createMockNekSettingsApis,
+  registerNekSettingsApis,
+} from "../../../packages/ui/src/settings/nek/api/registry.js";
+
+// This walkthrough exercises a returning user. First-run onboarding has its own browser suite.
+const { config, host } = createMockNekSettingsApis(0);
+await host.setOnboardingState({ completedAt: "2026-01-01T00:00:00.000Z" });
+registerNekSettingsApis(config, host);
+
 const params = new URLSearchParams(location.search);
 const mode = params.get("mode") || "restored";
 const modelMode = params.get("models") || "ready";
@@ -12,6 +22,7 @@ window.startupFixture = {
   modelReads: 0,
   directoryCreates: 0,
   directorySelections: 0,
+  reloadListeners: 0,
   platformListeners: {},
 };
 const fixture = window.startupFixture;
@@ -55,6 +66,14 @@ const serviceValues = {
         throw new Error("Fixture model settings failure");
       return modelView;
     },
+  },
+  nekWorkspaceConfigService: {
+    // Startup subscribes to reload results; it must never initiate a config read or reload.
+    onDynamicDidReload: () => () => {
+      fixture.reloadListeners++;
+      return { dispose: () => fixture.reloadListeners-- };
+    },
+    callConfig: (method) => forbidden(`nekWorkspaceConfig.${method}`),
   },
   zcodeAgentService: {
     async syncAppRuntimePreferences() {
