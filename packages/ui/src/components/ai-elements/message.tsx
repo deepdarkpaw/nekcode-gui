@@ -81,6 +81,7 @@ import {
   parseMarkdownFileLinkTarget,
   resolveMarkdownFileLink,
 } from "@/lib/markdownFileLink.js";
+import { remarkParenMath } from "@/lib/remarkParenMath.js";
 import { stripBalancedAssistantPathQuotes } from "@/lib/assistantPathQuotes.js";
 import { getPathLeaf } from "@/lib/path.js";
 import { getWorkspaceFileRelativePath } from "@/workspace-file-tree/model.js";
@@ -1342,6 +1343,7 @@ export const MessageResponse = memo(
         // 显式传 remarkPlugins 会覆盖 Streamdown 默认插件；
         // citation 必须和默认 GFM 插件一起传入，否则表格会退化成普通段落。
         ...messageDefaultRemarkPlugins,
+        remarkParenMath,
         // Windows 绝对路径链接里的 `\.` 会在 remark 解析期被当成标点转义吃掉
         // rehype 阶段已经看不到原文。这条还原必须无条件生效，不能挂在 citation 开关下。
         windowsFileLinkEscapeRemarkPlugin,

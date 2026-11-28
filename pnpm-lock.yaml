@@ -611,6 +611,15 @@ importers:
       happy-dom:
         specifier: ^21.0.4
         version: 21.0.4
+      micromark-extension-math:
+        specifier: ^3.1.0
+        version: 3.1.0
+      micromark-util-types:
+        specifier: ^2.0.2
+        version: 2.0.2
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
       tailwindcss:
         specifier: ^4.2.2
         version: 4.2.2

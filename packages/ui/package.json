@@ -82,6 +82,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^21.0.4",
+    "micromark-extension-math": "^3.1.0",
+    "micromark-util-types": "^2.0.2",
+    "remark-parse": "^11.0.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
     "unified": "^11.0.5"
