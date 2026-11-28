@@ -108,7 +108,9 @@ export function Root(props: RootProps) {
                     enabled={props.assistantCodeCommentCardsEnabled}
                   >
                     <NekSettingsProvider apis={nekApis}>
-                      <MachineReloadNotifications local={props.services.nekWorkspaceConfigService} />
+                      <MachineReloadNotifications
+                        local={props.services.nekWorkspaceConfigService}
+                      />
                       <RootInner {...props} />
                     </NekSettingsProvider>
                   </AssistantCodeCommentFeatureProvider>

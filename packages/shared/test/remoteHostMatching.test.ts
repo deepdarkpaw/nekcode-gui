@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   inheritConnectedSavedHostId,
   matchSavedRemoteHost,
   withSavedRemoteHostId,
-} from "./remoteHostMatching.js";
+} from "../src/remoteHostMatching.js";
 
 const target = {
   kind: "ssh",
@@ -16,22 +17,24 @@ const host = { connectionId: "saved", target, authMethod: "agent" } as const;
 describe("saved workspace host association", () => {
   it("uses explicit identity among duplicate profiles but never follows an edited destination", () => {
     const duplicate = { ...host, connectionId: "other" };
-    expect(
+    assert.equal(
       matchSavedRemoteHost({ ...target, savedHostId: host.connectionId }, [duplicate, host]),
-    ).toBe(host);
-    expect(matchSavedRemoteHost({ ...target, savedHostId: "missing" }, [host])).toBeUndefined();
-    expect(
+      host,
+    );
+    assert.equal(matchSavedRemoteHost({ ...target, savedHostId: "missing" }, [host]), undefined);
+    assert.equal(
       matchSavedRemoteHost({ ...target, host: "elsewhere", savedHostId: host.connectionId }, [
         host,
       ]),
-    ).toBeUndefined();
+      undefined,
+    );
   });
 
   it("upgrades only unique SSH routes without collapsing aliases, users, ports or keys", () => {
-    expect(
-      withSavedRemoteHostId({ ...target, host: "DEV.example", port: 22 }, [host]),
-    ).toMatchObject({ savedHostId: "saved" });
-    expect(withSavedRemoteHostId(target, [host, { ...host, connectionId: "duplicate" }])).toBe(
+    const legacy = { ...target, host: "DEV.example", port: 22 };
+    assert.deepEqual(withSavedRemoteHostId(legacy, [host]), { ...legacy, savedHostId: "saved" });
+    assert.equal(
+      withSavedRemoteHostId(target, [host, { ...host, connectionId: "duplicate" }]),
       target,
     );
     for (const variant of [
@@ -41,23 +44,24 @@ describe("saved workspace host association", () => {
       { ...target, port: 2222 },
       { ...target, privateKeyPath: "/key" },
     ])
-      expect(matchSavedRemoteHost(variant, [host])).toBeUndefined();
+      assert.equal(matchSavedRemoteHost(variant, [host]), undefined);
   });
 
   it("keeps legacy credentials during migration and does not guess a missing password", () => {
     const passwordHost = { ...host, authMethod: "password" } as const;
-    expect(withSavedRemoteHostId(target, [passwordHost])).toBe(target);
+    assert.equal(withSavedRemoteHostId(target, [passwordHost]), target);
     const withPassword = { ...target, password: "ephemeral" };
-    expect(withSavedRemoteHostId(withPassword, [passwordHost])).toEqual({
+    assert.deepEqual(withSavedRemoteHostId(withPassword, [passwordHost]), {
       ...withPassword,
       savedHostId: "saved",
     });
-    expect(inheritConnectedSavedHostId(withPassword, { ...target, savedHostId: "saved" })).toEqual({
-      ...withPassword,
-      savedHostId: "saved",
-    });
-    expect(
+    assert.deepEqual(
+      inheritConnectedSavedHostId(withPassword, { ...target, savedHostId: "saved" }),
+      { ...withPassword, savedHostId: "saved" },
+    );
+    assert.equal(
       inheritConnectedSavedHostId(withPassword, { ...target, host: "other", savedHostId: "saved" }),
-    ).toBe(withPassword);
+      withPassword,
+    );
   });
 });

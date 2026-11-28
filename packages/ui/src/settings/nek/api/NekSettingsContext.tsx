@@ -41,7 +41,7 @@ export interface NekTargetsState {
   error?: NekConfigApiError;
 }
 
-export interface ProjectTargetSelection {
+interface ProjectTargetSelection {
   target: NekConfigTarget;
   projectTarget?: NekConfigTarget;
   targetInfo?: NekConfigTargetInfo;
