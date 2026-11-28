@@ -21,22 +21,7 @@ export function buildModelSelectGroups(view: ModelSelectionView): ModelSelectGro
   }));
 }
 
-/** 单一分组保留 nek 的原始顺序，不能按服务商再次聚合。 */
-export function buildScopedModelSelectGroups(
-  scope: ModelSelectionView["scope"],
-  allGroups: readonly ModelSelectGroup[],
-): ModelSelectGroup[] {
-  const byValue = new Map(
-    allGroups.flatMap((group) => group.items.map((item) => [item.value, item] as const)),
-  );
-  const items = scope.models.flatMap(({ provider, id }) => {
-    const item = byValue.get(encodeCustomModelValue(provider, id));
-    return item ? [{ ...item, badgeLabel: provider }] : [];
-  });
-  return items.length ? [{ key: "scoped", label: "", items }] : [];
-}
-
-export function findModelSelectItem(
+function findModelSelectItem(
   groups: readonly ModelSelectGroup[],
   value: string,
 ): ModelSelectGroupItem | undefined {

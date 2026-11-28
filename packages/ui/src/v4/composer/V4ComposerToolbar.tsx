@@ -49,11 +49,7 @@ import { useActionShortcutLabel } from "@/shortcuts/useActionShortcuts.js";
 import { useNekActionHandlers } from "@/shortcuts/nekActionDispatcher.js";
 import { logger } from "@/logger.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
-import {
-  buildModelSelectGroups,
-  buildScopedModelSelectGroups,
-  findModelSelectItem,
-} from "@/lib/modelSelectionGroups.js";
+import { buildModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import {
   resolveDraftDisplayedConfig,
   resolveDraftModelThoughtOption,
@@ -152,14 +148,12 @@ function V4ComposerModelControlsImpl({
   const thoughtTriggerRef = useRef<HTMLSpanElement | null>(null);
   // Ctrl+M 热键：递增 openRequestKey 请求 ModelConfigSelect 打开菜单（旧 handleOpenModelMenuShortcut 语义）。
   const [modelMenuOpenRequestKey, setModelMenuOpenRequestKey] = useState(0);
-  const [showAllModels, setShowAllModels] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(false);
   const handleOpenModelMenuShortcut = useCallback(() => {
     setModelMenuOpenRequestKey((current) => current + 1);
   }, []);
   const handleModelPickerOpenChange = useCallback(
     (open: boolean) => {
-      setShowAllModels(false);
       onConfigPickerOpenChange("model", open);
     },
     [onConfigPickerOpenChange],
@@ -190,29 +184,6 @@ function V4ComposerModelControlsImpl({
   const modelSelectGroups = useMemo(
     () => (modelSelectionView ? buildModelSelectGroups(modelSelectionView) : []),
     [modelSelectionView],
-  );
-  const scope = modelSelectionView?.scope;
-  const hasScope = Boolean(scope?.models.length);
-  const showScoped = hasScope && !showAllModels;
-  const scopedGroups = useMemo(
-    () => (scope?.models.length ? buildScopedModelSelectGroups(scope, modelSelectGroups) : []),
-    [scope, modelSelectGroups],
-  );
-  const scopeActions = useMemo(
-    () =>
-      hasScope
-        ? [
-            {
-              key: "scope-view",
-              label: intl.formatMessage({
-                id: showScoped ? "chat.toolbar.model.showAll" : "chat.toolbar.model.showScoped",
-              }),
-              keepOpen: true,
-              onSelect: () => setShowAllModels((all) => !all),
-            },
-          ]
-        : [],
-    [hasScope, intl, showScoped],
   );
 
   // 修复：恢复「管理模型」入口（老版 onManageModels = 打开设置页并定位模型供应商区）。
@@ -251,11 +222,6 @@ function V4ComposerModelControlsImpl({
     [manageModelsLabel, modelSelectGroups, rawModelValue, showManageModelsAction],
   );
   const normalizedModelValue = triggerDisplay.value ?? "";
-  // 当前选择由 Composer 持有，范围不应清掉它或改动实际提交候选。
-  const currentOutsideScope =
-    showScoped && !findModelSelectItem(scopedGroups, normalizedModelValue)
-      ? findModelSelectItem(modelSelectGroups, normalizedModelValue)
-      : undefined;
 
   const modelTriggerDisplay = useMemo(() => {
     // 非可选值（未选 / synthetic / 不可用）：占位文案或默认「选择模型」。
@@ -501,19 +467,8 @@ function V4ComposerModelControlsImpl({
         </span>
       ) : modelMenuVisible ? (
         <ModelConfigSelect
-          modelGroups={showScoped ? scopedGroups : modelSelectGroups}
-          showProviderLevel={!showScoped}
-          footerActions={scopeActions}
-          leadingItems={
-            currentOutsideScope
-              ? [
-                  {
-                    ...currentOutsideScope,
-                    badgeLabel: intl.formatMessage({ id: "chat.toolbar.model.outsideScope" }),
-                  },
-                ]
-              : undefined
-          }
+          modelGroups={modelSelectGroups}
+          showProviderLevel={modelSelectGroups.length > 1}
           normalizedValue={normalizedModelValue}
           triggerLabel={modelTriggerDisplay.fullLabel}
           triggerLabelPrefix={modelTriggerDisplay.providerPrefix}

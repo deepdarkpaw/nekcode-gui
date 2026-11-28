@@ -519,9 +519,6 @@ const zhCN: Record<string, string> = {
   "sidePane.openFile.emptyQuery": "输入内容搜索文件",
   "sidePane.review": "审查",
   "chat.toolbar.model.loadFailedRetry": "模型加载失败，重试",
-  "chat.toolbar.model.showAll": "显示全部模型",
-  "chat.toolbar.model.showScoped": "只显示循环范围",
-  "chat.toolbar.model.outsideScope": "当前 · 范围外",
   "chat.toolbar.model.loading": "模型加载中…",
   "chat.toolbar.model.remoteWaiting": "等待远程模型",
   "chat.toolbar.model.targetMissing": "暂无模型目标",
@@ -2924,7 +2921,7 @@ const zhCN: Record<string, string> = {
   "settings.nek.defaultModel.thinkingHint": "只列出所选模型支持的等级。当前生效：{level}",
   "settings.nek.scoped.title": "循环范围",
   "settings.nek.scoped.description":
-    "对应 nek 的 /scoped-models：设置后，模型菜单（GUI 与 CLI /model 相同）默认只显示这些模型，循环切换也只在其中进行，顺序可拖动调整；不设置时显示全部已配置模型。",
+    "对应 nek 的 enabledModels（CLI 的 /scoped-models）：快捷键切换模型只在这些模型间轮换，nek 也只把它们列给子代理选用。输入框旁的模型菜单不受影响，始终列出全部可用模型。拖动可调整顺序；不设置即不限制。",
   "settings.nek.scoped.selected": "已选 {count} 个",
   "settings.nek.scoped.allModels": "未设置时在所有可用模型之间循环。",
   "settings.nek.scoped.pattern": "匹配模式",

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ModelSelectionView } from "@zcode/services";
 import { TID_CHAT_MODEL_SELECT_TRIGGER } from "@zcode/shared";
@@ -33,6 +33,7 @@ const available = [
   },
   { providerId: "b", displayName: "Provider B", models: [model("second")] },
 ];
+// enabledModels 只影响 nek 的循环切换与子代理列表，不能过滤聊天模型菜单。
 const scoped: ModelSelectionView = {
   revision: 1,
   providers: available,
@@ -90,54 +91,26 @@ function renderToolbar(view = scoped, state: ModelSelectionState = { status: "re
 const openMenu = () =>
   fireEvent.keyDown(screen.getByTestId(TID_CHAT_MODEL_SELECT_TRIGGER), { key: "Enter" });
 
-describe("composer model scope", () => {
-  it("keeps RPC order, marks the current model outside scope, and toggles both ways without closing", async () => {
-    const { select } = renderToolbar();
+describe("composer model menu", () => {
+  it("lists every configured provider directly, ignoring enabledModels", async () => {
+    renderToolbar();
     expect(screen.getByTestId(TID_CHAT_MODEL_SELECT_TRIGGER).textContent).toContain("current");
     openMenu();
-    const menu = within(await screen.findByRole("menu"));
-    const choices = menu.getAllByRole("menuitemradio");
-    expect(choices.map((choice) => choice.textContent)).toEqual([
-      "current当前 · 范围外",
-      "secondb",
-      "firsta",
-    ]);
-    expect(choices[0]?.getAttribute("aria-checked")).toBe("true");
-    expect(menu.queryByText("hidden")).toBeNull();
-    fireEvent.click(menu.getByText("显示全部模型"));
-    expect(menu.getByText("Provider A")).toBeDefined();
-    expect(menu.getByText("Provider B")).toBeDefined();
-    expect(menu.queryByText("当前 · 范围外")).toBeNull();
-    fireEvent.click(menu.getByText("只显示循环范围"));
-    fireEvent.click(menu.getByText("second"));
-    expect(select).toHaveBeenCalledWith("b", "second", { provider: "a", model: "current" });
+    expect(await screen.findByText("Provider A")).toBeDefined();
+    expect(screen.getByText("Provider B")).toBeDefined();
+    expect(screen.queryByText("显示全部模型")).toBeNull();
+    expect(screen.queryByText("只显示循环范围")).toBeNull();
+    expect(screen.queryByText("当前 · 范围外")).toBeNull();
   });
 
-  it.each([[], ["gone"]].map((patterns) => ({ patterns })))(
-    "shows all providers without a scope toggle when no models resolve ($patterns)",
-    async ({ patterns }) => {
-      renderToolbar({
-        ...scoped,
-        scope: {
-          patterns,
-          models: [],
-          diagnostics: patterns.map((pattern) => ({
-            code: "no-match",
-            pattern,
-            message: "No models match",
-          })),
-        },
-      });
-      openMenu();
-      expect(await screen.findByText("Provider A")).toBeDefined();
-      expect(screen.getByText("Provider B")).toBeDefined();
-      expect(screen.queryByText("显示全部模型")).toBeNull();
-      expect(screen.queryByText("只显示循环范围")).toBeNull();
-      expect(screen.queryByText("当前 · 范围外")).toBeNull();
-    },
-  );
+  it("selects a model outside enabledModels in one step", async () => {
+    const { select } = renderToolbar({ ...scoped, providers: [available[0]!] });
+    openMenu();
+    fireEvent.click(await screen.findByText("hidden"));
+    expect(select).toHaveBeenCalledWith("a", "hidden", { provider: "a", model: "current" });
+  });
 
-  it("shows the scope RPC error and offers retry, not an unrestricted menu", () => {
+  it("shows the model RPC error and offers retry, not a stale menu", () => {
     const { retry } = renderToolbar(scoped, {
       status: "error",
       error: new Error("get_model_scope: RPC failed"),

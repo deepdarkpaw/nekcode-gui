@@ -565,9 +565,6 @@ const enUS: Record<string, string> = {
   "sidePane.openFile.emptyQuery": "Type to search files",
   "sidePane.review": "Review",
   "chat.toolbar.model.loadFailedRetry": "Models failed to load. Retry",
-  "chat.toolbar.model.showAll": "Show all models",
-  "chat.toolbar.model.showScoped": "Show scoped models only",
-  "chat.toolbar.model.outsideScope": "Current · outside scope",
   "chat.toolbar.model.loading": "Loading models…",
   "chat.toolbar.model.remoteWaiting": "Waiting for remote models",
   "chat.toolbar.model.targetMissing": "No model target",
@@ -3107,7 +3104,7 @@ const enUS: Record<string, string> = {
     "Only levels supported by the selected model are listed. In effect: {level}",
   "settings.nek.scoped.title": "Scoped models",
   "settings.nek.scoped.description":
-    "Same as nek /scoped-models: when set, the model menu (identical in the GUI and CLI /model) shows only these models by default and cycling stays within them, in this order. When unset, all configured models are shown.",
+    "nek's enabledModels (/scoped-models in the CLI): the model-cycling shortcut rotates only through these models, and nek offers only these models to subagents. The model menu next to the input is not affected and always lists all available models. Drag to reorder; leave empty for no restriction.",
   "settings.nek.scoped.selected": "{count} selected",
   "settings.nek.scoped.allModels": "When empty, cycling covers all available models.",
   "settings.nek.scoped.pattern": "Pattern",
